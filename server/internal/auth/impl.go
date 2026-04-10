@@ -24,10 +24,10 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	collectionsRepo "github.com/speakeasy-api/gram/server/internal/collections/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
-	externalMcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -60,7 +60,7 @@ type Service struct {
 	projectsRepo    *projectsRepo.Queries
 	envRepo         *envRepo.Queries
 	orgRepo         *orgRepo.Queries
-	externalMcpRepo *externalMcpRepo.Queries
+	collectionsRepo *collectionsRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -83,7 +83,7 @@ func NewService(
 		projectsRepo:    projectsRepo.New(db),
 		envRepo:         envRepo.New(db),
 		orgRepo:         orgRepo.New(db),
-		externalMcpRepo: externalMcpRepo.New(db),
+		collectionsRepo: collectionsRepo.New(db),
 	}
 }
 
@@ -487,7 +487,7 @@ func (s *Service) getProjectsOrSetupDefaults(ctx context.Context, organizationID
 }
 
 func (s *Service) setupDefaultCollection(ctx context.Context, organizationID, orgSlug string) error {
-	_, err := s.externalMcpRepo.GetOrganizationMcpCollectionBySlugAndOrg(ctx, externalMcpRepo.GetOrganizationMcpCollectionBySlugAndOrgParams{
+	_, err := s.collectionsRepo.GetOrganizationMcpCollectionBySlugAndOrg(ctx, collectionsRepo.GetOrganizationMcpCollectionBySlugAndOrgParams{
 		Slug:           "registry",
 		OrganizationID: organizationID,
 	})
@@ -495,7 +495,7 @@ func (s *Service) setupDefaultCollection(ctx context.Context, organizationID, or
 		return nil // already exists
 	}
 
-	collection, err := s.externalMcpRepo.CreateOrganizationMcpCollection(ctx, externalMcpRepo.CreateOrganizationMcpCollectionParams{
+	collection, err := s.collectionsRepo.CreateOrganizationMcpCollection(ctx, collectionsRepo.CreateOrganizationMcpCollectionParams{
 		OrganizationID: organizationID,
 		Name:           "Registry",
 		Description:    conv.ToPGText("Default registry for your organisation"),
@@ -506,7 +506,7 @@ func (s *Service) setupDefaultCollection(ctx context.Context, organizationID, or
 		return fmt.Errorf("create default collection: %w", err)
 	}
 
-	_, err = s.externalMcpRepo.CreateOrganizationMcpCollectionRegistry(ctx, externalMcpRepo.CreateOrganizationMcpCollectionRegistryParams{
+	_, err = s.collectionsRepo.CreateOrganizationMcpCollectionRegistry(ctx, collectionsRepo.CreateOrganizationMcpCollectionRegistryParams{
 		CollectionID: collection.ID,
 		Namespace:    orgSlug,
 	})

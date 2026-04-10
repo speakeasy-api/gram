@@ -20,29 +20,15 @@ type Client struct {
 	ListRegistriesEndpoint   goa.Endpoint
 	ListCatalogEndpoint      goa.Endpoint
 	GetServerDetailsEndpoint goa.Endpoint
-	ServeEndpoint            goa.Endpoint
-	CreateCollectionEndpoint goa.Endpoint
-	ListCollectionsEndpoint  goa.Endpoint
-	UpdateCollectionEndpoint goa.Endpoint
-	DeleteCollectionEndpoint goa.Endpoint
-	AttachServerEndpoint     goa.Endpoint
-	DetachServerEndpoint     goa.Endpoint
 }
 
 // NewClient initializes a "mcpRegistries" service client given the endpoints.
-func NewClient(clearCache, listRegistries, listCatalog, getServerDetails, serve, createCollection, listCollections, updateCollection, deleteCollection, attachServer, detachServer goa.Endpoint) *Client {
+func NewClient(clearCache, listRegistries, listCatalog, getServerDetails goa.Endpoint) *Client {
 	return &Client{
 		ClearCacheEndpoint:       clearCache,
 		ListRegistriesEndpoint:   listRegistries,
 		ListCatalogEndpoint:      listCatalog,
 		GetServerDetailsEndpoint: getServerDetails,
-		ServeEndpoint:            serve,
-		CreateCollectionEndpoint: createCollection,
-		ListCollectionsEndpoint:  listCollections,
-		UpdateCollectionEndpoint: updateCollection,
-		DeleteCollectionEndpoint: deleteCollection,
-		AttachServerEndpoint:     attachServer,
-		DetachServerEndpoint:     detachServer,
 	}
 }
 
@@ -130,156 +116,4 @@ func (c *Client) GetServerDetails(ctx context.Context, p *GetServerDetailsPayloa
 		return
 	}
 	return ires.(*types.ExternalMCPServer), nil
-}
-
-// Serve calls the "serve" endpoint of the "mcpRegistries" service.
-// Serve may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) Serve(ctx context.Context, p *ServePayload) (res *ServeResult, err error) {
-	var ires any
-	ires, err = c.ServeEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*ServeResult), nil
-}
-
-// CreateCollection calls the "createCollection" endpoint of the
-// "mcpRegistries" service.
-// CreateCollection may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) CreateCollection(ctx context.Context, p *CreateCollectionPayload) (res *types.MCPCollection, err error) {
-	var ires any
-	ires, err = c.CreateCollectionEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*types.MCPCollection), nil
-}
-
-// ListCollections calls the "listCollections" endpoint of the "mcpRegistries"
-// service.
-// ListCollections may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) ListCollections(ctx context.Context, p *ListCollectionsPayload) (res *ListCollectionsResult, err error) {
-	var ires any
-	ires, err = c.ListCollectionsEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*ListCollectionsResult), nil
-}
-
-// UpdateCollection calls the "updateCollection" endpoint of the
-// "mcpRegistries" service.
-// UpdateCollection may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) UpdateCollection(ctx context.Context, p *UpdateCollectionPayload) (res *types.MCPCollection, err error) {
-	var ires any
-	ires, err = c.UpdateCollectionEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*types.MCPCollection), nil
-}
-
-// DeleteCollection calls the "deleteCollection" endpoint of the
-// "mcpRegistries" service.
-// DeleteCollection may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) DeleteCollection(ctx context.Context, p *DeleteCollectionPayload) (err error) {
-	_, err = c.DeleteCollectionEndpoint(ctx, p)
-	return
-}
-
-// AttachServer calls the "attachServer" endpoint of the "mcpRegistries"
-// service.
-// AttachServer may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) AttachServer(ctx context.Context, p *AttachServerPayload) (res *types.MCPCollection, err error) {
-	var ires any
-	ires, err = c.AttachServerEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*types.MCPCollection), nil
-}
-
-// DetachServer calls the "detachServer" endpoint of the "mcpRegistries"
-// service.
-// DetachServer may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) DetachServer(ctx context.Context, p *DetachServerPayload) (err error) {
-	_, err = c.DetachServerEndpoint(ctx, p)
-	return
 }

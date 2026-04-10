@@ -193,6 +193,16 @@ run();
 * [create](docs/sdks/chatsessions/README.md#create) - create chatSessions
 * [revoke](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 
+### [Collections](docs/sdks/collections/README.md)
+
+* [attachServer](docs/sdks/collections/README.md#attachserver) - attachServer collections
+* [create](docs/sdks/collections/README.md#create) - create collections
+* [delete](docs/sdks/collections/README.md#delete) - delete collections
+* [detachServer](docs/sdks/collections/README.md#detachserver) - detachServer collections
+* [list](docs/sdks/collections/README.md#list) - list collections
+* [listServers](docs/sdks/collections/README.md#listservers) - listServers collections
+* [update](docs/sdks/collections/README.md#update) - update collections
+
 ### [Deployments](docs/sdks/deployments/README.md)
 
 * [active](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
@@ -264,17 +274,10 @@ run();
 
 ### [McpRegistries](docs/sdks/mcpregistries/README.md)
 
-* [attachServer](docs/sdks/mcpregistries/README.md#attachserver) - attachServer mcpRegistries
 * [clearCache](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
-* [createCollection](docs/sdks/mcpregistries/README.md#createcollection) - createCollection mcpRegistries
-* [deleteCollection](docs/sdks/mcpregistries/README.md#deletecollection) - deleteCollection mcpRegistries
-* [detachServer](docs/sdks/mcpregistries/README.md#detachserver) - detachServer mcpRegistries
 * [getServerDetails](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 * [listCatalog](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
-* [listCollections](docs/sdks/mcpregistries/README.md#listcollections) - listCollections mcpRegistries
 * [listRegistries](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
-* [serve](docs/sdks/mcpregistries/README.md#serve) - serve mcpRegistries
-* [updateCollection](docs/sdks/mcpregistries/README.md#updatecollection) - updateCollection mcpRegistries
 
 ### [Organizations](docs/sdks/organizations/README.md)
 
@@ -432,6 +435,13 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`chatSessionsCreate`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`chatSessionsRevoke`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 - [`chatSubmitFeedback`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
+- [`collectionsAttachServer`](docs/sdks/collections/README.md#attachserver) - attachServer collections
+- [`collectionsCreate`](docs/sdks/collections/README.md#create) - create collections
+- [`collectionsDelete`](docs/sdks/collections/README.md#delete) - delete collections
+- [`collectionsDetachServer`](docs/sdks/collections/README.md#detachserver) - detachServer collections
+- [`collectionsList`](docs/sdks/collections/README.md#list) - list collections
+- [`collectionsListServers`](docs/sdks/collections/README.md#listservers) - listServers collections
+- [`collectionsUpdate`](docs/sdks/collections/README.md#update) - update collections
 - [`deploymentsActive`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`deploymentsCreate`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`deploymentsEvolveDeployment`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
@@ -471,17 +481,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpMetadataExport`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 - [`mcpMetadataGet`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
-- [`mcpRegistriesAttachServer`](docs/sdks/mcpregistries/README.md#attachserver) - attachServer mcpRegistries
 - [`mcpRegistriesClearCache`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
-- [`mcpRegistriesCreateCollection`](docs/sdks/mcpregistries/README.md#createcollection) - createCollection mcpRegistries
-- [`mcpRegistriesDeleteCollection`](docs/sdks/mcpregistries/README.md#deletecollection) - deleteCollection mcpRegistries
-- [`mcpRegistriesDetachServer`](docs/sdks/mcpregistries/README.md#detachserver) - detachServer mcpRegistries
 - [`mcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`mcpRegistriesListCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
-- [`mcpRegistriesListCollections`](docs/sdks/mcpregistries/README.md#listcollections) - listCollections mcpRegistries
 - [`mcpRegistriesListRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
-- [`mcpRegistriesServe`](docs/sdks/mcpregistries/README.md#serve) - serve mcpRegistries
-- [`mcpRegistriesUpdateCollection`](docs/sdks/mcpregistries/README.md#updatecollection) - updateCollection mcpRegistries
 - [`organizationsGetInviteByToken`](docs/sdks/organizations/README.md#getinvitebytoken) - getInviteByToken organizations
 - [`organizationsListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`organizationsListUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
@@ -587,6 +590,12 @@ To learn about this feature and how to get started, check
 - [`useChatSubmitFeedbackMutation`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
+- [`useCollectionsAttachServerMutation`](docs/sdks/collections/README.md#attachserver) - attachServer collections
+- [`useCollectionsCreateMutation`](docs/sdks/collections/README.md#create) - create collections
+- [`useCollectionsDeleteMutation`](docs/sdks/collections/README.md#delete) - delete collections
+- [`useCollectionsDetachServerMutation`](docs/sdks/collections/README.md#detachserver) - detachServer collections
+- [`useCollectionsListServers`](docs/sdks/collections/README.md#listservers) - listServers collections
+- [`useCollectionsUpdateMutation`](docs/sdks/collections/README.md#update) - update collections
 - [`useConfigureSlackAppMutation`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
@@ -647,6 +656,7 @@ To learn about this feature and how to get started, check
 - [`useListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
 - [`useListChatsWithResolutions`](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
+- [`useListCollections`](docs/sdks/collections/README.md#list) - list collections
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
 - [`useListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
@@ -654,7 +664,6 @@ To learn about this feature and how to get started, check
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
 - [`useListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`useListMCPCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
-- [`useListMCPCollections`](docs/sdks/mcpregistries/README.md#listcollections) - listCollections mcpRegistries
 - [`useListMCPRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
 - [`useListOrganizationUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
@@ -669,14 +678,8 @@ To learn about this feature and how to get started, check
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
-- [`useMcpRegistriesAttachServerMutation`](docs/sdks/mcpregistries/README.md#attachserver) - attachServer mcpRegistries
 - [`useMcpRegistriesClearCacheMutation`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
-- [`useMcpRegistriesCreateCollectionMutation`](docs/sdks/mcpregistries/README.md#createcollection) - createCollection mcpRegistries
-- [`useMcpRegistriesDeleteCollectionMutation`](docs/sdks/mcpregistries/README.md#deletecollection) - deleteCollection mcpRegistries
-- [`useMcpRegistriesDetachServerMutation`](docs/sdks/mcpregistries/README.md#detachserver) - detachServer mcpRegistries
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
-- [`useMcpRegistriesServe`](docs/sdks/mcpregistries/README.md#serve) - serve mcpRegistries
-- [`useMcpRegistriesUpdateCollectionMutation`](docs/sdks/mcpregistries/README.md#updatecollection) - updateCollection mcpRegistries
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects

@@ -17,11 +17,10 @@ type ExternalMCPServer struct {
 	Version string
 	// Description of what the server does
 	Description string
-	// ID of the registry or collection this server came from
-	RegistryID string
-	// Type of registry: 'external' for public registries, 'internal' for
-	// Gram-hosted collections
-	RegistryType string
+	// ID of the external MCP registry this server came from
+	RegistryID *string
+	// ID of the internal collection registry this server came from
+	OrganizationMcpCollectionRegistryID *string
 	// Display name for the server
 	Title *string
 	// URL to the server's icon

@@ -97,7 +97,7 @@ import {
 } from "@/pages/collections/hooks";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  buildMcpRegistriesServeQuery,
+  buildCollectionsListServersQuery,
   useGramContext,
 } from "@gram/client/react-query";
 
@@ -1487,7 +1487,9 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
   // Fetch servers for each collection to determine which ones this toolset is in
   const serveQueries = useQueries({
     queries: collections.map((c) => ({
-      ...buildMcpRegistriesServeQuery(gramClient, { collectionSlug: c.slug! }),
+      ...buildCollectionsListServersQuery(gramClient, {
+        collectionSlug: c.slug!,
+      }),
       enabled: !!c.slug,
     })),
   });

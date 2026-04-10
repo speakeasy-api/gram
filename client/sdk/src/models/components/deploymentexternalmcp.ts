@@ -5,21 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-
-/**
- * The type of registry: 'external' for public registries, 'internal' for Gram-hosted collections.
- */
-export const RegistryType = {
-  External: "external",
-  Internal: "internal",
-} as const;
-/**
- * The type of registry: 'external' for public registries, 'internal' for Gram-hosted collections.
- */
-export type RegistryType = ClosedEnum<typeof RegistryType>;
 
 export type DeploymentExternalMCP = {
   /**
@@ -31,26 +18,22 @@ export type DeploymentExternalMCP = {
    */
   name: string;
   /**
-   * The ID of the MCP registry or collection the server is from.
+   * The ID of the internal collection registry the server is from.
    */
-  registryId: string;
+  organizationMcpCollectionRegistryId?: string | undefined;
+  /**
+   * The ID of the external MCP registry the server is from.
+   */
+  registryId?: string | undefined;
   /**
    * The canonical server name used to look up the server in the registry.
    */
   registryServerSpecifier: string;
   /**
-   * The type of registry: 'external' for public registries, 'internal' for Gram-hosted collections.
-   */
-  registryType: RegistryType;
-  /**
    * A short url-friendly label that uniquely identifies a resource.
    */
   slug: string;
 };
-
-/** @internal */
-export const RegistryType$inboundSchema: z.ZodMiniEnum<typeof RegistryType> = z
-  .enum(RegistryType);
 
 /** @internal */
 export const DeploymentExternalMCP$inboundSchema: z.ZodMiniType<
@@ -60,16 +43,17 @@ export const DeploymentExternalMCP$inboundSchema: z.ZodMiniType<
   z.object({
     id: z.string(),
     name: z.string(),
-    registry_id: z.string(),
+    organization_mcp_collection_registry_id: z.optional(z.string()),
+    registry_id: z.optional(z.string()),
     registry_server_specifier: z.string(),
-    registry_type: z._default(RegistryType$inboundSchema, "external"),
     slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "organization_mcp_collection_registry_id":
+        "organizationMcpCollectionRegistryId",
       "registry_id": "registryId",
       "registry_server_specifier": "registryServerSpecifier",
-      "registry_type": "registryType",
     });
   }),
 );

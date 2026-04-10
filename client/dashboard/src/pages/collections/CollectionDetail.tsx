@@ -50,6 +50,7 @@ export default function CollectionDetail() {
   const deleteCollection = useDeleteCollection();
   const updateCollection = useUpdateCollection();
   const organization = useOrganization();
+  const defaultProjectSlug = organization.projects?.[0]?.slug;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showProjectPicker, setShowProjectPicker] = useState(false);
@@ -396,7 +397,8 @@ export default function CollectionDetail() {
                         // Update collection metadata
                         await updateCollection.mutateAsync({
                           request: {
-                            updateCollectionRequestBody: {
+                            gramProject: defaultProjectSlug,
+                            updateRequestBody: {
                               collectionId: collection.id,
                               name: editName,
                               description: editDescription,
@@ -417,6 +419,7 @@ export default function CollectionDetail() {
                           ...toAttach.map((toolsetId) =>
                             attachServer.mutateAsync({
                               request: {
+                                gramProject: defaultProjectSlug,
                                 attachServerRequestBody: {
                                   collectionId: collection.id,
                                   toolsetId,
@@ -427,6 +430,7 @@ export default function CollectionDetail() {
                           ...toDetach.map((toolsetId) =>
                             detachServer.mutateAsync({
                               request: {
+                                gramProject: defaultProjectSlug,
                                 attachServerRequestBody: {
                                   collectionId: collection.id,
                                   toolsetId,
@@ -542,7 +546,10 @@ export default function CollectionDetail() {
                     disabled={deleteCollection.isPending}
                     onClick={async () => {
                       await deleteCollection.mutateAsync({
-                        request: { collectionId: collection.id },
+                        request: {
+                          gramProject: defaultProjectSlug,
+                          collectionId: collection.id,
+                        },
                       });
                       orgRoutes.collections.goTo();
                     }}

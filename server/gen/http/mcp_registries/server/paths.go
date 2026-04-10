@@ -26,38 +26,3 @@ func ListCatalogMcpRegistriesPath() string {
 func GetServerDetailsMcpRegistriesPath() string {
 	return "/rpc/mcpRegistries.getServerDetails"
 }
-
-// ServeMcpRegistriesPath returns the URL path to the mcpRegistries service serve HTTP endpoint.
-func ServeMcpRegistriesPath() string {
-	return "/rpc/mcpRegistries.serve"
-}
-
-// CreateCollectionMcpRegistriesPath returns the URL path to the mcpRegistries service createCollection HTTP endpoint.
-func CreateCollectionMcpRegistriesPath() string {
-	return "/rpc/mcpRegistries.createCollection"
-}
-
-// ListCollectionsMcpRegistriesPath returns the URL path to the mcpRegistries service listCollections HTTP endpoint.
-func ListCollectionsMcpRegistriesPath() string {
-	return "/rpc/mcpRegistries.listCollections"
-}
-
-// UpdateCollectionMcpRegistriesPath returns the URL path to the mcpRegistries service updateCollection HTTP endpoint.
-func UpdateCollectionMcpRegistriesPath() string {
-	return "/rpc/mcpRegistries.updateCollection"
-}
-
-// DeleteCollectionMcpRegistriesPath returns the URL path to the mcpRegistries service deleteCollection HTTP endpoint.
-func DeleteCollectionMcpRegistriesPath() string {
-	return "/rpc/mcpRegistries.deleteCollection"
-}
-
-// AttachServerMcpRegistriesPath returns the URL path to the mcpRegistries service attachServer HTTP endpoint.
-func AttachServerMcpRegistriesPath() string {
-	return "/rpc/mcpRegistries.attachServer"
-}
-
-// DetachServerMcpRegistriesPath returns the URL path to the mcpRegistries service detachServer HTTP endpoint.
-func DetachServerMcpRegistriesPath() string {
-	return "/rpc/mcpRegistries.detachServer"
-}

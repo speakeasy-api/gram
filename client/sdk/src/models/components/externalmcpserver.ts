@@ -5,7 +5,6 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -16,20 +15,6 @@ import {
   ExternalMCPTool,
   ExternalMCPTool$inboundSchema,
 } from "./externalmcptool.js";
-
-/**
- * Type of registry: 'external' for public registries, 'internal' for Gram-hosted collections
- */
-export const ExternalMCPServerRegistryType = {
-  External: "external",
-  Internal: "internal",
-} as const;
-/**
- * Type of registry: 'external' for public registries, 'internal' for Gram-hosted collections
- */
-export type ExternalMCPServerRegistryType = ClosedEnum<
-  typeof ExternalMCPServerRegistryType
->;
 
 /**
  * An MCP server from an external registry
@@ -48,17 +33,17 @@ export type ExternalMCPServer = {
    */
   meta?: any | undefined;
   /**
-   * ID of the registry or collection this server came from
+   * ID of the internal collection registry this server came from
    */
-  registryId: string;
+  organizationMcpCollectionRegistryId?: string | undefined;
+  /**
+   * ID of the external MCP registry this server came from
+   */
+  registryId?: string | undefined;
   /**
    * Server specifier used to look up in the registry (e.g., 'io.github.user/server')
    */
   registrySpecifier: string;
-  /**
-   * Type of registry: 'external' for public registries, 'internal' for Gram-hosted collections
-   */
-  registryType: ExternalMCPServerRegistryType;
   /**
    * Available remote endpoints for the server
    */
@@ -78,11 +63,6 @@ export type ExternalMCPServer = {
 };
 
 /** @internal */
-export const ExternalMCPServerRegistryType$inboundSchema: z.ZodMiniEnum<
-  typeof ExternalMCPServerRegistryType
-> = z.enum(ExternalMCPServerRegistryType);
-
-/** @internal */
 export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
   ExternalMCPServer,
   unknown
@@ -91,12 +71,9 @@ export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
     description: z.string(),
     icon_url: z.optional(z.string()),
     meta: z.optional(z.any()),
-    registry_id: z.string(),
+    organization_mcp_collection_registry_id: z.optional(z.string()),
+    registry_id: z.optional(z.string()),
     registry_specifier: z.string(),
-    registry_type: z._default(
-      ExternalMCPServerRegistryType$inboundSchema,
-      "external",
-    ),
     remotes: z.optional(z.array(ExternalMCPRemote$inboundSchema)),
     title: z.optional(z.string()),
     tools: z.optional(z.array(ExternalMCPTool$inboundSchema)),
@@ -105,9 +82,10 @@ export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "icon_url": "iconUrl",
+      "organization_mcp_collection_registry_id":
+        "organizationMcpCollectionRegistryId",
       "registry_id": "registryId",
       "registry_specifier": "registrySpecifier",
-      "registry_type": "registryType",
     });
   }),
 );

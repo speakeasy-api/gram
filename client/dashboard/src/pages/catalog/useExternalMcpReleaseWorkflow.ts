@@ -458,7 +458,8 @@ export function useExternalMcpReleaseWorkflow({
               const slug = generateSlug(config.server.registrySpecifier);
               return {
                 registryId: config.server.registryId,
-                registryType: config.server.registryType,
+                organizationMcpCollectionRegistryId:
+                  config.server.organizationMcpCollectionRegistryId,
                 name: config.name,
                 slug,
                 registryServerSpecifier: config.server.registrySpecifier,

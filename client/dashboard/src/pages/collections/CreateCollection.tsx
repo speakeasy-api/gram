@@ -127,7 +127,8 @@ export default function CreateCollection() {
 
     await createCollection.mutateAsync({
       request: {
-        createCollectionRequestBody: {
+        gramProject: projects[0]?.slug,
+        createRequestBody2: {
           name,
           slug,
           mcpRegistryNamespace: namespace,

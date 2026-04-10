@@ -814,7 +814,7 @@ func readToolsetTools(
 
 					DeploymentExternalMcpID:    def.ExternalMcpAttachmentID.String(),
 					DeploymentID:               def.DeploymentID.String(),
-					RegistryID:                 def.RegistryID.String(),
+					RegistryID:                 def.RegistryID.UUID.String(),
 					RegistryServerName:         def.RegistryServerName,
 					RegistrySpecifier:          def.RegistryServerSpecifier,
 					Slug:                       def.Slug,

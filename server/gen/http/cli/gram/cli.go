@@ -21,6 +21,7 @@ import (
 	authc "github.com/speakeasy-api/gram/server/gen/http/auth/client"
 	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
 	chatsessionsc "github.com/speakeasy-api/gram/server/gen/http/chat_sessions/client"
+	collectionsc "github.com/speakeasy-api/gram/server/gen/http/collections/client"
 	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
 	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
@@ -64,7 +65,8 @@ func UsageCommands() []string {
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|delete-domain)",
 		"environments (create-environment|list-environments|update-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
-		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details|serve|create-collection|list-collections|update-collection|delete-collection|attach-server|detach-server)",
+		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details)",
+		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|logs)",
@@ -488,46 +490,48 @@ func ParseEndpoint(
 		mcpRegistriesGetServerDetailsApikeyTokenFlag      = mcpRegistriesGetServerDetailsFlags.String("apikey-token", "", "")
 		mcpRegistriesGetServerDetailsProjectSlugInputFlag = mcpRegistriesGetServerDetailsFlags.String("project-slug-input", "", "")
 
-		mcpRegistriesServeFlags                = flag.NewFlagSet("serve", flag.ExitOnError)
-		mcpRegistriesServeCollectionSlugFlag   = mcpRegistriesServeFlags.String("collection-slug", "REQUIRED", "")
-		mcpRegistriesServeSessionTokenFlag     = mcpRegistriesServeFlags.String("session-token", "", "")
-		mcpRegistriesServeApikeyTokenFlag      = mcpRegistriesServeFlags.String("apikey-token", "", "")
-		mcpRegistriesServeProjectSlugInputFlag = mcpRegistriesServeFlags.String("project-slug-input", "", "")
+		collectionsFlags = flag.NewFlagSet("collections", flag.ContinueOnError)
 
-		mcpRegistriesCreateCollectionFlags                = flag.NewFlagSet("create-collection", flag.ExitOnError)
-		mcpRegistriesCreateCollectionBodyFlag             = mcpRegistriesCreateCollectionFlags.String("body", "REQUIRED", "")
-		mcpRegistriesCreateCollectionSessionTokenFlag     = mcpRegistriesCreateCollectionFlags.String("session-token", "", "")
-		mcpRegistriesCreateCollectionApikeyTokenFlag      = mcpRegistriesCreateCollectionFlags.String("apikey-token", "", "")
-		mcpRegistriesCreateCollectionProjectSlugInputFlag = mcpRegistriesCreateCollectionFlags.String("project-slug-input", "", "")
+		collectionsCreateFlags                = flag.NewFlagSet("create", flag.ExitOnError)
+		collectionsCreateBodyFlag             = collectionsCreateFlags.String("body", "REQUIRED", "")
+		collectionsCreateSessionTokenFlag     = collectionsCreateFlags.String("session-token", "", "")
+		collectionsCreateApikeyTokenFlag      = collectionsCreateFlags.String("apikey-token", "", "")
+		collectionsCreateProjectSlugInputFlag = collectionsCreateFlags.String("project-slug-input", "", "")
 
-		mcpRegistriesListCollectionsFlags                = flag.NewFlagSet("list-collections", flag.ExitOnError)
-		mcpRegistriesListCollectionsSessionTokenFlag     = mcpRegistriesListCollectionsFlags.String("session-token", "", "")
-		mcpRegistriesListCollectionsApikeyTokenFlag      = mcpRegistriesListCollectionsFlags.String("apikey-token", "", "")
-		mcpRegistriesListCollectionsProjectSlugInputFlag = mcpRegistriesListCollectionsFlags.String("project-slug-input", "", "")
+		collectionsListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
+		collectionsListSessionTokenFlag     = collectionsListFlags.String("session-token", "", "")
+		collectionsListApikeyTokenFlag      = collectionsListFlags.String("apikey-token", "", "")
+		collectionsListProjectSlugInputFlag = collectionsListFlags.String("project-slug-input", "", "")
 
-		mcpRegistriesUpdateCollectionFlags                = flag.NewFlagSet("update-collection", flag.ExitOnError)
-		mcpRegistriesUpdateCollectionBodyFlag             = mcpRegistriesUpdateCollectionFlags.String("body", "REQUIRED", "")
-		mcpRegistriesUpdateCollectionSessionTokenFlag     = mcpRegistriesUpdateCollectionFlags.String("session-token", "", "")
-		mcpRegistriesUpdateCollectionApikeyTokenFlag      = mcpRegistriesUpdateCollectionFlags.String("apikey-token", "", "")
-		mcpRegistriesUpdateCollectionProjectSlugInputFlag = mcpRegistriesUpdateCollectionFlags.String("project-slug-input", "", "")
+		collectionsUpdateFlags                = flag.NewFlagSet("update", flag.ExitOnError)
+		collectionsUpdateBodyFlag             = collectionsUpdateFlags.String("body", "REQUIRED", "")
+		collectionsUpdateSessionTokenFlag     = collectionsUpdateFlags.String("session-token", "", "")
+		collectionsUpdateApikeyTokenFlag      = collectionsUpdateFlags.String("apikey-token", "", "")
+		collectionsUpdateProjectSlugInputFlag = collectionsUpdateFlags.String("project-slug-input", "", "")
 
-		mcpRegistriesDeleteCollectionFlags                = flag.NewFlagSet("delete-collection", flag.ExitOnError)
-		mcpRegistriesDeleteCollectionCollectionIDFlag     = mcpRegistriesDeleteCollectionFlags.String("collection-id", "REQUIRED", "")
-		mcpRegistriesDeleteCollectionSessionTokenFlag     = mcpRegistriesDeleteCollectionFlags.String("session-token", "", "")
-		mcpRegistriesDeleteCollectionApikeyTokenFlag      = mcpRegistriesDeleteCollectionFlags.String("apikey-token", "", "")
-		mcpRegistriesDeleteCollectionProjectSlugInputFlag = mcpRegistriesDeleteCollectionFlags.String("project-slug-input", "", "")
+		collectionsDeleteFlags                = flag.NewFlagSet("delete", flag.ExitOnError)
+		collectionsDeleteCollectionIDFlag     = collectionsDeleteFlags.String("collection-id", "REQUIRED", "")
+		collectionsDeleteSessionTokenFlag     = collectionsDeleteFlags.String("session-token", "", "")
+		collectionsDeleteApikeyTokenFlag      = collectionsDeleteFlags.String("apikey-token", "", "")
+		collectionsDeleteProjectSlugInputFlag = collectionsDeleteFlags.String("project-slug-input", "", "")
 
-		mcpRegistriesAttachServerFlags                = flag.NewFlagSet("attach-server", flag.ExitOnError)
-		mcpRegistriesAttachServerBodyFlag             = mcpRegistriesAttachServerFlags.String("body", "REQUIRED", "")
-		mcpRegistriesAttachServerSessionTokenFlag     = mcpRegistriesAttachServerFlags.String("session-token", "", "")
-		mcpRegistriesAttachServerApikeyTokenFlag      = mcpRegistriesAttachServerFlags.String("apikey-token", "", "")
-		mcpRegistriesAttachServerProjectSlugInputFlag = mcpRegistriesAttachServerFlags.String("project-slug-input", "", "")
+		collectionsAttachServerFlags                = flag.NewFlagSet("attach-server", flag.ExitOnError)
+		collectionsAttachServerBodyFlag             = collectionsAttachServerFlags.String("body", "REQUIRED", "")
+		collectionsAttachServerSessionTokenFlag     = collectionsAttachServerFlags.String("session-token", "", "")
+		collectionsAttachServerApikeyTokenFlag      = collectionsAttachServerFlags.String("apikey-token", "", "")
+		collectionsAttachServerProjectSlugInputFlag = collectionsAttachServerFlags.String("project-slug-input", "", "")
 
-		mcpRegistriesDetachServerFlags                = flag.NewFlagSet("detach-server", flag.ExitOnError)
-		mcpRegistriesDetachServerBodyFlag             = mcpRegistriesDetachServerFlags.String("body", "REQUIRED", "")
-		mcpRegistriesDetachServerSessionTokenFlag     = mcpRegistriesDetachServerFlags.String("session-token", "", "")
-		mcpRegistriesDetachServerApikeyTokenFlag      = mcpRegistriesDetachServerFlags.String("apikey-token", "", "")
-		mcpRegistriesDetachServerProjectSlugInputFlag = mcpRegistriesDetachServerFlags.String("project-slug-input", "", "")
+		collectionsDetachServerFlags                = flag.NewFlagSet("detach-server", flag.ExitOnError)
+		collectionsDetachServerBodyFlag             = collectionsDetachServerFlags.String("body", "REQUIRED", "")
+		collectionsDetachServerSessionTokenFlag     = collectionsDetachServerFlags.String("session-token", "", "")
+		collectionsDetachServerApikeyTokenFlag      = collectionsDetachServerFlags.String("apikey-token", "", "")
+		collectionsDetachServerProjectSlugInputFlag = collectionsDetachServerFlags.String("project-slug-input", "", "")
+
+		collectionsListServersFlags                = flag.NewFlagSet("list-servers", flag.ExitOnError)
+		collectionsListServersCollectionSlugFlag   = collectionsListServersFlags.String("collection-slug", "REQUIRED", "")
+		collectionsListServersSessionTokenFlag     = collectionsListServersFlags.String("session-token", "", "")
+		collectionsListServersApikeyTokenFlag      = collectionsListServersFlags.String("apikey-token", "", "")
+		collectionsListServersProjectSlugInputFlag = collectionsListServersFlags.String("project-slug-input", "", "")
 
 		functionsFlags = flag.NewFlagSet("functions", flag.ContinueOnError)
 
@@ -1100,13 +1104,15 @@ func ParseEndpoint(
 	mcpRegistriesListRegistriesFlags.Usage = mcpRegistriesListRegistriesUsage
 	mcpRegistriesListCatalogFlags.Usage = mcpRegistriesListCatalogUsage
 	mcpRegistriesGetServerDetailsFlags.Usage = mcpRegistriesGetServerDetailsUsage
-	mcpRegistriesServeFlags.Usage = mcpRegistriesServeUsage
-	mcpRegistriesCreateCollectionFlags.Usage = mcpRegistriesCreateCollectionUsage
-	mcpRegistriesListCollectionsFlags.Usage = mcpRegistriesListCollectionsUsage
-	mcpRegistriesUpdateCollectionFlags.Usage = mcpRegistriesUpdateCollectionUsage
-	mcpRegistriesDeleteCollectionFlags.Usage = mcpRegistriesDeleteCollectionUsage
-	mcpRegistriesAttachServerFlags.Usage = mcpRegistriesAttachServerUsage
-	mcpRegistriesDetachServerFlags.Usage = mcpRegistriesDetachServerUsage
+
+	collectionsFlags.Usage = collectionsUsage
+	collectionsCreateFlags.Usage = collectionsCreateUsage
+	collectionsListFlags.Usage = collectionsListUsage
+	collectionsUpdateFlags.Usage = collectionsUpdateUsage
+	collectionsDeleteFlags.Usage = collectionsDeleteUsage
+	collectionsAttachServerFlags.Usage = collectionsAttachServerUsage
+	collectionsDetachServerFlags.Usage = collectionsDetachServerUsage
+	collectionsListServersFlags.Usage = collectionsListServersUsage
 
 	functionsFlags.Usage = functionsUsage
 	functionsGetSignedAssetURLFlags.Usage = functionsGetSignedAssetURLUsage
@@ -1269,6 +1275,8 @@ func ParseEndpoint(
 			svcf = environmentsFlags
 		case "mcp-registries":
 			svcf = mcpRegistriesFlags
+		case "collections":
+			svcf = collectionsFlags
 		case "functions":
 			svcf = functionsFlags
 		case "hooks-server-names":
@@ -1566,26 +1574,30 @@ func ParseEndpoint(
 			case "get-server-details":
 				epf = mcpRegistriesGetServerDetailsFlags
 
-			case "serve":
-				epf = mcpRegistriesServeFlags
+			}
 
-			case "create-collection":
-				epf = mcpRegistriesCreateCollectionFlags
+		case "collections":
+			switch epn {
+			case "create":
+				epf = collectionsCreateFlags
 
-			case "list-collections":
-				epf = mcpRegistriesListCollectionsFlags
+			case "list":
+				epf = collectionsListFlags
 
-			case "update-collection":
-				epf = mcpRegistriesUpdateCollectionFlags
+			case "update":
+				epf = collectionsUpdateFlags
 
-			case "delete-collection":
-				epf = mcpRegistriesDeleteCollectionFlags
+			case "delete":
+				epf = collectionsDeleteFlags
 
 			case "attach-server":
-				epf = mcpRegistriesAttachServerFlags
+				epf = collectionsAttachServerFlags
 
 			case "detach-server":
-				epf = mcpRegistriesDetachServerFlags
+				epf = collectionsDetachServerFlags
+
+			case "list-servers":
+				epf = collectionsListServersFlags
 
 			}
 
@@ -2193,27 +2205,31 @@ func ParseEndpoint(
 			case "get-server-details":
 				endpoint = c.GetServerDetails()
 				data, err = mcpregistriesc.BuildGetServerDetailsPayload(*mcpRegistriesGetServerDetailsRegistryIDFlag, *mcpRegistriesGetServerDetailsServerSpecifierFlag, *mcpRegistriesGetServerDetailsSessionTokenFlag, *mcpRegistriesGetServerDetailsApikeyTokenFlag, *mcpRegistriesGetServerDetailsProjectSlugInputFlag)
-			case "serve":
-				endpoint = c.Serve()
-				data, err = mcpregistriesc.BuildServePayload(*mcpRegistriesServeCollectionSlugFlag, *mcpRegistriesServeSessionTokenFlag, *mcpRegistriesServeApikeyTokenFlag, *mcpRegistriesServeProjectSlugInputFlag)
-			case "create-collection":
-				endpoint = c.CreateCollection()
-				data, err = mcpregistriesc.BuildCreateCollectionPayload(*mcpRegistriesCreateCollectionBodyFlag, *mcpRegistriesCreateCollectionSessionTokenFlag, *mcpRegistriesCreateCollectionApikeyTokenFlag, *mcpRegistriesCreateCollectionProjectSlugInputFlag)
-			case "list-collections":
-				endpoint = c.ListCollections()
-				data, err = mcpregistriesc.BuildListCollectionsPayload(*mcpRegistriesListCollectionsSessionTokenFlag, *mcpRegistriesListCollectionsApikeyTokenFlag, *mcpRegistriesListCollectionsProjectSlugInputFlag)
-			case "update-collection":
-				endpoint = c.UpdateCollection()
-				data, err = mcpregistriesc.BuildUpdateCollectionPayload(*mcpRegistriesUpdateCollectionBodyFlag, *mcpRegistriesUpdateCollectionSessionTokenFlag, *mcpRegistriesUpdateCollectionApikeyTokenFlag, *mcpRegistriesUpdateCollectionProjectSlugInputFlag)
-			case "delete-collection":
-				endpoint = c.DeleteCollection()
-				data, err = mcpregistriesc.BuildDeleteCollectionPayload(*mcpRegistriesDeleteCollectionCollectionIDFlag, *mcpRegistriesDeleteCollectionSessionTokenFlag, *mcpRegistriesDeleteCollectionApikeyTokenFlag, *mcpRegistriesDeleteCollectionProjectSlugInputFlag)
+			}
+		case "collections":
+			c := collectionsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create":
+				endpoint = c.Create()
+				data, err = collectionsc.BuildCreatePayload(*collectionsCreateBodyFlag, *collectionsCreateSessionTokenFlag, *collectionsCreateApikeyTokenFlag, *collectionsCreateProjectSlugInputFlag)
+			case "list":
+				endpoint = c.List()
+				data, err = collectionsc.BuildListPayload(*collectionsListSessionTokenFlag, *collectionsListApikeyTokenFlag, *collectionsListProjectSlugInputFlag)
+			case "update":
+				endpoint = c.Update()
+				data, err = collectionsc.BuildUpdatePayload(*collectionsUpdateBodyFlag, *collectionsUpdateSessionTokenFlag, *collectionsUpdateApikeyTokenFlag, *collectionsUpdateProjectSlugInputFlag)
+			case "delete":
+				endpoint = c.Delete()
+				data, err = collectionsc.BuildDeletePayload(*collectionsDeleteCollectionIDFlag, *collectionsDeleteSessionTokenFlag, *collectionsDeleteApikeyTokenFlag, *collectionsDeleteProjectSlugInputFlag)
 			case "attach-server":
 				endpoint = c.AttachServer()
-				data, err = mcpregistriesc.BuildAttachServerPayload(*mcpRegistriesAttachServerBodyFlag, *mcpRegistriesAttachServerSessionTokenFlag, *mcpRegistriesAttachServerApikeyTokenFlag, *mcpRegistriesAttachServerProjectSlugInputFlag)
+				data, err = collectionsc.BuildAttachServerPayload(*collectionsAttachServerBodyFlag, *collectionsAttachServerSessionTokenFlag, *collectionsAttachServerApikeyTokenFlag, *collectionsAttachServerProjectSlugInputFlag)
 			case "detach-server":
 				endpoint = c.DetachServer()
-				data, err = mcpregistriesc.BuildDetachServerPayload(*mcpRegistriesDetachServerBodyFlag, *mcpRegistriesDetachServerSessionTokenFlag, *mcpRegistriesDetachServerApikeyTokenFlag, *mcpRegistriesDetachServerProjectSlugInputFlag)
+				data, err = collectionsc.BuildDetachServerPayload(*collectionsDetachServerBodyFlag, *collectionsDetachServerSessionTokenFlag, *collectionsDetachServerApikeyTokenFlag, *collectionsDetachServerProjectSlugInputFlag)
+			case "list-servers":
+				endpoint = c.ListServers()
+				data, err = collectionsc.BuildListServersPayload(*collectionsListServersCollectionSlugFlag, *collectionsListServersSessionTokenFlag, *collectionsListServersApikeyTokenFlag, *collectionsListServersProjectSlugInputFlag)
 			}
 		case "functions":
 			c := functionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3710,7 +3726,7 @@ func deploymentsCreateDeploymentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments create-deployment --body '{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"registry_type\": \"internal\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"external_url\": \"abc123\",\n      \"functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"non_blocking\": false,\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\" --idempotency-key \"01jqq0ajmb4qh9eppz48dejr2m\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments create-deployment --body '{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"organization_mcp_collection_registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"external_url\": \"abc123\",\n      \"functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"non_blocking\": false,\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\" --idempotency-key \"01jqq0ajmb4qh9eppz48dejr2m\"")
 }
 
 func deploymentsEvolveUsage() {
@@ -3734,7 +3750,7 @@ func deploymentsEvolveUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments evolve --body '{\n      \"deployment_id\": \"abc123\",\n      \"exclude_external_mcps\": [\n         \"abc123\"\n      ],\n      \"exclude_functions\": [\n         \"abc123\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"abc123\"\n      ],\n      \"exclude_packages\": [\n         \"abc123\"\n      ],\n      \"non_blocking\": false,\n      \"upsert_external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"registry_type\": \"internal\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments evolve --body '{\n      \"deployment_id\": \"abc123\",\n      \"exclude_external_mcps\": [\n         \"abc123\"\n      ],\n      \"exclude_functions\": [\n         \"abc123\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"abc123\"\n      ],\n      \"exclude_packages\": [\n         \"abc123\"\n      ],\n      \"non_blocking\": false,\n      \"upsert_external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"organization_mcp_collection_registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func deploymentsRedeployUsage() {
@@ -4133,13 +4149,6 @@ func mcpRegistriesUsage() {
 	fmt.Fprintln(os.Stderr, `    list-registries: List all MCP registries (admin only)`)
 	fmt.Fprintln(os.Stderr, `    list-catalog: List available MCP servers from configured registries`)
 	fmt.Fprintln(os.Stderr, `    get-server-details: Get detailed information about an MCP server including remotes`)
-	fmt.Fprintln(os.Stderr, `    serve: List published MCP servers from a collection`)
-	fmt.Fprintln(os.Stderr, `    create-collection: Create an MCP collection within the organization`)
-	fmt.Fprintln(os.Stderr, `    list-collections: List MCP collections in the organization`)
-	fmt.Fprintln(os.Stderr, `    update-collection: Update an MCP collection`)
-	fmt.Fprintln(os.Stderr, `    delete-collection: Delete an MCP collection`)
-	fmt.Fprintln(os.Stderr, `    attach-server: Attach a server (toolset) to a collection`)
-	fmt.Fprintln(os.Stderr, `    detach-server: Detach a server (toolset) from a collection`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s mcp-registries COMMAND --help\n", os.Args[0])
@@ -4244,33 +4253,26 @@ func mcpRegistriesGetServerDetailsUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries get-server-details --registry-id \"550e8400-e29b-41d4-a716-446655440000\" --server-specifier \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func mcpRegistriesServeUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries serve", os.Args[0])
-	fmt.Fprint(os.Stderr, " -collection-slug STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+// collectionsUsage displays the usage of the collections command and its
+// subcommands.
+func collectionsUsage() {
+	fmt.Fprintln(os.Stderr, `MCP collection operations`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] collections COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create: Create an MCP collection within the organization`)
+	fmt.Fprintln(os.Stderr, `    list: List MCP collections in the organization`)
+	fmt.Fprintln(os.Stderr, `    update: Update an MCP collection`)
+	fmt.Fprintln(os.Stderr, `    delete: Delete an MCP collection`)
+	fmt.Fprintln(os.Stderr, `    attach-server: Attach a server (toolset) to a collection`)
+	fmt.Fprintln(os.Stderr, `    detach-server: Detach a server (toolset) from a collection`)
+	fmt.Fprintln(os.Stderr, `    list-servers: List published MCP servers from a collection`)
 	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List published MCP servers from a collection`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -collection-slug STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries serve --collection-slug \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s collections COMMAND --help\n", os.Args[0])
 }
-
-func mcpRegistriesCreateCollectionUsage() {
+func collectionsCreateUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries create-collection", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] collections create", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
@@ -4289,12 +4291,12 @@ func mcpRegistriesCreateCollectionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries create-collection --body '{\n      \"description\": \"aaa\",\n      \"mcp_registry_namespace\": \"aa\",\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections create --body '{\n      \"description\": \"aaa\",\n      \"mcp_registry_namespace\": \"aa\",\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func mcpRegistriesListCollectionsUsage() {
+func collectionsListUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries list-collections", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] collections list", os.Args[0])
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -4311,12 +4313,12 @@ func mcpRegistriesListCollectionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries list-collections --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections list --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func mcpRegistriesUpdateCollectionUsage() {
+func collectionsUpdateUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries update-collection", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] collections update", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
@@ -4335,12 +4337,12 @@ func mcpRegistriesUpdateCollectionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries update-collection --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"description\": \"aaa\",\n      \"name\": \"aa\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections update --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"description\": \"aaa\",\n      \"name\": \"aa\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func mcpRegistriesDeleteCollectionUsage() {
+func collectionsDeleteUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries delete-collection", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] collections delete", os.Args[0])
 	fmt.Fprint(os.Stderr, " -collection-id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
@@ -4359,12 +4361,12 @@ func mcpRegistriesDeleteCollectionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries delete-collection --collection-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections delete --collection-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func mcpRegistriesAttachServerUsage() {
+func collectionsAttachServerUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries attach-server", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] collections attach-server", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
@@ -4383,12 +4385,12 @@ func mcpRegistriesAttachServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries attach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections attach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func mcpRegistriesDetachServerUsage() {
+func collectionsDetachServerUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries detach-server", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] collections detach-server", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
@@ -4407,7 +4409,31 @@ func mcpRegistriesDetachServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries detach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections detach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func collectionsListServersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] collections list-servers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -collection-slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List published MCP servers from a collection`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -collection-slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections list-servers --collection-slug \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // functionsUsage displays the usage of the functions command and its

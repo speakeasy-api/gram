@@ -7,8 +7,7 @@
 
 package types
 
-// MCPCollection is the result type of the mcpRegistries service
-// createCollection method.
+// MCPCollection is the result type of the collections service create method.
 type MCPCollection struct {
 	// Collection ID
 	ID string

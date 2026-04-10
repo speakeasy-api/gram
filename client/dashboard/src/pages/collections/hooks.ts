@@ -1,16 +1,15 @@
 import { useOrganization } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
 import type { ExternalMCPServer } from "@gram/client/models/components";
 import {
-  invalidateAllListMCPCollections,
-  invalidateAllMcpRegistriesServe,
-  useListMCPCollections,
-  useMcpRegistriesAttachServerMutation,
-  useMcpRegistriesCreateCollectionMutation,
-  useMcpRegistriesDeleteCollectionMutation,
-  useMcpRegistriesDetachServerMutation,
-  useMcpRegistriesServe,
-  useMcpRegistriesUpdateCollectionMutation,
+  invalidateAllCollectionsListServers,
+  invalidateAllListCollections,
+  useCollectionsAttachServerMutation,
+  useCollectionsCreateMutation,
+  useCollectionsDeleteMutation,
+  useCollectionsDetachServerMutation,
+  useCollectionsListServers,
+  useCollectionsUpdateMutation,
+  useListCollections,
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -24,8 +23,8 @@ function useDefaultProjectSlug(): string | undefined {
 function useInvalidateCollections() {
   const queryClient = useQueryClient();
   return () => {
-    invalidateAllListMCPCollections(queryClient);
-    invalidateAllMcpRegistriesServe(queryClient);
+    invalidateAllListCollections(queryClient);
+    invalidateAllCollectionsListServers(queryClient);
   };
 }
 
@@ -35,7 +34,7 @@ export function useCollections(search?: string): {
 } {
   const projectSlug = useDefaultProjectSlug();
 
-  const { data, isLoading } = useListMCPCollections(
+  const { data, isLoading } = useListCollections(
     { gramProject: projectSlug },
     undefined,
     { enabled: !!projectSlug },
@@ -74,7 +73,7 @@ export function useCollectionServers(slug: string | undefined): {
 } {
   const projectSlug = useDefaultProjectSlug();
 
-  const { data, isLoading } = useMcpRegistriesServe(
+  const { data, isLoading } = useCollectionsListServers(
     { collectionSlug: slug!, gramProject: projectSlug },
     undefined,
     { enabled: !!slug && !!projectSlug },
@@ -94,10 +93,9 @@ export function useCollectionServers(slug: string | undefined): {
 }
 
 export function useUpdateCollection() {
-  const projectSlug = useDefaultProjectSlug();
   const invalidate = useInvalidateCollections();
 
-  return useMcpRegistriesUpdateCollectionMutation({
+  return useCollectionsUpdateMutation({
     onSuccess: () => {
       invalidate();
       toast.success("Collection updated");
@@ -111,7 +109,7 @@ export function useUpdateCollection() {
 export function useDeleteCollection() {
   const invalidate = useInvalidateCollections();
 
-  return useMcpRegistriesDeleteCollectionMutation({
+  return useCollectionsDeleteMutation({
     onSuccess: () => {
       invalidate();
       toast.success("Collection deleted");
@@ -125,7 +123,7 @@ export function useDeleteCollection() {
 export function useAttachServer() {
   const invalidate = useInvalidateCollections();
 
-  return useMcpRegistriesAttachServerMutation({
+  return useCollectionsAttachServerMutation({
     onSuccess: () => {
       invalidate();
       toast.success("Server added to collection");
@@ -139,7 +137,7 @@ export function useAttachServer() {
 export function useDetachServer() {
   const invalidate = useInvalidateCollections();
 
-  return useMcpRegistriesDetachServerMutation({
+  return useCollectionsDetachServerMutation({
     onSuccess: () => {
       invalidate();
       toast.success("Server removed from collection");
@@ -153,7 +151,7 @@ export function useDetachServer() {
 export function useCreateCollection() {
   const invalidate = useInvalidateCollections();
 
-  return useMcpRegistriesCreateCollectionMutation({
+  return useCollectionsCreateMutation({
     onSuccess: () => {
       invalidate();
     },

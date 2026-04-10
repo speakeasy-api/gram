@@ -1906,18 +1906,12 @@ func marshalTypesDeploymentExternalMCPToDeploymentExternalMCPResponseBody(v *typ
 		return nil
 	}
 	res := &DeploymentExternalMCPResponseBody{
-		ID:                      v.ID,
-		RegistryID:              v.RegistryID,
-		RegistryType:            v.RegistryType,
-		Name:                    v.Name,
-		Slug:                    string(v.Slug),
-		RegistryServerSpecifier: v.RegistryServerSpecifier,
-	}
-	{
-		var zero string
-		if res.RegistryType == zero {
-			res.RegistryType = "external"
-		}
+		ID:                                  v.ID,
+		RegistryID:                          v.RegistryID,
+		OrganizationMcpCollectionRegistryID: v.OrganizationMcpCollectionRegistryID,
+		Name:                                v.Name,
+		Slug:                                string(v.Slug),
+		RegistryServerSpecifier:             v.RegistryServerSpecifier,
 	}
 
 	return res
@@ -2051,16 +2045,11 @@ func unmarshalAddExternalMCPFormRequestBodyToDeploymentsAddExternalMCPForm(v *Ad
 		return nil
 	}
 	res := &deployments.AddExternalMCPForm{
-		RegistryID:              *v.RegistryID,
-		Name:                    *v.Name,
-		Slug:                    types.Slug(*v.Slug),
-		RegistryServerSpecifier: *v.RegistryServerSpecifier,
-	}
-	if v.RegistryType != nil {
-		res.RegistryType = *v.RegistryType
-	}
-	if v.RegistryType == nil {
-		res.RegistryType = "external"
+		RegistryID:                          v.RegistryID,
+		OrganizationMcpCollectionRegistryID: v.OrganizationMcpCollectionRegistryID,
+		Name:                                *v.Name,
+		Slug:                                types.Slug(*v.Slug),
+		RegistryServerSpecifier:             *v.RegistryServerSpecifier,
 	}
 	if v.SelectedRemotes != nil {
 		res.SelectedRemotes = make([]string, len(v.SelectedRemotes))

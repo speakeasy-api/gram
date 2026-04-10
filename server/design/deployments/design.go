@@ -349,16 +349,15 @@ var AddDeploymentPackageForm = Type("AddDeploymentPackageForm", func() {
 })
 
 var AddExternalMCPForm = Type("AddExternalMCPForm", func() {
-	Required("registry_id", "name", "slug", "registry_server_specifier")
+	Required("name", "slug", "registry_server_specifier")
 
 	Attribute("registry_id", String, func() {
-		Description("The ID of the MCP registry or collection the server is from.")
+		Description("The ID of the external MCP registry the server is from.")
 		Format(FormatUUID)
 	})
-	Attribute("registry_type", String, func() {
-		Description("The type of registry: 'external' for public registries (e.g. PulseMCP), 'internal' for Gram-hosted collections.")
-		Default("external")
-		Enum("external", "internal")
+	Attribute("organization_mcp_collection_registry_id", String, func() {
+		Description("The ID of the internal collection registry the server is from.")
+		Format(FormatUUID)
 	})
 	Attribute("name", String, func() {
 		Description("The display name for the external MCP server.")

@@ -43,13 +43,13 @@ func NewToolExtractor(
 }
 
 type ToolExtractorTaskMCPServer struct {
-	AttachmentID            uuid.UUID
-	RegistryID              uuid.UUID
-	RegistryType            string
-	Name                    string
-	Slug                    string
-	RegistryServerSpecifier string
-	SelectedRemotes         []string
+	AttachmentID                        uuid.UUID
+	RegistryID                          uuid.NullUUID
+	OrganizationMcpCollectionRegistryID uuid.NullUUID
+	Name                                string
+	Slug                                string
+	RegistryServerSpecifier             string
+	SelectedRemotes                     []string
 }
 
 type ToolExtractorTask struct {
@@ -69,7 +69,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 		attr.SlogExternalMCPID(task.MCP.AttachmentID.String()),
 		attr.SlogExternalMCPSlug(task.MCP.Slug),
 		attr.SlogExternalMCPName(task.MCP.Name),
-		attr.SlogMCPRegistryID(task.MCP.RegistryID.String()),
+		attr.SlogMCPRegistryID(task.MCP.RegistryID.UUID.String()),
 	}
 
 	internalLogger := te.logger.With(slogArgs...)
@@ -93,7 +93,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 	logger.InfoContext(ctx, fmt.Sprintf("[%s] processing external mcp server", task.MCP.Name))
 
 	var serverDetails *ServerDetails
-	if task.MCP.RegistryType == "internal" {
+	if task.MCP.OrganizationMcpCollectionRegistryID.Valid {
 		// Internal Gram-hosted server — build ServerDetails directly from selected_remotes
 		if len(task.MCP.SelectedRemotes) == 0 {
 			return oops.E(oops.CodeBadRequest, nil, "[%s] internal mcp server has no selected remotes", task.MCP.Name).Log(ctx, logger)
@@ -110,7 +110,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 		logger.InfoContext(ctx, fmt.Sprintf("[%s] using internal gram server at %s", task.MCP.Name, serverDetails.RemoteURL))
 	} else {
 		// External registry server — look up registry and fetch details via HTTP
-		registry, err := te.repo.GetMCPRegistryByID(ctx, task.MCP.RegistryID)
+		registry, err := te.repo.GetMCPRegistryByID(ctx, task.MCP.RegistryID.UUID)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "[%s] error getting registry for mcp server", task.MCP.Name).Log(ctx, logger)
 		}
