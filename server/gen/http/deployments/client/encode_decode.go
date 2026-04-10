@@ -2008,11 +2008,12 @@ func unmarshalDeploymentExternalMCPResponseBodyToTypesDeploymentExternalMCP(v *D
 		return nil
 	}
 	res := &types.DeploymentExternalMCP{
-		ID:                      *v.ID,
-		RegistryID:              *v.RegistryID,
-		Name:                    *v.Name,
-		Slug:                    types.Slug(*v.Slug),
-		RegistryServerSpecifier: *v.RegistryServerSpecifier,
+		ID:                                  *v.ID,
+		RegistryID:                          v.RegistryID,
+		OrganizationMcpCollectionRegistryID: v.OrganizationMcpCollectionRegistryID,
+		Name:                                *v.Name,
+		Slug:                                types.Slug(*v.Slug),
+		RegistryServerSpecifier:             *v.RegistryServerSpecifier,
 	}
 
 	return res
@@ -2138,10 +2139,11 @@ func marshalDeploymentsAddExternalMCPFormToAddExternalMCPFormRequestBody(v *depl
 		return nil
 	}
 	res := &AddExternalMCPFormRequestBody{
-		RegistryID:              v.RegistryID,
-		Name:                    v.Name,
-		Slug:                    string(v.Slug),
-		RegistryServerSpecifier: v.RegistryServerSpecifier,
+		RegistryID:                          v.RegistryID,
+		OrganizationMcpCollectionRegistryID: v.OrganizationMcpCollectionRegistryID,
+		Name:                                v.Name,
+		Slug:                                string(v.Slug),
+		RegistryServerSpecifier:             v.RegistryServerSpecifier,
 	}
 	if v.SelectedRemotes != nil {
 		res.SelectedRemotes = make([]string, len(v.SelectedRemotes))
@@ -2209,10 +2211,11 @@ func marshalAddExternalMCPFormRequestBodyToDeploymentsAddExternalMCPForm(v *AddE
 		return nil
 	}
 	res := &deployments.AddExternalMCPForm{
-		RegistryID:              v.RegistryID,
-		Name:                    v.Name,
-		Slug:                    types.Slug(v.Slug),
-		RegistryServerSpecifier: v.RegistryServerSpecifier,
+		RegistryID:                          v.RegistryID,
+		OrganizationMcpCollectionRegistryID: v.OrganizationMcpCollectionRegistryID,
+		Name:                                v.Name,
+		Slug:                                types.Slug(v.Slug),
+		RegistryServerSpecifier:             v.RegistryServerSpecifier,
 	}
 	if v.SelectedRemotes != nil {
 		res.SelectedRemotes = make([]string, len(v.SelectedRemotes))

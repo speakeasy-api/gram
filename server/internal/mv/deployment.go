@@ -106,11 +106,11 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 		externalMCPID := r.ExternalMcpID.UUID
 		if externalMCPID != uuid.Nil && !seenExternalMCPs[externalMCPID] {
 			hasRegistry := r.ExternalMcpRegistryID.Valid && r.ExternalMcpRegistryID.UUID != uuid.Nil
-			hasCollectionRegistry := r.ExternalMcpCollectionRegistryID.Valid && r.ExternalMcpCollectionRegistryID.UUID != uuid.Nil
+			hasCollection := r.ExternalMcpCollectionRegistryID.Valid && r.ExternalMcpCollectionRegistryID.UUID != uuid.Nil
 
 			if err := inv.Check(
 				"describe deployment external mcp",
-				"valid registry reference", hasRegistry || hasCollectionRegistry,
+				"valid registry id", hasRegistry || hasCollection,
 				"valid name", r.ExternalMcpName.Valid && r.ExternalMcpName.String != "",
 				"valid slug", r.ExternalMcpSlug.Valid && r.ExternalMcpSlug.String != "",
 				"valid registry server specifier", r.ExternalMcpRegistryServerSpecifier.Valid && r.ExternalMcpRegistryServerSpecifier.String != "",
@@ -118,15 +118,25 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment external mcp").Log(ctx, logger)
 			}
 
-			registryIDStr := conv.PtrValOr(conv.FromNullableUUID(r.ExternalMcpRegistryID), "")
-
-			attachedExternalMCPs = append(attachedExternalMCPs, &types.DeploymentExternalMCP{
-				ID:                      externalMCPID.String(),
-				RegistryID:              registryIDStr,
-				Name:                    r.ExternalMcpName.String,
-				Slug:                    types.Slug(r.ExternalMcpSlug.String),
-				RegistryServerSpecifier: r.ExternalMcpRegistryServerSpecifier.String,
-			})
+			var registryIDPtr *string
+			var collectionRegistryIDPtr *string
+			if hasRegistry {
+				s := r.ExternalMcpRegistryID.UUID.String()
+				registryIDPtr = &s
+			}
+			if hasCollection {
+				s := r.ExternalMcpCollectionRegistryID.UUID.String()
+				collectionRegistryIDPtr = &s
+			}
+			mcp := &types.DeploymentExternalMCP{
+				ID:                                  externalMCPID.String(),
+				RegistryID:                          registryIDPtr,
+				OrganizationMcpCollectionRegistryID: collectionRegistryIDPtr,
+				Name:                                r.ExternalMcpName.String,
+				Slug:                                types.Slug(r.ExternalMcpSlug.String),
+				RegistryServerSpecifier:             r.ExternalMcpRegistryServerSpecifier.String,
+			}
+			attachedExternalMCPs = append(attachedExternalMCPs, mcp)
 			seenExternalMCPs[externalMCPID] = true
 		}
 	}

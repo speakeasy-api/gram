@@ -92,22 +92,36 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 
 	logger.InfoContext(ctx, fmt.Sprintf("[%s] processing external mcp server", task.MCP.Name))
 
-	if !task.MCP.RegistryID.Valid {
-		logger.InfoContext(ctx, fmt.Sprintf("[%s] skipping external mcp server with no registry_id (collection-backed)", task.MCP.Name))
-		return nil
-	}
+	var serverDetails *ServerDetails
+	if task.MCP.OrganizationMcpCollectionRegistryID.Valid {
+		// Internal Gram-hosted server — build ServerDetails directly from selected_remotes
+		if len(task.MCP.SelectedRemotes) == 0 {
+			return oops.E(oops.CodeBadRequest, nil, "[%s] internal mcp server has no selected remotes", task.MCP.Name).Log(ctx, logger)
+		}
+		serverDetails = &ServerDetails{
+			Name:          task.MCP.Name,
+			Description:   "",
+			Version:       "",
+			RemoteURL:     task.MCP.SelectedRemotes[0],
+			TransportType: types.TransportTypeStreamableHTTP,
+			Tools:         nil,
+			Headers:       nil,
+		}
+		logger.InfoContext(ctx, fmt.Sprintf("[%s] using internal gram server at %s", task.MCP.Name, serverDetails.RemoteURL))
+	} else {
+		// External registry server — look up registry and fetch details via HTTP
+		registry, err := te.repo.GetMCPRegistryByID(ctx, task.MCP.RegistryID.UUID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "[%s] error getting registry for mcp server", task.MCP.Name).Log(ctx, logger)
+		}
 
-	registry, err := te.repo.GetMCPRegistryByID(ctx, task.MCP.RegistryID.UUID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "[%s] error getting registry for mcp server", task.MCP.Name).Log(ctx, logger)
-	}
-
-	serverDetails, err := te.registryClient.GetServerDetails(ctx, Registry{
-		ID:  registry.ID,
-		URL: registry.Url,
-	}, task.MCP.RegistryServerSpecifier, task.MCP.SelectedRemotes)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).Log(ctx, logger)
+		serverDetails, err = te.registryClient.GetServerDetails(ctx, Registry{
+			ID:  registry.ID,
+			URL: registry.Url,
+		}, task.MCP.RegistryServerSpecifier, task.MCP.SelectedRemotes)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).Log(ctx, logger)
+		}
 	}
 
 	var requiresOAuth bool

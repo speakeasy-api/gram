@@ -262,15 +262,16 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 		}
 
 		server := &types.ExternalMCPServer{
-			RegistrySpecifier: s.Server.Name,
-			Version:           s.Server.Version,
-			Description:       s.Server.Description,
-			RegistryID:        registryID,
-			Title:             s.Server.Title,
-			IconURL:           iconURL,
-			Meta:              s.Meta,
-			Tools:             tools,
-			Remotes:           remotes,
+			RegistrySpecifier:                   s.Server.Name,
+			Version:                             s.Server.Version,
+			Description:                         s.Server.Description,
+			RegistryID:                          &registryID,
+			OrganizationMcpCollectionRegistryID: nil,
+			Title:                               s.Server.Title,
+			IconURL:                             iconURL,
+			Meta:                                s.Meta,
+			Tools:                               tools,
+			Remotes:                             remotes,
 		}
 
 		servers = append(servers, server)
