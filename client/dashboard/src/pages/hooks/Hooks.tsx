@@ -1979,12 +1979,10 @@ function HooksAnalytics({
   }, [groupedTraces]);
 
   const kpis = useMemo(() => {
+    const totalSuccesses = derivedServers.reduce((s, r) => s + r.successCount, 0);
     const avgSuccessRate =
-      derivedServers.length > 0
-        ? derivedServers.reduce(
-            (sum, s) => sum + (1 - s.failureRate) * 100,
-            0,
-          ) / derivedServers.length
+      totalEvents > 0
+        ? (totalSuccesses / derivedServers.reduce((s, r) => s + r.eventCount, 0)) * 100
         : null;
 
     const totalEvents = derivedServers.reduce((s, r) => s + r.eventCount, 0);
