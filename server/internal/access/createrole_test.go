@@ -184,7 +184,7 @@ func TestService_CreateRole_AuditLog(t *testing.T) {
 	require.Equal(t, "Audit Builder", record.SubjectDisplay)
 	require.Equal(t, "org-audit-builder", record.SubjectSlug)
 	require.Nil(t, record.BeforeSnapshot)
-	require.NotNil(t, record.AfterSnapshot)
+	require.Nil(t, record.AfterSnapshot)
 
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
