@@ -66,7 +66,7 @@ func parseOverrideHeader(value string) []ScopeOverride {
 			continue
 		}
 
-		override := ScopeOverride{Scope: scope}
+		override := ScopeOverride{Scope: scope, Resources: nil}
 		if hasResources && resourcesStr != "" {
 			for r := range strings.SplitSeq(resourcesStr, "|") {
 				r = strings.TrimSpace(r)
