@@ -21,6 +21,8 @@ type Service interface {
 	CreateToolset(context.Context, *CreateToolsetPayload) (res *types.Toolset, err error)
 	// List all toolsets for a project
 	ListToolsets(context.Context, *ListToolsetsPayload) (res *ListToolsetsResult, err error)
+	// List all toolsets across the organization
+	ListToolsetsForOrg(context.Context, *ListToolsetsForOrgPayload) (res *ListToolsetsResult, err error)
 	// Update a toolset's properties including name, description, and HTTP tools
 	UpdateToolset(context.Context, *UpdateToolsetPayload) (res *types.Toolset, err error)
 	// Delete a toolset by its ID
@@ -37,6 +39,8 @@ type Service interface {
 	RemoveOAuthServer(context.Context, *RemoveOAuthServerPayload) (res *types.Toolset, err error)
 	// Associate an OAuth proxy server with a toolset (admin only)
 	AddOAuthProxyServer(context.Context, *AddOAuthProxyServerPayload) (res *types.Toolset, err error)
+	// Update an existing OAuth proxy server associated with a toolset
+	UpdateOAuthProxyServer(context.Context, *UpdateOAuthProxyServerPayload) (res *types.Toolset, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -59,7 +63,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer"}
+var MethodNames = [12]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer", "updateOAuthProxyServer"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.
@@ -143,6 +147,13 @@ type GetToolsetPayload struct {
 	ProjectSlugInput *string
 }
 
+// ListToolsetsForOrgPayload is the payload type of the toolsets service
+// listToolsetsForOrg method.
+type ListToolsetsForOrgPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+}
+
 // ListToolsetsPayload is the payload type of the toolsets service listToolsets
 // method.
 type ListToolsetsPayload struct {
@@ -165,6 +176,18 @@ type RemoveOAuthServerPayload struct {
 	Slug             types.Slug
 	SessionToken     *string
 	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// UpdateOAuthProxyServerPayload is the payload type of the toolsets service
+// updateOAuthProxyServer method.
+type UpdateOAuthProxyServerPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+	// The slug of the toolset whose OAuth proxy server to update
+	Slug types.Slug
+	// The OAuth proxy server fields to update
+	OauthProxyServer *types.OAuthProxyServerUpdateForm
 	ProjectSlugInput *string
 }
 

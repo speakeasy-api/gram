@@ -47,6 +47,14 @@ import (
 
 const maxUnpaidEnabledServers = 1
 
+// validOAuthProxyAuthMethods is the allowlist of token_endpoint_auth_methods_supported
+// values accepted by AddOAuthProxyServer and UpdateOAuthProxyServer.
+var validOAuthProxyAuthMethods = map[string]bool{
+	"client_secret_basic": true,
+	"client_secret_post":  true,
+	"none":                true,
+}
+
 type Service struct {
 	tracer          trace.Tracer
 	logger          *slog.Logger
@@ -213,7 +221,32 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 
 	result := make([]*types.ToolsetEntry, len(toolsets))
 	for i, toolset := range toolsets {
-		toolsetDetails, err := mv.DescribeToolsetEntry(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug))
+		toolsetDetails, err := mv.DescribeToolsetEntry(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))
+		if err != nil {
+			return nil, err
+		}
+		result[i] = toolsetDetails
+	}
+
+	return &gen.ListToolsetsResult{
+		Toolsets: result,
+	}, nil
+}
+
+func (s *Service) ListToolsetsForOrg(ctx context.Context, payload *gen.ListToolsetsForOrgPayload) (*gen.ListToolsetsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	toolsets, err := s.repo.ListToolsetsByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets for organization").Log(ctx, s.logger)
+	}
+
+	result := make([]*types.ToolsetEntry, len(toolsets))
+	for i, toolset := range toolsets {
+		toolsetDetails, err := mv.DescribeToolsetEntry(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))
 		if err != nil {
 			return nil, err
 		}
@@ -250,7 +283,6 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
 	}
-
 	existingView, err := mv.DescribeToolset(ctx, logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(existingToolset.Slug), new(s.toolsetCache.SkipCache()))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to describe existing toolset").Log(ctx, logger)
@@ -947,14 +979,8 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 	}
 
 	// Validate token_endpoint_auth_methods_supported
-	validAuthMethods := map[string]bool{
-		"client_secret_basic": true,
-		"client_secret_post":  true,
-		"none":                true,
-	}
-
 	for _, method := range payload.OauthProxyServer.TokenEndpointAuthMethodsSupported {
-		if !validAuthMethods[method] {
+		if !validOAuthProxyAuthMethods[method] {
 			return nil, oops.E(oops.CodeBadRequest, nil, "invalid token_endpoint_auth_methods_supported value: %s (must be client_secret_basic or client_secret_post)", method).Log(ctx, s.logger)
 		}
 	}

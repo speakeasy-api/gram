@@ -10,8 +10,10 @@ import { toolsetsCreate } from "../funcs/toolsetsCreate.js";
 import { toolsetsDeleteBySlug } from "../funcs/toolsetsDeleteBySlug.js";
 import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
 import { toolsetsList } from "../funcs/toolsetsList.js";
+import { toolsetsListForOrg } from "../funcs/toolsetsListForOrg.js";
 import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
+import { toolsetsUpdateOAuthProxyServer } from "../funcs/toolsetsUpdateOAuthProxyServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -171,6 +173,25 @@ export class Toolsets extends ClientSDK {
   }
 
   /**
+   * listToolsetsForOrg toolsets
+   *
+   * @remarks
+   * List all toolsets across the organization
+   */
+  async listForOrg(
+    request?: operations.ListToolsetsForOrgRequest | undefined,
+    security?: operations.ListToolsetsForOrgSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListToolsetsResult> {
+    return unwrapAsync(toolsetsListForOrg(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * removeOAuthServer toolsets
    *
    * @remarks
@@ -201,6 +222,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsUpdateBySlug(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateOAuthProxyServer toolsets
+   *
+   * @remarks
+   * Update an existing OAuth proxy server associated with a toolset
+   */
+  async updateOAuthProxyServer(
+    request: operations.UpdateOAuthProxyServerRequest,
+    security?: operations.UpdateOAuthProxyServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsUpdateOAuthProxyServer(
       this,
       request,
       security,

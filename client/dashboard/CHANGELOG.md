@@ -1,5 +1,32 @@
 # dashboard
 
+## 0.38.0
+
+### Minor Changes
+
+- b328938: Add static platform tools to tool discovery and the built-in MCP logs server.
+
+### Patch Changes
+
+- 3a3acd3: Add editable OAuth proxy server configuration.
+
+  Admins can now edit an existing OAuth proxy server's audience, authorization endpoint, token endpoint, scopes, token endpoint auth methods, and environment slug without having to unlink and recreate the configuration. The new `POST /rpc/toolsets.updateOAuthProxyServer` endpoint accepts partial updates with PATCH semantics (omit fields to leave them unchanged; pass an empty array to clear array fields). The dashboard's OAuth proxy details modal now exposes an Edit button that opens the existing OAuth modal in edit mode with the current values pre-filled.
+
+  Slug and provider type remain immutable after creation. Gram-managed OAuth proxy servers stay view-only.
+
+- Updated dependencies [3a3acd3]
+- Updated dependencies [b328938]
+  - @gram/client@0.33.0
+
+## 0.37.2
+
+### Patch Changes
+
+- 494f76c: Adds support for tracking skills in hooks dashboard
+- baa93c7: Store user-provided playground credentials in encrypted server-side environments instead of localStorage. Credentials are scoped per-user per-toolset and resolved server-side when proxying to MCP servers. Also shows the active environment name in the authentication section and adds a starter suggestion prompt.
+- Updated dependencies [494f76c]
+  - @gram/client@0.32.38
+
 ## 0.37.1
 
 ### Patch Changes

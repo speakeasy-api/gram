@@ -198,6 +198,7 @@ func (c *Client) AgentChat(
 			ChatID:         chatID,
 			UserID:         "",
 			ExternalUserID: "", // TODO
+			UserEmail:      "",
 			HTTPMetadata:   nil,
 			APIKeyID:       "",
 			JSONSchema:     nil,

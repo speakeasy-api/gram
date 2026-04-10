@@ -129,6 +129,14 @@ type PromptToolCallPlan struct {
 	Kind       string `json:"kind" yaml:"kind"`
 }
 
+type PlatformToolCallPlan struct {
+	SourceSlug  string `json:"source_slug" yaml:"source_slug"`
+	Managed     bool   `json:"managed" yaml:"managed"`
+	OwnerKind   string `json:"owner_kind" yaml:"owner_kind"`
+	OwnerID     string `json:"owner_id" yaml:"owner_id"`
+	InputSchema []byte `json:"input_schema" yaml:"input_schema"`
+}
+
 // ExternalMCPToolCallPlan is an alias for externalmcp.ToolCallPlan.
 // Kept for backwards compatibility with existing code.
 type ExternalMCPToolCallPlan = externalmcp.ToolCallPlan
@@ -152,6 +160,7 @@ const (
 	ToolKindHTTP        ToolKind = "http"
 	ToolKindFunction    ToolKind = "function"
 	ToolKindPrompt      ToolKind = "prompt"
+	ToolKindPlatform    ToolKind = "platform"
 	ToolKindExternalMCP ToolKind = "external_mcp"
 )
 
@@ -171,6 +180,7 @@ type ToolCallPlan struct {
 	HTTP        *HTTPToolCallPlan
 	Function    *FunctionToolCallPlan
 	Prompt      *PromptToolCallPlan
+	Platform    *PlatformToolCallPlan
 	ExternalMCP *ExternalMCPToolCallPlan
 }
 
@@ -183,6 +193,7 @@ func NewHTTPToolCallPlan(tool *ToolDescriptor, plan *HTTPToolCallPlan) *ToolCall
 		HTTP:        plan,
 		Function:    nil,
 		Prompt:      nil,
+		Platform:    nil,
 		ExternalMCP: nil,
 	}
 }
@@ -196,6 +207,7 @@ func NewFunctionToolCallPlan(tool *ToolDescriptor, plan *FunctionToolCallPlan) *
 		HTTP:        nil,
 		Function:    plan,
 		Prompt:      nil,
+		Platform:    nil,
 		ExternalMCP: nil,
 	}
 }
@@ -209,6 +221,20 @@ func NewPromptToolCallPlan(tool *ToolDescriptor, plan *PromptToolCallPlan) *Tool
 		HTTP:        nil,
 		Function:    nil,
 		Prompt:      plan,
+		Platform:    nil,
+		ExternalMCP: nil,
+	}
+}
+
+func NewPlatformToolCallPlan(tool *ToolDescriptor, plan *PlatformToolCallPlan) *ToolCallPlan {
+	return &ToolCallPlan{
+		Kind:        ToolKindPlatform,
+		BillingType: billing.ToolCallTypePlatform,
+		Descriptor:  tool,
+		HTTP:        nil,
+		Function:    nil,
+		Prompt:      nil,
+		Platform:    plan,
 		ExternalMCP: nil,
 	}
 }
@@ -222,6 +248,7 @@ func NewExternalMCPToolCallPlan(tool *ToolDescriptor, plan *ExternalMCPToolCallP
 		HTTP:        nil,
 		Function:    nil,
 		Prompt:      nil,
+		Platform:    nil,
 		ExternalMCP: plan,
 	}
 }

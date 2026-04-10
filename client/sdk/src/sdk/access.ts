@@ -5,6 +5,7 @@
 import { accessCreateRole } from "../funcs/accessCreateRole.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
+import { accessListGrants } from "../funcs/accessListGrants.js";
 import { accessListMembers } from "../funcs/accessListMembers.js";
 import { accessListRoles } from "../funcs/accessListRoles.js";
 import { accessListScopes } from "../funcs/accessListScopes.js";
@@ -66,6 +67,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Role> {
     return unwrapAsync(accessGetRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listGrants access
+   *
+   * @remarks
+   * List the current user's effective grants, including inherited role grants.
+   */
+  async listGrants(
+    request?: operations.ListGrantsRequest | undefined,
+    security?: operations.ListGrantsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListUserGrantsResult> {
+    return unwrapAsync(accessListGrants(
       this,
       request,
       security,

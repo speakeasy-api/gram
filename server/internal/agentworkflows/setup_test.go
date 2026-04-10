@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -91,6 +92,7 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 
 	// Create auth service
 	authService := auth.New(logger, conn, sessionManager, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	platformSvc := platformtoolsruntime.NewService(logger, conn, nil)
 
 	// Create agents service for the background worker
 	agentsService := agents.NewService(
@@ -103,6 +105,7 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 		cacheImpl,
 		nil, // guardian policy - nil is acceptable for testing
 		funcs,
+		platformSvc,
 		nil, // openrouter provisioner - nil is acceptable for testing
 		nil, // chat client - nil is acceptable for testing
 	)
@@ -129,6 +132,7 @@ func newTestAgentsAPIService(t *testing.T) (context.Context, *testInstance) {
 		cacheImpl,
 		nil, // guardian policy
 		funcs,
+		platformSvc,
 		nil, // openrouter provisioner
 		nil, // chat client
 		authService,

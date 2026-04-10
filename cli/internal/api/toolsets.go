@@ -32,6 +32,7 @@ func NewToolsetsClient(options *ToolsetsClientOptions) *ToolsetsClient {
 	client := toolsets.NewClient(
 		h.CreateToolset(),
 		h.ListToolsets(),
+		h.ListToolsetsForOrg(),
 		h.UpdateToolset(),
 		h.DeleteToolset(),
 		h.GetToolset(),
@@ -40,6 +41,7 @@ func NewToolsetsClient(options *ToolsetsClientOptions) *ToolsetsClient {
 		h.AddExternalOAuthServer(),
 		h.RemoveOAuthServer(),
 		h.AddOAuthProxyServer(),
+		h.UpdateOAuthProxyServer(),
 	)
 
 	return &ToolsetsClient{client: client}

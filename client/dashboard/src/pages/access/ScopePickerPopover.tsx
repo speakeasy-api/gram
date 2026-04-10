@@ -6,8 +6,9 @@ import {
 } from "@/components/ui/popover";
 import { useOrganization } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
-import { useListMCPRegistries } from "@gram/client/react-query/listMCPRegistries";
+import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Check, ChevronDown } from "lucide-react";
+import { useMemo } from "react";
 import type { ResourceType } from "./types";
 
 interface ScopePickerPopoverProps {
@@ -18,17 +19,41 @@ interface ScopePickerPopoverProps {
   onChangeResources: (resources: string[] | null) => void;
 }
 
+interface ServerGroup {
+  projectId: string;
+  projectName: string;
+  servers: { id: string; name: string }[];
+}
+
+function useMCPServers(enabled: boolean) {
+  const organization = useOrganization();
+  const { data } = useListToolsetsForOrg(undefined, undefined, { enabled });
+
+  return useMemo((): ServerGroup[] => {
+    const projectNames = new Map(
+      organization.projects.map((p) => [p.id, p.name]),
+    );
+    const groups = new Map<string, ServerGroup>();
+    for (const t of data?.toolsets ?? []) {
+      const projectName = projectNames.get(t.projectId) ?? "Unknown";
+      let group = groups.get(t.projectId);
+      if (!group) {
+        group = { projectId: t.projectId, projectName, servers: [] };
+        groups.set(t.projectId, group);
+      }
+      group.servers.push({ id: t.slug, name: t.name });
+    }
+    return [...groups.values()];
+  }, [data, organization.projects]);
+}
+
 export function ScopePickerPopover({
   resourceType,
   resources,
   onChangeResources,
 }: ScopePickerPopoverProps) {
   const organization = useOrganization();
-  const { data: mcpData } = useListMCPRegistries(
-    { gramSession: "" },
-    undefined,
-    { enabled: resourceType === "mcp" },
-  );
+  const mcpServers = useMCPServers(resourceType === "mcp");
 
   // Org-scoped permissions have no resource picker — they're always org-wide
   if (resourceType === "org") {
@@ -40,13 +65,13 @@ export function ScopePickerPopover({
   }
 
   const isUnrestricted = resources === null;
-  const resourceList =
-    resourceType === "project"
-      ? organization.projects.map((p) => ({ id: p.id, name: p.name }))
-      : (mcpData?.registries ?? []).map((r) => ({ id: r.id, name: r.name }));
+  const projectList = organization.projects.map((p) => ({
+    id: p.id,
+    name: p.name,
+  }));
   const label = getLabel(resourceType, resources);
 
-  const toggleProject = (id: string) => {
+  const toggleResource = (id: string) => {
     if (resources === null) return;
     const has = resources.includes(id);
     const next = has ? resources.filter((r) => r !== id) : [...resources, id];
@@ -90,31 +115,66 @@ export function ScopePickerPopover({
         {!isUnrestricted && (
           <>
             <div className="my-1 h-px bg-border" />
-            {resourceList.map((resource) => {
-              const checked = resources.includes(resource.id);
-              return (
-                <button
-                  key={resource.id}
-                  type="button"
-                  onClick={() => toggleProject(resource.id)}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent cursor-pointer",
-                    checked && "font-medium",
-                  )}
-                >
-                  <Checkbox
-                    checked={checked}
-                    className="pointer-events-none"
-                    tabIndex={-1}
+            {resourceType === "project"
+              ? projectList.map((resource) => (
+                  <ResourceCheckbox
+                    key={resource.id}
+                    id={resource.id}
+                    name={resource.name}
+                    checked={resources.includes(resource.id)}
+                    onToggle={toggleResource}
                   />
-                  <span>{resource.name}</span>
-                </button>
-              );
-            })}
+                ))
+              : mcpServers.map((group) => (
+                  <div key={group.projectId}>
+                    <div className="px-2 py-1 text-xs text-muted-foreground font-medium">
+                      {group.projectName}
+                    </div>
+                    {group.servers.map((server) => (
+                      <ResourceCheckbox
+                        key={server.id}
+                        id={server.id}
+                        name={server.name}
+                        checked={resources.includes(server.id)}
+                        onToggle={toggleResource}
+                      />
+                    ))}
+                  </div>
+                ))}
           </>
         )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+function ResourceCheckbox({
+  id,
+  name,
+  checked,
+  onToggle,
+}: {
+  id: string;
+  name: string;
+  checked: boolean;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(id)}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent cursor-pointer",
+        checked && "font-medium",
+      )}
+    >
+      <Checkbox
+        checked={checked}
+        className="pointer-events-none"
+        tabIndex={-1}
+      />
+      <span>{name}</span>
+    </button>
   );
 }
 

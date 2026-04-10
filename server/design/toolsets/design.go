@@ -64,6 +64,33 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolsets"}`)
 	})
 
+	Method("listToolsetsForOrg", func() {
+		Description("List all toolsets across the organization")
+
+		Security(security.Session)
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(ListToolsetsResult)
+
+		HTTP(func() {
+			GET("/rpc/toolsets.listForOrg")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listToolsetsForOrg")
+		Meta("openapi:extension:x-speakeasy-name-override", "listForOrg")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolsetsForOrg"}`)
+	})
+
 	Method("updateToolset", func() {
 		Description("Update a toolset's properties including name, description, and HTTP tools")
 
@@ -271,6 +298,31 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddOAuthProxyServer"}`)
 	})
 
+	Method("updateOAuthProxyServer", func() {
+		Description("Update an existing OAuth proxy server associated with a toolset")
+
+		Payload(func() {
+			Extend(UpdateOAuthProxyServerForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			Param("slug")
+			POST("/rpc/toolsets.updateOAuthProxyServer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateOAuthProxyServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateOAuthProxyServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateOAuthProxyServer"}`)
+	})
+
 })
 
 var CreateToolsetForm = Type("CreateToolsetForm", func() {
@@ -315,6 +367,13 @@ var AddExternalOAuthServerForm = Type("AddExternalOAuthServerForm", func() {
 var AddOAuthProxyServerForm = Type("AddOAuthProxyServerForm", func() {
 	Attribute("slug", shared.Slug, "The slug of the toolset to update")
 	Attribute("oauth_proxy_server", shared.OAuthProxyServerForm, "The OAuth proxy server data to create and associate with the toolset")
+	security.ProjectPayload()
+	Required("slug", "oauth_proxy_server")
+})
+
+var UpdateOAuthProxyServerForm = Type("UpdateOAuthProxyServerForm", func() {
+	Attribute("slug", shared.Slug, "The slug of the toolset whose OAuth proxy server to update")
+	Attribute("oauth_proxy_server", shared.OAuthProxyServerUpdateForm, "The OAuth proxy server fields to update")
 	security.ProjectPayload()
 	Required("slug", "oauth_proxy_server")
 })

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
@@ -34,6 +35,10 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) ([]*gen.Se
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	rows, err := s.repo.ListHooksServerNameOverrides(ctx, *authCtx.ProjectID)
@@ -66,6 +71,10 @@ func (s *Service) Upsert(ctx context.Context, payload *gen.UpsertPayload) (*gen.
 
 	if authCtx.ProjectID == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "project_id required")
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	if payload.RawServerName == "" {
@@ -105,6 +114,10 @@ func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error 
 
 	if authCtx.ProjectID == nil {
 		return oops.E(oops.CodeBadRequest, nil, "project_id required")
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return err
 	}
 
 	overrideUUID, err := uuid.Parse(payload.OverrideID)

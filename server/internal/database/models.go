@@ -585,6 +585,41 @@ type OrganizationFeature struct {
 	Deleted        bool
 }
 
+type OrganizationMcpCollection struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Name           string
+	Description    pgtype.Text
+	Slug           string
+	Visibility     string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type OrganizationMcpCollectionRegistry struct {
+	ID           uuid.UUID
+	CollectionID uuid.UUID
+	Namespace    string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
+type OrganizationMcpCollectionServerAttachment struct {
+	PublishedAt  pgtype.Timestamptz
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	PublishedBy  pgtype.Text
+	ID           uuid.UUID
+	CollectionID uuid.UUID
+	ToolsetID    uuid.UUID
+	Deleted      bool
+}
+
 type OrganizationMetadatum struct {
 	ID                 string
 	Name               string
@@ -859,6 +894,24 @@ type ToolsetVersion struct {
 	UpdatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	Deleted       bool
+}
+
+type TriggerInstance struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	DefinitionSlug string
+	Name           string
+	EnvironmentID  uuid.NullUUID
+	TargetKind     string
+	TargetRef      string
+	TargetDisplay  string
+	ConfigJson     []byte
+	Status         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type User struct {
