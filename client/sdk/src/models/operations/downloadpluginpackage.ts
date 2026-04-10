@@ -5,15 +5,31 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
-import * as components from "../components/index.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type DownloadPluginPackageSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
+/**
+ * Target platform to download plugins for.
+ */
+export const Platform = {
+  Claude: "claude",
+  Cursor: "cursor",
+} as const;
+/**
+ * Target platform to download plugins for.
+ */
+export type Platform = ClosedEnum<typeof Platform>;
+
 export type DownloadPluginPackageRequest = {
+  /**
+   * Target platform to download plugins for.
+   */
+  platform: Platform;
   /**
    * Session header
    */
@@ -22,7 +38,7 @@ export type DownloadPluginPackageRequest = {
 
 export type DownloadPluginPackageResponse = {
   headers: { [k: string]: Array<string> };
-  result: components.DownloadPluginPackageResponseBody;
+  result: ReadableStream<Uint8Array>;
 };
 
 /** @internal */
@@ -56,7 +72,13 @@ export function downloadPluginPackageSecurityToJSON(
 }
 
 /** @internal */
+export const Platform$outboundSchema: z.ZodMiniEnum<typeof Platform> = z.enum(
+  Platform,
+);
+
+/** @internal */
 export type DownloadPluginPackageRequest$Outbound = {
+  platform: string;
   "Gram-Session"?: string | undefined;
 };
 
@@ -66,6 +88,7 @@ export const DownloadPluginPackageRequest$outboundSchema: z.ZodMiniType<
   DownloadPluginPackageRequest
 > = z.pipe(
   z.object({
+    platform: Platform$outboundSchema,
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
@@ -92,7 +115,9 @@ export const DownloadPluginPackageResponse$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     Headers: z._default(z.record(z.string(), z.array(z.string())), {}),
-    Result: components.DownloadPluginPackageResponseBody$inboundSchema,
+    Result: z.custom<ReadableStream<Uint8Array>>(x =>
+      x instanceof ReadableStream
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {

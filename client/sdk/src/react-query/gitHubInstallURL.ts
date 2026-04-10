@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildGitHubConnectionQuery,
-  GitHubConnectionQueryData,
-  prefetchGitHubConnection,
-  queryKeyGitHubConnection,
-} from "./gitHubConnection.core.js";
+  buildGitHubInstallURLQuery,
+  GitHubInstallURLQueryData,
+  prefetchGitHubInstallURL,
+  queryKeyGitHubInstallURL,
+} from "./gitHubInstallURL.core.js";
 export {
-  buildGitHubConnectionQuery,
-  type GitHubConnectionQueryData,
-  prefetchGitHubConnection,
-  queryKeyGitHubConnection,
+  buildGitHubInstallURLQuery,
+  type GitHubInstallURLQueryData,
+  prefetchGitHubInstallURL,
+  queryKeyGitHubInstallURL,
 };
 
-export type GitHubConnectionQueryError =
+export type GitHubInstallURLQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,22 +53,22 @@ export type GitHubConnectionQueryError =
   | SDKValidationError;
 
 /**
- * getGitHubConnection plugins
+ * getGitHubInstallURL plugins
  *
  * @remarks
- * Get the current GitHub connection for the organization.
+ * Get the GitHub App installation URL and whether it is already installed.
  */
-export function useGitHubConnection(
-  request?: operations.GetGitHubConnectionRequest | undefined,
-  security?: operations.GetGitHubConnectionSecurity | undefined,
+export function useGitHubInstallURL(
+  request?: operations.GetGitHubInstallURLRequest | undefined,
+  security?: operations.GetGitHubInstallURLSecurity | undefined,
   options?: QueryHookOptions<
-    GitHubConnectionQueryData,
-    GitHubConnectionQueryError
+    GitHubInstallURLQueryData,
+    GitHubInstallURLQueryError
   >,
-): UseQueryResult<GitHubConnectionQueryData, GitHubConnectionQueryError> {
+): UseQueryResult<GitHubInstallURLQueryData, GitHubInstallURLQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildGitHubConnectionQuery(
+    ...buildGitHubInstallURLQuery(
       client,
       request,
       security,
@@ -79,25 +79,25 @@ export function useGitHubConnection(
 }
 
 /**
- * getGitHubConnection plugins
+ * getGitHubInstallURL plugins
  *
  * @remarks
- * Get the current GitHub connection for the organization.
+ * Get the GitHub App installation URL and whether it is already installed.
  */
-export function useGitHubConnectionSuspense(
-  request?: operations.GetGitHubConnectionRequest | undefined,
-  security?: operations.GetGitHubConnectionSecurity | undefined,
+export function useGitHubInstallURLSuspense(
+  request?: operations.GetGitHubInstallURLRequest | undefined,
+  security?: operations.GetGitHubInstallURLSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    GitHubConnectionQueryData,
-    GitHubConnectionQueryError
+    GitHubInstallURLQueryData,
+    GitHubInstallURLQueryError
   >,
 ): UseSuspenseQueryResult<
-  GitHubConnectionQueryData,
-  GitHubConnectionQueryError
+  GitHubInstallURLQueryData,
+  GitHubInstallURLQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildGitHubConnectionQuery(
+    ...buildGitHubInstallURLQuery(
       client,
       request,
       security,
@@ -107,17 +107,17 @@ export function useGitHubConnectionSuspense(
   });
 }
 
-export function setGitHubConnectionData(
+export function setGitHubInstallURLData(
   client: QueryClient,
   queryKeyBase: [parameters: { gramSession?: string | undefined }],
-  data: GitHubConnectionQueryData,
-): GitHubConnectionQueryData | undefined {
-  const key = queryKeyGitHubConnection(...queryKeyBase);
+  data: GitHubInstallURLQueryData,
+): GitHubInstallURLQueryData | undefined {
+  const key = queryKeyGitHubInstallURL(...queryKeyBase);
 
-  return client.setQueryData<GitHubConnectionQueryData>(key, data);
+  return client.setQueryData<GitHubInstallURLQueryData>(key, data);
 }
 
-export function invalidateGitHubConnection(
+export function invalidateGitHubInstallURL(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: { gramSession?: string | undefined }]
@@ -129,18 +129,18 @@ export function invalidateGitHubConnection(
     queryKey: [
       "@gram/client",
       "plugins",
-      "getGitHubConnection",
+      "getGitHubInstallURL",
       ...queryKeyBase,
     ],
   });
 }
 
-export function invalidateAllGitHubConnection(
+export function invalidateAllGitHubInstallURL(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "plugins", "getGitHubConnection"],
+    queryKey: ["@gram/client", "plugins", "getGitHubInstallURL"],
   });
 }

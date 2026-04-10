@@ -53,6 +53,7 @@ export * from "./getdeployment.js";
 export * from "./getdeploymentlogs.js";
 export * from "./getdomain.js";
 export * from "./getgithubconnection.js";
+export * from "./getgithubinstallurl.js";
 export * from "./gethookssummary.js";
 export * from "./getinstance.js";
 export * from "./getinvitebytoken.js";

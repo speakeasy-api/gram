@@ -35,12 +35,14 @@ type Service interface {
 	RemovePluginServer(context.Context, *RemovePluginServerPayload) (err error)
 	// Replace all assignments for a plugin with the given list of principal URNs.
 	SetPluginAssignments(context.Context, *SetPluginAssignmentsPayload) (res *SetPluginAssignmentsResult, err error)
-	// Store the GitHub App installation and repository connection for plugin
-	// distribution.
+	// Get the GitHub App installation URL and whether it is already installed.
+	GetGitHubInstallURL(context.Context, *GetGitHubInstallURLPayload) (res *GetGitHubInstallURLResult, err error)
+	// Connect the organization to a GitHub App installation, creating a repo in
+	// the customer's org.
 	ConnectGitHub(context.Context, *ConnectGitHubPayload) (res *PluginGitHubConnection, err error)
-	// Remove the GitHub connection for plugin distribution.
+	// Disconnect the organization's GitHub integration.
 	DisconnectGitHub(context.Context, *DisconnectGitHubPayload) (err error)
-	// Get the current GitHub connection status for plugin distribution.
+	// Get the current GitHub connection for the organization.
 	GetGitHubConnection(context.Context, *GetGitHubConnectionPayload) (res *PluginGitHubConnection, err error)
 	// Generate platform-specific plugin packages and push them to the connected
 	// GitHub repository.
@@ -74,7 +76,7 @@ const ServiceName = "plugins"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "connectGitHub", "disconnectGitHub", "getGitHubConnection", "publishPlugins", "downloadPluginPackage"}
+var MethodNames = [15]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "getGitHubInstallURL", "connectGitHub", "disconnectGitHub", "getGitHubConnection", "publishPlugins", "downloadPluginPackage"}
 
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
@@ -95,12 +97,8 @@ type AddPluginServerPayload struct {
 // connectGitHub method.
 type ConnectGitHubPayload struct {
 	SessionToken *string
-	// GitHub App installation ID.
-	InstallationID int64
-	// GitHub repo owner.
-	RepoOwner string
-	// GitHub repo name.
-	RepoName string
+	// GitHub App installation ID. Auto-detected if omitted.
+	InstallationID *int64
 }
 
 // CreatePluginPayload is the payload type of the plugins service createPlugin
@@ -145,6 +143,21 @@ type DownloadPluginPackageResult struct {
 // getGitHubConnection method.
 type GetGitHubConnectionPayload struct {
 	SessionToken *string
+}
+
+// GetGitHubInstallURLPayload is the payload type of the plugins service
+// getGitHubInstallURL method.
+type GetGitHubInstallURLPayload struct {
+	SessionToken *string
+}
+
+// GetGitHubInstallURLResult is the result type of the plugins service
+// getGitHubInstallURL method.
+type GetGitHubInstallURLResult struct {
+	// GitHub App installation URL.
+	URL string
+	// Whether the app is already installed on at least one account.
+	Installed bool
 }
 
 // GetPluginPayload is the payload type of the plugins service getPlugin method.
@@ -199,12 +212,13 @@ type PluginAssignment struct {
 // PluginGitHubConnection is the result type of the plugins service
 // connectGitHub method.
 type PluginGitHubConnection struct {
+	// Unique connection identifier.
 	ID string
 	// GitHub App installation ID.
 	InstallationID int64
-	// GitHub repo owner (org or user).
+	// GitHub org or user that owns the repo.
 	RepoOwner string
-	// GitHub repo name.
+	// Repository name.
 	RepoName  string
 	CreatedAt string
 }
@@ -242,6 +256,8 @@ type PublishPluginsPayload struct {
 type PublishPluginsResult struct {
 	// Whether the publish succeeded.
 	Published bool
+	// GitHub repository URL where plugins were published.
+	RepoURL string
 	// Git commit SHA of the push.
 	CommitSha *string
 }

@@ -7,24 +7,14 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type ConnectGitHubForm = {
   /**
-   * GitHub App installation ID.
+   * GitHub App installation ID. Auto-detected if omitted.
    */
-  installationId: number;
-  /**
-   * GitHub repo name.
-   */
-  repoName: string;
-  /**
-   * GitHub repo owner.
-   */
-  repoOwner: string;
+  installationId?: number | undefined;
 };
 
 /** @internal */
 export type ConnectGitHubForm$Outbound = {
-  installation_id: number;
-  repo_name: string;
-  repo_owner: string;
+  installation_id?: number | undefined;
 };
 
 /** @internal */
@@ -33,15 +23,11 @@ export const ConnectGitHubForm$outboundSchema: z.ZodMiniType<
   ConnectGitHubForm
 > = z.pipe(
   z.object({
-    installationId: z.int(),
-    repoName: z.string(),
-    repoOwner: z.string(),
+    installationId: z.optional(z.int()),
   }),
   z.transform((v) => {
     return remap$(v, {
       installationId: "installation_id",
-      repoName: "repo_name",
-      repoOwner: "repo_owner",
     });
   }),
 );

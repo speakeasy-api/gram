@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * getGitHubConnection plugins
  *
  * @remarks
- * Get the current GitHub connection status for plugin distribution.
+ * Get the current GitHub connection for the organization.
  */
 export function pluginsGetGitHubConnection(
   client: GramCore,

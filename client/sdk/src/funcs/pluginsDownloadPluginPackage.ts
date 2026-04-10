@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -30,11 +30,11 @@ import { Result } from "../types/fp.js";
  * downloadPluginPackage plugins
  *
  * @remarks
- * Download a ZIP archive of all generated plugin packages for the organization.
+ * Download a ZIP archive of generated plugin packages for the organization, filtered by platform.
  */
 export function pluginsDownloadPluginPackage(
   client: GramCore,
-  request?: operations.DownloadPluginPackageRequest | undefined,
+  request: operations.DownloadPluginPackageRequest,
   security?: operations.DownloadPluginPackageSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -61,7 +61,7 @@ export function pluginsDownloadPluginPackage(
 
 async function $do(
   client: GramCore,
-  request?: operations.DownloadPluginPackageRequest | undefined,
+  request: operations.DownloadPluginPackageRequest,
   security?: operations.DownloadPluginPackageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -84,10 +84,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        z.optional(operations.DownloadPluginPackageRequest$outboundSchema),
-        value,
-      ),
+      z.parse(operations.DownloadPluginPackageRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -98,9 +95,13 @@ async function $do(
 
   const path = pathToFunc("/rpc/plugins.downloadPluginPackage")();
 
+  const query = encodeFormQuery({
+    "platform": payload.platform,
+  });
+
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -137,6 +138,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -185,7 +187,8 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, operations.DownloadPluginPackageResponse$inboundSchema, {
+    M.stream(200, operations.DownloadPluginPackageResponse$inboundSchema, {
+      ctype: "application/json",
       hdrs: true,
       key: "Result",
     }),

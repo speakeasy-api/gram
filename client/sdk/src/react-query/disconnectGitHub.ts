@@ -50,7 +50,7 @@ export type DisconnectGitHubMutationError =
  * disconnectGitHub plugins
  *
  * @remarks
- * Remove the GitHub connection for plugin distribution.
+ * Disconnect the organization's GitHub integration.
  */
 export function useDisconnectGitHubMutation(
   options?: MutationHookOptions<

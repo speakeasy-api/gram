@@ -14,9 +14,10 @@ import (
 
 const apiBase = "https://api.github.com"
 
-// CreateRepo creates a new repository in the given GitHub organization.
-// If the repo already exists, this is a no-op.
-func (c *Client) CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error {
+// CreateRepo creates a new repository under the given account.
+// For organizations, uses the org repos endpoint. For user accounts, uses the
+// authenticated user repos endpoint. If the repo already exists, this is a no-op.
+func (c *Client) CreateRepo(ctx context.Context, installationID int64, owner, name string, private bool, accountType string) error {
 	payload := map[string]any{
 		"name":          name,
 		"private":       private,
@@ -31,7 +32,12 @@ func (c *Client) CreateRepo(ctx context.Context, installationID int64, org, name
 		return fmt.Errorf("marshal create repo: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/orgs/%s/repos", apiBase, org)
+	var url string
+	if accountType == "Organization" {
+		url = fmt.Sprintf("%s/orgs/%s/repos", apiBase, owner)
+	} else {
+		url = fmt.Sprintf("%s/user/repos", apiBase)
+	}
 	resp, err := c.doAPI(ctx, installationID, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create repo: %w", err)
@@ -233,4 +239,82 @@ func (c *Client) updateRef(ctx context.Context, installationID int64, owner, rep
 	}
 
 	return nil
+}
+
+// Installation contains metadata about a GitHub App installation.
+type Installation struct {
+	ID      int64 `json:"id"`
+	Account struct {
+		Login string `json:"login"`
+		Type  string `json:"type"` // "Organization" or "User"
+	} `json:"account"`
+}
+
+// GetInstallation retrieves details about a GitHub App installation,
+// including which org/user account it's installed on.
+func (c *Client) GetInstallation(ctx context.Context, installationID int64) (*Installation, error) {
+	appJWT, err := c.appJWT()
+	if err != nil {
+		return nil, fmt.Errorf("create app JWT: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/app/installations/%d", apiBase, installationID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+appJWT)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get installation: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get installation: status %d: %s", resp.StatusCode, body)
+	}
+
+	var inst Installation
+	if err := json.NewDecoder(resp.Body).Decode(&inst); err != nil {
+		return nil, fmt.Errorf("decode installation: %w", err)
+	}
+	return &inst, nil
+}
+
+// ListInstallations returns all installations of this GitHub App.
+func (c *Client) ListInstallations(ctx context.Context) ([]Installation, error) {
+	appJWT, err := c.appJWT()
+	if err != nil {
+		return nil, fmt.Errorf("create app JWT: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/app/installations", apiBase)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+appJWT)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("list installations: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("list installations: status %d: %s", resp.StatusCode, body)
+	}
+
+	var installations []Installation
+	if err := json.NewDecoder(resp.Body).Decode(&installations); err != nil {
+		return nil, fmt.Errorf("decode installations: %w", err)
+	}
+	return installations, nil
 }

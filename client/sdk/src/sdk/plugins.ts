@@ -9,6 +9,7 @@ import { pluginsDeletePlugin } from "../funcs/pluginsDeletePlugin.js";
 import { pluginsDisconnectGitHub } from "../funcs/pluginsDisconnectGitHub.js";
 import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPackage.js";
 import { pluginsGetGitHubConnection } from "../funcs/pluginsGetGitHubConnection.js";
+import { pluginsGetGitHubInstallURL } from "../funcs/pluginsGetGitHubInstallURL.js";
 import { pluginsGetPlugin } from "../funcs/pluginsGetPlugin.js";
 import { pluginsListPlugins } from "../funcs/pluginsListPlugins.js";
 import { pluginsPublishPlugins } from "../funcs/pluginsPublishPlugins.js";
@@ -45,7 +46,7 @@ export class Plugins extends ClientSDK {
    * connectGitHub plugins
    *
    * @remarks
-   * Store the GitHub App installation and repository connection for plugin distribution.
+   * Connect the organization to a GitHub App installation, creating a repo in the customer's org.
    */
   async connectGitHub(
     request: operations.ConnectGitHubRequest,
@@ -102,7 +103,7 @@ export class Plugins extends ClientSDK {
    * disconnectGitHub plugins
    *
    * @remarks
-   * Remove the GitHub connection for plugin distribution.
+   * Disconnect the organization's GitHub integration.
    */
   async disconnectGitHub(
     request?: operations.DisconnectGitHubRequest | undefined,
@@ -121,10 +122,10 @@ export class Plugins extends ClientSDK {
    * downloadPluginPackage plugins
    *
    * @remarks
-   * Download a ZIP archive of all generated plugin packages for the organization.
+   * Download a ZIP archive of generated plugin packages for the organization, filtered by platform.
    */
   async downloadPluginPackage(
-    request?: operations.DownloadPluginPackageRequest | undefined,
+    request: operations.DownloadPluginPackageRequest,
     security?: operations.DownloadPluginPackageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<operations.DownloadPluginPackageResponse> {
@@ -140,7 +141,7 @@ export class Plugins extends ClientSDK {
    * getGitHubConnection plugins
    *
    * @remarks
-   * Get the current GitHub connection status for plugin distribution.
+   * Get the current GitHub connection for the organization.
    */
   async getGitHubConnection(
     request?: operations.GetGitHubConnectionRequest | undefined,
@@ -148,6 +149,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.PluginGitHubConnection> {
     return unwrapAsync(pluginsGetGitHubConnection(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getGitHubInstallURL plugins
+   *
+   * @remarks
+   * Get the GitHub App installation URL and whether it is already installed.
+   */
+  async getGitHubInstallURL(
+    request?: operations.GetGitHubInstallURLRequest | undefined,
+    security?: operations.GetGitHubInstallURLSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetGitHubInstallURLResponseBody> {
+    return unwrapAsync(pluginsGetGitHubInstallURL(
       this,
       request,
       security,

@@ -73,21 +73,6 @@ var PluginModel = Type("Plugin", func() {
 	})
 })
 
-// GitHubConnectionModel represents the org's GitHub plugin repo connection.
-var GitHubConnectionModel = Type("PluginGitHubConnection", func() {
-	Required("id", "installation_id", "repo_owner", "repo_name", "created_at")
-
-	Attribute("id", String, func() {
-		Format(FormatUUID)
-	})
-	Attribute("installation_id", Int64, "GitHub App installation ID.")
-	Attribute("repo_owner", String, "GitHub repo owner (org or user).")
-	Attribute("repo_name", String, "GitHub repo name.")
-	Attribute("created_at", String, func() {
-		Format(FormatDateTime)
-	})
-})
-
 // --- Forms ---
 
 var CreatePluginForm = Type("CreatePluginForm", func() {
@@ -160,14 +145,6 @@ var SetPluginAssignmentsForm = Type("SetPluginAssignmentsForm", func() {
 	Attribute("principal_urns", ArrayOf(String), "List of principal URNs to assign.")
 })
 
-var ConnectGitHubForm = Type("ConnectGitHubForm", func() {
-	Required("installation_id", "repo_owner", "repo_name")
-
-	Attribute("installation_id", Int64, "GitHub App installation ID.")
-	Attribute("repo_owner", String, "GitHub repo owner.")
-	Attribute("repo_name", String, "GitHub repo name.")
-})
-
 // --- Results ---
 
 var ListPluginsResult = Type("ListPluginsResult", func() {
@@ -176,9 +153,29 @@ var ListPluginsResult = Type("ListPluginsResult", func() {
 })
 
 var PublishPluginsResult = Type("PublishPluginsResult", func() {
-	Required("published")
+	Required("published", "repo_url")
 	Attribute("published", Boolean, "Whether the publish succeeded.")
+	Attribute("repo_url", String, "GitHub repository URL where plugins were published.")
 	Attribute("commit_sha", String, "Git commit SHA of the push.")
+})
+
+var GitHubConnectionModel = Type("PluginGitHubConnection", func() {
+	Required("id", "installation_id", "repo_owner", "repo_name", "created_at")
+
+	Attribute("id", String, func() {
+		Description("Unique connection identifier.")
+		Format(FormatUUID)
+	})
+	Attribute("installation_id", Int64, "GitHub App installation ID.")
+	Attribute("repo_owner", String, "GitHub org or user that owns the repo.")
+	Attribute("repo_name", String, "Repository name.")
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+var ConnectGitHubForm = Type("ConnectGitHubForm", func() {
+	Attribute("installation_id", Int64, "GitHub App installation ID. Auto-detected if omitted.")
 })
 
 // --- Service ---
@@ -392,8 +389,32 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetPluginAssignments"}`)
 	})
 
+	Method("getGitHubInstallURL", func() {
+		Description("Get the GitHub App installation URL and whether it is already installed.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(func() {
+			Required("url", "installed")
+			Attribute("url", String, "GitHub App installation URL.")
+			Attribute("installed", Boolean, "Whether the app is already installed on at least one account.")
+		})
+
+		HTTP(func() {
+			GET("/rpc/plugins.getGitHubInstallURL")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getGitHubInstallURL")
+		Meta("openapi:extension:x-speakeasy-name-override", "getGitHubInstallURL")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GitHubInstallURL"}`)
+	})
+
 	Method("connectGitHub", func() {
-		Description("Store the GitHub App installation and repository connection for plugin distribution.")
+		Description("Connect the organization to a GitHub App installation, creating a repo in the customer's org.")
 
 		Payload(func() {
 			Extend(ConnectGitHubForm)
@@ -414,7 +435,7 @@ var _ = Service("plugins", func() {
 	})
 
 	Method("disconnectGitHub", func() {
-		Description("Remove the GitHub connection for plugin distribution.")
+		Description("Disconnect the organization's GitHub integration.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -432,7 +453,7 @@ var _ = Service("plugins", func() {
 	})
 
 	Method("getGitHubConnection", func() {
-		Description("Get the current GitHub connection status for plugin distribution.")
+		Description("Get the current GitHub connection for the organization.")
 
 		Payload(func() {
 			security.SessionPayload()

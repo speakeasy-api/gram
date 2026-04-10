@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
  * disconnectGitHub plugins
  *
  * @remarks
- * Remove the GitHub connection for plugin distribution.
+ * Disconnect the organization's GitHub integration.
  */
 export function pluginsDisconnectGitHub(
   client: GramCore,

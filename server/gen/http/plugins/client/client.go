@@ -54,6 +54,10 @@ type Client struct {
 	// setPluginAssignments endpoint.
 	SetPluginAssignmentsDoer goahttp.Doer
 
+	// GetGitHubInstallURL Doer is the HTTP client used to make requests to the
+	// getGitHubInstallURL endpoint.
+	GetGitHubInstallURLDoer goahttp.Doer
+
 	// ConnectGitHub Doer is the HTTP client used to make requests to the
 	// connectGitHub endpoint.
 	ConnectGitHubDoer goahttp.Doer
@@ -103,6 +107,7 @@ func NewClient(
 		UpdatePluginServerDoer:    doer,
 		RemovePluginServerDoer:    doer,
 		SetPluginAssignmentsDoer:  doer,
+		GetGitHubInstallURLDoer:   doer,
 		ConnectGitHubDoer:         doer,
 		DisconnectGitHubDoer:      doer,
 		GetGitHubConnectionDoer:   doer,
@@ -327,6 +332,30 @@ func (c *Client) SetPluginAssignments() goa.Endpoint {
 		resp, err := c.SetPluginAssignmentsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("plugins", "setPluginAssignments", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetGitHubInstallURL returns an endpoint that makes HTTP requests to the
+// plugins service getGitHubInstallURL server.
+func (c *Client) GetGitHubInstallURL() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetGitHubInstallURLRequest(c.encoder)
+		decodeResponse = DecodeGetGitHubInstallURLResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetGitHubInstallURLRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetGitHubInstallURLDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "getGitHubInstallURL", err)
 		}
 		return decodeResponse(resp)
 	}

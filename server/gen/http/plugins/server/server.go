@@ -30,6 +30,7 @@ type Server struct {
 	UpdatePluginServer    http.Handler
 	RemovePluginServer    http.Handler
 	SetPluginAssignments  http.Handler
+	GetGitHubInstallURL   http.Handler
 	ConnectGitHub         http.Handler
 	DisconnectGitHub      http.Handler
 	GetGitHubConnection   http.Handler
@@ -73,6 +74,7 @@ func New(
 			{"UpdatePluginServer", "PUT", "/rpc/plugins.updatePluginServer"},
 			{"RemovePluginServer", "DELETE", "/rpc/plugins.removePluginServer"},
 			{"SetPluginAssignments", "PUT", "/rpc/plugins.setPluginAssignments"},
+			{"GetGitHubInstallURL", "GET", "/rpc/plugins.getGitHubInstallURL"},
 			{"ConnectGitHub", "POST", "/rpc/plugins.connectGitHub"},
 			{"DisconnectGitHub", "DELETE", "/rpc/plugins.disconnectGitHub"},
 			{"GetGitHubConnection", "GET", "/rpc/plugins.getGitHubConnection"},
@@ -88,6 +90,7 @@ func New(
 		UpdatePluginServer:    NewUpdatePluginServerHandler(e.UpdatePluginServer, mux, decoder, encoder, errhandler, formatter),
 		RemovePluginServer:    NewRemovePluginServerHandler(e.RemovePluginServer, mux, decoder, encoder, errhandler, formatter),
 		SetPluginAssignments:  NewSetPluginAssignmentsHandler(e.SetPluginAssignments, mux, decoder, encoder, errhandler, formatter),
+		GetGitHubInstallURL:   NewGetGitHubInstallURLHandler(e.GetGitHubInstallURL, mux, decoder, encoder, errhandler, formatter),
 		ConnectGitHub:         NewConnectGitHubHandler(e.ConnectGitHub, mux, decoder, encoder, errhandler, formatter),
 		DisconnectGitHub:      NewDisconnectGitHubHandler(e.DisconnectGitHub, mux, decoder, encoder, errhandler, formatter),
 		GetGitHubConnection:   NewGetGitHubConnectionHandler(e.GetGitHubConnection, mux, decoder, encoder, errhandler, formatter),
@@ -110,6 +113,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdatePluginServer = m(s.UpdatePluginServer)
 	s.RemovePluginServer = m(s.RemovePluginServer)
 	s.SetPluginAssignments = m(s.SetPluginAssignments)
+	s.GetGitHubInstallURL = m(s.GetGitHubInstallURL)
 	s.ConnectGitHub = m(s.ConnectGitHub)
 	s.DisconnectGitHub = m(s.DisconnectGitHub)
 	s.GetGitHubConnection = m(s.GetGitHubConnection)
@@ -131,6 +135,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdatePluginServerHandler(mux, h.UpdatePluginServer)
 	MountRemovePluginServerHandler(mux, h.RemovePluginServer)
 	MountSetPluginAssignmentsHandler(mux, h.SetPluginAssignments)
+	MountGetGitHubInstallURLHandler(mux, h.GetGitHubInstallURL)
 	MountConnectGitHubHandler(mux, h.ConnectGitHub)
 	MountDisconnectGitHubHandler(mux, h.DisconnectGitHub)
 	MountGetGitHubConnectionHandler(mux, h.GetGitHubConnection)
@@ -597,6 +602,59 @@ func NewSetPluginAssignmentsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setPluginAssignments")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetGitHubInstallURLHandler configures the mux to serve the "plugins"
+// service "getGitHubInstallURL" endpoint.
+func MountGetGitHubInstallURLHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/plugins.getGitHubInstallURL", f)
+}
+
+// NewGetGitHubInstallURLHandler creates a HTTP handler which loads the HTTP
+// request and calls the "plugins" service "getGitHubInstallURL" endpoint.
+func NewGetGitHubInstallURLHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetGitHubInstallURLRequest(mux, decoder)
+		encodeResponse = EncodeGetGitHubInstallURLResponse(encoder)
+		encodeError    = EncodeGetGitHubInstallURLError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getGitHubInstallURL")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
 		payload, err := decodeRequest(r)
 		if err != nil {

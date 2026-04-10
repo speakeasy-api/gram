@@ -295,6 +295,7 @@ run();
 * [disconnectGitHub](docs/sdks/plugins/README.md#disconnectgithub) - disconnectGitHub plugins
 * [downloadPluginPackage](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 * [getGitHubConnection](docs/sdks/plugins/README.md#getgithubconnection) - getGitHubConnection plugins
+* [getGitHubInstallURL](docs/sdks/plugins/README.md#getgithubinstallurl) - getGitHubInstallURL plugins
 * [getPlugin](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 * [listPlugins](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
 * [publishPlugins](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
@@ -502,6 +503,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`pluginsDisconnectGitHub`](docs/sdks/plugins/README.md#disconnectgithub) - disconnectGitHub plugins
 - [`pluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 - [`pluginsGetGitHubConnection`](docs/sdks/plugins/README.md#getgithubconnection) - getGitHubConnection plugins
+- [`pluginsGetGitHubInstallURL`](docs/sdks/plugins/README.md#getgithubinstallurl) - getGitHubInstallURL plugins
 - [`pluginsGetPlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 - [`pluginsListPlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
 - [`pluginsPublishPlugins`](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
@@ -651,6 +653,7 @@ To learn about this feature and how to get started, check
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGitHubConnection`](docs/sdks/plugins/README.md#getgithubconnection) - getGitHubConnection plugins
+- [`useGitHubInstallURL`](docs/sdks/plugins/README.md#getgithubinstallurl) - getGitHubInstallURL plugins
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`useGrants`](docs/sdks/access/README.md#listgrants) - listGrants access
 - [`useHooksHooksNumberClaudeMutation`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks

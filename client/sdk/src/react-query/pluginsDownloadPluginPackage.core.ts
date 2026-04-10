@@ -19,7 +19,7 @@ export type PluginsDownloadPluginPackageQueryData =
 export function prefetchPluginsDownloadPluginPackage(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.DownloadPluginPackageRequest | undefined,
+  request: operations.DownloadPluginPackageRequest,
   security?: operations.DownloadPluginPackageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -35,7 +35,7 @@ export function prefetchPluginsDownloadPluginPackage(
 
 export function buildPluginsDownloadPluginPackageQuery(
   client$: GramCore,
-  request?: operations.DownloadPluginPackageRequest | undefined,
+  request: operations.DownloadPluginPackageRequest,
   security?: operations.DownloadPluginPackageSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -46,7 +46,8 @@ export function buildPluginsDownloadPluginPackageQuery(
 } {
   return {
     queryKey: queryKeyPluginsDownloadPluginPackage({
-      gramSession: request?.gramSession,
+      platform: request.platform,
+      gramSession: request.gramSession,
     }),
     queryFn: async function pluginsDownloadPluginPackageQueryFn(
       ctx,
@@ -73,7 +74,10 @@ export function buildPluginsDownloadPluginPackageQuery(
 }
 
 export function queryKeyPluginsDownloadPluginPackage(
-  parameters: { gramSession?: string | undefined },
+  parameters: {
+    platform: operations.Platform;
+    gramSession?: string | undefined;
+  },
 ): QueryKey {
   return ["@gram/client", "plugins", "downloadPluginPackage", parameters];
 }

@@ -10,17 +10,20 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type PluginGitHubConnection = {
   createdAt: Date;
+  /**
+   * Unique connection identifier.
+   */
   id: string;
   /**
    * GitHub App installation ID.
    */
   installationId: number;
   /**
-   * GitHub repo name.
+   * Repository name.
    */
   repoName: string;
   /**
-   * GitHub repo owner (org or user).
+   * GitHub org or user that owns the repo.
    */
   repoOwner: string;
 };

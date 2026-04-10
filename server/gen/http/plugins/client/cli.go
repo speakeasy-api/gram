@@ -318,6 +318,21 @@ func BuildSetPluginAssignmentsPayload(pluginsSetPluginAssignmentsBody string, pl
 	return v, nil
 }
 
+// BuildGetGitHubInstallURLPayload builds the payload for the plugins
+// getGitHubInstallURL endpoint from CLI flags.
+func BuildGetGitHubInstallURLPayload(pluginsGetGitHubInstallURLSessionToken string) (*plugins.GetGitHubInstallURLPayload, error) {
+	var sessionToken *string
+	{
+		if pluginsGetGitHubInstallURLSessionToken != "" {
+			sessionToken = &pluginsGetGitHubInstallURLSessionToken
+		}
+	}
+	v := &plugins.GetGitHubInstallURLPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildConnectGitHubPayload builds the payload for the plugins connectGitHub
 // endpoint from CLI flags.
 func BuildConnectGitHubPayload(pluginsConnectGitHubBody string, pluginsConnectGitHubSessionToken string) (*plugins.ConnectGitHubPayload, error) {
@@ -326,7 +341,7 @@ func BuildConnectGitHubPayload(pluginsConnectGitHubBody string, pluginsConnectGi
 	{
 		err = json.Unmarshal([]byte(pluginsConnectGitHubBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"installation_id\": 1,\n      \"repo_name\": \"abc123\",\n      \"repo_owner\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"installation_id\": 1\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -337,8 +352,6 @@ func BuildConnectGitHubPayload(pluginsConnectGitHubBody string, pluginsConnectGi
 	}
 	v := &plugins.ConnectGitHubPayload{
 		InstallationID: body.InstallationID,
-		RepoOwner:      body.RepoOwner,
-		RepoName:       body.RepoName,
 	}
 	v.SessionToken = sessionToken
 

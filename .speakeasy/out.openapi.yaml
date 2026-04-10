@@ -9003,7 +9003,7 @@ paths:
         name: AddPluginServer
   /rpc/plugins.connectGitHub:
     post:
-      description: Store the GitHub App installation and repository connection for plugin distribution.
+      description: Connect the organization to a GitHub App installation, creating a repo in the customer's org.
       operationId: connectGitHub
       parameters:
         - allowEmptyValue: true
@@ -9264,7 +9264,7 @@ paths:
         name: DeletePlugin
   /rpc/plugins.disconnectGitHub:
     delete:
-      description: Remove the GitHub connection for plugin distribution.
+      description: Disconnect the organization's GitHub integration.
       operationId: disconnectGitHub
       parameters:
         - allowEmptyValue: true
@@ -9342,9 +9342,20 @@ paths:
         name: DisconnectGitHub
   /rpc/plugins.downloadPluginPackage:
     get:
-      description: Download a ZIP archive of all generated plugin packages for the organization.
+      description: Download a ZIP archive of generated plugin packages for the organization, filtered by platform.
       operationId: downloadPluginPackage
       parameters:
+        - allowEmptyValue: true
+          description: Target platform to download plugins for.
+          in: query
+          name: platform
+          required: true
+          schema:
+            description: Target platform to download plugins for.
+            enum:
+              - claude
+              - cursor
+            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -9357,7 +9368,8 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DownloadPluginPackageResponseBody'
+                format: binary
+                type: string
           description: OK response.
           headers:
             Content-Disposition:
@@ -9429,7 +9441,7 @@ paths:
       x-speakeasy-name-override: downloadPluginPackage
   /rpc/plugins.getGitHubConnection:
     get:
-      description: Get the current GitHub connection status for plugin distribution.
+      description: Get the current GitHub connection for the organization.
       operationId: getGitHubConnection
       parameters:
         - allowEmptyValue: true
@@ -9509,6 +9521,88 @@ paths:
       x-speakeasy-name-override: getGitHubConnection
       x-speakeasy-react-hook:
         name: GitHubConnection
+  /rpc/plugins.getGitHubInstallURL:
+    get:
+      description: Get the GitHub App installation URL and whether it is already installed.
+      operationId: getGitHubInstallURL
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetGitHubInstallURLResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getGitHubInstallURL plugins
+      tags:
+        - plugins
+      x-speakeasy-name-override: getGitHubInstallURL
+      x-speakeasy-react-hook:
+        name: GitHubInstallURL
   /rpc/plugins.getPlugin:
     get:
       description: Get a plugin with its servers and assignments.
@@ -16879,18 +16973,8 @@ components:
       properties:
         installation_id:
           type: integer
-          description: GitHub App installation ID.
+          description: GitHub App installation ID. Auto-detected if omitted.
           format: int64
-        repo_name:
-          type: string
-          description: GitHub repo name.
-        repo_owner:
-          type: string
-          description: GitHub repo owner.
-      required:
-        - installation_id
-        - repo_owner
-        - repo_name
     CreateDeploymentForm:
       type: object
       properties:
@@ -17754,15 +17838,6 @@ components:
         - functions_tool_count
         - external_mcp_asset_count
         - external_mcp_tool_count
-    DownloadPluginPackageResponseBody:
-      type: object
-      properties:
-        body:
-          type: string
-          description: ZIP archive contents.
-          format: binary
-      required:
-        - body
     Environment:
       type: object
       properties:
@@ -18554,6 +18629,18 @@ components:
         - openapiv3_tool_count
         - functions_tool_count
         - external_mcp_tool_count
+    GetGitHubInstallURLResponseBody:
+      type: object
+      properties:
+        installed:
+          type: boolean
+          description: Whether the app is already installed on at least one account.
+        url:
+          type: string
+          description: GitHub App installation URL.
+      required:
+        - url
+        - installed
     GetHooksSummaryPayload:
       type: object
       properties:
@@ -20750,6 +20837,7 @@ components:
           format: date-time
         id:
           type: string
+          description: Unique connection identifier.
           format: uuid
         installation_id:
           type: integer
@@ -20757,10 +20845,10 @@ components:
           format: int64
         repo_name:
           type: string
-          description: GitHub repo name.
+          description: Repository name.
         repo_owner:
           type: string
-          description: GitHub repo owner (org or user).
+          description: GitHub org or user that owns the repo.
       required:
         - id
         - installation_id
@@ -21145,8 +21233,12 @@ components:
         published:
           type: boolean
           description: Whether the publish succeeded.
+        repo_url:
+          type: string
+          description: GitHub repository URL where plugins were published.
       required:
         - published
+        - repo_url
     RedeployRequestBody:
       type: object
       properties:

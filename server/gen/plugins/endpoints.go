@@ -26,6 +26,7 @@ type Endpoints struct {
 	UpdatePluginServer    goa.Endpoint
 	RemovePluginServer    goa.Endpoint
 	SetPluginAssignments  goa.Endpoint
+	GetGitHubInstallURL   goa.Endpoint
 	ConnectGitHub         goa.Endpoint
 	DisconnectGitHub      goa.Endpoint
 	GetGitHubConnection   goa.Endpoint
@@ -56,6 +57,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdatePluginServer:    NewUpdatePluginServerEndpoint(s, a.APIKeyAuth),
 		RemovePluginServer:    NewRemovePluginServerEndpoint(s, a.APIKeyAuth),
 		SetPluginAssignments:  NewSetPluginAssignmentsEndpoint(s, a.APIKeyAuth),
+		GetGitHubInstallURL:   NewGetGitHubInstallURLEndpoint(s, a.APIKeyAuth),
 		ConnectGitHub:         NewConnectGitHubEndpoint(s, a.APIKeyAuth),
 		DisconnectGitHub:      NewDisconnectGitHubEndpoint(s, a.APIKeyAuth),
 		GetGitHubConnection:   NewGetGitHubConnectionEndpoint(s, a.APIKeyAuth),
@@ -75,6 +77,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdatePluginServer = m(e.UpdatePluginServer)
 	e.RemovePluginServer = m(e.RemovePluginServer)
 	e.SetPluginAssignments = m(e.SetPluginAssignments)
+	e.GetGitHubInstallURL = m(e.GetGitHubInstallURL)
 	e.ConnectGitHub = m(e.ConnectGitHub)
 	e.DisconnectGitHub = m(e.DisconnectGitHub)
 	e.GetGitHubConnection = m(e.GetGitHubConnection)
@@ -286,6 +289,29 @@ func NewSetPluginAssignmentsEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.SetPluginAssignments(ctx, p)
+	}
+}
+
+// NewGetGitHubInstallURLEndpoint returns an endpoint function that calls the
+// method "getGitHubInstallURL" of service "plugins".
+func NewGetGitHubInstallURLEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetGitHubInstallURLPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetGitHubInstallURL(ctx, p)
 	}
 }
 

@@ -52,6 +52,11 @@ func SetPluginAssignmentsPluginsPath() string {
 	return "/rpc/plugins.setPluginAssignments"
 }
 
+// GetGitHubInstallURLPluginsPath returns the URL path to the plugins service getGitHubInstallURL HTTP endpoint.
+func GetGitHubInstallURLPluginsPath() string {
+	return "/rpc/plugins.getGitHubInstallURL"
+}
+
 // ConnectGitHubPluginsPath returns the URL path to the plugins service connectGitHub HTTP endpoint.
 func ConnectGitHubPluginsPath() string {
 	return "/rpc/plugins.connectGitHub"

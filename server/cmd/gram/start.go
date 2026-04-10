@@ -376,6 +376,12 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_GITHUB_APP_PRIVATE_KEY"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "github-app-slug",
+			Usage:    "GitHub App URL slug (e.g. 'gram-plugins') for the install flow",
+			EnvVars:  []string{"GRAM_GITHUB_APP_SLUG"},
+			Required: false,
+		},
 	}
 
 	flags = append(flags, clickHouseFlags...)
@@ -745,7 +751,7 @@ func newStartCommand() *cli.Command {
 					}
 				}
 			}
-			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, accessManager, githubClient, c.String("server-url")))
+			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, accessManager, githubClient, c.String("github-app-slug"), c.String("server-url")))
 			// access depends on productfeatures for the RBAC feature gate, so inject
 			// the concrete checks here instead of importing access in that package.
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, accessManager, func(ctx context.Context, organizationID string) error {

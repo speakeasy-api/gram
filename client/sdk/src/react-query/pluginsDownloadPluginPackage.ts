@@ -56,10 +56,10 @@ export type PluginsDownloadPluginPackageQueryError =
  * downloadPluginPackage plugins
  *
  * @remarks
- * Download a ZIP archive of all generated plugin packages for the organization.
+ * Download a ZIP archive of generated plugin packages for the organization, filtered by platform.
  */
 export function usePluginsDownloadPluginPackage(
-  request?: operations.DownloadPluginPackageRequest | undefined,
+  request: operations.DownloadPluginPackageRequest,
   security?: operations.DownloadPluginPackageSecurity | undefined,
   options?: QueryHookOptions<
     PluginsDownloadPluginPackageQueryData,
@@ -85,10 +85,10 @@ export function usePluginsDownloadPluginPackage(
  * downloadPluginPackage plugins
  *
  * @remarks
- * Download a ZIP archive of all generated plugin packages for the organization.
+ * Download a ZIP archive of generated plugin packages for the organization, filtered by platform.
  */
 export function usePluginsDownloadPluginPackageSuspense(
-  request?: operations.DownloadPluginPackageRequest | undefined,
+  request: operations.DownloadPluginPackageRequest,
   security?: operations.DownloadPluginPackageSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     PluginsDownloadPluginPackageQueryData,
@@ -112,7 +112,12 @@ export function usePluginsDownloadPluginPackageSuspense(
 
 export function setPluginsDownloadPluginPackageData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
+  queryKeyBase: [
+    parameters: {
+      platform: operations.Platform;
+      gramSession?: string | undefined;
+    },
+  ],
   data: PluginsDownloadPluginPackageQueryData,
 ): PluginsDownloadPluginPackageQueryData | undefined {
   const key = queryKeyPluginsDownloadPluginPackage(...queryKeyBase);
@@ -123,7 +128,10 @@ export function setPluginsDownloadPluginPackageData(
 export function invalidatePluginsDownloadPluginPackage(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
+    [parameters: {
+      platform: operations.Platform;
+      gramSession?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

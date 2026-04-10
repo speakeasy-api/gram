@@ -68,6 +68,7 @@ export * from "./getToolsetEnvironment.js";
 export * from "./getUsageTiers.js";
 export * from "./getUserMetricsSummary.js";
 export * from "./gitHubConnection.js";
+export * from "./gitHubInstallURL.js";
 export * from "./globalVariations.js";
 export * from "./grants.js";
 export * from "./hooksHooksNumberClaude.js";

@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -28,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * connectGitHub plugins
+ * getGitHubInstallURL plugins
  *
  * @remarks
- * Connect the organization to a GitHub App installation, creating a repo in the customer's org.
+ * Get the GitHub App installation URL and whether it is already installed.
  */
-export function pluginsConnectGitHub(
+export function pluginsGetGitHubInstallURL(
   client: GramCore,
-  request: operations.ConnectGitHubRequest,
-  security?: operations.ConnectGitHubSecurity | undefined,
+  request?: operations.GetGitHubInstallURLRequest | undefined,
+  security?: operations.GetGitHubInstallURLSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.PluginGitHubConnection,
+    components.GetGitHubInstallURLResponseBody,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +62,13 @@ export function pluginsConnectGitHub(
 
 async function $do(
   client: GramCore,
-  request: operations.ConnectGitHubRequest,
-  security?: operations.ConnectGitHubSecurity | undefined,
+  request?: operations.GetGitHubInstallURLRequest | undefined,
+  security?: operations.GetGitHubInstallURLSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.PluginGitHubConnection,
+      components.GetGitHubInstallURLResponseBody,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -84,21 +84,24 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(operations.ConnectGitHubRequest$outboundSchema, value),
+    (value) =>
+      z.parse(
+        z.optional(operations.GetGitHubInstallURLRequest$outboundSchema),
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.ConnectGitHubForm, { explode: true });
+  const body = null;
 
-  const path = pathToFunc("/rpc/plugins.connectGitHub")();
+  const path = pathToFunc("/rpc/plugins.getGitHubInstallURL")();
 
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -117,7 +120,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "connectGitHub",
+    operationID: "getGitHubInstallURL",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -131,7 +134,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -172,7 +175,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.PluginGitHubConnection,
+    components.GetGitHubInstallURLResponseBody,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -183,7 +186,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.PluginGitHubConnection$inboundSchema),
+    M.json(200, components.GetGitHubInstallURLResponseBody$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

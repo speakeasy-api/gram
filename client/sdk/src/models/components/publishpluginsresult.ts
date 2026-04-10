@@ -17,6 +17,10 @@ export type PublishPluginsResult = {
    * Whether the publish succeeded.
    */
   published: boolean;
+  /**
+   * GitHub repository URL where plugins were published.
+   */
+  repoUrl: string;
 };
 
 /** @internal */
@@ -27,10 +31,12 @@ export const PublishPluginsResult$inboundSchema: z.ZodMiniType<
   z.object({
     commit_sha: z.optional(z.string()),
     published: z.boolean(),
+    repo_url: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "commit_sha": "commitSha",
+      "repo_url": "repoUrl",
     });
   }),
 );

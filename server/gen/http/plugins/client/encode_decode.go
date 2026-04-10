@@ -2096,6 +2096,237 @@ func DecodeSetPluginAssignmentsResponse(decoder func(*http.Response) goahttp.Dec
 	}
 }
 
+// BuildGetGitHubInstallURLRequest instantiates a HTTP request object with
+// method and path set to call the "plugins" service "getGitHubInstallURL"
+// endpoint
+func (c *Client) BuildGetGitHubInstallURLRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetGitHubInstallURLPluginsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("plugins", "getGitHubInstallURL", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetGitHubInstallURLRequest returns an encoder for requests sent to the
+// plugins getGitHubInstallURL server.
+func EncodeGetGitHubInstallURLRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*plugins.GetGitHubInstallURLPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("plugins", "getGitHubInstallURL", "*plugins.GetGitHubInstallURLPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetGitHubInstallURLResponse returns a decoder for responses returned
+// by the plugins getGitHubInstallURL endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeGetGitHubInstallURLResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetGitHubInstallURLResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetGitHubInstallURLResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getGitHubInstallURL", err)
+			}
+			err = ValidateGetGitHubInstallURLResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getGitHubInstallURL", err)
+			}
+			res := NewGetGitHubInstallURLResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetGitHubInstallURLUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getGitHubInstallURL", err)
+			}
+			err = ValidateGetGitHubInstallURLUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getGitHubInstallURL", err)
+			}
+			return nil, NewGetGitHubInstallURLUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetGitHubInstallURLForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getGitHubInstallURL", err)
+			}
+			err = ValidateGetGitHubInstallURLForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getGitHubInstallURL", err)
+			}
+			return nil, NewGetGitHubInstallURLForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetGitHubInstallURLBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getGitHubInstallURL", err)
+			}
+			err = ValidateGetGitHubInstallURLBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getGitHubInstallURL", err)
+			}
+			return nil, NewGetGitHubInstallURLBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetGitHubInstallURLNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getGitHubInstallURL", err)
+			}
+			err = ValidateGetGitHubInstallURLNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getGitHubInstallURL", err)
+			}
+			return nil, NewGetGitHubInstallURLNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetGitHubInstallURLConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getGitHubInstallURL", err)
+			}
+			err = ValidateGetGitHubInstallURLConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getGitHubInstallURL", err)
+			}
+			return nil, NewGetGitHubInstallURLConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetGitHubInstallURLUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getGitHubInstallURL", err)
+			}
+			err = ValidateGetGitHubInstallURLUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getGitHubInstallURL", err)
+			}
+			return nil, NewGetGitHubInstallURLUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetGitHubInstallURLInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getGitHubInstallURL", err)
+			}
+			err = ValidateGetGitHubInstallURLInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getGitHubInstallURL", err)
+			}
+			return nil, NewGetGitHubInstallURLInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetGitHubInstallURLInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "getGitHubInstallURL", err)
+				}
+				err = ValidateGetGitHubInstallURLInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "getGitHubInstallURL", err)
+				}
+				return nil, NewGetGitHubInstallURLInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetGitHubInstallURLUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "getGitHubInstallURL", err)
+				}
+				err = ValidateGetGitHubInstallURLUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "getGitHubInstallURL", err)
+				}
+				return nil, NewGetGitHubInstallURLUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("plugins", "getGitHubInstallURL", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetGitHubInstallURLGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getGitHubInstallURL", err)
+			}
+			err = ValidateGetGitHubInstallURLGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getGitHubInstallURL", err)
+			}
+			return nil, NewGetGitHubInstallURLGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("plugins", "getGitHubInstallURL", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildConnectGitHubRequest instantiates a HTTP request object with method and
 // path set to call the "plugins" service "connectGitHub" endpoint
 func (c *Client) BuildConnectGitHubRequest(ctx context.Context, v any) (*http.Request, error) {

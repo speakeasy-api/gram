@@ -68,12 +68,8 @@ type SetPluginAssignmentsRequestBody struct {
 // ConnectGitHubRequestBody is the type of the "plugins" service
 // "connectGitHub" endpoint HTTP request body.
 type ConnectGitHubRequestBody struct {
-	// GitHub App installation ID.
-	InstallationID int64 `form:"installation_id" json:"installation_id" xml:"installation_id"`
-	// GitHub repo owner.
-	RepoOwner string `form:"repo_owner" json:"repo_owner" xml:"repo_owner"`
-	// GitHub repo name.
-	RepoName string `form:"repo_name" json:"repo_name" xml:"repo_name"`
+	// GitHub App installation ID. Auto-detected if omitted.
+	InstallationID *int64 `form:"installation_id,omitempty" json:"installation_id,omitempty" xml:"installation_id,omitempty"`
 }
 
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
@@ -203,15 +199,25 @@ type SetPluginAssignmentsResponseBody struct {
 	Assignments []*PluginAssignmentResponseBody `form:"assignments,omitempty" json:"assignments,omitempty" xml:"assignments,omitempty"`
 }
 
+// GetGitHubInstallURLResponseBody is the type of the "plugins" service
+// "getGitHubInstallURL" endpoint HTTP response body.
+type GetGitHubInstallURLResponseBody struct {
+	// GitHub App installation URL.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Whether the app is already installed on at least one account.
+	Installed *bool `form:"installed,omitempty" json:"installed,omitempty" xml:"installed,omitempty"`
+}
+
 // ConnectGitHubResponseBody is the type of the "plugins" service
 // "connectGitHub" endpoint HTTP response body.
 type ConnectGitHubResponseBody struct {
+	// Unique connection identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// GitHub App installation ID.
 	InstallationID *int64 `form:"installation_id,omitempty" json:"installation_id,omitempty" xml:"installation_id,omitempty"`
-	// GitHub repo owner (org or user).
+	// GitHub org or user that owns the repo.
 	RepoOwner *string `form:"repo_owner,omitempty" json:"repo_owner,omitempty" xml:"repo_owner,omitempty"`
-	// GitHub repo name.
+	// Repository name.
 	RepoName  *string `form:"repo_name,omitempty" json:"repo_name,omitempty" xml:"repo_name,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
@@ -219,12 +225,13 @@ type ConnectGitHubResponseBody struct {
 // GetGitHubConnectionResponseBody is the type of the "plugins" service
 // "getGitHubConnection" endpoint HTTP response body.
 type GetGitHubConnectionResponseBody struct {
+	// Unique connection identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// GitHub App installation ID.
 	InstallationID *int64 `form:"installation_id,omitempty" json:"installation_id,omitempty" xml:"installation_id,omitempty"`
-	// GitHub repo owner (org or user).
+	// GitHub org or user that owns the repo.
 	RepoOwner *string `form:"repo_owner,omitempty" json:"repo_owner,omitempty" xml:"repo_owner,omitempty"`
-	// GitHub repo name.
+	// Repository name.
 	RepoName  *string `form:"repo_name,omitempty" json:"repo_name,omitempty" xml:"repo_name,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
@@ -234,6 +241,8 @@ type GetGitHubConnectionResponseBody struct {
 type PublishPluginsResponseBody struct {
 	// Whether the publish succeeded.
 	Published *bool `form:"published,omitempty" json:"published,omitempty" xml:"published,omitempty"`
+	// GitHub repository URL where plugins were published.
+	RepoURL *string `form:"repo_url,omitempty" json:"repo_url,omitempty" xml:"repo_url,omitempty"`
 	// Git commit SHA of the push.
 	CommitSha *string `form:"commit_sha,omitempty" json:"commit_sha,omitempty" xml:"commit_sha,omitempty"`
 }
@@ -1888,6 +1897,193 @@ type SetPluginAssignmentsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetGitHubInstallURLUnauthorizedResponseBody is the type of the "plugins"
+// service "getGitHubInstallURL" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetGitHubInstallURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGitHubInstallURLForbiddenResponseBody is the type of the "plugins"
+// service "getGitHubInstallURL" endpoint HTTP response body for the
+// "forbidden" error.
+type GetGitHubInstallURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGitHubInstallURLBadRequestResponseBody is the type of the "plugins"
+// service "getGitHubInstallURL" endpoint HTTP response body for the
+// "bad_request" error.
+type GetGitHubInstallURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGitHubInstallURLNotFoundResponseBody is the type of the "plugins" service
+// "getGitHubInstallURL" endpoint HTTP response body for the "not_found" error.
+type GetGitHubInstallURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGitHubInstallURLConflictResponseBody is the type of the "plugins" service
+// "getGitHubInstallURL" endpoint HTTP response body for the "conflict" error.
+type GetGitHubInstallURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGitHubInstallURLUnsupportedMediaResponseBody is the type of the "plugins"
+// service "getGitHubInstallURL" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetGitHubInstallURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGitHubInstallURLInvalidResponseBody is the type of the "plugins" service
+// "getGitHubInstallURL" endpoint HTTP response body for the "invalid" error.
+type GetGitHubInstallURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGitHubInstallURLInvariantViolationResponseBody is the type of the
+// "plugins" service "getGitHubInstallURL" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetGitHubInstallURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGitHubInstallURLUnexpectedResponseBody is the type of the "plugins"
+// service "getGitHubInstallURL" endpoint HTTP response body for the
+// "unexpected" error.
+type GetGitHubInstallURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGitHubInstallURLGatewayErrorResponseBody is the type of the "plugins"
+// service "getGitHubInstallURL" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetGitHubInstallURLGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ConnectGitHubUnauthorizedResponseBody is the type of the "plugins" service
 // "connectGitHub" endpoint HTTP response body for the "unauthorized" error.
 type ConnectGitHubUnauthorizedResponseBody struct {
@@ -2962,8 +3158,6 @@ func NewSetPluginAssignmentsRequestBody(p *plugins.SetPluginAssignmentsPayload) 
 func NewConnectGitHubRequestBody(p *plugins.ConnectGitHubPayload) *ConnectGitHubRequestBody {
 	body := &ConnectGitHubRequestBody{
 		InstallationID: p.InstallationID,
-		RepoOwner:      p.RepoOwner,
-		RepoName:       p.RepoName,
 	}
 	return body
 }
@@ -4497,6 +4691,167 @@ func NewSetPluginAssignmentsGatewayError(body *SetPluginAssignmentsGatewayErrorR
 	return v
 }
 
+// NewGetGitHubInstallURLResultOK builds a "plugins" service
+// "getGitHubInstallURL" endpoint result from a HTTP "OK" response.
+func NewGetGitHubInstallURLResultOK(body *GetGitHubInstallURLResponseBody) *plugins.GetGitHubInstallURLResult {
+	v := &plugins.GetGitHubInstallURLResult{
+		URL:       *body.URL,
+		Installed: *body.Installed,
+	}
+
+	return v
+}
+
+// NewGetGitHubInstallURLUnauthorized builds a plugins service
+// getGitHubInstallURL endpoint unauthorized error.
+func NewGetGitHubInstallURLUnauthorized(body *GetGitHubInstallURLUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGitHubInstallURLForbidden builds a plugins service getGitHubInstallURL
+// endpoint forbidden error.
+func NewGetGitHubInstallURLForbidden(body *GetGitHubInstallURLForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGitHubInstallURLBadRequest builds a plugins service
+// getGitHubInstallURL endpoint bad_request error.
+func NewGetGitHubInstallURLBadRequest(body *GetGitHubInstallURLBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGitHubInstallURLNotFound builds a plugins service getGitHubInstallURL
+// endpoint not_found error.
+func NewGetGitHubInstallURLNotFound(body *GetGitHubInstallURLNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGitHubInstallURLConflict builds a plugins service getGitHubInstallURL
+// endpoint conflict error.
+func NewGetGitHubInstallURLConflict(body *GetGitHubInstallURLConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGitHubInstallURLUnsupportedMedia builds a plugins service
+// getGitHubInstallURL endpoint unsupported_media error.
+func NewGetGitHubInstallURLUnsupportedMedia(body *GetGitHubInstallURLUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGitHubInstallURLInvalid builds a plugins service getGitHubInstallURL
+// endpoint invalid error.
+func NewGetGitHubInstallURLInvalid(body *GetGitHubInstallURLInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGitHubInstallURLInvariantViolation builds a plugins service
+// getGitHubInstallURL endpoint invariant_violation error.
+func NewGetGitHubInstallURLInvariantViolation(body *GetGitHubInstallURLInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGitHubInstallURLUnexpected builds a plugins service
+// getGitHubInstallURL endpoint unexpected error.
+func NewGetGitHubInstallURLUnexpected(body *GetGitHubInstallURLUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGitHubInstallURLGatewayError builds a plugins service
+// getGitHubInstallURL endpoint gateway_error error.
+func NewGetGitHubInstallURLGatewayError(body *GetGitHubInstallURLGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewConnectGitHubPluginGitHubConnectionOK builds a "plugins" service
 // "connectGitHub" endpoint result from a HTTP "OK" response.
 func NewConnectGitHubPluginGitHubConnectionOK(body *ConnectGitHubResponseBody) *plugins.PluginGitHubConnection {
@@ -4980,6 +5335,7 @@ func NewGetGitHubConnectionGatewayError(body *GetGitHubConnectionGatewayErrorRes
 func NewPublishPluginsResultOK(body *PublishPluginsResponseBody) *plugins.PublishPluginsResult {
 	v := &plugins.PublishPluginsResult{
 		Published: *body.Published,
+		RepoURL:   *body.RepoURL,
 		CommitSha: body.CommitSha,
 	}
 
@@ -5536,6 +5892,18 @@ func ValidateSetPluginAssignmentsResponseBody(body *SetPluginAssignmentsResponse
 	return
 }
 
+// ValidateGetGitHubInstallURLResponseBody runs the validations defined on
+// GetGitHubInstallURLResponseBody
+func ValidateGetGitHubInstallURLResponseBody(body *GetGitHubInstallURLResponseBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.Installed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("installed", "body"))
+	}
+	return
+}
+
 // ValidateConnectGitHubResponseBody runs the validations defined on
 // ConnectGitHubResponseBody
 func ValidateConnectGitHubResponseBody(body *ConnectGitHubResponseBody) (err error) {
@@ -5595,6 +5963,9 @@ func ValidateGetGitHubConnectionResponseBody(body *GetGitHubConnectionResponseBo
 func ValidatePublishPluginsResponseBody(body *PublishPluginsResponseBody) (err error) {
 	if body.Published == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("published", "body"))
+	}
+	if body.RepoURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("repo_url", "body"))
 	}
 	return
 }
@@ -7738,6 +8109,246 @@ func ValidateSetPluginAssignmentsUnexpectedResponseBody(body *SetPluginAssignmen
 // ValidateSetPluginAssignmentsGatewayErrorResponseBody runs the validations
 // defined on setPluginAssignments_gateway_error_response_body
 func ValidateSetPluginAssignmentsGatewayErrorResponseBody(body *SetPluginAssignmentsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGitHubInstallURLUnauthorizedResponseBody runs the validations
+// defined on getGitHubInstallURL_unauthorized_response_body
+func ValidateGetGitHubInstallURLUnauthorizedResponseBody(body *GetGitHubInstallURLUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGitHubInstallURLForbiddenResponseBody runs the validations
+// defined on getGitHubInstallURL_forbidden_response_body
+func ValidateGetGitHubInstallURLForbiddenResponseBody(body *GetGitHubInstallURLForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGitHubInstallURLBadRequestResponseBody runs the validations
+// defined on getGitHubInstallURL_bad_request_response_body
+func ValidateGetGitHubInstallURLBadRequestResponseBody(body *GetGitHubInstallURLBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGitHubInstallURLNotFoundResponseBody runs the validations defined
+// on getGitHubInstallURL_not_found_response_body
+func ValidateGetGitHubInstallURLNotFoundResponseBody(body *GetGitHubInstallURLNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGitHubInstallURLConflictResponseBody runs the validations defined
+// on getGitHubInstallURL_conflict_response_body
+func ValidateGetGitHubInstallURLConflictResponseBody(body *GetGitHubInstallURLConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGitHubInstallURLUnsupportedMediaResponseBody runs the validations
+// defined on getGitHubInstallURL_unsupported_media_response_body
+func ValidateGetGitHubInstallURLUnsupportedMediaResponseBody(body *GetGitHubInstallURLUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGitHubInstallURLInvalidResponseBody runs the validations defined
+// on getGitHubInstallURL_invalid_response_body
+func ValidateGetGitHubInstallURLInvalidResponseBody(body *GetGitHubInstallURLInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGitHubInstallURLInvariantViolationResponseBody runs the
+// validations defined on getGitHubInstallURL_invariant_violation_response_body
+func ValidateGetGitHubInstallURLInvariantViolationResponseBody(body *GetGitHubInstallURLInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGitHubInstallURLUnexpectedResponseBody runs the validations
+// defined on getGitHubInstallURL_unexpected_response_body
+func ValidateGetGitHubInstallURLUnexpectedResponseBody(body *GetGitHubInstallURLUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGitHubInstallURLGatewayErrorResponseBody runs the validations
+// defined on getGitHubInstallURL_gateway_error_response_body
+func ValidateGetGitHubInstallURLGatewayErrorResponseBody(body *GetGitHubInstallURLGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

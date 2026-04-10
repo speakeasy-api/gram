@@ -59,7 +59,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	if err != nil {
 		return nil, fmt.Errorf("marshal marketplace.json: %w", err)
 	}
-	files["marketplace.json"] = manifest
+	files[".claude-plugin/marketplace.json"] = manifest
 
 	return files, nil
 }
@@ -99,7 +99,7 @@ func GeneratePluginPackagesForPlatform(plugins []PluginInfo, cfg GenerateConfig,
 		if err != nil {
 			return nil, fmt.Errorf("marshal marketplace.json: %w", err)
 		}
-		files["marketplace.json"] = manifest
+		files[".claude-plugin/marketplace.json"] = manifest
 	}
 
 	return files, nil
@@ -109,12 +109,27 @@ func generateClaudePlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 	prefix := p.Slug + "/"
 
 	// .claude-plugin/plugin.json
+	// Check if any server needs Gram auth to decide whether to include userConfig.
+	var userConfig map[string]userConfigEntry
+	for _, s := range p.Servers {
+		if s.UseGramAuth {
+			userConfig = map[string]userConfigEntry{
+				"GRAM_API_KEY": {
+					Description: "Your Gram API key for authenticating MCP server connections",
+					Sensitive:   true,
+				},
+			}
+			break
+		}
+	}
+
 	pluginJSON, err := marshalJSON(claudePluginMeta{
 		Name:        p.Slug,
 		Description: p.Description,
 		Version:     "0.1.0",
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
+		UserConfig:  userConfig,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -125,13 +140,12 @@ func generateClaudePlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 	mcpServers := make(map[string]claudeMCPServer)
 	for _, s := range p.Servers {
 		server := claudeMCPServer{
-			Type:    "http",
 			URL:     s.MCPURL,
 			Headers: nil,
 		}
 		if s.UseGramAuth {
 			server.Headers = map[string]string{
-				"Authorization": "Bearer ${GRAM_API_KEY}",
+				"Authorization": "Bearer ${user_config.GRAM_API_KEY}",
 			}
 		}
 		mcpServers[s.DisplayName] = server
@@ -141,12 +155,6 @@ func generateClaudePlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 		return fmt.Errorf("marshal .mcp.json: %w", err)
 	}
 	files[prefix+".mcp.json"] = mcpJSON
-
-	// hooks/hooks.json — same structure as the existing gram-hooks plugin.
-	files[prefix+"hooks/hooks.json"] = []byte(claudeHooksJSON)
-
-	// hooks/send_hook.sh
-	files[prefix+"hooks/send_hook.sh"] = []byte(claudeSendHookSH(cfg.ServerURL))
 
 	return nil
 }
@@ -187,12 +195,6 @@ func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 		return fmt.Errorf("marshal mcp.json: %w", err)
 	}
 	files[prefix+"mcp.json"] = mcpJSON
-
-	// hooks/hooks.json
-	files[prefix+"hooks/hooks.json"] = []byte(cursorHooksJSON)
-
-	// hooks/send_hook.sh
-	files[prefix+"hooks/send_hook.sh"] = []byte(cursorSendHookSH(cfg.ServerURL))
 
 	return nil
 }
@@ -237,11 +239,17 @@ type pluginAuthor struct {
 }
 
 type claudePluginMeta struct {
-	Name        string       `json:"name"`
-	Description string       `json:"description"`
-	Version     string       `json:"version"`
-	Author      pluginAuthor `json:"author"`
-	Homepage    string       `json:"homepage"`
+	Name        string                     `json:"name"`
+	Description string                     `json:"description"`
+	Version     string                     `json:"version"`
+	Author      pluginAuthor               `json:"author"`
+	Homepage    string                     `json:"homepage"`
+	UserConfig  map[string]userConfigEntry `json:"userConfig,omitempty"`
+}
+
+type userConfigEntry struct {
+	Description string `json:"description"`
+	Sensitive   bool   `json:"sensitive"`
 }
 
 type claudeMCPConfig struct {
@@ -249,7 +257,6 @@ type claudeMCPConfig struct {
 }
 
 type claudeMCPServer struct {
-	Type    string            `json:"type"`
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers,omitempty"`
 }
@@ -278,129 +285,4 @@ func marshalJSON(v any) ([]byte, error) {
 		return nil, fmt.Errorf("marshal JSON: %w", err)
 	}
 	return b, nil
-}
-
-// --- Static hook templates ---
-
-const claudeHooksJSON = `{
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
-            "async": true
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
-            "async": true
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
-            "async": true
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
-            "async": true
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
-            "async": true
-          }
-        ]
-      }
-    ]
-  }
-}
-`
-
-const cursorHooksJSON = `{
-  "hooks": {
-    "preToolUse": [
-      {
-        "command": "./hooks/send_hook.sh",
-        "timeout": 10
-      }
-    ],
-    "postToolUse": [
-      {
-        "command": "./hooks/send_hook.sh",
-        "timeout": 10
-      }
-    ],
-    "postToolUseFailure": [
-      {
-        "command": "./hooks/send_hook.sh",
-        "timeout": 10
-      }
-    ]
-  }
-}
-`
-
-func claudeSendHookSH(serverURL string) string {
-	return fmt.Sprintf(`#!/usr/bin/env bash
-# Shared script to send hook events to Gram
-
-server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
-
-curl -X POST \
-  -H "Content-Type: application/json" \
-  -d @- \
-  --max-time 30 \
-  "${server_url}/rpc/hooks.claude"
-`, serverURL)
-}
-
-func cursorSendHookSH(serverURL string) string {
-	return fmt.Sprintf(`#!/usr/bin/env bash
-# Shared script to send Cursor hook events to Gram
-
-server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
-api_key="${GRAM_API_KEY:-}"
-project_slug="${GRAM_PROJECT_SLUG:-}"
-
-# Fail silently if credentials are not configured
-if [ -z "$api_key" ] || [ -z "$project_slug" ]; then
-  echo '{}'
-  exit 0
-fi
-
-curl -s -X POST \
-  -H "Content-Type: application/json" \
-  -H "Gram-Key: ${api_key}" \
-  -H "Gram-Project: ${project_slug}" \
-  -d @- \
-  --max-time 10 \
-  "${server_url}/rpc/hooks.cursor" 2>/dev/null || echo '{}'
-`, serverURL)
 }
