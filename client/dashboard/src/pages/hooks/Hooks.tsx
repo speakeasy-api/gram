@@ -684,16 +684,16 @@ function HooksInnerContent({
   isLoading,
   isFetching,
   error,
-  summaryData,
-  summaryView,
-  onSummaryViewChange,
+  // summaryData,
+  // summaryView,
+  // onSummaryViewChange,
   groupedTraces,
   serverInput,
   setServerInput,
   userEmailInput,
   setUserEmailInput,
   activeFilters,
-  addFilter,
+  // addFilter,
   removeFilter,
   selectedHookTypes,
   onHookTypesChange,
@@ -829,7 +829,7 @@ function HooksInnerContent({
           />
 
           {/* Summary Tables */}
-          {summaryData &&
+          {/*{summaryData &&
             (summaryData.servers.length > 0 ||
               (summaryData.users && summaryData.users.length > 0) ||
               (summaryData.skills && summaryData.skills.length > 0)) && (
@@ -865,7 +865,7 @@ function HooksInnerContent({
                   </div>
                 )}
               </div>
-            )}
+            )}*/}
         </div>
 
         {/* Content section */}
