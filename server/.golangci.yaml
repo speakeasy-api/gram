@@ -26,6 +26,7 @@ linters:
     - gochecksumtype
     - gocritic
     - gosec
+    - glint
     - govet
     - iface
     - importas
@@ -89,6 +90,17 @@ linters:
           - forbidigo
         text: GG002
   settings:
+    custom:
+      glint:
+        type: module
+        description: Gram-specific lint rules.
+        original-url: github.com/speakeasy-api/gram/glint
+        settings:
+          rules:
+            no-anonymous-defer:
+              disabled: true
+            no-repo-fields-in-service:
+              disabled: true
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate

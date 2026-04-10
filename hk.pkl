@@ -22,6 +22,7 @@ local linters = new Mapping<String, Step> {
   }
   ["gofix"] {
     glob = "**/*.go"
+    exclude = "**/testdata/**"
     fix = "mise run -q go:fix {{files}}"
   }
   ["oxfmt"] {

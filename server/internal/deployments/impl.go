@@ -16,6 +16,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/glint/annotations"
 	gen "github.com/speakeasy-api/gram/server/gen/deployments"
 	srv "github.com/speakeasy-api/gram/server/gen/http/deployments/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -45,6 +46,8 @@ import (
 )
 
 type Service struct {
+	annotations.Service[gen.Service, gen.Auther]
+
 	logger         *slog.Logger
 	tracer         trace.Tracer
 	db             *pgxpool.Pool
@@ -62,6 +65,7 @@ type Service struct {
 }
 
 var _ gen.Service = (*Service)(nil)
+var _ gen.Auther = (*Service)(nil)
 
 func NewService(
 	logger *slog.Logger,
@@ -93,6 +97,7 @@ func NewService(
 		posthog:        posthog,
 		siteURL:        siteURL,
 		registryClient: mcpRegistryClient,
+		Service:        annotations.Service[gen.Service, gen.Auther]{},
 	}
 }
 
