@@ -1,8 +1,8 @@
 import { useOrganization } from "@/contexts/Auth";
 import { Switch } from "./ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Shield, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronUp, Shield } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 
 const STORAGE_KEY = "gram-rbac-dev-override";
 
@@ -394,8 +394,6 @@ function ResourcePicker({
   onChange: (resources: string[] | null) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   const isAll = selected === null;
 
   const alreadySelected = new Set(selected ?? []);
@@ -414,17 +412,12 @@ function ResourcePicker({
       onChange([...(selected ?? []), id]);
     }
     setQuery("");
-    inputRef.current?.focus();
   };
 
   const removeResource = (id: string) => {
     const next = (selected ?? []).filter((s) => s !== id);
     onChange(next.length === 0 ? null : next);
   };
-
-  // Resolve label for a selected ID
-  const labelFor = (id: string) =>
-    knownResources.find((r) => r.id === id)?.label ?? id;
 
   return (
     <div className="ml-7 mr-2 mb-1.5 rounded-lg border border-dashed border-border bg-muted/30 p-2 space-y-1.5">
@@ -444,93 +437,39 @@ function ResourcePicker({
         </button>
       </div>
 
-      {/* Selected resource chips */}
-      {!isAll && selected.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {selected.map((id) => (
-            <span
-              key={id}
-              className="inline-flex items-center gap-0.5 text-[10px] font-mono bg-foreground/10 text-foreground px-1.5 py-0.5 rounded"
-            >
-              {labelFor(id)}
-              <X
-                className="w-2.5 h-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
-                onClick={() => removeResource(id)}
-              />
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Typeahead input */}
-      <div className="relative">
+      {/* Filter input (only shown when there are many resources) */}
+      {knownResources.length > 5 && (
         <input
-          ref={inputRef}
           type="text"
           value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => {
-            // Delay to allow click on dropdown item
-            setTimeout(() => setOpen(false), 150);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && query.trim()) {
-              e.preventDefault();
-              // If there's an exact match in suggestions, select it
-              const match = suggestions.find(
-                (r) =>
-                  r.label.toLowerCase() === query.toLowerCase() ||
-                  r.id.toLowerCase() === query.toLowerCase(),
-              );
-              toggleResource(match ? match.id : query.trim());
-            }
-            if (
-              e.key === "Backspace" &&
-              !query &&
-              selected &&
-              selected.length > 0
-            ) {
-              removeResource(selected[selected.length - 1]);
-            }
-          }}
-          placeholder={
-            isAll ? "type to restrict to specific resources…" : "add resource…"
-          }
-          className="w-full text-[11px] font-mono bg-background border border-border rounded px-1.5 py-1 text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-foreground/30"
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="filter…"
+          className="w-full text-[11px] font-mono bg-background border border-border rounded px-1.5 py-0.5 text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-foreground/30"
         />
+      )}
 
-        {/* Dropdown */}
-        {open && suggestions.length > 0 && (
-          <div className="absolute left-0 right-0 top-full mt-0.5 z-10 bg-background border border-border rounded shadow-lg max-h-[140px] overflow-y-auto">
-            {suggestions.map((r) => {
-              const isChecked = alreadySelected.has(r.id);
-              return (
-                <button
-                  key={r.id}
-                  type="button"
-                  className={`w-full text-left px-2 py-1 hover:bg-muted/50 transition-colors flex items-center gap-2 ${isChecked ? "bg-muted/30" : ""}`}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    toggleResource(r.id);
-                  }}
-                >
-                  <div
-                    className={`w-3 h-3 shrink-0 rounded-sm border flex items-center justify-center text-[8px] transition-all ${isChecked ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30"}`}
-                  >
-                    {isChecked && "✓"}
-                  </div>
-                  <span className="text-[11px] font-mono text-foreground truncate">
-                    {r.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+      {/* Resource list */}
+      <div className="max-h-[140px] overflow-y-auto space-y-0.5">
+        {suggestions.map((r) => {
+          const isChecked = alreadySelected.has(r.id);
+          return (
+            <button
+              key={r.id}
+              type="button"
+              className={`w-full text-left px-1.5 py-0.5 rounded hover:bg-muted/50 transition-colors flex items-center gap-1.5 ${isChecked ? "bg-muted/30" : ""}`}
+              onClick={() => toggleResource(r.id)}
+            >
+              <div
+                className={`w-3 h-3 shrink-0 rounded-sm border flex items-center justify-center text-[8px] transition-all ${isChecked ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30"}`}
+              >
+                {isChecked && "✓"}
+              </div>
+              <span className="text-[11px] font-mono text-foreground truncate">
+                {r.label}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

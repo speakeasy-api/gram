@@ -95,7 +95,6 @@ export default function App() {
                     <AppContent />
                     <Toaster />
                     <CommandPalette />
-                    {import.meta.env.DEV && <RBACDevToolbar />}
                   </SdkProvider>
                 </NuqsAdapter>
               </BrowserRouter>
@@ -139,6 +138,7 @@ function AppContent() {
           </>
         )}
         <RouteProvider />
+        {import.meta.env.DEV && <RBACDevToolbar />}
       </ProjectProvider>
     </AuthProvider>
   );
