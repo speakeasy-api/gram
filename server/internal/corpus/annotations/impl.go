@@ -27,13 +27,11 @@ type CreateParams struct {
 }
 
 type Service struct {
-	db   *pgxpool.Pool
 	repo *repo.Queries
 }
 
 func NewService(db *pgxpool.Pool) *Service {
 	return &Service{
-		db:   db,
 		repo: repo.New(db),
 	}
 }
