@@ -400,18 +400,20 @@ function ResourcePicker({
 
   const alreadySelected = new Set(selected ?? []);
 
-  // Filter known resources by query, exclude already-selected
+  // Filter known resources by query
   const suggestions = knownResources.filter((r) => {
-    if (alreadySelected.has(r.id)) return false;
     if (!query) return true;
     const q = query.toLowerCase();
     return r.label.toLowerCase().includes(q) || r.id.toLowerCase().includes(q);
   });
 
-  const selectResource = (id: string) => {
-    onChange([...(selected ?? []), id]);
+  const toggleResource = (id: string) => {
+    if (alreadySelected.has(id)) {
+      removeResource(id);
+    } else {
+      onChange([...(selected ?? []), id]);
+    }
     setQuery("");
-    setOpen(false);
     inputRef.current?.focus();
   };
 
@@ -484,7 +486,7 @@ function ResourcePicker({
                   r.label.toLowerCase() === query.toLowerCase() ||
                   r.id.toLowerCase() === query.toLowerCase(),
               );
-              selectResource(match ? match.id : query.trim());
+              toggleResource(match ? match.id : query.trim());
             }
             if (
               e.key === "Backspace" &&
@@ -504,24 +506,29 @@ function ResourcePicker({
         {/* Dropdown */}
         {open && suggestions.length > 0 && (
           <div className="absolute left-0 right-0 top-full mt-0.5 z-10 bg-background border border-border rounded shadow-lg max-h-[140px] overflow-y-auto">
-            {suggestions.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                className="w-full text-left px-2 py-1 hover:bg-muted/50 transition-colors flex items-center gap-2"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  selectResource(r.id);
-                }}
-              >
-                <span className="text-[11px] font-mono text-foreground truncate">
-                  {r.label}
-                </span>
-                <span className="text-[9px] text-muted-foreground truncate ml-auto">
-                  {r.id}
-                </span>
-              </button>
-            ))}
+            {suggestions.map((r) => {
+              const isChecked = alreadySelected.has(r.id);
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  className={`w-full text-left px-2 py-1 hover:bg-muted/50 transition-colors flex items-center gap-2 ${isChecked ? "bg-muted/30" : ""}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    toggleResource(r.id);
+                  }}
+                >
+                  <div
+                    className={`w-3 h-3 shrink-0 rounded-sm border flex items-center justify-center text-[8px] transition-all ${isChecked ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30"}`}
+                  >
+                    {isChecked && "✓"}
+                  </div>
+                  <span className="text-[11px] font-mono text-foreground truncate">
+                    {r.label}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
