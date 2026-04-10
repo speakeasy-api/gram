@@ -179,16 +179,12 @@ export default function CollectionDetail() {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <Page.Section>
-            <Page.Section.Body>
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <SearchX className="w-10 h-10 text-muted-foreground mb-3" />
-                <p className="text-sm text-muted-foreground">
-                  Collection not found.
-                </p>
-              </div>
-            </Page.Section.Body>
-          </Page.Section>
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <SearchX className="w-10 h-10 text-muted-foreground mb-3" />
+            <p className="text-sm text-muted-foreground">
+              Collection not found.
+            </p>
+          </div>
         </Page.Body>
       </Page>
     );
@@ -541,7 +537,7 @@ export default function CollectionDetail() {
               {confirmDelete ? (
                 <div className="flex items-center gap-2">
                   <Button
-                    variant="destructive"
+                    variant="destructive-primary"
                     size="sm"
                     disabled={deleteCollection.isPending}
                     onClick={async () => {
@@ -570,7 +566,7 @@ export default function CollectionDetail() {
                 </div>
               ) : (
                 <Button
-                  variant="destructive"
+                  variant="destructive-primary"
                   size="sm"
                   onClick={() => setConfirmDelete(true)}
                 >

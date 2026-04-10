@@ -240,6 +240,9 @@ function useEnrichedServers(servers: Server[], open: boolean) {
             }
 
             try {
+              if (!server.registryId) {
+                return server;
+              }
               const details = await client.mcpRegistries.getServerDetails({
                 registryId: server.registryId,
                 serverSpecifier: server.registrySpecifier,
