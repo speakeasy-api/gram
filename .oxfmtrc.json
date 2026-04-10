@@ -10,7 +10,6 @@
     "/client/dashboard/src/App.css",
     "/client/dashboard/src/components/tools-badge.tsx",
     "/client/dashboard/src/lib/constants.ts",
-    "/client/dashboard/src/styles/globals.css",
     "/client/sdk/**",
     "/elements/docs/**",
     "/server/**/fixtures/**",
