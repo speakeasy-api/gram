@@ -19,6 +19,13 @@ function makeConfig(
   };
 }
 
+function jsonResponse(data: unknown): Response {
+  return new Response(JSON.stringify(data), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 function renderWithQuery(ui: React.ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -28,25 +35,19 @@ function renderWithQuery(ui: React.ReactElement) {
   );
 }
 
-let fetchSpy: ReturnType<typeof vi.spyOn>;
-
-beforeEach(() => {
-  fetchSpy = vi.spyOn(globalThis, "fetch");
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
 describe("YoloMode", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   test("renders toggle from config API", async () => {
-    const config = makeConfig({ enabled: true });
-    fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify(config), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    fetchSpy.mockResolvedValueOnce(jsonResponse(makeConfig({ enabled: true })));
 
     renderWithQuery(<YoloMode projectId="proj-1" />);
 
@@ -58,13 +59,8 @@ describe("YoloMode", () => {
   test("toggling calls setAutoPublishConfig", async () => {
     const user = userEvent.setup();
 
-    // Initial fetch: disabled config
-    const config = makeConfig({ enabled: false });
     fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify(config), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
+      jsonResponse(makeConfig({ enabled: false })),
     );
 
     renderWithQuery(<YoloMode projectId="proj-1" />);
@@ -72,14 +68,7 @@ describe("YoloMode", () => {
     const toggle = await screen.findByRole("switch");
     expect(toggle).toHaveAttribute("aria-checked", "false");
 
-    // Mock the PUT response for toggling on
-    const updatedConfig = makeConfig({ enabled: true });
-    fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify(updatedConfig), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    fetchSpy.mockResolvedValueOnce(jsonResponse(makeConfig({ enabled: true })));
 
     await user.click(toggle);
 
@@ -94,17 +83,12 @@ describe("YoloMode", () => {
   });
 
   test("shows config panel when enabled", async () => {
-    const config = makeConfig({ enabled: true, intervalMinutes: 30 });
     fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify(config), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
+      jsonResponse(makeConfig({ enabled: true, intervalMinutes: 30 })),
     );
 
     renderWithQuery(<YoloMode projectId="proj-1" />);
 
-    // Wait for config to load and panel to appear
     await waitFor(() => {
       expect(screen.getByRole("switch")).toHaveAttribute(
         "aria-checked",
@@ -112,7 +96,6 @@ describe("YoloMode", () => {
       );
     });
 
-    // Interval and filter controls should be visible when enabled
     expect(screen.getByLabelText(/interval/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/minimum upvotes/i)).toBeInTheDocument();
   });
