@@ -34,6 +34,7 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
+import { ORG_ROUTE_STRUCTURE } from "@/routes";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -212,7 +213,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 // Paths that don't require authentication — skip the loading shell on these
 // to avoid a brief flash of the authenticated skeleton (e.g. after logout).
-const UNAUTHENTICATED_PATHS = ["/login", "/register", "/book-demo"];
+const UNAUTHENTICATED_PATHS = ["/login", "/register", "/invite", "/book-demo"];
 
 // Paths that are authenticated but don't require org/project slug context.
 const SLUG_EXEMPT_PATHS = ["/slack/register"];
@@ -232,10 +233,13 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading
   // !! Very important that auth.info returns an error if there's no session
   if (isLoading || (!session && !error)) {
-    // Don't show the authenticated app skeleton on unauthenticated routes
-    // (e.g. after logout navigates to /login). The session check will resolve
-    // quickly and render the correct page without a jarring skeleton flash.
-    if (UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p))) {
+    // Don't show the authenticated app skeleton on routes that always redirect
+    // (root "/" and unauthenticated pages like /login). This avoids a jarring
+    // skeleton flash for logged-out users before the redirect to /login fires.
+    if (
+      location.pathname === "/" ||
+      UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p))
+    ) {
       return null;
     }
     return <AppLoadingShell />;
@@ -273,13 +277,12 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // Backwards-compat: redirect old /:orgSlug/:projectSlug/... URLs to /:orgSlug/projects/:projectSlug/...
   // If the second segment is a known project slug (and not "projects" or an org-level route),
   // redirect to the new URL structure.
-  // Known org-level route paths that should not be treated as project slugs
+  // Derived from ORG_ROUTE_STRUCTURE so new org routes are automatically excluded from project slug redirects
   const ORG_ROUTE_PATHS = [
-    "billing",
-    "api-keys",
-    "domains",
-    "logs",
     "projects",
+    ...Object.values(ORG_ROUTE_STRUCTURE)
+      .map((r) => r.url)
+      .filter(Boolean),
   ];
   const isProjectSlug = session.organization?.projects.some(
     (p) => p.slug === pathParts[1],

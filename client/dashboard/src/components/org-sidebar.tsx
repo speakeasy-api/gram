@@ -20,8 +20,10 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const isAdmin = useIsAdmin();
   const telemetry = useTelemetry();
   const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
+  const isTeamPageEnabled =
+    telemetry.isFeatureEnabled("gram-team-page") ?? false;
 
-  const teamUrl =
+  const externalTeamUrl =
     organization?.userWorkspaceSlugs &&
     organization.userWorkspaceSlugs.length > 0
       ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
@@ -48,6 +50,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <NavMenu
               items={[
                 orgRoutes.billing,
+                ...(isTeamPageEnabled ? [orgRoutes.team] : []),
                 orgRoutes.apiKeys,
                 orgRoutes.domains,
                 orgRoutes.logs,
@@ -56,20 +59,22 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 ...(isAdmin ? [orgRoutes.adminSettings] : []),
               ]}
             >
-              <SidebarMenuItem>
-                <NavButton
-                  title="Team"
-                  titleNode={
-                    <span className="flex items-center gap-1.5">
-                      Team
-                      <ExternalLink className="w-3 h-3 text-muted-foreground" />
-                    </span>
-                  }
-                  href={teamUrl}
-                  target="_blank"
-                  Icon={(props) => <Icon name="users-round" {...props} />}
-                />
-              </SidebarMenuItem>
+              {!isTeamPageEnabled && (
+                <SidebarMenuItem>
+                  <NavButton
+                    title="Team"
+                    titleNode={
+                      <span className="flex items-center gap-1.5">
+                        Team
+                        <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                      </span>
+                    }
+                    href={externalTeamUrl}
+                    target="_blank"
+                    Icon={(props) => <Icon name="users-round" {...props} />}
+                  />
+                </SidebarMenuItem>
+              )}
             </NavMenu>
           </SidebarGroupContent>
         </SidebarGroup>

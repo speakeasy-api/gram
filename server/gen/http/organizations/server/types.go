@@ -1210,6 +1210,12 @@ type OrganizationUserResponseBody struct {
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Gram user ID.
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// User display name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// User email address.
+	Email string `form:"email" json:"email" xml:"email"`
+	// User photo URL.
+	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
 	// WorkOS organization membership ID when known.
 	WorkosMembershipID *string `form:"workos_membership_id,omitempty" json:"workos_membership_id,omitempty" xml:"workos_membership_id,omitempty"`
 	CreatedAt          string  `form:"created_at" json:"created_at" xml:"created_at"`

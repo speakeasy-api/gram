@@ -151,21 +151,40 @@ func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOr
 }
 
 const listOrganizationUsers = `-- name: ListOrganizationUsers :many
-SELECT id, organization_id, user_id, workos_membership_id, created_at, updated_at, deleted_at, deleted
-FROM organization_user_relationships
-WHERE organization_id = $1
-  AND deleted_at IS NULL
+SELECT
+  our.id, our.organization_id, our.user_id, our.workos_membership_id, our.created_at, our.updated_at, our.deleted_at, our.deleted,
+  u.email AS user_email,
+  u.display_name AS user_display_name,
+  u.photo_url AS user_photo_url
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted_at IS NULL
 `
 
-func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID string) ([]OrganizationUserRelationship, error) {
+type ListOrganizationUsersRow struct {
+	ID                 int64
+	OrganizationID     string
+	UserID             string
+	WorkosMembershipID pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
+	UserEmail          string
+	UserDisplayName    string
+	UserPhotoUrl       pgtype.Text
+}
+
+func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID string) ([]ListOrganizationUsersRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationUsers, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []OrganizationUserRelationship
+	var items []ListOrganizationUsersRow
 	for rows.Next() {
-		var i OrganizationUserRelationship
+		var i ListOrganizationUsersRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizationID,
@@ -175,6 +194,9 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+			&i.UserEmail,
+			&i.UserDisplayName,
+			&i.UserPhotoUrl,
 		); err != nil {
 			return nil, err
 		}
