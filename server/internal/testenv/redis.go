@@ -62,10 +62,26 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 		client := redis.NewClient(&redis.Options{
 			Addr:         net.JoinHostPort(host, port),
 			DB:           db,
+			Protocol:     2, // Use RESP2 to skip the HELLO 3 handshake that fails when Docker port-forwarding briefly returns HTTP
 			DialTimeout:  1 * time.Second,
 			ReadTimeout:  300 * time.Millisecond,
 			WriteTimeout: 1 * time.Second,
 		})
+
+		// Verify the connection is alive before returning. Without this,
+		// the container's mapped port may be open before the Docker
+		// port-forwarding is fully routing to Redis, causing transient
+		// connection errors under CI load.
+		ctx := t.Context()
+		for attempt := range 10 {
+			if err := client.Ping(ctx).Err(); err == nil {
+				break
+			} else if attempt == 9 {
+				_ = client.Close()
+				return nil, fmt.Errorf("redis not ready after retries: %w", err)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
 
 		t.Cleanup(func() {
 			if err := client.Close(); err != nil {
