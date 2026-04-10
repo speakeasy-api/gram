@@ -2539,7 +2539,7 @@ function HooksAnalytics({
             traces={groupedTraces}
           />
           <ServerActivityChart
-            title="MCP Server Usage per User"
+            title="Server Usage per User"
             traces={groupedTraces}
             serverNameMappings={serverNameMappings}
           />
@@ -2555,7 +2555,7 @@ function HooksAnalytics({
       {groupedTraces.length > 0 && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-            <h3 className="text font-semibold">Server Usage Over Time</h3>
+            <h3 className="text font-semibold">Server Usage</h3>
             <ServerUsageTimeSeries
               traces={groupedTraces}
               from={from}
@@ -2564,7 +2564,7 @@ function HooksAnalytics({
             />
           </div>
           <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-            <h3 className="text font-semibold">User Usage Over Time</h3>
+            <h3 className="text font-semibold">User Usage</h3>
             <UserUsageTimeSeries traces={groupedTraces} from={from} to={to} />
           </div>
         </div>
