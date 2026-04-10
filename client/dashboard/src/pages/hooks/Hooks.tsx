@@ -25,7 +25,6 @@ import {
 import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
 import { telemetryListHooksTraces } from "@gram/client/funcs/telemetryListHooksTraces";
 import type {
-  GetHooksSummaryResult,
   HookTraceSummary as HookTrace,
   LogFilter,
   TelemetryLogRecord,
@@ -257,9 +256,6 @@ function HooksContent() {
   const [userEmailInput, setUserEmailInput] = useState("");
   const [selectedHookTypes, setSelectedHookTypes] =
     useState<TypesToInclude[]>(parsedHookTypes);
-  const [summaryView, setSummaryView] = useState<
-    "servers" | "users" | "skills"
-  >("servers");
   const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
     null,
@@ -345,25 +341,22 @@ function HooksContent() {
   );
 
   // Fetch hooks summary
-  const {
-    data: summaryData,
-    refetch: refetchSummary,
-    isLogsDisabled: isSummaryLogsDisabled,
-  } = useLogsEnabledErrorCheck(
-    useQuery({
-      queryKey: ["hooks-summary", from.toISOString(), to.toISOString()],
-      queryFn: () =>
-        unwrapAsync(
-          telemetryGetHooksSummary(client, {
-            getProjectMetricsSummaryPayload: {
-              from,
-              to,
-            },
-          }),
-        ),
-      throwOnError: false,
-    }),
-  );
+  const { refetch: refetchSummary, isLogsDisabled: isSummaryLogsDisabled } =
+    useLogsEnabledErrorCheck(
+      useQuery({
+        queryKey: ["hooks-summary", from.toISOString(), to.toISOString()],
+        queryFn: () =>
+          unwrapAsync(
+            telemetryGetHooksSummary(client, {
+              getProjectMetricsSummaryPayload: {
+                from,
+                to,
+              },
+            }),
+          ),
+        throwOnError: false,
+      }),
+    );
 
   // Build attribute filters from active filter chips
   const logFilters = useMemo(() => {
@@ -634,9 +627,6 @@ function HooksContent() {
                   isLoading={isLoading}
                   isFetching={isFetching}
                   error={error}
-                  summaryData={summaryData}
-                  summaryView={summaryView}
-                  onSummaryViewChange={setSummaryView}
                   groupedTraces={groupedTraces}
                   serverInput={serverInput}
                   setServerInput={setServerInput}
@@ -679,9 +669,6 @@ function HooksInnerContent({
   isLoading,
   isFetching,
   error,
-  // summaryData,
-  // summaryView,
-  // onSummaryViewChange,
   groupedTraces,
   serverInput,
   setServerInput,
@@ -714,9 +701,6 @@ function HooksInnerContent({
   isLoading: boolean;
   isFetching: boolean;
   error: Error | null;
-  summaryData?: GetHooksSummaryResult;
-  summaryView: "servers" | "users" | "skills";
-  onSummaryViewChange: (view: "servers" | "users" | "skills") => void;
   groupedTraces: HookTrace[];
   serverInput: string;
   setServerInput: (value: string) => void;
@@ -1978,7 +1962,7 @@ function HooksAnalytics({
         tools: new Set<string>(),
       };
       if (t.hookStatus === "success") entry.success += 1;
-      else entry.failure += 1;
+      else if (t.hookStatus === "failure") entry.failure += 1;
       if (t.toolName) entry.tools.add(t.toolName);
       map.set(key, entry);
     }
@@ -2083,14 +2067,14 @@ function HooksAnalytics({
           format="percent"
           icon="circle-check"
           accentColor="green"
-          subtext="across all servers"
+          subtext="from loaded traces"
         />
         <MetricCard
           title="Total Events"
           value={kpis.totalEvents}
           icon="activity"
           accentColor="purple"
-          subtext="this period"
+          subtext="from loaded traces"
         />
         <MetricCard
           title="Active Users"
@@ -2104,14 +2088,14 @@ function HooksAnalytics({
           value={kpis.activeSources}
           icon="monitor"
           accentColor="blue"
-          subtext="distinct sources"
+          subtext="from loaded traces"
         />
         <MetricCard
           title="Unique Tools"
           value={kpis.uniqueTools}
           icon="wrench"
           accentColor="orange"
-          subtext="across all servers"
+          subtext="from loaded traces"
         />
       </div>
 
