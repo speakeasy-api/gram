@@ -466,11 +466,12 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		}
 
 		newExternalMCPs = append(newExternalMCPs, upsertExternalMCP{
-			registryID:              registryID,
-			name:                    add.Name,
-			slug:                    string(add.Slug),
-			registryServerSpecifier: add.RegistryServerSpecifier,
-			selectedRemotes:         add.SelectedRemotes,
+			registryID:                          uuid.NullUUID{UUID: registryID, Valid: registryID != uuid.Nil},
+			organizationMcpCollectionRegistryID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			name:                                add.Name,
+			slug:                                string(add.Slug),
+			registryServerSpecifier:             add.RegistryServerSpecifier,
+			selectedRemotes:                     add.SelectedRemotes,
 		})
 	}
 
@@ -665,11 +666,12 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		}
 
 		externalMCPsToUpsert = append(externalMCPsToUpsert, upsertExternalMCP{
-			registryID:              registryID,
-			name:                    add.Name,
-			slug:                    string(add.Slug),
-			registryServerSpecifier: add.RegistryServerSpecifier,
-			selectedRemotes:         add.SelectedRemotes,
+			registryID:                          uuid.NullUUID{UUID: registryID, Valid: registryID != uuid.Nil},
+			organizationMcpCollectionRegistryID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			name:                                add.Name,
+			slug:                                string(add.Slug),
+			registryServerSpecifier:             add.RegistryServerSpecifier,
+			selectedRemotes:                     add.SelectedRemotes,
 		})
 	}
 
