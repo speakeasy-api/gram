@@ -1,10 +1,12 @@
-/* Import Tailwind CSS v4 */
-@import "tailwindcss";
-
-/* Import Google Fonts */
+/* Google Fonts must be imported before Tailwind — @import "tailwindcss" expands inline to full
+   CSS rules, and the CSS spec requires all @import statements to precede any other rules.
+   Imports after that expansion are invalid and silently ignored by browsers. */
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Cormorant:wght@300;400;500;600;700&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&display=swap");
+
+/* Import Tailwind CSS v4 */
+@import "tailwindcss";
 
 /* Define CSS variables for font families using system fonts and fallbacks */
 :root {
