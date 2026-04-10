@@ -169,21 +169,17 @@ func splitByHeading(doc ast.Node, source []byte, targetLevel int) []section {
 }
 
 func nodeStart(node ast.Node) int {
-	// For headings, the text segment starts after the "## " markers.
-	// Walk backwards from the text start to find the line beginning.
 	if node.Lines().Len() > 0 {
 		return node.Lines().At(0).Start
 	}
 	if fc := node.FirstChild(); fc != nil {
-		pos := nodeStart(fc)
-		// Walk backwards to find the start of the line (past "## " markers)
-		return pos
+		return nodeStart(fc)
 	}
 	return 0
 }
 
-// headingLineStart returns the byte offset of the line containing this heading,
-// which includes the "## " marker prefix.
+// headingLineStart walks backwards from the text content to include the
+// markdown heading markers (e.g. "## ") that goldmark strips from the AST.
 func headingLineStart(node ast.Node, source []byte) int {
 	pos := nodeStart(node)
 	// Walk backwards to start of line
@@ -337,7 +333,6 @@ func splitParagraph(p string, maxSize int) []string {
 		return []string{p}
 	}
 
-	// Split at sentence boundaries (". ") first, then word boundaries
 	var segments []string
 	var current strings.Builder
 	words := strings.FieldsSeq(p)
