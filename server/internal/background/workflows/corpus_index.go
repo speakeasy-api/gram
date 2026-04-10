@@ -3,6 +3,7 @@ package workflows
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -284,22 +285,10 @@ func CorpusIndexWorkflow(ctx workflow.Context, params CorpusIndexParams) error {
 
 // hasConfigChange checks if any of the changed files is a .docs-mcp.json config.
 func hasConfigChange(diff DiffResult) bool {
-	for _, f := range diff.Added {
-		if filepath.Base(f) == configFileName {
-			return true
-		}
-	}
-	for _, f := range diff.Modified {
-		if filepath.Base(f) == configFileName {
-			return true
-		}
-	}
-	for _, f := range diff.Deleted {
-		if filepath.Base(f) == configFileName {
-			return true
-		}
-	}
-	return false
+	isConfig := func(f string) bool { return filepath.Base(f) == configFileName }
+	return slices.ContainsFunc(diff.Added, isConfig) ||
+		slices.ContainsFunc(diff.Modified, isConfig) ||
+		slices.ContainsFunc(diff.Deleted, isConfig)
 }
 
 // filterConfigFiles removes .docs-mcp.json files from the list.
