@@ -68,7 +68,7 @@ export function Type({
     return <Skeleton className={cn(variantWidth, variantHeight)} />;
   }
 
-  let baseClass = "font-light";
+  let baseClass = "font-normal";
 
   if (mono) {
     baseClass += " font-mono";
