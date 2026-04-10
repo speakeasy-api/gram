@@ -12,40 +12,35 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/object"
 )
 
-// Repo wraps a bare git repository for corpus content operations.
+// Repo wraps a bare git repository for corpus content.
 type Repo struct {
 	repo *gogit.Repository
 	path string
 }
 
-// TreeEntry represents a file in a git tree.
 type TreeEntry struct {
 	Path string
 	Size int64
 }
 
-// LogEntry represents a commit in the log.
 type LogEntry struct {
 	SHA     string
 	Message string
 }
 
-// DiffAction represents the type of change in a diff.
 type DiffAction int
 
 const (
-	DiffAdded    DiffAction = iota
-	DiffModified DiffAction = iota
-	DiffDeleted  DiffAction = iota
+	DiffAdded DiffAction = iota
+	DiffModified
+	DiffDeleted
 )
 
-// DiffEntry represents a single file change between two commits.
 type DiffEntry struct {
 	Path   string
 	Action DiffAction
 }
 
-// InitBareRepo initializes a new bare git repository at the given path.
 func InitBareRepo(path string) (*Repo, error) {
 	r, err := gogit.PlainInit(path, true)
 	if err != nil {
@@ -55,7 +50,6 @@ func InitBareRepo(path string) (*Repo, error) {
 	return &Repo{repo: r, path: path}, nil
 }
 
-// OpenRepo opens an existing bare git repository at the given path.
 func OpenRepo(path string) (*Repo, error) {
 	r, err := gogit.PlainOpen(path)
 	if err != nil {
@@ -65,13 +59,11 @@ func OpenRepo(path string) (*Repo, error) {
 	return &Repo{repo: r, path: path}, nil
 }
 
-// Path returns the filesystem path of the bare repository.
 func (r *Repo) Path() string {
 	return r.path
 }
 
-// CommitFiles creates a commit with the given files replacing the entire tree.
-// Returns the commit SHA.
+// CommitFiles replaces the entire tree with the given files and creates a commit.
 func (r *Repo) CommitFiles(files map[string][]byte, message string) (string, error) {
 	storer := r.repo.Storer
 
@@ -244,8 +236,7 @@ type gogitStorer interface {
 	SetEncodedObject(plumbing.EncodedObject) (plumbing.Hash, error)
 }
 
-// ReadTree returns all file entries at the given ref.
-func (r *Repo) ReadTree(ref string) ([]TreeEntry, error) {
+func (r *Repo) resolveCommit(ref string) (*object.Commit, error) {
 	hash, err := r.repo.ResolveRevision(plumbing.Revision(ref))
 	if err != nil {
 		return nil, fmt.Errorf("resolve ref %s: %w", ref, err)
@@ -253,7 +244,16 @@ func (r *Repo) ReadTree(ref string) ([]TreeEntry, error) {
 
 	commit, err := r.repo.CommitObject(*hash)
 	if err != nil {
-		return nil, fmt.Errorf("get commit: %w", err)
+		return nil, fmt.Errorf("get commit %s: %w", ref, err)
+	}
+
+	return commit, nil
+}
+
+func (r *Repo) ReadTree(ref string) ([]TreeEntry, error) {
+	commit, err := r.resolveCommit(ref)
+	if err != nil {
+		return nil, err
 	}
 
 	tree, err := commit.Tree()
@@ -285,16 +285,10 @@ func (r *Repo) ReadTree(ref string) ([]TreeEntry, error) {
 	return entries, nil
 }
 
-// ReadBlob returns the content of a file at the given ref and path.
 func (r *Repo) ReadBlob(ref string, path string) ([]byte, error) {
-	hash, err := r.repo.ResolveRevision(plumbing.Revision(ref))
+	commit, err := r.resolveCommit(ref)
 	if err != nil {
-		return nil, fmt.Errorf("resolve ref %s: %w", ref, err)
-	}
-
-	commit, err := r.repo.CommitObject(*hash)
-	if err != nil {
-		return nil, fmt.Errorf("get commit: %w", err)
+		return nil, err
 	}
 
 	file, err := commit.File(path)
@@ -316,7 +310,6 @@ func (r *Repo) ReadBlob(ref string, path string) ([]byte, error) {
 	return content, nil
 }
 
-// FileLog returns the commit log for a specific file path.
 func (r *Repo) FileLog(path string) ([]LogEntry, error) {
 	logIter, err := r.repo.Log(&gogit.LogOptions{
 		From:       plumbing.ZeroHash,
@@ -348,7 +341,6 @@ func (r *Repo) FileLog(path string) ([]LogEntry, error) {
 	return entries, nil
 }
 
-// Diff returns the file changes between two commits.
 func (r *Repo) Diff(fromSHA, toSHA string) ([]DiffEntry, error) {
 	fromCommit, err := r.repo.CommitObject(plumbing.NewHash(fromSHA))
 	if err != nil {
