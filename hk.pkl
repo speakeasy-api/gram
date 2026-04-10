@@ -43,7 +43,6 @@ local linters = new Mapping<String, Step> {
         "**/*.css",
         "**/*.scss",
         "**/*.less",
-        "**/*.html",
         "**/*.json",
         "**/*.json5",
         "**/*.jsonc",
