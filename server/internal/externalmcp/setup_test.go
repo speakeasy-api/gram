@@ -72,7 +72,8 @@ func newTestExternalMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
-	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, mcpRegistryClient, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{})
+	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, mcpRegistryClient, accessManager, accessManager.RequireScope)
 
 	return ctx, &testInstance{
 		service:        svc,

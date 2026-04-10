@@ -65,6 +65,13 @@ func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
 	return GrantsToContext(ctx, grants), nil
 }
 
+// RequireScope is a convenience wrapper around Require that accepts string
+// scope and resource ID. It can be used as a closure to avoid packages
+// importing the access package directly.
+func (m *Manager) RequireScope(ctx context.Context, scope string, resourceID string) error {
+	return m.Require(ctx, Check{Scope: Scope(scope), ResourceID: resourceID})
+}
+
 func (m *Manager) Require(ctx context.Context, checks ...Check) error {
 	enforce, err := m.shouldEnforce(ctx)
 	if err != nil {

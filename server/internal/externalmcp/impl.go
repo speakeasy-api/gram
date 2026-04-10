@@ -20,7 +20,6 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/server"
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_registries"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -30,13 +29,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
+// AccessRequirer checks whether the caller has a given scope on a resource.
+// Defined as a func type to avoid importing the access package directly,
+// which would create an import cycle through testenv.
+type AccessRequirer func(ctx context.Context, scope string, resourceID string) error
+
 type Service struct {
 	tracer         trace.Tracer
 	logger         *slog.Logger
 	db             *pgxpool.Pool
 	repo           *repo.Queries
 	auth           *auth.Auth
-	access         *access.Manager
+	requireAccess  AccessRequirer
 	sessions       *sessions.Manager
 	registryClient *RegistryClient
 }
@@ -44,7 +48,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, accessManager *access.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, accessLoader auth.AccessLoader, requireAccess AccessRequirer) *Service {
 	logger = logger.With(attr.SlogComponent("external_mcp"))
 
 	return &Service{
@@ -52,8 +56,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger:         logger,
 		db:             db,
 		repo:           repo.New(db),
-		auth:           auth.New(logger, db, sessions, accessManager),
-		access:         accessManager,
+		auth:           auth.New(logger, db, sessions, accessLoader),
+		requireAccess:  requireAccess,
 		sessions:       sessions,
 		registryClient: registryClient,
 	}
@@ -151,7 +155,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.requireAccess(ctx, "build:read", authCtx.ProjectID.String()); err != nil {
 		return nil, err
 	}
 
@@ -231,7 +235,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.requireAccess(ctx, "build:read", authCtx.ProjectID.String()); err != nil {
 		return nil, err
 	}
 
