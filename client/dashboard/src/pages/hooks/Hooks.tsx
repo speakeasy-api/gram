@@ -3,7 +3,9 @@ import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsSidebar } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
+import { ErrorAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSearch } from "@/components/ui/multi-search";
 import {
@@ -794,15 +796,47 @@ function HooksInnerContent({
             {/* Content Column */}
 
             <div className="flex-1 min-h-0 overflow-y-auto">
-              <HooksAnalytics
-                groupedTraces={groupedTraces}
-                serverNameMappings={serverNameMappings}
-                from={from}
-                to={to}
-                compact={isLogsVisible}
-                addFilter={addFilter}
-                onHookTypesChange={onHookTypesChange}
-              />
+              {error ? (
+                <ErrorAlert
+                  error={error}
+                  title="Error loading hook events"
+                  className="mx-auto w-full"
+                />
+              ) : isLoading ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                  <Spinner className="size-5 mr-0" />
+                  <span>Loading hook events...</span>
+                </div>
+              ) : groupedTraces.length === 0 && activeFilters.length === 0 ? (
+                <HooksEmptyState />
+              ) : groupedTraces.length === 0 ? (
+                <div className="py-12 text-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="size-12 rounded-full bg-muted flex items-center justify-center">
+                      <Icon
+                        name="inbox"
+                        className="size-6 text-muted-foreground"
+                      />
+                    </div>
+                    <span className="font-medium text-foreground">
+                      No matching hook events
+                    </span>
+                    <span className="text-sm text-muted-foreground max-w-sm">
+                      Try adjusting your search query or time range
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <HooksAnalytics
+                  groupedTraces={groupedTraces}
+                  serverNameMappings={serverNameMappings}
+                  from={from}
+                  to={to}
+                  compact={isLogsVisible}
+                  addFilter={addFilter}
+                  onHookTypesChange={onHookTypesChange}
+                />
+              )}
             </div>
 
             {/* Logs Column */}
@@ -968,24 +1002,18 @@ function HooksTraceContent({
 }) {
   if (error) {
     return (
-      <div className="flex flex-col items-center gap-3 py-12">
-        <div className="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
-          <Icon name="x" className="text-destructive size-6" />
-        </div>
-        <span className="text-foreground font-medium">
-          Error loading hook events
-        </span>
-        <span className="text-muted-foreground max-w-sm text-center text-sm">
-          {error.message}
-        </span>
-      </div>
+      <ErrorAlert
+        error={error}
+        title="Error loading hook events"
+        className="m-4"
+      />
     );
   }
 
   if (isLoading) {
     return (
-      <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-        <Icon name="loader-circle" className="size-5 animate-spin" />
+      <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+        <Spinner className="size-5 mr-0" />
         <span>Loading hook events...</span>
       </div>
     );
