@@ -157,7 +157,7 @@ func TestListComments(t *testing.T) {
 
 	// Verify ordering by created_at ascending
 	for i := 1; i < len(comments); i++ {
-		require.True(t, !comments[i].CreatedAt.Time.Before(comments[i-1].CreatedAt.Time),
+		require.False(t, comments[i].CreatedAt.Time.Before(comments[i-1].CreatedAt.Time),
 			"comments should be ordered by created_at ascending")
 	}
 }

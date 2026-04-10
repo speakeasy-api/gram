@@ -3,8 +3,10 @@ package feedback
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/corpus/feedback/repo"
@@ -19,7 +21,16 @@ var ErrInvalidDirection = errors.New("invalid direction: must be up or down")
 var ErrEmptyFilePath = errors.New("file_path must not be empty")
 var ErrEmptyContent = errors.New("content must not be empty")
 var ErrInvalidAuthorType = errors.New("invalid author_type: must be human or agent")
-var errNotImplemented = errors.New("not implemented")
+
+var validDirections = map[string]bool{
+	DirectionUp:   true,
+	DirectionDown: true,
+}
+
+var validAuthorTypes = map[string]bool{
+	"human": true,
+	"agent": true,
+}
 
 type VoteParams struct {
 	FilePath  string
@@ -59,18 +70,139 @@ func NewService(db *pgxpool.Pool) *Service {
 	}
 }
 
-func (s *Service) Vote(_ context.Context, _ uuid.UUID, _ string, _ VoteParams) (*Vote, error) {
-	return nil, errNotImplemented
+// Vote records an up/down vote on a file. If the same direction already exists,
+// it clears the vote (toggle). If a different direction exists, it switches.
+// Returns nil when the vote was toggled off.
+func (s *Service) Vote(ctx context.Context, projectID uuid.UUID, orgID string, params VoteParams) (*Vote, error) {
+	if !validDirections[params.Direction] {
+		return nil, ErrInvalidDirection
+	}
+	if params.FilePath == "" {
+		return nil, ErrEmptyFilePath
+	}
+
+	// Check for existing vote
+	existing, err := s.repo.GetVote(ctx, repo.GetVoteParams{
+		ProjectID: projectID,
+		FilePath:  params.FilePath,
+		UserID:    params.UserID,
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("get vote: %w", err)
+	}
+
+	if err == nil {
+		// Existing vote found
+		if existing.Direction == params.Direction {
+			// Toggle off — delete the vote
+			err = s.repo.DeleteVote(ctx, repo.DeleteVoteParams{
+				ProjectID: projectID,
+				FilePath:  params.FilePath,
+				UserID:    params.UserID,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("delete vote: %w", err)
+			}
+			return nil, nil
+		}
+		// Switch direction
+		v, err := s.repo.UpdateVoteDirection(ctx, repo.UpdateVoteDirectionParams{
+			ProjectID: projectID,
+			FilePath:  params.FilePath,
+			UserID:    params.UserID,
+			Direction: params.Direction,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("update vote direction: %w", err)
+		}
+		return &v, nil
+	}
+
+	// No existing vote — create new
+	v, err := s.repo.CreateVote(ctx, repo.CreateVoteParams{
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		FilePath:       params.FilePath,
+		UserID:         params.UserID,
+		Direction:      params.Direction,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create vote: %w", err)
+	}
+	return &v, nil
 }
 
-func (s *Service) ListFeedback(_ context.Context, _ uuid.UUID, _ *string) ([]FeedbackSummary, error) {
-	return nil, errNotImplemented
+// ListFeedback returns aggregated vote counts per file path. If filePath is
+// non-nil, only feedback for that file is returned.
+func (s *Service) ListFeedback(ctx context.Context, projectID uuid.UUID, filePath *string) ([]FeedbackSummary, error) {
+	if filePath != nil {
+		rows, err := s.repo.ListFeedbackForFile(ctx, repo.ListFeedbackForFileParams{
+			ProjectID: projectID,
+			FilePath:  *filePath,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list feedback for file: %w", err)
+		}
+		result := make([]FeedbackSummary, 0, len(rows))
+		for _, row := range rows {
+			result = append(result, FeedbackSummary{
+				FilePath:  row.FilePath,
+				Upvotes:   row.Upvotes,
+				Downvotes: row.Downvotes,
+			})
+		}
+		return result, nil
+	}
+
+	rows, err := s.repo.ListFeedbackByProject(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list feedback by project: %w", err)
+	}
+	result := make([]FeedbackSummary, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, FeedbackSummary{
+			FilePath:  row.FilePath,
+			Upvotes:   row.Upvotes,
+			Downvotes: row.Downvotes,
+		})
+	}
+	return result, nil
 }
 
-func (s *Service) AddComment(_ context.Context, _ uuid.UUID, _ string, _ AddCommentParams) (*Comment, error) {
-	return nil, errNotImplemented
+// AddComment creates a new comment on a file path.
+func (s *Service) AddComment(ctx context.Context, projectID uuid.UUID, orgID string, params AddCommentParams) (*Comment, error) {
+	if params.FilePath == "" {
+		return nil, ErrEmptyFilePath
+	}
+	if params.Content == "" {
+		return nil, ErrEmptyContent
+	}
+	if !validAuthorTypes[params.AuthorType] {
+		return nil, ErrInvalidAuthorType
+	}
+
+	c, err := s.repo.CreateComment(ctx, repo.CreateCommentParams{
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		FilePath:       params.FilePath,
+		AuthorID:       params.AuthorID,
+		AuthorType:     params.AuthorType,
+		Content:        params.Content,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create comment: %w", err)
+	}
+	return &c, nil
 }
 
-func (s *Service) ListComments(_ context.Context, _ uuid.UUID, _ string) ([]Comment, error) {
-	return nil, errNotImplemented
+// ListComments returns all non-deleted comments for a file, ordered by created_at ascending.
+func (s *Service) ListComments(ctx context.Context, projectID uuid.UUID, filePath string) ([]Comment, error) {
+	comments, err := s.repo.ListComments(ctx, repo.ListCommentsParams{
+		ProjectID: projectID,
+		FilePath:  filePath,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list comments: %w", err)
+	}
+	return comments, nil
 }
