@@ -56,7 +56,7 @@ import {
   type ChartOptions,
 } from "chart.js";
 import { Bar, Line } from "react-chartjs-2";
-import { Filter, Settings } from "lucide-react";
+import { Filter, List, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { LogDetailSheet } from "../logs/LogDetailSheet";
@@ -820,6 +820,15 @@ function HooksInnerContent({
                 projectSlug={projectSlug}
               />
             </div>
+            <Button
+              variant={isLogsVisible ? "secondary" : "outline"}
+              size="sm"
+              className="h-[42px] shrink-0"
+              onClick={() => setIsLogsVisible((v) => !v)}
+            >
+              <List className="h-4 w-4" />
+              Logs
+            </Button>
             <div className="absolute inset-x-0 -bottom-6 h-6 w-full bg-linear-to-b from-white to-white/0" />
           </div>
 
