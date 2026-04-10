@@ -1,11 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { Dialog } from "@/components/ui/dialog";
 import {
   PageTabsTrigger,
@@ -20,7 +15,6 @@ import {
   BotIcon,
   ChevronDownIcon,
   GitCommitHorizontalIcon,
-  LoaderCircleIcon,
   MessageSquareIcon,
   MoveRightIcon,
   PlusIcon,
@@ -33,13 +27,13 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Outlet } from "react-router";
 import { AddRepoDialog } from "./AddRepoDialog";
+import { AnnotationsPanel } from "./AnnotationsPanel";
+import { FeedbackPanel } from "./FeedbackPanel";
 import {
-  type Annotation,
   type ContextFile,
   type ContextFolder,
   type ContextNode,
   type DiffLine,
-  type DocFeedback,
   type DocsMcpConfig,
   type DraftDocument,
   type FileVersion,
@@ -1310,11 +1304,8 @@ function FileDetail({ file }: { file: ContextFile }) {
           </div>
         )}
 
-      {file.feedback && <FeedbackSection feedback={file.feedback} />}
-
-      {file.annotations && file.annotations.length > 0 && (
-        <AnnotationsSection annotations={file.annotations} />
-      )}
+      <FeedbackPanel filePath={file.name} />
+      <AnnotationsPanel filePath={file.name} />
 
       <div className="px-4 py-3 border-t border-border flex gap-2">
         {file.draft ? (
@@ -1349,304 +1340,7 @@ function FileDetail({ file }: { file: ContextFile }) {
 
 // ── Source Badge ───────────────────────────────────────────────────────────
 
-// ── Feedback Section ──────────────────────────────────────────────────────
-
-const INITIAL_COMMENTS_SHOWN = 2;
-
-type IterateState = "idle" | "processing" | "done";
-
-function FeedbackSection({ feedback }: { feedback: DocFeedback }) {
-  const [showAllComments, setShowAllComments] = useState(false);
-  const [iterateState, setIterateState] = useState<IterateState>("idle");
-  const [iteratePrompt, setIteratePrompt] = useState("");
-  const [showPrompt, setShowPrompt] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(0 as never);
-  const score = feedback.upvotes - feedback.downvotes;
-
-  const sortedComments = [...feedback.comments].sort(
-    (a, b) => b.upvotes - b.downvotes - (a.upvotes - a.downvotes),
-  );
-  const visibleComments = showAllComments
-    ? sortedComments
-    : sortedComments.slice(0, INITIAL_COMMENTS_SHOWN);
-  const hiddenCount = sortedComments.length - INITIAL_COMMENTS_SHOWN;
-
-  const handleIterate = useCallback(() => {
-    if (iterateState === "processing") return;
-    setIterateState("processing");
-    setShowPrompt(false);
-    // Simulate agent processing
-    timerRef.current = setTimeout(() => {
-      setIterateState("done");
-    }, 3000);
-  }, [iterateState]);
-
-  const handleUndo = useCallback(() => {
-    clearTimeout(timerRef.current);
-    setIterateState("idle");
-    setIteratePrompt("");
-  }, []);
-
-  useEffect(() => () => clearTimeout(timerRef.current), []);
-
-  const isProcessing = iterateState === "processing";
-  const isDone = iterateState === "done";
-
-  return (
-    <div
-      className={cn(
-        "border-t border-border transition-all duration-500",
-        isProcessing && "opacity-40 grayscale pointer-events-none",
-      )}
-    >
-      {/* Processing overlay */}
-      {isProcessing && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-          <div className="flex items-center gap-2 bg-background/90 border border-border rounded-lg px-4 py-2 shadow-lg pointer-events-auto">
-            <LoaderCircleIcon className="h-4 w-4 text-primary animate-spin" />
-            <Type small>Incorporating feedback...</Type>
-          </div>
-        </div>
-      )}
-
-      {/* Done banner */}
-      {isDone && (
-        <div className="flex items-center justify-between px-4 py-2 bg-emerald-500/10 border-b border-emerald-500/30">
-          <div className="flex items-center gap-2 text-xs text-emerald-600">
-            <SparklesIcon className="h-3.5 w-3.5" />
-            <span className="font-medium">
-              Agent incorporated {feedback.comments.length} comment
-              {feedback.comments.length !== 1 && "s"} into a draft
-            </span>
-          </div>
-          <button
-            onClick={handleUndo}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Undo2Icon className="h-3 w-3" />
-            Undo
-          </button>
-        </div>
-      )}
-
-      {/* Vote bar + labels */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border">
-        <div className="flex items-center gap-1.5">
-          <button
-            className={cn(
-              "p-0.5 rounded transition-colors",
-              feedback.userVote === "up"
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <ThumbsUpIcon className="h-3.5 w-3.5" />
-          </button>
-          <span
-            className={cn(
-              "text-xs font-bold tabular-nums",
-              score > 0
-                ? "text-primary"
-                : score < 0
-                  ? "text-destructive"
-                  : "text-muted-foreground",
-            )}
-          >
-            {score}
-          </span>
-          <button
-            className={cn(
-              "p-0.5 rounded transition-colors",
-              feedback.userVote === "down"
-                ? "text-destructive"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <ThumbsDownIcon className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <span className="text-xs text-muted-foreground">
-          {feedback.upvotes} upvote{feedback.upvotes !== 1 && "s"}
-        </span>
-        {feedback.labels.length > 0 && (
-          <div className="flex flex-wrap gap-1 ml-auto">
-            {feedback.labels.map((label) => (
-              <Badge key={label} variant="secondary" className="text-[10px]">
-                {label}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Comments list */}
-      {!isDone && sortedComments.length > 0 && (
-        <div className="divide-y divide-border">
-          {visibleComments.map((comment) => (
-            <FeedbackCommentRow key={comment.id} comment={comment} />
-          ))}
-          {!showAllComments && hiddenCount > 0 && (
-            <button
-              onClick={() => setShowAllComments(true)}
-              className="w-full px-4 py-2 text-xs text-primary hover:bg-muted/30 transition-colors text-left"
-            >
-              Load {hiddenCount} more comment{hiddenCount !== 1 && "s"}...
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Iterate action */}
-      {!isDone && sortedComments.length > 0 && (
-        <div className="px-4 py-2.5 border-t border-border">
-          {showPrompt ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={iteratePrompt}
-                onChange={(e) => setIteratePrompt(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleIterate()}
-                placeholder="Incorporate all feedback comments into the doc..."
-                className="flex-1 h-7 px-2 text-xs rounded-md border border-border bg-transparent focus:outline-none focus:border-ring"
-                autoFocus
-              />
-              <Button
-                size="sm"
-                className="h-7 px-3 text-xs gap-1.5"
-                onClick={handleIterate}
-              >
-                <SparklesIcon className="h-3 w-3" />
-                Iterate
-              </Button>
-              <button
-                onClick={() => {
-                  setShowPrompt(false);
-                  setIteratePrompt("");
-                }}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowPrompt(true)}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <SparklesIcon className="h-3.5 w-3.5" />
-              Iterate on {sortedComments.length} comment
-              {sortedComments.length !== 1 && "s"}
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FeedbackCommentRow({
-  comment,
-}: {
-  comment: DocFeedback["comments"][number];
-}) {
-  const score = comment.upvotes - comment.downvotes;
-  return (
-    <div className="flex gap-2.5 px-4 py-2.5">
-      {/* Mini vote column */}
-      <div className="flex flex-col items-center gap-0 pt-0.5 shrink-0">
-        <button className="text-muted-foreground hover:text-foreground transition-colors">
-          <ThumbsUpIcon className="h-3 w-3" />
-        </button>
-        <span
-          className={cn(
-            "text-[10px] font-bold tabular-nums",
-            score > 0
-              ? "text-primary"
-              : score < 0
-                ? "text-destructive"
-                : "text-muted-foreground",
-          )}
-        >
-          {score}
-        </span>
-        <button className="text-muted-foreground hover:text-foreground transition-colors">
-          <ThumbsDownIcon className="h-3 w-3" />
-        </button>
-      </div>
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 text-xs mb-0.5">
-          <span className="font-medium text-foreground">{comment.author}</span>
-          {comment.authorType === "agent" && (
-            <Badge variant="default" className="text-[10px] px-1 py-0">
-              Agent
-            </Badge>
-          )}
-          <span className="text-muted-foreground">
-            {formatRelativeTime(comment.createdAt)}
-          </span>
-        </div>
-        <Type small className="text-foreground">
-          {comment.content}
-        </Type>
-      </div>
-    </div>
-  );
-}
-
-// ── Annotations Section ───────────────────────────────────────────────────
-
-function AnnotationsSection({ annotations }: { annotations: Annotation[] }) {
-  return (
-    <div className="border-t border-border">
-      <Collapsible>
-        <CollapsibleTrigger className="flex items-center justify-between w-full px-4 py-3 text-sm hover:bg-muted/50 transition-colors">
-          <div className="flex items-center gap-2">
-            <MessageSquareIcon className="h-4 w-4 text-muted-foreground" />
-            <Type small muted className="font-medium">
-              Annotations ({annotations.length})
-            </Type>
-          </div>
-          <ChevronDownIcon className="h-4 w-4 text-muted-foreground transition-transform [[data-state=open]>&]:rotate-180" />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="px-4 pb-3 space-y-3">
-            {annotations.map((annotation) => (
-              <AnnotationItem key={annotation.id} annotation={annotation} />
-            ))}
-            <Button size="sm" variant="outline" className="w-full">
-              <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
-              Add Annotation
-            </Button>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </div>
-  );
-}
-
-function AnnotationItem({ annotation }: { annotation: Annotation }) {
-  return (
-    <div className="rounded-md border border-border bg-muted/30 p-3 space-y-1.5">
-      <div className="flex items-center gap-2">
-        <Type small className="font-medium">
-          {annotation.author}
-        </Type>
-        <Badge
-          variant={annotation.authorType === "agent" ? "default" : "secondary"}
-        >
-          {annotation.authorType === "agent" ? "Agent" : "Human"}
-        </Badge>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {formatDate(annotation.createdAt)}
-        </span>
-      </div>
-      <Type small muted>
-        {annotation.content}
-      </Type>
-    </div>
-  );
-}
+// ── Feedback & Annotations (moved to FeedbackPanel.tsx, AnnotationsPanel.tsx)
 
 function LayerToggle({
   active,
