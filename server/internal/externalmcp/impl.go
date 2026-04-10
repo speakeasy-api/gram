@@ -29,10 +29,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// AccessRequirer checks whether the caller has a given scope on a resource.
-// Defined as a func type to avoid importing the access package directly,
-// which would create an import cycle through testenv.
-type AccessRequirer func(ctx context.Context, scope string, resourceID string) error
+// AccessRequirer checks whether the caller has the required scope on a resource.
+// The scope is baked into the closure at construction time to avoid importing
+// the access package directly (which would create an import cycle through testenv).
+type AccessRequirer func(ctx context.Context, resourceID string) error
 
 type Service struct {
 	tracer         trace.Tracer
@@ -155,7 +155,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, "build:read", authCtx.ProjectID.String()); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ProjectID.String()); err != nil {
 		return nil, err
 	}
 
@@ -235,7 +235,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, "build:read", authCtx.ProjectID.String()); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ProjectID.String()); err != nil {
 		return nil, err
 	}
 
