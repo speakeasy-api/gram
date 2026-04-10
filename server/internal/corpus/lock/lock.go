@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -16,12 +17,12 @@ import (
 
 // ErrNotHeld is returned when attempting to release or renew a lock that is
 // not held by the caller.
-var ErrNotHeld = fmt.Errorf("lock not held")
+var ErrNotHeld = errors.New("lock not held")
 
 // ErrStaleFencingToken is returned when a fencing token is older than the
 // current token for the lock, indicating the caller's lease has been
 // superseded.
-var ErrStaleFencingToken = fmt.Errorf("stale fencing token")
+var ErrStaleFencingToken = errors.New("stale fencing token")
 
 // fencingTokenKey returns the Redis key used to store the monotonically
 // increasing fencing token counter for a given lock key.
