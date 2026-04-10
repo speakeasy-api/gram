@@ -1,5 +1,6 @@
 import "@speakeasy-api/moonshine/moonshine.css";
 import "./App.css"; // Import after moonshine.css to override certain values
+const _ciGateTest: string = nonExistentVariable;
 
 import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
 import { Toaster } from "@/components/ui/sonner";
