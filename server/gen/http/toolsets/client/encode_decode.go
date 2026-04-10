@@ -2659,6 +2659,252 @@ func DecodeAddOAuthProxyServerResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildUpdateOAuthProxyServerRequest instantiates a HTTP request object with
+// method and path set to call the "toolsets" service "updateOAuthProxyServer"
+// endpoint
+func (c *Client) BuildUpdateOAuthProxyServerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateOAuthProxyServerToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "updateOAuthProxyServer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateOAuthProxyServerRequest returns an encoder for requests sent to
+// the toolsets updateOAuthProxyServer server.
+func EncodeUpdateOAuthProxyServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.UpdateOAuthProxyServerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "updateOAuthProxyServer", "*toolsets.UpdateOAuthProxyServerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		body := NewUpdateOAuthProxyServerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("toolsets", "updateOAuthProxyServer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateOAuthProxyServerResponse returns a decoder for responses
+// returned by the toolsets updateOAuthProxyServer endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeUpdateOAuthProxyServerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateOAuthProxyServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateOAuthProxyServerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateOAuthProxyServer", err)
+			}
+			err = ValidateUpdateOAuthProxyServerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateOAuthProxyServer", err)
+			}
+			res := NewUpdateOAuthProxyServerToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateOAuthProxyServerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateOAuthProxyServer", err)
+			}
+			err = ValidateUpdateOAuthProxyServerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateOAuthProxyServer", err)
+			}
+			return nil, NewUpdateOAuthProxyServerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateOAuthProxyServerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateOAuthProxyServer", err)
+			}
+			err = ValidateUpdateOAuthProxyServerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateOAuthProxyServer", err)
+			}
+			return nil, NewUpdateOAuthProxyServerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateOAuthProxyServerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateOAuthProxyServer", err)
+			}
+			err = ValidateUpdateOAuthProxyServerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateOAuthProxyServer", err)
+			}
+			return nil, NewUpdateOAuthProxyServerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateOAuthProxyServerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateOAuthProxyServer", err)
+			}
+			err = ValidateUpdateOAuthProxyServerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateOAuthProxyServer", err)
+			}
+			return nil, NewUpdateOAuthProxyServerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateOAuthProxyServerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateOAuthProxyServer", err)
+			}
+			err = ValidateUpdateOAuthProxyServerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateOAuthProxyServer", err)
+			}
+			return nil, NewUpdateOAuthProxyServerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateOAuthProxyServerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateOAuthProxyServer", err)
+			}
+			err = ValidateUpdateOAuthProxyServerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateOAuthProxyServer", err)
+			}
+			return nil, NewUpdateOAuthProxyServerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateOAuthProxyServerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateOAuthProxyServer", err)
+			}
+			err = ValidateUpdateOAuthProxyServerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateOAuthProxyServer", err)
+			}
+			return nil, NewUpdateOAuthProxyServerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateOAuthProxyServerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "updateOAuthProxyServer", err)
+				}
+				err = ValidateUpdateOAuthProxyServerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "updateOAuthProxyServer", err)
+				}
+				return nil, NewUpdateOAuthProxyServerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateOAuthProxyServerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "updateOAuthProxyServer", err)
+				}
+				err = ValidateUpdateOAuthProxyServerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "updateOAuthProxyServer", err)
+				}
+				return nil, NewUpdateOAuthProxyServerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "updateOAuthProxyServer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateOAuthProxyServerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateOAuthProxyServer", err)
+			}
+			err = ValidateUpdateOAuthProxyServerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateOAuthProxyServer", err)
+			}
+			return nil, NewUpdateOAuthProxyServerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "updateOAuthProxyServer", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalSecurityVariableResponseBodyToTypesSecurityVariable builds a value
 // of type *types.SecurityVariable from a value of type
 // *SecurityVariableResponseBody.
@@ -2765,6 +3011,9 @@ func unmarshalToolResponseBodyToTypesTool(v *ToolResponseBody) *types.Tool {
 	}
 	if v.PromptTemplate != nil {
 		res.PromptTemplate = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v.PromptTemplate)
+	}
+	if v.PlatformToolDefinition != nil {
+		res.PlatformToolDefinition = unmarshalPlatformToolDefinitionResponseBodyToTypesPlatformToolDefinition(v.PlatformToolDefinition)
 	}
 	if v.ExternalMcpToolDefinition != nil {
 		res.ExternalMcpToolDefinition = unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinition(v.ExternalMcpToolDefinition)
@@ -2994,6 +3243,44 @@ func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateR
 		for i, val := range v.ToolUrnsHint {
 			res.ToolUrnsHint[i] = val
 		}
+	}
+	if v.Canonical != nil {
+		res.Canonical = unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(v.Canonical)
+	}
+	if v.Variation != nil {
+		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
+	}
+	if v.Annotations != nil {
+		res.Annotations = unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v.Annotations)
+	}
+
+	return res
+}
+
+// unmarshalPlatformToolDefinitionResponseBodyToTypesPlatformToolDefinition
+// builds a value of type *types.PlatformToolDefinition from a value of type
+// *PlatformToolDefinitionResponseBody.
+func unmarshalPlatformToolDefinitionResponseBodyToTypesPlatformToolDefinition(v *PlatformToolDefinitionResponseBody) *types.PlatformToolDefinition {
+	if v == nil {
+		return nil
+	}
+	res := &types.PlatformToolDefinition{
+		SourceSlug:    *v.SourceSlug,
+		OwnerKind:     v.OwnerKind,
+		OwnerID:       v.OwnerID,
+		ID:            *v.ID,
+		ToolUrn:       *v.ToolUrn,
+		ProjectID:     *v.ProjectID,
+		Name:          *v.Name,
+		CanonicalName: *v.CanonicalName,
+		Description:   *v.Description,
+		SchemaVersion: v.SchemaVersion,
+		Schema:        *v.Schema,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+		Summarizer:    v.Summarizer,
+		CreatedAt:     *v.CreatedAt,
+		UpdatedAt:     *v.UpdatedAt,
 	}
 	if v.Canonical != nil {
 		res.Canonical = unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(v.Canonical)
@@ -3407,6 +3694,64 @@ func marshalOAuthProxyServerFormRequestBodyToTypesOAuthProxyServerForm(v *OAuthP
 		Slug:                  types.Slug(v.Slug),
 		Audience:              v.Audience,
 		ProviderType:          v.ProviderType,
+		AuthorizationEndpoint: v.AuthorizationEndpoint,
+		TokenEndpoint:         v.TokenEndpoint,
+	}
+	if v.EnvironmentSlug != nil {
+		environmentSlug := types.Slug(*v.EnvironmentSlug)
+		res.EnvironmentSlug = &environmentSlug
+	}
+	if v.ScopesSupported != nil {
+		res.ScopesSupported = make([]string, len(v.ScopesSupported))
+		for i, val := range v.ScopesSupported {
+			res.ScopesSupported[i] = val
+		}
+	}
+	if v.TokenEndpointAuthMethodsSupported != nil {
+		res.TokenEndpointAuthMethodsSupported = make([]string, len(v.TokenEndpointAuthMethodsSupported))
+		for i, val := range v.TokenEndpointAuthMethodsSupported {
+			res.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalTypesOAuthProxyServerUpdateFormToOAuthProxyServerUpdateFormRequestBody
+// builds a value of type *OAuthProxyServerUpdateFormRequestBody from a value
+// of type *types.OAuthProxyServerUpdateForm.
+func marshalTypesOAuthProxyServerUpdateFormToOAuthProxyServerUpdateFormRequestBody(v *types.OAuthProxyServerUpdateForm) *OAuthProxyServerUpdateFormRequestBody {
+	res := &OAuthProxyServerUpdateFormRequestBody{
+		Audience:              v.Audience,
+		AuthorizationEndpoint: v.AuthorizationEndpoint,
+		TokenEndpoint:         v.TokenEndpoint,
+	}
+	if v.EnvironmentSlug != nil {
+		environmentSlug := string(*v.EnvironmentSlug)
+		res.EnvironmentSlug = &environmentSlug
+	}
+	if v.ScopesSupported != nil {
+		res.ScopesSupported = make([]string, len(v.ScopesSupported))
+		for i, val := range v.ScopesSupported {
+			res.ScopesSupported[i] = val
+		}
+	}
+	if v.TokenEndpointAuthMethodsSupported != nil {
+		res.TokenEndpointAuthMethodsSupported = make([]string, len(v.TokenEndpointAuthMethodsSupported))
+		for i, val := range v.TokenEndpointAuthMethodsSupported {
+			res.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalOAuthProxyServerUpdateFormRequestBodyToTypesOAuthProxyServerUpdateForm
+// builds a value of type *types.OAuthProxyServerUpdateForm from a value of
+// type *OAuthProxyServerUpdateFormRequestBody.
+func marshalOAuthProxyServerUpdateFormRequestBodyToTypesOAuthProxyServerUpdateForm(v *OAuthProxyServerUpdateFormRequestBody) *types.OAuthProxyServerUpdateForm {
+	res := &types.OAuthProxyServerUpdateForm{
+		Audience:              v.Audience,
 		AuthorizationEndpoint: v.AuthorizationEndpoint,
 		TokenEndpoint:         v.TokenEndpoint,
 	}

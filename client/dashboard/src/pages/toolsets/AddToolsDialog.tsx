@@ -9,30 +9,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
-import { Tool, Toolset } from "@/lib/toolTypes";
+import { Tool, Toolset, getToolSourceLabel } from "@/lib/toolTypes";
 import { Button } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
-
-function getToolSource(
-  tool: Tool,
-  documentIdToName?: Record<string, string>,
-  functionIdToName?: Record<string, string>,
-): string {
-  if (tool.type === "http") {
-    if (tool.packageName) return tool.packageName;
-    if (tool.openapiv3DocumentId && documentIdToName) {
-      return documentIdToName[tool.openapiv3DocumentId];
-    }
-    if (tool.deploymentId) return tool.deploymentId;
-    return "custom";
-  } else if (tool.type === "function") {
-    if (tool.functionId && functionIdToName) {
-      return functionIdToName[tool.functionId];
-    }
-    return "Functions";
-  }
-  return "unknown";
-}
 
 function getToolIdentifier(tool: Tool): string {
   return tool.toolUrn;
@@ -90,7 +69,10 @@ export function AddToolsDialog({
 
     const sourceSet = new Set<string>();
     allTools.tools.forEach((tool) => {
-      const source = getToolSource(tool, documentIdToName, functionIdToName);
+      const source = getToolSourceLabel(tool, {
+        documentIdToName,
+        functionIdToName,
+      });
       sourceSet.add(source);
     });
 
@@ -111,7 +93,10 @@ export function AddToolsDialog({
 
     return availableTools.filter((tool) => {
       if (sourceFilter !== "all") {
-        const source = getToolSource(tool, documentIdToName, functionIdToName);
+        const source = getToolSourceLabel(tool, {
+          documentIdToName,
+          functionIdToName,
+        });
         if (source !== sourceFilter) return false;
       }
 

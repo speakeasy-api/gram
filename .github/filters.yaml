@@ -26,6 +26,11 @@ cli:
 tsframework:
   - "ts-framework/**"
 
+sdk:
+  - "client/sdk/**"
+  - "package.json"
+  - "pnpm-lock.yaml"
+
 elements:
   - "elements/**"
 

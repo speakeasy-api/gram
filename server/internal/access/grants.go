@@ -31,17 +31,16 @@ type Grants struct {
 	rows []Grant
 }
 
-func (g *Grants) hasAccess(scope Scope, resourceID string) bool {
+func (g *Grants) satisfies(checks []Check) bool {
 	if g == nil {
 		return false
 	}
 
 	for _, row := range g.rows {
-		if row.Scope != scope {
-			continue
-		}
-		if row.Resource == WildcardResource || row.Resource == resourceID {
-			return true
+		for _, check := range checks {
+			if row.Scope == check.Scope && row.Resource == check.ResourceID {
+				return true
+			}
 		}
 	}
 

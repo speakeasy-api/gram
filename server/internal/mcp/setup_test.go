@@ -2,7 +2,6 @@ package mcp_test
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"log/slog"
 	"net/url"
@@ -27,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -34,10 +34,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
-	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 var (
@@ -73,6 +71,7 @@ type testInstance struct {
 	logger         *slog.Logger
 	tracerProvider trace.TracerProvider
 	cacheAdapter   cache.Cache
+	enc            *encryption.Client
 }
 
 func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
@@ -149,103 +148,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		logger:         logger,
 		tracerProvider: tracerProvider,
 		cacheAdapter:   cacheAdapter,
-	}
-}
-
-// mockOAuthService allows controlling OAuth validation behavior in tests
-type mockOAuthService struct {
-	validateFunc func(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*oauth.Token, error)
-	refreshFunc  func(ctx context.Context, toolsetID uuid.UUID, token *oauth.Token, proxyProvider *oauth_repo.OauthProxyProvider, toolset *toolsets_repo.Toolset) (*oauth.Token, error)
-}
-
-func (m *mockOAuthService) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*oauth.Token, error) {
-	if m.validateFunc != nil {
-		return m.validateFunc(ctx, toolsetId, accessToken)
-	}
-	return nil, oauth.ErrInvalidAccessToken
-}
-
-func (m *mockOAuthService) RefreshProxyToken(ctx context.Context, toolsetID uuid.UUID, token *oauth.Token, proxyProvider *oauth_repo.OauthProxyProvider, toolset *toolsets_repo.Toolset) (*oauth.Token, error) {
-	if m.refreshFunc != nil {
-		return m.refreshFunc(ctx, toolsetID, token, proxyProvider, toolset)
-	}
-	return nil, fmt.Errorf("not implemented")
-}
-
-// newTestMCPServiceWithOAuth creates a test MCP service with a custom OAuth service
-func newTestMCPServiceWithOAuth(t *testing.T, oauthSvc mcp.OAuthService) (context.Context, *testInstance) {
-	t.Helper()
-
-	ctx := t.Context()
-
-	logger := testenv.NewLogger(t)
-	tracerProvider := testenv.NewTracerProvider(t)
-	meterProvider := noop.NewMeterProvider()
-
-	conn, err := infra.CloneTestDatabase(t, "mcptest")
-	require.NoError(t, err)
-
-	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-
-	billingClient := billing.NewStubClient(logger, tracerProvider)
-
-	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
-
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-
-	serverURL, err := url.Parse("http://0.0.0.0")
-	require.NoError(t, err)
-
-	siteURL, err := url.Parse("http://0.0.0.0")
-	require.NoError(t, err)
-
-	enc := testenv.NewEncryptionClient(t)
-	mcpMetadataRepo := mcpmetadata_repo.New(conn)
-	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
-	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
-	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	guardianPolicy := guardian.NewDefaultPolicy()
-	billingStub := billing.NewStubClient(logger, tracerProvider)
-	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
-	chatClient := openrouter.NewUnifiedClient(logger, devProvisioner, nil, nil, nil, nil, nil)
-	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
-	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	temporalEnv, _ := infra.NewTemporalEnv(t)
-
-	redisClient, err2 := infra.NewRedisClient(t, 0)
-	require.NoError(t, err2)
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
-	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
-
-	telemService := telemetry.NewService(
-		logger,
-		tracerProvider,
-		conn,
-		chConn,
-		sessionManager,
-		chatSessionsManager,
-		logsEnabled,
-		toolIOLogsEnabled,
-		posthog,
-		access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}),
-	)
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthSvc, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalEnv, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
-
-	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
-		serverURL:      serverURL,
-		siteURL:        siteURL,
-		logger:         logger,
-		tracerProvider: tracerProvider,
-		cacheAdapter:   cacheAdapter,
+		enc:            enc,
 	}
 }
 
@@ -329,4 +232,67 @@ func (ti *testInstance) addToolWithSecurity(ctx context.Context, t *testing.T, t
 	require.NoError(t, err)
 
 	return envVarName
+}
+
+// addToolWithDualSecurity creates a deployment with an HTTP tool that accepts
+// EITHER an apiKey OR an oauth2 access token. This exercises the
+// anySchemeSatisfied logic where multiple alternative schemes exist.
+// Returns the deployment ID so callers can reference it.
+func (ti *testInstance) addToolWithDualSecurity(ctx context.Context, t *testing.T, toolsetID uuid.UUID, projectID uuid.UUID, orgID string) uuid.UUID {
+	t.Helper()
+
+	var deploymentID uuid.UUID
+	err := ti.conn.QueryRow(ctx, `
+		INSERT INTO deployments (project_id, organization_id, user_id, idempotency_key)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`, projectID, orgID, "test-user", uuid.New().String()).Scan(&deploymentID)
+	require.NoError(t, err)
+
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO deployment_statuses (deployment_id, status)
+		VALUES ($1, 'completed')
+	`, deploymentID)
+	require.NoError(t, err)
+
+	// Tool security: either "test_api_key" OR "test_oauth" can satisfy.
+	toolURN := "tools:http:dual-sec:" + uuid.New().String()[:8]
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO http_tool_definitions (
+			project_id, deployment_id, tool_urn, name, untruncated_name,
+			summary, description, tags, http_method, path,
+			schema_version, schema, server_env_var, security,
+			header_settings, query_settings, path_settings
+		) VALUES (
+			$1, $2, $3, 'dual_sec_tool', '', 'Dual security tool', 'A tool with apiKey and oauth2 security',
+			'{}', 'GET', '/dual', '3.0.0', '{}', 'TEST_SERVER_URL',
+			$4, '{}', '{}', '{}'
+		)
+	`, projectID, deploymentID, toolURN, `[{"test_api_key": []}, {"test_oauth": []}]`)
+	require.NoError(t, err)
+
+	// apiKey scheme
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO http_security (
+			key, deployment_id, project_id, type, name, in_placement, env_variables
+		) VALUES ($1, $2, $3, 'apiKey', 'X-Api-Key', 'header', $4)
+	`, "test_api_key", deploymentID, projectID, []string{"TEST_API_KEY"})
+	require.NoError(t, err)
+
+	// oauth2 scheme — name and in_placement are nullable for oauth2 types
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO http_security (
+			key, deployment_id, project_id, type, name, in_placement, env_variables
+		) VALUES ($1, $2, $3, 'oauth2', NULL, NULL, $4)
+	`, "test_oauth", deploymentID, projectID, []string{"TEST_OAUTH_ACCESS_TOKEN"})
+	require.NoError(t, err)
+
+	// Link tool to toolset
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns)
+		VALUES ($1, 1, $2, '{}')
+	`, toolsetID, []string{toolURN})
+	require.NoError(t, err)
+
+	return deploymentID
 }

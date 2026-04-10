@@ -17,7 +17,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { Tool } from "@/lib/toolTypes";
+import { Tool, getToolSourceLabel } from "@/lib/toolTypes";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -28,6 +28,7 @@ import {
   SquareFunction,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { McpIcon } from "@/components/ui/mcp-icon";
 
 interface ToolsetInfo {
   name: string;
@@ -38,12 +39,13 @@ interface ToolsetInfo {
 }
 
 interface ToolGroup {
-  type: "package" | "function" | "custom" | "higher_order";
+  type: "package" | "function" | "custom" | "higher_order" | "platform";
   icon:
     | typeof FileCode
     | typeof SquareFunction
     | typeof PencilRuler
-    | typeof Layers;
+    | typeof Layers
+    | typeof McpIcon;
   title: string;
   tools: Tool[];
   packageName?: string;
@@ -131,6 +133,7 @@ function groupTools(
   const groups: ToolGroup[] = [];
   const packageMap = new Map<string, Tool[]>();
   const functionMap = new Map<string, Tool[]>();
+  const platformSourceToTools = new Map<string, Tool[]>();
   const functionTools: Tool[] = [];
   const customTools: Tool[] = [];
   const higherOrderTools: Tool[] = [];
@@ -168,6 +171,10 @@ function groupTools(
         // Function tools without a source go to the generic functions group
         functionTools.push(tool);
       }
+    } else if (tool.type === "platform") {
+      const groupKey = getToolSourceLabel(tool);
+      const existing = platformSourceToTools.get(groupKey) || [];
+      platformSourceToTools.set(groupKey, [...existing, tool]);
     } else {
       // Everything else (prompts, etc.)
       customTools.push(tool);
@@ -205,6 +212,15 @@ function groupTools(
       tools: functionTools,
     });
   }
+
+  platformSourceToTools.forEach((tools, sourceName) => {
+    groups.push({
+      type: "platform",
+      icon: McpIcon,
+      title: sourceName,
+      tools,
+    });
+  });
 
   // Add custom tools group with sorted tools
   if (customTools.length > 0) {

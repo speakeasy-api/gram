@@ -4,7 +4,9 @@ import (
 	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/stretchr/testify/require"
 )
@@ -45,21 +47,67 @@ func TestService_ListUsers(t *testing.T) {
 	require.True(t, found, "expected upserted user in list")
 }
 
-func TestService_ListUsers_NoActiveOrganization(t *testing.T) {
+func TestService_ListUsers_AllowsOrgReadGrant(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestOrganizationsService(t)
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	require.NotEmpty(t, authCtx.ActiveOrganizationID, "setup should have active org")
 
-	stripped := *authCtx
-	stripped.ActiveOrganizationID = ""
-	ctx = contextvalues.SetAuthContext(ctx, &stripped)
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+	})
+	require.NoError(t, err)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID})
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+}
+
+func TestService_ListUsers_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+	})
+	require.NoError(t, err)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+
+	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+}
+
+func TestService_ListUsers_ForbiddenWithoutOrgReadGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn)
+
+	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Nil(t, res)
+}
+
+func TestService_ListUsers_ForbiddenWithGrantForDifferentOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceRBAC(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
+
+	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
+	requireOopsCode(t, err, oops.CodeForbidden)
 	require.Nil(t, res)
 }
 
@@ -70,6 +118,6 @@ func TestService_ListUsers_ForbiddenWhenNotOrgAdmin(t *testing.T) {
 	expectWorkOSOrgNonAdminRole(t, ti.orgs)
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
-	requireOrgManagementForbidden(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
 	require.Nil(t, res)
 }

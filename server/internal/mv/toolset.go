@@ -25,6 +25,7 @@ import (
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	org "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	resourcesR "github.com/speakeasy-api/gram/server/internal/resources/repo"
 	templatesR "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	tr "github.com/speakeasy-api/gram/server/internal/tools/repo"
@@ -200,6 +201,8 @@ func DescribeToolsetEntry(
 				ToolUrn: pt.ToolUrn.String(),
 			})
 		}
+
+		tools = append(tools, platformtools.FindToolEntries(toolUrns)...)
 
 		// Fetch external MCP tool entries
 		externalmcpRepo := externalmcpR.New(tx)
@@ -586,7 +589,6 @@ func readToolsetTools(
 ) (*ToolsetBaseContents, error) {
 	toolsRepo := tr.New(tx)
 	templatesRepo := templatesR.New(tx)
-
 	var tools []*types.Tool
 	var securityVars []*types.SecurityVariable
 	var serverVars []*types.ServerVariable
@@ -721,6 +723,8 @@ func readToolsetTools(
 				},
 			})
 		}
+
+		tools = append(tools, platformtools.FindTypedTools(pid, toolUrns)...)
 
 		functionDefinitions, err := toolsRepo.FindFunctionToolsByUrn(ctx, tr.FindFunctionToolsByUrnParams{
 			ProjectID: pid,

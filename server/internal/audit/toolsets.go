@@ -19,6 +19,7 @@ const (
 	ActionToolsetAttachExternalOAuth Action = "toolset:attach_external_oauth"
 	ActionToolsetDetachExternalOAuth Action = "toolset:detach_external_oauth"
 	ActionToolsetAttachOAuthProxy    Action = "toolset:attach_oauth_proxy"
+	ActionToolsetUpdateOAuthProxy    Action = "toolset:update_oauth_proxy"
 	ActionToolsetDetachOAuthProxy    Action = "toolset:detach_oauth_proxy"
 )
 
@@ -404,6 +405,89 @@ func LogToolsetDetachOAuthProxy(ctx context.Context, dbtx repo.DBTX, event LogTo
 		Metadata:       metadata,
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
+	}
+
+	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
+		return fmt.Errorf("log %s: %w", action, err)
+	}
+
+	return nil
+}
+
+type LogToolsetUpdateOAuthProxyEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	ToolsetURN          urn.Toolset
+	ToolsetName         string
+	ToolsetSlug         string
+	ToolsetVersionAfter int64
+
+	OAuthProxyServerID   string
+	OAuthProxyServerSlug string
+
+	ToolsetSnapshotBefore *types.Toolset
+	ToolsetSnapshotAfter  *types.Toolset
+}
+
+func LogToolsetUpdateOAuthProxy(ctx context.Context, dbtx repo.DBTX, event LogToolsetUpdateOAuthProxyEvent) error {
+	action := ActionToolsetUpdateOAuthProxy
+
+	// Clone snapshots and strip the Tools field to avoid serializing a potentially massive list of tools into the audit log.
+	var snapshotBefore, snapshotAfter *types.Toolset
+	if event.ToolsetSnapshotBefore != nil {
+		clone := *event.ToolsetSnapshotBefore
+		clone.Tools = nil
+		snapshotBefore = &clone
+	}
+	if event.ToolsetSnapshotAfter != nil {
+		clone := *event.ToolsetSnapshotAfter
+		clone.Tools = nil
+		snapshotAfter = &clone
+	}
+
+	beforeSnapshot, err := marshalAuditPayload(snapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	afterSnapshot, err := marshalAuditPayload(snapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"oauth_proxy_server_id":   event.OAuthProxyServerID,
+		"oauth_proxy_server_slug": event.OAuthProxyServerSlug,
+		"toolset_version_after":   event.ToolsetVersionAfter,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.ToolsetURN.ID.String(),
+		SubjectType:        string(subjectTypeToolset),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ToolsetName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.ToolsetSlug),
+
+		Metadata:       metadata,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
 	}
 
 	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {

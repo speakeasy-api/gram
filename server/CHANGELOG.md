@@ -1,5 +1,28 @@
 # server
 
+## 0.37.0
+
+### Minor Changes
+
+- 3a3acd3: Add editable OAuth proxy server configuration.
+
+  Admins can now edit an existing OAuth proxy server's audience, authorization endpoint, token endpoint, scopes, token endpoint auth methods, and environment slug without having to unlink and recreate the configuration. The new `POST /rpc/toolsets.updateOAuthProxyServer` endpoint accepts partial updates with PATCH semantics (omit fields to leave them unchanged; pass an empty array to clear array fields). The dashboard's OAuth proxy details modal now exposes an Edit button that opens the existing OAuth modal in edit mode with the current values pre-filled.
+
+  Slug and provider type remain immutable after creation. Gram-managed OAuth proxy servers stay view-only.
+
+- b328938: Add static platform tools to tool discovery and the built-in MCP logs server.
+
+## 0.36.0
+
+### Minor Changes
+
+- 58d44eb: Add team management endpoints (invites & members)
+
+### Patch Changes
+
+- 252cbca: fix: allow platform domain to serve MCPs with custom domains
+- 494f76c: Adds support for tracking skills in hooks dashboard
+
 ## 0.35.0
 
 ### Minor Changes

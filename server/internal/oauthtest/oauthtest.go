@@ -134,7 +134,11 @@ type ExternalOAuthToolsetOpts struct {
 	// IsPublic sets McpIsPublic on the toolset. Default false (private).
 	IsPublic bool
 	// Metadata is RFC 8414 compliant JSON. If nil, a minimal default is used.
+	// Ignored when AuthServer is set (the server's metadata is used instead).
 	Metadata []byte
+	// AuthServer, when set, wires the toolset metadata to a live
+	// AuthorizationServer so that the external OAuth endpoints are addressable.
+	AuthServer *AuthorizationServer
 }
 
 // CreateExternalOAuthToolset creates a toolset linked to an external OAuth server.
@@ -153,7 +157,9 @@ func CreateExternalOAuthToolset(
 	}
 	slug := opts.Slug + "-" + suffix
 
-	if opts.Metadata == nil {
+	if opts.AuthServer != nil {
+		opts.Metadata = opts.AuthServer.Metadata()
+	} else if opts.Metadata == nil {
 		meta := map[string]any{
 			"issuer":                   "https://test-oauth-server.example.com",
 			"authorization_endpoint":   "https://test-oauth-server.example.com/authorize",
