@@ -87,7 +87,6 @@ const CHART_COLORS = {
   tooltipTitle: "#fafafa", // neutral-50
   tooltipBody: "#d4d4d4", // neutral-300
   tooltipBorder: "#262626", // neutral-800
-  stackedBorder: "#ffffff", // white
 } as const;
 
 const USER_SOURCE_COLORS = [
@@ -1739,6 +1738,8 @@ type StackedBarDataset = {
   borderColor: string;
   borderWidth: number;
   barThickness: number;
+  hoverBackgroundColor?: string;
+  hoverBorderColor?: string;
 };
 
 function StackedBarChart({
@@ -1898,9 +1899,12 @@ function ServerActivityChart({
       label: server,
       barThickness: 24,
       data: sortedUsers.map((u) => u.serverCounts.get(server) ?? 0),
-      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
-      borderColor: CHART_COLORS.stackedBorder,
-      borderWidth: 1,
+      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "44",
+      borderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
+      borderWidth: 1.5,
+      hoverBackgroundColor:
+        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "99",
+      hoverBorderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
@@ -1972,9 +1976,12 @@ function SourceVolumeChart({
       label: source,
       barThickness: 24,
       data: sortedServers.map((s) => s.sourceCounts.get(source) ?? 0),
-      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
-      borderColor: CHART_COLORS.stackedBorder,
-      borderWidth: 1,
+      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "44",
+      borderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
+      borderWidth: 1.5,
+      hoverBackgroundColor:
+        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "99",
+      hoverBorderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
@@ -2102,9 +2109,12 @@ function UserVolumeList({
       label: source,
       barThickness: 24,
       data: sortedUsers.map((u) => u.sourceCounts.get(source) ?? 0),
-      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
-      borderColor: CHART_COLORS.stackedBorder,
-      borderWidth: 1,
+      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "44",
+      borderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
+      borderWidth: 1.5,
+      hoverBackgroundColor:
+        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "99",
+      hoverBorderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
