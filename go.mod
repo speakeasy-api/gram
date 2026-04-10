@@ -20,7 +20,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.13
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.13
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.98.0
-	github.com/aws/smithy-go v1.24.2
+	github.com/aws/smithy-go v1.24.3
 	github.com/cbroglie/mustache v1.4.0
 	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/charmbracelet/lipgloss v1.1.0
