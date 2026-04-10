@@ -34,10 +34,11 @@ type RequestContext struct {
 }
 
 const (
-	SessionTokenContextKey  contextKey = "sessionTokenKey"
-	SessionValueContextKey  contextKey = "sessionValueKey"
-	AdminOverrideContextKey contextKey = "adminOverrideKey"
-	RequestContextKey       contextKey = "requestContextKey"
+	SessionTokenContextKey      contextKey = "sessionTokenKey"
+	SessionValueContextKey      contextKey = "sessionValueKey"
+	AdminOverrideContextKey     contextKey = "adminOverrideKey"
+	RequestContextKey           contextKey = "requestContextKey"
+	RBACScopeOverrideContextKey contextKey = "rbacScopeOverrideKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -74,4 +75,13 @@ func SetRequestContext(ctx context.Context, value *RequestContext) context.Conte
 func GetRequestContext(ctx context.Context) (*RequestContext, bool) {
 	value, ok := ctx.Value(RequestContextKey).(*RequestContext)
 	return value, ok
+}
+
+func SetRBACScopeOverride(ctx context.Context, value string) context.Context {
+	return context.WithValue(ctx, RBACScopeOverrideContextKey, value)
+}
+
+func GetRBACScopeOverride(ctx context.Context) (string, bool) {
+	value, ok := ctx.Value(RBACScopeOverrideContextKey).(string)
+	return value, ok && value != ""
 }
