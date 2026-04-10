@@ -438,7 +438,7 @@ func (p *ProcessDeployment) doExternalMCPs(
 				DeploymentID: deploymentID,
 				MCP: externalmcp.ToolExtractorTaskMCPServer{
 					AttachmentID:            mcp.ID,
-					RegistryID:              mcp.RegistryID,
+					RegistryID:              mcp.RegistryID.UUID,
 					Name:                    mcp.Name,
 					Slug:                    mcp.Slug,
 					RegistryServerSpecifier: mcp.RegistryServerSpecifier,
