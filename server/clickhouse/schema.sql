@@ -268,3 +268,52 @@ SELECT
     sumMapIfState(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts
 FROM telemetry_logs
 GROUP BY gram_project_id, time_bucket;
+
+-- Corpus search events: raw log of every search query against the content corpus.
+CREATE TABLE IF NOT EXISTS corpus_search_events (
+    id UUID DEFAULT generateUUIDv7() COMMENT 'Unique event identifier.',
+    project_id UUID COMMENT 'Project that owns the corpus.',
+    query String COMMENT 'The search query text.' CODEC(ZSTD),
+    filters String COMMENT 'JSON-encoded filter criteria applied to the search.' CODEC(ZSTD),
+    result_count UInt32 COMMENT 'Number of results returned.',
+    latency_ms Float64 COMMENT 'Server-side search latency in milliseconds.' CODEC(ZSTD),
+    session_id String COMMENT 'Optional session or conversation ID.',
+    agent String COMMENT 'Agent or user identifier that issued the search.',
+    timestamp DateTime64(3, 'UTC') DEFAULT now64(3) COMMENT 'When the search occurred.'
+) ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(timestamp)
+ORDER BY (project_id, timestamp, id)
+TTL timestamp + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Raw corpus search events for observability dashboards.';
+
+CREATE INDEX IF NOT EXISTS idx_corpus_search_events_query ON corpus_search_events (query) TYPE bloom_filter(0.01) GRANULARITY 1;
+
+-- Materialized view: aggregated search stats per project + query, bucketed hourly.
+CREATE TABLE IF NOT EXISTS corpus_search_stats (
+    project_id UUID,
+    query String,
+    time_bucket DateTime('UTC'),
+    search_count SimpleAggregateFunction(sum, UInt64),
+    total_results SimpleAggregateFunction(sum, UInt64),
+    total_latency_ms SimpleAggregateFunction(sum, Float64),
+    min_latency_ms SimpleAggregateFunction(min, Float64),
+    max_latency_ms SimpleAggregateFunction(max, Float64)
+) ENGINE = AggregatingMergeTree
+ORDER BY (project_id, query, time_bucket)
+TTL time_bucket + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Pre-aggregated corpus search statistics per query per hour.';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS corpus_search_stats_mv TO corpus_search_stats AS
+SELECT
+    project_id,
+    query,
+    toStartOfHour(timestamp) AS time_bucket,
+    toUInt64(count(*)) AS search_count,
+    toUInt64(sum(result_count)) AS total_results,
+    sum(latency_ms) AS total_latency_ms,
+    min(latency_ms) AS min_latency_ms,
+    max(latency_ms) AS max_latency_ms
+FROM corpus_search_events
+GROUP BY project_id, query, time_bucket;
