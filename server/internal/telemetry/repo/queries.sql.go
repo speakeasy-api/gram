@@ -1248,8 +1248,9 @@ func (q *Queries) ListAttributeKeys(ctx context.Context, arg ListAttributeKeysPa
 	sb := sq.Select("attribute_key").
 		From("attribute_keys").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("last_seen_unix_nano >= ?", arg.TimeStart).
-		Where("first_seen_unix_nano <= ?", arg.TimeEnd).
+		GroupBy("gram_project_id", "attribute_key").
+		Having("max(last_seen_unix_nano) >= ?", arg.TimeStart).
+		Having("min(first_seen_unix_nano) <= ?", arg.TimeEnd).
 		OrderBy("attribute_key")
 
 	query, args, err := sb.ToSql()
