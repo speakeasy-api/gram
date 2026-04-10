@@ -5,6 +5,7 @@ import { useDeploymentLogsSuspense } from "@gram/client/react-query";
 import { Icon, Input } from "@speakeasy-api/moonshine";
 import React, {
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -174,6 +175,10 @@ export const LogsTabContent = ({
     [visibleEvents],
   );
 
+  useEffect(() => {
+    setCurrentLogIndex(null);
+  }, [parsedLogs]);
+
   const logStats = useMemo(() => {
     const stats = { warns: 0, errors: 0, skipped: 0 };
     parsedLogs.forEach((log) => {
@@ -206,8 +211,10 @@ export const LogsTabContent = ({
     );
   }, [parsedLogs, groupBySource]);
 
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+
   const filteredIndices = useMemo(() => {
-    if (focus === "all" && !searchQuery) return [];
+    if (focus === "all" && !deferredSearchQuery) return [];
 
     const indices: number[] = [];
     parsedLogs.forEach((log, index) => {
@@ -218,8 +225,8 @@ export const LogsTabContent = ({
         (focus === "skipped" && log.level === "SKIP");
 
       const matchesSearch =
-        !searchQuery ||
-        log.message.toLowerCase().includes(searchQuery.toLowerCase());
+        !deferredSearchQuery ||
+        log.message.toLowerCase().includes(deferredSearchQuery.toLowerCase());
 
       if (matchesFocus && matchesSearch) {
         indices.push(index);
@@ -227,7 +234,12 @@ export const LogsTabContent = ({
     });
 
     return indices;
-  }, [focus, searchQuery, parsedLogs]);
+  }, [focus, deferredSearchQuery, parsedLogs]);
+
+  const effectiveSearchIndex =
+    filteredIndices.length > 0
+      ? Math.min(currentSearchIndex, filteredIndices.length - 1)
+      : 0;
 
   const scrollToLog = useCallback((index: number) => {
     const element = logRefs.current.get(index);
@@ -243,12 +255,12 @@ export const LogsTabContent = ({
 
       let newIndex: number;
       if (direction === "next") {
-        newIndex = (currentSearchIndex + 1) % filteredIndices.length;
+        newIndex = (effectiveSearchIndex + 1) % filteredIndices.length;
       } else {
         newIndex =
-          currentSearchIndex === 0
+          effectiveSearchIndex === 0
             ? filteredIndices.length - 1
-            : currentSearchIndex - 1;
+            : effectiveSearchIndex - 1;
       }
 
       setCurrentSearchIndex(newIndex);
@@ -257,7 +269,7 @@ export const LogsTabContent = ({
         scrollToLog(targetIndex);
       }
     },
-    [currentSearchIndex, filteredIndices, scrollToLog],
+    [effectiveSearchIndex, filteredIndices, scrollToLog],
   );
 
   const handleFocusChange = (newFocus: LogFocus) => {
@@ -441,27 +453,35 @@ export const LogsTabContent = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [currentLogIndex, parsedLogs.length, navigateToResult, groupBySource]);
 
-  const highlightMatch = (text: string) => {
-    if (!searchQuery) return text;
+  const searchRegex = useMemo(() => {
+    if (!searchQuery) return null;
+    const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(${escaped})`, "gi");
+  }, [searchQuery]);
 
-    const parts = text.split(new RegExp(`(${searchQuery})`, "gi"));
-    return (
-      <>
-        {parts.map((part, i) =>
-          part.toLowerCase() === searchQuery.toLowerCase() ? (
-            <mark
-              key={i}
-              className="bg-yellow-200 dark:bg-yellow-800 text-inherit"
-            >
-              {part}
-            </mark>
-          ) : (
-            part
-          ),
-        )}
-      </>
-    );
-  };
+  const highlightMatch = useCallback(
+    (text: string) => {
+      if (!searchRegex) return text;
+      const parts = text.split(searchRegex);
+      return (
+        <>
+          {parts.map((part, i) =>
+            part.toLowerCase() === searchQuery.toLowerCase() ? (
+              <mark
+                key={i}
+                className="bg-yellow-200 dark:bg-yellow-800 text-inherit"
+              >
+                {part}
+              </mark>
+            ) : (
+              part
+            ),
+          )}
+        </>
+      );
+    },
+    [searchQuery, searchRegex],
+  );
 
   return (
     <>
@@ -605,7 +625,7 @@ export const LogsTabContent = ({
                       ESC
                     </span>
                     <span className="text-[10px] text-muted-foreground mx-0.5">
-                      {currentSearchIndex + 1}/{filteredIndices.length}
+                      {effectiveSearchIndex + 1}/{filteredIndices.length}
                     </span>
                     <div className="flex items-center">
                       <button
