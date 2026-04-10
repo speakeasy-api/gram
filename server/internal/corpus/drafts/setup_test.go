@@ -75,7 +75,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NotNil(t, authctx.ProjectID)
 
 	gitRepo := newTestGitRepo(t, t.TempDir())
-	svc := drafts.NewService(conn, gitRepo)
+	svc := drafts.NewService(conn, gitRepo, drafts.NewMutexWriteLock())
 
 	return ctx, &testInstance{
 		svc:       svc,

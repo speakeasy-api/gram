@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,6 +13,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/corpus/drafts/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
+
+// WriteLock abstracts the publish write lock. In dev, use MutexWriteLock
+// (in-process). In prod, use lock.Locker (Redis distributed lock).
+type WriteLock interface {
+	Lock(ctx context.Context, key string) error
+	Unlock(ctx context.Context, key string) error
+}
 
 const (
 	OpCreate = "create"
@@ -56,18 +62,18 @@ type Enrichment struct {
 }
 
 type Service struct {
-	db      *pgxpool.Pool
-	repo    *repo.Queries
-	git     GitRepo
-	writeMu sync.Mutex
+	db   *pgxpool.Pool
+	repo *repo.Queries
+	git  GitRepo
+	lock WriteLock
 }
 
-func NewService(db *pgxpool.Pool, git GitRepo) *Service {
+func NewService(db *pgxpool.Pool, git GitRepo, lock WriteLock) *Service {
 	return &Service{
-		db:      db,
-		repo:    repo.New(db),
-		git:     git,
-		writeMu: sync.Mutex{},
+		db:   db,
+		repo: repo.New(db),
+		git:  git,
+		lock: lock,
 	}
 }
 
@@ -155,8 +161,11 @@ func (s *Service) Delete(ctx context.Context, projectID uuid.UUID, id uuid.UUID)
 }
 
 func (s *Service) Publish(ctx context.Context, projectID uuid.UUID, orgID string, draftIDs []uuid.UUID) (string, error) {
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
+	lockKey := "corpus:publish:" + projectID.String()
+	if err := s.lock.Lock(ctx, lockKey); err != nil {
+		return "", fmt.Errorf("acquire publish lock: %w", err)
+	}
+	defer func() { _ = s.lock.Unlock(ctx, lockKey) }()
 
 	openDrafts, err := s.repo.ListOpenDraftsByProject(ctx, projectID)
 	if err != nil {

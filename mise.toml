@@ -93,6 +93,8 @@ GRAM_SITE_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SITE_PORT}}"
 GRAM_SERVER_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SERVER_PORT}}"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
+## Base path for corpus git repositories. In prod, this is a GCS FUSE mount.
+GRAM_CORPUS_REPO_BASE = ".corpus-repos"
 ## The following variable is used to encrypt env vars stored in the database.
 GRAM_ENCRYPTION_KEY = "unset"
 GRAM_REDIS_CACHE_HOST = "127.0.0.1"
