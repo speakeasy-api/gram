@@ -841,6 +841,7 @@ function HooksInnerContent({
                 serverNameMappings={serverNameMappings}
                 from={from}
                 to={to}
+                compact={isLogsVisible}
               />
             </div>
 
@@ -2452,11 +2453,13 @@ function HooksAnalytics({
   serverNameMappings,
   from,
   to,
+  compact = false,
 }: {
   groupedTraces: HookTrace[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
+  compact?: boolean;
 }) {
   const derivedServers = useMemo(() => {
     const map = new Map<
@@ -2522,7 +2525,14 @@ function HooksAnalytics({
   return (
     <div className="space-y-4">
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+      <div
+        className={cn(
+          "grid gap-3",
+          compact
+            ? "grid-cols-2 md:grid-cols-3"
+            : "grid-cols-2 md:grid-cols-3 lg:grid-cols-5",
+        )}
+      >
         <MetricCard
           title="Avg Success Rate"
           value={kpis.avgSuccessRate ?? 0}
@@ -2563,7 +2573,12 @@ function HooksAnalytics({
 
       {/* Bar Charts */}
       {hasServers && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div
+          className={cn(
+            "grid gap-4",
+            compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-3",
+          )}
+        >
           <UserVolumeList
             title="Source Usage per User"
             traces={groupedTraces}
@@ -2583,8 +2598,13 @@ function HooksAnalytics({
 
       {/* Usage Over Time */}
       {groupedTraces.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
+        <div
+          className={cn(
+            "grid gap-4",
+            compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
+          )}
+        >
+          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
             <h3 className="text font-semibold">Server Usage</h3>
             <ServerUsageTimeSeries
               traces={groupedTraces}
@@ -2602,7 +2622,12 @@ function HooksAnalytics({
 
       {/* Error Analysis */}
       {hasServers && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div
+          className={cn(
+            "grid gap-4",
+            compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
+          )}
+        >
           <ServerErrorRateChart
             title="Errors per Server and Tool"
             traces={groupedTraces}
