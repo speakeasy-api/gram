@@ -92,6 +92,7 @@ type Service struct {
 	externalmcpRepo     *externalmcp_repo.Queries
 	deploymentsRepo     *deployments_repo.Queries
 	enc                 *encryption.Client
+	docsSearcher        DocsSearcher
 }
 
 type oauthTokenInputs struct {
@@ -136,6 +137,7 @@ func NewService(
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporal *temporal.Environment,
 	accessLoader auth.AccessLoader,
+	docsSearcher DocsSearcher,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -181,6 +183,7 @@ func NewService(
 		sessions:            sessions,
 		chatSessionsManager: chatSessionsManager,
 		enc:                 enc,
+		docsSearcher:        docsSearcher,
 	}
 }
 
@@ -850,9 +853,9 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
+		return handleToolsList(ctx, s.logger, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.docsSearcher)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemetryService, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemetryService, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.docsSearcher)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
@@ -1019,6 +1022,7 @@ func (s *Service) HandleToolsList(
 		&s.toolsetCache,
 		s.vectorToolStore,
 		s.temporal,
+		s.docsSearcher,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tools list: %w", err)
@@ -1091,6 +1095,7 @@ func (s *Service) HandleToolsCall(
 		s.vectorToolStore,
 		s.temporal,
 		s.mcpMetadataRepo,
+		s.docsSearcher,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tool call: %w", err)

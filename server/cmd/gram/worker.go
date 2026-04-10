@@ -521,6 +521,7 @@ func newWorkerCommand() *cli.Command {
 				ragService,
 				temporalEnv,
 				accessManager,
+				nil, // DocsSearcher — wired when corpus infrastructure is enabled
 			)
 
 			chatClient := chat.NewAgenticChatClient(

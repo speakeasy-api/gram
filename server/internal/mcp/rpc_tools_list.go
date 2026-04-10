@@ -49,6 +49,7 @@ func handleToolsList(
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporalEnv *temporal.Environment,
+	docsSearcher DocsSearcher,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
@@ -89,6 +90,11 @@ func handleToolsList(
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	// Append docs tools when a corpus DocsSearcher is configured.
+	if docsSearcher != nil {
+		tools = append(tools, buildDocsToolListEntries()...)
 	}
 
 	result := &toolsListResult{

@@ -69,6 +69,7 @@ func handleToolsCall(
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporalEnv *temporal.Environment,
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
+	docsSearcher DocsSearcher,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -101,6 +102,16 @@ func handleToolsCall(
 			// TODO: we would want some way in metrics/logging/billing to track this is a dynamic tool call
 			params.Name = proxyName
 			params.Arguments = proxyArgs
+		}
+	}
+
+	// Docs tools are available when a DocsSearcher is configured.
+	if docsSearcher != nil {
+		switch params.Name {
+		case searchDocsToolName:
+			return handleSearchDocsCall(ctx, logger, req.ID, params.Arguments, payload.projectID.String(), docsSearcher)
+		case getDocToolName:
+			return handleGetDocCall(ctx, logger, req.ID, params.Arguments, payload.projectID.String(), docsSearcher)
 		}
 	}
 
