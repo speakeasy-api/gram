@@ -1378,8 +1378,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments
 CREATE TABLE IF NOT EXISTS external_mcp_attachments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
-  registry_id uuid NOT NULL,
-  registry_type TEXT NOT NULL DEFAULT 'external' CHECK (registry_type IN ('external', 'internal')),
+  registry_id uuid,
+  organization_mcp_collection_registry_id uuid,
   name TEXT NOT NULL CHECK (name <> ''),
   slug TEXT NOT NULL CHECK (slug <> ''),
   registry_server_specifier TEXT NOT NULL CHECK (registry_server_specifier <> ''),
@@ -1391,7 +1391,13 @@ CREATE TABLE IF NOT EXISTS external_mcp_attachments (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT external_mcp_attachments_pkey PRIMARY KEY (id),
-  CONSTRAINT external_mcp_attachments_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments(id) ON DELETE CASCADE
+  CONSTRAINT external_mcp_attachments_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments(id) ON DELETE CASCADE,
+  CONSTRAINT external_mcp_attachments_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries(id) ON DELETE CASCADE,
+  CONSTRAINT external_mcp_attachments_collection_registry_id_fkey FOREIGN KEY (organization_mcp_collection_registry_id) REFERENCES organization_mcp_collection_registries(id) ON DELETE CASCADE,
+  CONSTRAINT external_mcp_attachments_exactly_one_registry CHECK (
+    (registry_id IS NOT NULL)::int +
+    (organization_mcp_collection_registry_id IS NOT NULL)::int = 1
+  )
 );
 
 CREATE INDEX IF NOT EXISTS external_mcp_attachments_deployment_id_idx
