@@ -106,6 +106,7 @@ export default defineConfig(({ command }) => {
     },
     plugins: [react(), tailwindcss()],
     resolve: {
+      conditions: ["source"],
       alias: {
         "@": path.resolve(__dirname, "./src"),
         // Ensure single instances of React and related packages across all dependencies

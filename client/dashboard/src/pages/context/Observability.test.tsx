@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, test, vi } from "vitest";
+import React from "react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type {
   SearchLogsData,
@@ -7,6 +8,17 @@ import type {
 } from "@/hooks/useObservability";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult";
+
+// Mock moonshine to avoid lucide-react/dynamicIconImports resolution issue
+vi.mock("@speakeasy-api/moonshine", () => ({
+  Icon: ({ name, className }: { name: string; className?: string }) => (
+    <span data-icon={name} className={className} />
+  ),
+  Stack: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  ResizablePanel: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
 
 // Mock the hooks module -- tests control what the hooks return
 vi.mock("@/hooks/useObservability", () => ({
@@ -80,6 +92,10 @@ const { ObservabilityTab } = await import("./ObservabilityTab");
 function renderObservability() {
   return render(<ObservabilityTab />);
 }
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("ObservabilityTab", () => {
   test("renders search logs table from API", async () => {

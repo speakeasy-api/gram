@@ -29,6 +29,7 @@ import { Outlet } from "react-router";
 import { AddRepoDialog } from "./AddRepoDialog";
 import { AnnotationsPanel } from "./AnnotationsPanel";
 import { FeedbackPanel } from "./FeedbackPanel";
+import { ObservabilityTab } from "./ObservabilityTab";
 import {
   type ContextFile,
   type ContextFolder,
@@ -45,13 +46,10 @@ import {
   formatDate,
   formatFileSize,
   formatRelativeTime,
-  formatTime,
   getEffectiveConfig,
   MOCK_ALL_ROLES,
   MOCK_CONTEXT_TREE,
   MOCK_DRAFT_DOCUMENTS,
-  MOCK_SEARCH_LOGS,
-  MOCK_SKILL_INVOCATIONS,
   parseSkillFrontmatter,
   resolvePath,
 } from "./mock-data";
@@ -903,234 +901,7 @@ function DraftCommentItem({
 }
 
 // ── Observability Tab ─────────────────────────────────────────────────────
-
-function ObservabilityTab() {
-  const [subTab, setSubTab] = useState<"search-logs" | "skill-invocations">(
-    "search-logs",
-  );
-
-  const searchStats = useMemo(() => {
-    const total = MOCK_SEARCH_LOGS.length;
-    const avgLatency =
-      total > 0
-        ? Math.round(
-            MOCK_SEARCH_LOGS.reduce((sum, l) => sum + l.latencyMs, 0) / total,
-          )
-        : 0;
-    return { total, avgLatency };
-  }, []);
-
-  const skillStats = useMemo(() => {
-    const total = MOCK_SKILL_INVOCATIONS.length;
-    const successes = MOCK_SKILL_INVOCATIONS.filter((s) => s.success).length;
-    const successRate = total > 0 ? Math.round((successes / total) * 100) : 0;
-    return { total, successRate };
-  }, []);
-
-  return (
-    <div className="space-y-4">
-      {/* Summary stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Total Searches" value={String(searchStats.total)} />
-        <StatCard
-          label="Avg Search Latency"
-          value={`${searchStats.avgLatency}ms`}
-        />
-        <StatCard label="Skill Invocations" value={String(skillStats.total)} />
-        <StatCard
-          label="Skill Success Rate"
-          value={`${skillStats.successRate}%`}
-        />
-      </div>
-
-      {/* Sub-tab toggle */}
-      <div className="flex items-center gap-1">
-        <LayerToggle
-          active={subTab === "search-logs"}
-          onClick={() => setSubTab("search-logs")}
-        >
-          Search Logs
-        </LayerToggle>
-        <LayerToggle
-          active={subTab === "skill-invocations"}
-          onClick={() => setSubTab("skill-invocations")}
-        >
-          Skill Invocations
-        </LayerToggle>
-      </div>
-
-      {subTab === "search-logs" ? (
-        <SearchLogsTable />
-      ) : (
-        <SkillInvocationsTable />
-      )}
-    </div>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-card px-4 py-3">
-      <Type small muted className="block">
-        {label}
-      </Type>
-      <Type variant="subheading" className="mt-1 block">
-        {value}
-      </Type>
-    </div>
-  );
-}
-
-function LatencyBadge({ ms }: { ms: number }) {
-  const variant = ms < 40 ? "default" : ms < 60 ? "secondary" : "destructive";
-  return <Badge variant={variant}>{ms}ms</Badge>;
-}
-
-function SearchLogsTable() {
-  return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
-                Time
-              </th>
-              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
-                Query
-              </th>
-              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
-                Filters
-              </th>
-              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
-                Results
-              </th>
-              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
-                Top Chunk
-              </th>
-              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
-                Latency
-              </th>
-              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
-                Agent
-              </th>
-              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
-                Session
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {MOCK_SEARCH_LOGS.map((log) => (
-              <tr
-                key={log.id}
-                className="border-b border-border last:border-b-0 hover:bg-muted/50 transition-colors"
-              >
-                <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
-                  {formatTime(log.timestamp)}
-                </td>
-                <td className="px-4 py-2.5 font-medium max-w-[200px] truncate">
-                  {log.query}
-                </td>
-                <td className="px-4 py-2.5">
-                  {log.filters ? (
-                    <div className="flex flex-wrap gap-1">
-                      {Object.entries(log.filters).map(([k, v]) => (
-                        <Badge key={k} variant="secondary">
-                          {k}: {v}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground">&mdash;</span>
-                  )}
-                </td>
-                <td className="px-4 py-2.5">{log.resultsCount}</td>
-                <td className="px-4 py-2.5">
-                  <code className="font-mono text-xs text-muted-foreground">
-                    {log.topChunkPath}
-                  </code>
-                </td>
-                <td className="px-4 py-2.5">
-                  <LatencyBadge ms={log.latencyMs} />
-                </td>
-                <td className="px-4 py-2.5">{log.agentName}</td>
-                <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
-                  {log.sessionId.slice(0, 8)}...
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function SkillInvocationsTable() {
-  return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
-                Time
-              </th>
-              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
-                Skill
-              </th>
-              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
-                Agent
-              </th>
-              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
-                Session
-              </th>
-              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
-                Latency
-              </th>
-              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
-                Status
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {MOCK_SKILL_INVOCATIONS.map((inv) => (
-              <tr
-                key={inv.id}
-                className="border-b border-border last:border-b-0 hover:bg-muted/50 transition-colors"
-              >
-                <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
-                  {formatTime(inv.timestamp)}
-                </td>
-                <td className="px-4 py-2.5 font-medium">{inv.skillName}</td>
-                <td className="px-4 py-2.5">{inv.agentName}</td>
-                <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
-                  {inv.sessionId.slice(0, 8)}...
-                </td>
-                <td className="px-4 py-2.5">
-                  <LatencyBadge ms={inv.latencyMs} />
-                </td>
-                <td className="px-4 py-2.5">
-                  {inv.success ? (
-                    <Icon
-                      name="check-circle"
-                      className="h-4 w-4 text-emerald-500"
-                    />
-                  ) : (
-                    <Icon
-                      name="x-circle"
-                      className="h-4 w-4 text-destructive"
-                    />
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
+// Extracted to ./ObservabilityTab.tsx — uses API hooks instead of mock data.
 
 // ── Shared SkillPreview ───────────────────────────────────────────────────
 
