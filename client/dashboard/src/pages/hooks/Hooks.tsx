@@ -629,7 +629,7 @@ function HooksContent() {
               </div>
             </Page.Body>
           ) : (
-            <Page.Body fullWidth noPadding className="flex-1">
+            <Page.Body fullWidth noPadding overflowHidden className="flex-1">
               <EnterpriseGate
                 icon="workflow"
                 description="Hooks are available on the Enterprise plan. Book a time to get started."
@@ -760,11 +760,11 @@ function HooksInnerContent({
 
   return (
     <>
-      <div className="flex min-h-0 w-full flex-1 flex-col">
-        <div className="flex shrink-0 flex-col gap-6 px-8 pt-8 pb-4">
+      <div className="flex flex-col flex-1 min-h-0 w-full">
+        <div className="px-8 pt-8 pb-4 flex flex-col gap-6 flex-1 min-h-0">
           {/* Header section */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex items-start justify-between gap-4 shrink-0">
+            <div className="flex flex-col gap-1 min-w-0">
               <h1 className="text-xl font-semibold">Hooks</h1>
               <p className="text-muted-foreground text-sm">
                 Monitor hook events and tool executions across all servers
@@ -782,7 +782,7 @@ function HooksInnerContent({
           </div>
 
           {/* Filter and Search Row */}
-          <div className="bg-primary-foreground sticky top-0 z-10 flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             <MultiSearch
               value={serverInput}
               onChange={setServerInput}
@@ -829,13 +829,12 @@ function HooksInnerContent({
               <List className="h-4 w-4" />
               Logs
             </Button>
-            <div className="absolute inset-x-0 -bottom-6 h-6 w-full bg-linear-to-b from-white to-white/0" />
           </div>
 
-          <div className="flex flex-wrap gap-4">
+          <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
             {/* Content Column */}
 
-            <div className="flex-1 shrink-0">
+            <div className="flex-1 min-h-0 overflow-y-auto">
               <HooksAnalytics
                 groupedTraces={groupedTraces}
                 serverNameMappings={serverNameMappings}
@@ -845,10 +844,10 @@ function HooksInnerContent({
               />
             </div>
 
+            {/* Logs Column */}
             {isLogsVisible && (
-              <div className="min-h-0 flex-1 shrink-0 overflow-hidden border">
-                {/* Logs Column */}
-                <div className="bg-background flex h-full flex-col">
+              <div className="flex-1 min-h-0 overflow-y-auto border">
+                <div className="h-full flex flex-col bg-background">
                   {isFetching && groupedTraces.length > 0 && (
                     <div className="bg-primary/20 absolute top-0 right-0 left-0 z-20 h-1">
                       <div className="bg-primary h-full animate-pulse" />
