@@ -1,9 +1,9 @@
--- Queries for managing plugins (org-scoped distributable MCP server bundles).
--- plugins is org-scoped (no project_id); every query is scoped to organization_id.
+-- Queries for managing plugins (project-scoped distributable MCP server bundles).
+-- plugins is project-scoped; every query is scoped to project_id (and organization_id where needed).
 
 -- name: CreatePlugin :one
-INSERT INTO plugins (organization_id, name, slug, description)
-VALUES (@organization_id, @name, @slug, sqlc.narg('description'))
+INSERT INTO plugins (organization_id, project_id, name, slug, description)
+VALUES (@organization_id, @project_id, @name, @slug, sqlc.narg('description'))
 RETURNING *;
 
 -- name: GetPlugin :one
@@ -11,6 +11,7 @@ SELECT *
 FROM plugins
 WHERE id = @id
   AND organization_id = @organization_id
+  AND project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: ListPlugins :many
@@ -19,7 +20,7 @@ SELECT
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
   (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id) AS assignment_count
 FROM plugins p
-WHERE p.organization_id = @organization_id
+WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
 ORDER BY p.created_at DESC;
 
@@ -31,6 +32,7 @@ SET name = @name,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
+  AND project_id = @project_id
   AND deleted IS FALSE
 RETURNING *;
 
@@ -40,6 +42,7 @@ SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
+  AND project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: AddPluginServer :one
@@ -105,12 +108,12 @@ WHERE plugin_id = @plugin_id;
 -- name: GetGitHubConnection :one
 SELECT *
 FROM plugin_github_connections
-WHERE organization_id = @organization_id;
+WHERE project_id = @project_id;
 
 -- name: UpsertGitHubConnection :one
-INSERT INTO plugin_github_connections (organization_id, installation_id, repo_owner, repo_name)
-VALUES (@organization_id, @installation_id, @repo_owner, @repo_name)
-ON CONFLICT (organization_id) DO UPDATE SET
+INSERT INTO plugin_github_connections (organization_id, project_id, installation_id, repo_owner, repo_name)
+VALUES (@organization_id, @project_id, @installation_id, @repo_owner, @repo_name)
+ON CONFLICT (project_id) DO UPDATE SET
   installation_id = EXCLUDED.installation_id,
   repo_owner = EXCLUDED.repo_owner,
   repo_name = EXCLUDED.repo_name,
@@ -119,9 +122,9 @@ RETURNING *;
 
 -- name: DeleteGitHubConnection :exec
 DELETE FROM plugin_github_connections
-WHERE organization_id = @organization_id;
+WHERE project_id = @project_id;
 
--- name: ListPluginsWithServersForOrg :many
+-- name: ListPluginsWithServersForProject :many
 -- Used during plugin generation: returns all active plugin servers joined with
 -- their parent plugin and optional toolset mcp_slug for URL construction.
 SELECT
@@ -141,18 +144,18 @@ SELECT
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 LEFT JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
-WHERE p.organization_id = @organization_id
+WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC;
 
--- name: ListPluginAssignmentsForOrg :many
--- Used during plugin generation: returns all assignments for an org's plugins.
+-- name: ListPluginAssignmentsForProject :many
+-- Used during plugin generation: returns all assignments for a project's plugins.
 SELECT
   pa.plugin_id,
   pa.principal_urn
 FROM plugin_assignments pa
 JOIN plugins p ON p.id = pa.plugin_id AND p.deleted IS FALSE
-WHERE pa.organization_id = @organization_id;
+WHERE p.project_id = @project_id;
 
 -- name: GetOrganizationName :one
 SELECT name FROM organization_metadata WHERE id = @id;

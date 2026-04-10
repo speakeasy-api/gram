@@ -109,7 +109,12 @@ export function useGitHubInstallURLSuspense(
 
 export function setGitHubInstallURLData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
+  queryKeyBase: [
+    parameters: {
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    },
+  ],
   data: GitHubInstallURLQueryData,
 ): GitHubInstallURLQueryData | undefined {
   const key = queryKeyGitHubInstallURL(...queryKeyBase);
@@ -120,7 +125,10 @@ export function setGitHubInstallURLData(
 export function invalidateGitHubInstallURL(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
+    [parameters: {
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

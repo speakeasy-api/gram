@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
  * downloadPluginPackage plugins
  *
  * @remarks
- * Download a ZIP archive of generated plugin packages for the organization, filtered by platform.
+ * Download a ZIP of a single plugin package for direct installation.
  */
 export function pluginsDownloadPluginPackage(
   client: GramCore,
@@ -97,10 +97,15 @@ async function $do(
 
   const query = encodeFormQuery({
     "platform": payload.platform,
+    "plugin_id": payload.plugin_id,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -109,6 +114,11 @@ async function $do(
 
   const requestSecurity = resolveSecurity(
     [
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.projectSlugHeaderGramProject,
+      },
       {
         fieldName: "Gram-Session",
         type: "apiKey:header",

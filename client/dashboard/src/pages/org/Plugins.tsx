@@ -5,7 +5,7 @@ import { Heading } from "@/components/ui/heading";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
-import { useSlugs } from "@/contexts/Sdk";
+import { useRoutes } from "@/routes";
 import { Plugin } from "@gram/client/models/components";
 import { useCreatePluginMutation } from "@gram/client/react-query/createPlugin";
 import {
@@ -27,7 +27,7 @@ export default function Plugins() {
   const [pluginToDelete, setPluginToDelete] = useState<Plugin | null>(null);
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
-  const { orgSlug } = useSlugs();
+  const routes = useRoutes();
   const navigate = useNavigate();
 
   const { data } = usePluginsSuspense();
@@ -46,7 +46,7 @@ export default function Plugins() {
     onSuccess: async (data) => {
       setIsCreateDialogOpen(false);
       await invalidateAllPlugins(queryClient);
-      navigate(`/${orgSlug}/plugins/${data.id}`);
+      navigate(routes.plugins.detail.href(data.id));
     },
   });
 
@@ -88,7 +88,7 @@ export default function Plugins() {
       header: "Name",
       width: "2fr",
       render: (p) => (
-        <Link to={`/${orgSlug}/plugins/${p.id}`}>
+        <Link to={routes.plugins.detail.href(p.id)}>
           <Type variant="body" className="hover:underline cursor-pointer">
             {p.name}
           </Type>

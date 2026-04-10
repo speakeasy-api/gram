@@ -178,7 +178,7 @@ export default function PluginDetail() {
 
   const handleDownload = async (platform: "claude" | "cursor") => {
     const resp = await fetch(
-      `/rpc/plugins.downloadPluginPackage?platform=${platform}`,
+      `/rpc/plugins.downloadPluginPackage?plugin_id=${pluginId}&platform=${platform}`,
       { credentials: "include" },
     );
     if (!resp.ok) return;

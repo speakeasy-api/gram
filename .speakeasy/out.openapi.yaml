@@ -8925,6 +8925,13 @@ paths:
           schema:
             description: Session header
             type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
       requestBody:
         content:
           application/json:
@@ -8993,7 +9000,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
       summary: addPluginServer plugins
       tags:
@@ -9003,7 +9011,7 @@ paths:
         name: AddPluginServer
   /rpc/plugins.connectGitHub:
     post:
-      description: Connect the organization to a GitHub App installation, creating a repo in the customer's org.
+      description: Connect the project to a GitHub App installation, creating a repo in the customer's org.
       operationId: connectGitHub
       parameters:
         - allowEmptyValue: true
@@ -9012,6 +9020,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
             type: string
       requestBody:
         content:
@@ -9081,7 +9096,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
       summary: connectGitHub plugins
       tags:
@@ -9100,6 +9116,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
             type: string
       requestBody:
         content:
@@ -9169,7 +9192,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
       summary: createPlugin plugins
       tags:
@@ -9196,83 +9220,12 @@ paths:
           schema:
             description: Session header
             type: string
-      responses:
-        "204":
-          description: No Content response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: deletePlugin plugins
-      tags:
-        - plugins
-      x-speakeasy-name-override: deletePlugin
-      x-speakeasy-react-hook:
-        name: DeletePlugin
-  /rpc/plugins.disconnectGitHub:
-    delete:
-      description: Disconnect the organization's GitHub integration.
-      operationId: disconnectGitHub
-      parameters:
         - allowEmptyValue: true
-          description: Session header
+          description: project header
           in: header
-          name: Gram-Session
+          name: Gram-Project
           schema:
-            description: Session header
+            description: project header
             type: string
       responses:
         "204":
@@ -9332,7 +9285,94 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: deletePlugin plugins
+      tags:
+        - plugins
+      x-speakeasy-name-override: deletePlugin
+      x-speakeasy-react-hook:
+        name: DeletePlugin
+  /rpc/plugins.disconnectGitHub:
+    delete:
+      description: Disconnect the project's GitHub integration.
+      operationId: disconnectGitHub
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
       summary: disconnectGitHub plugins
       tags:
@@ -9342,9 +9382,18 @@ paths:
         name: DisconnectGitHub
   /rpc/plugins.downloadPluginPackage:
     get:
-      description: Download a ZIP archive of generated plugin packages for the organization, filtered by platform.
+      description: Download a ZIP of a single plugin package for direct installation.
       operationId: downloadPluginPackage
       parameters:
+        - allowEmptyValue: true
+          description: The plugin to download.
+          in: query
+          name: plugin_id
+          required: true
+          schema:
+            description: The plugin to download.
+            format: uuid
+            type: string
         - allowEmptyValue: true
           description: Target platform to download plugins for.
           in: query
@@ -9362,6 +9411,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
             type: string
       responses:
         "200":
@@ -9433,7 +9489,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
       summary: downloadPluginPackage plugins
       tags:
@@ -9441,7 +9498,7 @@ paths:
       x-speakeasy-name-override: downloadPluginPackage
   /rpc/plugins.getGitHubConnection:
     get:
-      description: Get the current GitHub connection for the organization.
+      description: Get the current GitHub connection for the project.
       operationId: getGitHubConnection
       parameters:
         - allowEmptyValue: true
@@ -9450,6 +9507,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
             type: string
       responses:
         "200":
@@ -9513,7 +9577,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
       summary: getGitHubConnection plugins
       tags:
@@ -9532,6 +9597,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
             type: string
       responses:
         "200":
@@ -9595,7 +9667,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
       summary: getGitHubInstallURL plugins
       tags:
@@ -9621,6 +9694,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
             type: string
       responses:
         "200":
@@ -9684,7 +9764,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
       summary: getPlugin plugins
       tags:
@@ -9694,7 +9775,7 @@ paths:
         name: Plugin
   /rpc/plugins.listPlugins:
     get:
-      description: List all plugins for the current organization.
+      description: List all plugins for the current project.
       operationId: listPlugins
       parameters:
         - allowEmptyValue: true
@@ -9703,6 +9784,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
             type: string
       responses:
         "200":
@@ -9766,7 +9854,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
       summary: listPlugins plugins
       tags:
@@ -9785,6 +9874,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
             type: string
       responses:
         "200":
@@ -9848,7 +9944,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
       summary: publishPlugins plugins
       tags:
@@ -9883,6 +9980,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
             type: string
       responses:
         "204":
@@ -9942,7 +10046,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
       summary: removePluginServer plugins
       tags:
@@ -9961,6 +10066,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
             type: string
       requestBody:
         content:
@@ -10030,7 +10142,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
       summary: setPluginAssignments plugins
       tags:
@@ -10049,6 +10162,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
             type: string
       requestBody:
         content:
@@ -10118,7 +10238,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
       summary: updatePlugin plugins
       tags:
@@ -10137,6 +10258,13 @@ paths:
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
             type: string
       requestBody:
         content:
@@ -10206,7 +10334,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - session_header_Gram-Session: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - {}
       summary: updatePluginServer plugins
       tags:

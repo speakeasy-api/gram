@@ -1610,6 +1610,7 @@ ON audit_logs (organization_id, project_id, seq DESC);
 CREATE TABLE IF NOT EXISTS plugins (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
   description TEXT,
@@ -1620,11 +1621,12 @@ CREATE TABLE IF NOT EXISTS plugins (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
   CONSTRAINT plugins_pkey PRIMARY KEY (id),
-  CONSTRAINT plugins_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+  CONSTRAINT plugins_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT plugins_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_slug_key
-  ON plugins (organization_id, slug)
+  ON plugins (organization_id, project_id, slug)
   WHERE deleted IS FALSE;
 
 -- Links a plugin to MCP servers. Each row represents one server included in
@@ -1679,6 +1681,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_assignments_plugin_id_principal_urn_key
 CREATE TABLE IF NOT EXISTS plugin_github_connections (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
   installation_id BIGINT NOT NULL,
   repo_owner TEXT NOT NULL,
   repo_name TEXT NOT NULL,
@@ -1687,8 +1690,9 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT plugin_github_connections_pkey PRIMARY KEY (id),
-  CONSTRAINT plugin_github_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+  CONSTRAINT plugin_github_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT plugin_github_connections_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_organization_id_key
-  ON plugin_github_connections (organization_id);
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_project_id_key
+  ON plugin_github_connections (project_id);

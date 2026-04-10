@@ -2,6 +2,7 @@
 CREATE TABLE "plugins" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "organization_id" text NOT NULL,
+  "project_id" uuid NOT NULL,
   "name" text NOT NULL,
   "slug" text NOT NULL,
   "description" text NULL,
@@ -10,10 +11,11 @@ CREATE TABLE "plugins" (
   "deleted_at" timestamptz NULL,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
-  CONSTRAINT "plugins_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
+  CONSTRAINT "plugins_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "plugins_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Create index "plugins_organization_id_slug_key" to table: "plugins"
-CREATE UNIQUE INDEX "plugins_organization_id_slug_key" ON "plugins" ("organization_id", "slug") WHERE (deleted IS FALSE);
+CREATE UNIQUE INDEX "plugins_organization_id_slug_key" ON "plugins" ("organization_id", "project_id", "slug") WHERE (deleted IS FALSE);
 -- Create "plugin_assignments" table
 CREATE TABLE "plugin_assignments" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -31,16 +33,18 @@ CREATE UNIQUE INDEX "plugin_assignments_plugin_id_principal_urn_key" ON "plugin_
 CREATE TABLE "plugin_github_connections" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "organization_id" text NOT NULL,
+  "project_id" uuid NOT NULL,
   "installation_id" bigint NOT NULL,
   "repo_owner" text NOT NULL,
   "repo_name" text NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "plugin_github_connections_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
+  CONSTRAINT "plugin_github_connections_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "plugin_github_connections_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
--- Create index "plugin_github_connections_organization_id_key" to table: "plugin_github_connections"
-CREATE UNIQUE INDEX "plugin_github_connections_organization_id_key" ON "plugin_github_connections" ("organization_id");
+-- Create index "plugin_github_connections_project_id_key" to table: "plugin_github_connections"
+CREATE UNIQUE INDEX "plugin_github_connections_project_id_key" ON "plugin_github_connections" ("project_id");
 -- Create "plugin_servers" table
 CREATE TABLE "plugin_servers" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),

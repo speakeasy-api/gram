@@ -45,7 +45,10 @@ export function buildGitHubConnectionQuery(
   ) => Promise<GitHubConnectionQueryData>;
 } {
   return {
-    queryKey: queryKeyGitHubConnection({ gramSession: request?.gramSession }),
+    queryKey: queryKeyGitHubConnection({
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
     queryFn: async function gitHubConnectionQueryFn(
       ctx,
     ): Promise<GitHubConnectionQueryData> {
@@ -71,7 +74,10 @@ export function buildGitHubConnectionQuery(
 }
 
 export function queryKeyGitHubConnection(
-  parameters: { gramSession?: string | undefined },
+  parameters: {
+    gramSession?: string | undefined;
+    gramProject?: string | undefined;
+  },
 ): QueryKey {
   return ["@gram/client", "plugins", "getGitHubConnection", parameters];
 }

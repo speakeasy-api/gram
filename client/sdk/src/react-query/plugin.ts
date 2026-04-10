@@ -100,7 +100,13 @@ export function usePluginSuspense(
 
 export function setPluginData(
   client: QueryClient,
-  queryKeyBase: [parameters: { id: string; gramSession?: string | undefined }],
+  queryKeyBase: [
+    parameters: {
+      id: string;
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    },
+  ],
   data: PluginQueryData,
 ): PluginQueryData | undefined {
   const key = queryKeyPlugin(...queryKeyBase);
@@ -111,7 +117,11 @@ export function setPluginData(
 export function invalidatePlugin(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { id: string; gramSession?: string | undefined }]
+    [parameters: {
+      id: string;
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

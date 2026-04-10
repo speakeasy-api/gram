@@ -56,7 +56,7 @@ export type GitHubConnectionQueryError =
  * getGitHubConnection plugins
  *
  * @remarks
- * Get the current GitHub connection for the organization.
+ * Get the current GitHub connection for the project.
  */
 export function useGitHubConnection(
   request?: operations.GetGitHubConnectionRequest | undefined,
@@ -82,7 +82,7 @@ export function useGitHubConnection(
  * getGitHubConnection plugins
  *
  * @remarks
- * Get the current GitHub connection for the organization.
+ * Get the current GitHub connection for the project.
  */
 export function useGitHubConnectionSuspense(
   request?: operations.GetGitHubConnectionRequest | undefined,
@@ -109,7 +109,12 @@ export function useGitHubConnectionSuspense(
 
 export function setGitHubConnectionData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
+  queryKeyBase: [
+    parameters: {
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    },
+  ],
   data: GitHubConnectionQueryData,
 ): GitHubConnectionQueryData | undefined {
   const key = queryKeyGitHubConnection(...queryKeyBase);
@@ -120,7 +125,10 @@ export function setGitHubConnectionData(
 export function invalidateGitHubConnection(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
+    [parameters: {
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

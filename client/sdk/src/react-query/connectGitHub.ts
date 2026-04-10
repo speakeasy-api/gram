@@ -51,7 +51,7 @@ export type ConnectGitHubMutationError =
  * connectGitHub plugins
  *
  * @remarks
- * Connect the organization to a GitHub App installation, creating a repo in the customer's org.
+ * Connect the project to a GitHub App installation, creating a repo in the customer's org.
  */
 export function useConnectGitHubMutation(
   options?: MutationHookOptions<

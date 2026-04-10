@@ -46,7 +46,7 @@ export class Plugins extends ClientSDK {
    * connectGitHub plugins
    *
    * @remarks
-   * Connect the organization to a GitHub App installation, creating a repo in the customer's org.
+   * Connect the project to a GitHub App installation, creating a repo in the customer's org.
    */
   async connectGitHub(
     request: operations.ConnectGitHubRequest,
@@ -103,7 +103,7 @@ export class Plugins extends ClientSDK {
    * disconnectGitHub plugins
    *
    * @remarks
-   * Disconnect the organization's GitHub integration.
+   * Disconnect the project's GitHub integration.
    */
   async disconnectGitHub(
     request?: operations.DisconnectGitHubRequest | undefined,
@@ -122,7 +122,7 @@ export class Plugins extends ClientSDK {
    * downloadPluginPackage plugins
    *
    * @remarks
-   * Download a ZIP archive of generated plugin packages for the organization, filtered by platform.
+   * Download a ZIP of a single plugin package for direct installation.
    */
   async downloadPluginPackage(
     request: operations.DownloadPluginPackageRequest,
@@ -141,7 +141,7 @@ export class Plugins extends ClientSDK {
    * getGitHubConnection plugins
    *
    * @remarks
-   * Get the current GitHub connection for the organization.
+   * Get the current GitHub connection for the project.
    */
   async getGitHubConnection(
     request?: operations.GetGitHubConnectionRequest | undefined,
@@ -198,7 +198,7 @@ export class Plugins extends ClientSDK {
    * listPlugins plugins
    *
    * @remarks
-   * List all plugins for the current organization.
+   * List all plugins for the current project.
    */
   async listPlugins(
     request?: operations.ListPluginsRequest | undefined,

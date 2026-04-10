@@ -17,22 +17,29 @@ import (
 
 // BuildListPluginsPayload builds the payload for the plugins listPlugins
 // endpoint from CLI flags.
-func BuildListPluginsPayload(pluginsListPluginsSessionToken string) (*plugins.ListPluginsPayload, error) {
+func BuildListPluginsPayload(pluginsListPluginsSessionToken string, pluginsListPluginsProjectSlugInput string) (*plugins.ListPluginsPayload, error) {
 	var sessionToken *string
 	{
 		if pluginsListPluginsSessionToken != "" {
 			sessionToken = &pluginsListPluginsSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsListPluginsProjectSlugInput != "" {
+			projectSlugInput = &pluginsListPluginsProjectSlugInput
+		}
+	}
 	v := &plugins.ListPluginsPayload{}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildGetPluginPayload builds the payload for the plugins getPlugin endpoint
 // from CLI flags.
-func BuildGetPluginPayload(pluginsGetPluginID string, pluginsGetPluginSessionToken string) (*plugins.GetPluginPayload, error) {
+func BuildGetPluginPayload(pluginsGetPluginID string, pluginsGetPluginSessionToken string, pluginsGetPluginProjectSlugInput string) (*plugins.GetPluginPayload, error) {
 	var err error
 	var id string
 	{
@@ -48,16 +55,23 @@ func BuildGetPluginPayload(pluginsGetPluginID string, pluginsGetPluginSessionTok
 			sessionToken = &pluginsGetPluginSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsGetPluginProjectSlugInput != "" {
+			projectSlugInput = &pluginsGetPluginProjectSlugInput
+		}
+	}
 	v := &plugins.GetPluginPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildCreatePluginPayload builds the payload for the plugins createPlugin
 // endpoint from CLI flags.
-func BuildCreatePluginPayload(pluginsCreatePluginBody string, pluginsCreatePluginSessionToken string) (*plugins.CreatePluginPayload, error) {
+func BuildCreatePluginPayload(pluginsCreatePluginBody string, pluginsCreatePluginSessionToken string, pluginsCreatePluginProjectSlugInput string) (*plugins.CreatePluginPayload, error) {
 	var err error
 	var body CreatePluginRequestBody
 	{
@@ -72,18 +86,25 @@ func BuildCreatePluginPayload(pluginsCreatePluginBody string, pluginsCreatePlugi
 			sessionToken = &pluginsCreatePluginSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsCreatePluginProjectSlugInput != "" {
+			projectSlugInput = &pluginsCreatePluginProjectSlugInput
+		}
+	}
 	v := &plugins.CreatePluginPayload{
 		Name:        body.Name,
 		Description: body.Description,
 	}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildUpdatePluginPayload builds the payload for the plugins updatePlugin
 // endpoint from CLI flags.
-func BuildUpdatePluginPayload(pluginsUpdatePluginBody string, pluginsUpdatePluginSessionToken string) (*plugins.UpdatePluginPayload, error) {
+func BuildUpdatePluginPayload(pluginsUpdatePluginBody string, pluginsUpdatePluginSessionToken string, pluginsUpdatePluginProjectSlugInput string) (*plugins.UpdatePluginPayload, error) {
 	var err error
 	var body UpdatePluginRequestBody
 	{
@@ -102,6 +123,12 @@ func BuildUpdatePluginPayload(pluginsUpdatePluginBody string, pluginsUpdatePlugi
 			sessionToken = &pluginsUpdatePluginSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsUpdatePluginProjectSlugInput != "" {
+			projectSlugInput = &pluginsUpdatePluginProjectSlugInput
+		}
+	}
 	v := &plugins.UpdatePluginPayload{
 		ID:          body.ID,
 		Name:        body.Name,
@@ -109,13 +136,14 @@ func BuildUpdatePluginPayload(pluginsUpdatePluginBody string, pluginsUpdatePlugi
 		Description: body.Description,
 	}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildDeletePluginPayload builds the payload for the plugins deletePlugin
 // endpoint from CLI flags.
-func BuildDeletePluginPayload(pluginsDeletePluginID string, pluginsDeletePluginSessionToken string) (*plugins.DeletePluginPayload, error) {
+func BuildDeletePluginPayload(pluginsDeletePluginID string, pluginsDeletePluginSessionToken string, pluginsDeletePluginProjectSlugInput string) (*plugins.DeletePluginPayload, error) {
 	var err error
 	var id string
 	{
@@ -131,16 +159,23 @@ func BuildDeletePluginPayload(pluginsDeletePluginID string, pluginsDeletePluginS
 			sessionToken = &pluginsDeletePluginSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsDeletePluginProjectSlugInput != "" {
+			projectSlugInput = &pluginsDeletePluginProjectSlugInput
+		}
+	}
 	v := &plugins.DeletePluginPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildAddPluginServerPayload builds the payload for the plugins
 // addPluginServer endpoint from CLI flags.
-func BuildAddPluginServerPayload(pluginsAddPluginServerBody string, pluginsAddPluginServerSessionToken string) (*plugins.AddPluginServerPayload, error) {
+func BuildAddPluginServerPayload(pluginsAddPluginServerBody string, pluginsAddPluginServerSessionToken string, pluginsAddPluginServerProjectSlugInput string) (*plugins.AddPluginServerPayload, error) {
 	var err error
 	var body AddPluginServerRequestBody
 	{
@@ -168,6 +203,12 @@ func BuildAddPluginServerPayload(pluginsAddPluginServerBody string, pluginsAddPl
 			sessionToken = &pluginsAddPluginServerSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsAddPluginServerProjectSlugInput != "" {
+			projectSlugInput = &pluginsAddPluginServerProjectSlugInput
+		}
+	}
 	v := &plugins.AddPluginServerPayload{
 		PluginID:                body.PluginID,
 		ToolsetID:               body.ToolsetID,
@@ -191,13 +232,14 @@ func BuildAddPluginServerPayload(pluginsAddPluginServerBody string, pluginsAddPl
 		}
 	}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildUpdatePluginServerPayload builds the payload for the plugins
 // updatePluginServer endpoint from CLI flags.
-func BuildUpdatePluginServerPayload(pluginsUpdatePluginServerBody string, pluginsUpdatePluginServerSessionToken string) (*plugins.UpdatePluginServerPayload, error) {
+func BuildUpdatePluginServerPayload(pluginsUpdatePluginServerBody string, pluginsUpdatePluginServerSessionToken string, pluginsUpdatePluginServerProjectSlugInput string) (*plugins.UpdatePluginServerPayload, error) {
 	var err error
 	var body UpdatePluginServerRequestBody
 	{
@@ -220,6 +262,12 @@ func BuildUpdatePluginServerPayload(pluginsUpdatePluginServerBody string, plugin
 			sessionToken = &pluginsUpdatePluginServerSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsUpdatePluginServerProjectSlugInput != "" {
+			projectSlugInput = &pluginsUpdatePluginServerProjectSlugInput
+		}
+	}
 	v := &plugins.UpdatePluginServerPayload{
 		ID:          body.ID,
 		PluginID:    body.PluginID,
@@ -240,13 +288,14 @@ func BuildUpdatePluginServerPayload(pluginsUpdatePluginServerBody string, plugin
 		}
 	}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildRemovePluginServerPayload builds the payload for the plugins
 // removePluginServer endpoint from CLI flags.
-func BuildRemovePluginServerPayload(pluginsRemovePluginServerID string, pluginsRemovePluginServerPluginID string, pluginsRemovePluginServerSessionToken string) (*plugins.RemovePluginServerPayload, error) {
+func BuildRemovePluginServerPayload(pluginsRemovePluginServerID string, pluginsRemovePluginServerPluginID string, pluginsRemovePluginServerSessionToken string, pluginsRemovePluginServerProjectSlugInput string) (*plugins.RemovePluginServerPayload, error) {
 	var err error
 	var id string
 	{
@@ -270,17 +319,24 @@ func BuildRemovePluginServerPayload(pluginsRemovePluginServerID string, pluginsR
 			sessionToken = &pluginsRemovePluginServerSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsRemovePluginServerProjectSlugInput != "" {
+			projectSlugInput = &pluginsRemovePluginServerProjectSlugInput
+		}
+	}
 	v := &plugins.RemovePluginServerPayload{}
 	v.ID = id
 	v.PluginID = pluginID
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildSetPluginAssignmentsPayload builds the payload for the plugins
 // setPluginAssignments endpoint from CLI flags.
-func BuildSetPluginAssignmentsPayload(pluginsSetPluginAssignmentsBody string, pluginsSetPluginAssignmentsSessionToken string) (*plugins.SetPluginAssignmentsPayload, error) {
+func BuildSetPluginAssignmentsPayload(pluginsSetPluginAssignmentsBody string, pluginsSetPluginAssignmentsSessionToken string, pluginsSetPluginAssignmentsProjectSlugInput string) (*plugins.SetPluginAssignmentsPayload, error) {
 	var err error
 	var body SetPluginAssignmentsRequestBody
 	{
@@ -302,6 +358,12 @@ func BuildSetPluginAssignmentsPayload(pluginsSetPluginAssignmentsBody string, pl
 			sessionToken = &pluginsSetPluginAssignmentsSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsSetPluginAssignmentsProjectSlugInput != "" {
+			projectSlugInput = &pluginsSetPluginAssignmentsProjectSlugInput
+		}
+	}
 	v := &plugins.SetPluginAssignmentsPayload{
 		PluginID: body.PluginID,
 	}
@@ -314,28 +376,36 @@ func BuildSetPluginAssignmentsPayload(pluginsSetPluginAssignmentsBody string, pl
 		v.PrincipalUrns = []string{}
 	}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildGetGitHubInstallURLPayload builds the payload for the plugins
 // getGitHubInstallURL endpoint from CLI flags.
-func BuildGetGitHubInstallURLPayload(pluginsGetGitHubInstallURLSessionToken string) (*plugins.GetGitHubInstallURLPayload, error) {
+func BuildGetGitHubInstallURLPayload(pluginsGetGitHubInstallURLSessionToken string, pluginsGetGitHubInstallURLProjectSlugInput string) (*plugins.GetGitHubInstallURLPayload, error) {
 	var sessionToken *string
 	{
 		if pluginsGetGitHubInstallURLSessionToken != "" {
 			sessionToken = &pluginsGetGitHubInstallURLSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsGetGitHubInstallURLProjectSlugInput != "" {
+			projectSlugInput = &pluginsGetGitHubInstallURLProjectSlugInput
+		}
+	}
 	v := &plugins.GetGitHubInstallURLPayload{}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildConnectGitHubPayload builds the payload for the plugins connectGitHub
 // endpoint from CLI flags.
-func BuildConnectGitHubPayload(pluginsConnectGitHubBody string, pluginsConnectGitHubSessionToken string) (*plugins.ConnectGitHubPayload, error) {
+func BuildConnectGitHubPayload(pluginsConnectGitHubBody string, pluginsConnectGitHubSessionToken string, pluginsConnectGitHubProjectSlugInput string) (*plugins.ConnectGitHubPayload, error) {
 	var err error
 	var body ConnectGitHubRequestBody
 	{
@@ -350,63 +420,99 @@ func BuildConnectGitHubPayload(pluginsConnectGitHubBody string, pluginsConnectGi
 			sessionToken = &pluginsConnectGitHubSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsConnectGitHubProjectSlugInput != "" {
+			projectSlugInput = &pluginsConnectGitHubProjectSlugInput
+		}
+	}
 	v := &plugins.ConnectGitHubPayload{
 		InstallationID: body.InstallationID,
 	}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildDisconnectGitHubPayload builds the payload for the plugins
 // disconnectGitHub endpoint from CLI flags.
-func BuildDisconnectGitHubPayload(pluginsDisconnectGitHubSessionToken string) (*plugins.DisconnectGitHubPayload, error) {
+func BuildDisconnectGitHubPayload(pluginsDisconnectGitHubSessionToken string, pluginsDisconnectGitHubProjectSlugInput string) (*plugins.DisconnectGitHubPayload, error) {
 	var sessionToken *string
 	{
 		if pluginsDisconnectGitHubSessionToken != "" {
 			sessionToken = &pluginsDisconnectGitHubSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsDisconnectGitHubProjectSlugInput != "" {
+			projectSlugInput = &pluginsDisconnectGitHubProjectSlugInput
+		}
+	}
 	v := &plugins.DisconnectGitHubPayload{}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildGetGitHubConnectionPayload builds the payload for the plugins
 // getGitHubConnection endpoint from CLI flags.
-func BuildGetGitHubConnectionPayload(pluginsGetGitHubConnectionSessionToken string) (*plugins.GetGitHubConnectionPayload, error) {
+func BuildGetGitHubConnectionPayload(pluginsGetGitHubConnectionSessionToken string, pluginsGetGitHubConnectionProjectSlugInput string) (*plugins.GetGitHubConnectionPayload, error) {
 	var sessionToken *string
 	{
 		if pluginsGetGitHubConnectionSessionToken != "" {
 			sessionToken = &pluginsGetGitHubConnectionSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsGetGitHubConnectionProjectSlugInput != "" {
+			projectSlugInput = &pluginsGetGitHubConnectionProjectSlugInput
+		}
+	}
 	v := &plugins.GetGitHubConnectionPayload{}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildPublishPluginsPayload builds the payload for the plugins publishPlugins
 // endpoint from CLI flags.
-func BuildPublishPluginsPayload(pluginsPublishPluginsSessionToken string) (*plugins.PublishPluginsPayload, error) {
+func BuildPublishPluginsPayload(pluginsPublishPluginsSessionToken string, pluginsPublishPluginsProjectSlugInput string) (*plugins.PublishPluginsPayload, error) {
 	var sessionToken *string
 	{
 		if pluginsPublishPluginsSessionToken != "" {
 			sessionToken = &pluginsPublishPluginsSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsPublishPluginsProjectSlugInput != "" {
+			projectSlugInput = &pluginsPublishPluginsProjectSlugInput
+		}
+	}
 	v := &plugins.PublishPluginsPayload{}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildDownloadPluginPackagePayload builds the payload for the plugins
 // downloadPluginPackage endpoint from CLI flags.
-func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePlatform string, pluginsDownloadPluginPackageSessionToken string) (*plugins.DownloadPluginPackagePayload, error) {
+func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID string, pluginsDownloadPluginPackagePlatform string, pluginsDownloadPluginPackageSessionToken string, pluginsDownloadPluginPackageProjectSlugInput string) (*plugins.DownloadPluginPackagePayload, error) {
 	var err error
+	var pluginID string
+	{
+		pluginID = pluginsDownloadPluginPackagePluginID
+		err = goa.MergeErrors(err, goa.ValidateFormat("plugin_id", pluginID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
 	var platform string
 	{
 		platform = pluginsDownloadPluginPackagePlatform
@@ -423,9 +529,17 @@ func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePlatform stri
 			sessionToken = &pluginsDownloadPluginPackageSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if pluginsDownloadPluginPackageProjectSlugInput != "" {
+			projectSlugInput = &pluginsDownloadPluginPackageProjectSlugInput
+		}
+	}
 	v := &plugins.DownloadPluginPackagePayload{}
+	v.PluginID = pluginID
 	v.Platform = platform
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

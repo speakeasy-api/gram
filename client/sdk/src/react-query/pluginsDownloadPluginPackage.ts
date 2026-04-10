@@ -56,7 +56,7 @@ export type PluginsDownloadPluginPackageQueryError =
  * downloadPluginPackage plugins
  *
  * @remarks
- * Download a ZIP archive of generated plugin packages for the organization, filtered by platform.
+ * Download a ZIP of a single plugin package for direct installation.
  */
 export function usePluginsDownloadPluginPackage(
   request: operations.DownloadPluginPackageRequest,
@@ -85,7 +85,7 @@ export function usePluginsDownloadPluginPackage(
  * downloadPluginPackage plugins
  *
  * @remarks
- * Download a ZIP archive of generated plugin packages for the organization, filtered by platform.
+ * Download a ZIP of a single plugin package for direct installation.
  */
 export function usePluginsDownloadPluginPackageSuspense(
   request: operations.DownloadPluginPackageRequest,
@@ -114,8 +114,10 @@ export function setPluginsDownloadPluginPackageData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
+      pluginId: string;
       platform: operations.Platform;
       gramSession?: string | undefined;
+      gramProject?: string | undefined;
     },
   ],
   data: PluginsDownloadPluginPackageQueryData,
@@ -129,8 +131,10 @@ export function invalidatePluginsDownloadPluginPackage(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
+      pluginId: string;
       platform: operations.Platform;
       gramSession?: string | undefined;
+      gramProject?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

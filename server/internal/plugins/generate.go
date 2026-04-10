@@ -64,45 +64,113 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	return files, nil
 }
 
-// GeneratePluginPackagesForPlatform produces files for a single platform.
-// Used for per-platform ZIP downloads.
-func GeneratePluginPackagesForPlatform(plugins []PluginInfo, cfg GenerateConfig, platform string) (map[string][]byte, error) {
+// GenerateSinglePluginPackage produces files for a single plugin with files at
+// the root level (no subdirectory prefix). Used for per-plugin ZIP downloads
+// that can be installed directly via `claude --plugin-dir`.
+func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform string) (map[string][]byte, error) {
+	// Use an empty prefix so files are at the root of the ZIP.
 	files := make(map[string][]byte)
 
-	for _, p := range plugins {
-		switch platform {
-		case "claude":
-			if err := generateClaudePlugin(files, p, cfg); err != nil {
-				return nil, fmt.Errorf("generate claude plugin %s: %w", p.Slug, err)
-			}
-		case "cursor":
-			if err := generateCursorPlugin(files, p, cfg); err != nil {
-				return nil, fmt.Errorf("generate cursor plugin %s: %w", p.Slug, err)
-			}
+	switch platform {
+	case "claude":
+		if err := generateClaudePluginFlat(files, plugin, cfg); err != nil {
+			return nil, fmt.Errorf("generate claude plugin: %w", err)
 		}
-	}
-
-	if platform == "claude" {
-		var marketplacePlugins []marketplaceEntry
-		for _, p := range plugins {
-			marketplacePlugins = append(marketplacePlugins, marketplaceEntry{
-				Name:        p.Slug,
-				Source:      "./" + p.Slug,
-				Description: p.Description,
-			})
+	case "cursor":
+		if err := generateCursorPluginFlat(files, plugin, cfg); err != nil {
+			return nil, fmt.Errorf("generate cursor plugin: %w", err)
 		}
-		manifest, err := marshalJSON(marketplaceManifest{
-			Name:    cfg.OrgName + "-gram",
-			Owner:   marketplaceOwner{Name: cfg.OrgName, Email: cfg.OrgEmail},
-			Plugins: marketplacePlugins,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("marshal marketplace.json: %w", err)
-		}
-		files[".claude-plugin/marketplace.json"] = manifest
 	}
 
 	return files, nil
+}
+
+// generateClaudePluginFlat generates Claude Code plugin files at the root level (no prefix).
+func generateClaudePluginFlat(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
+	var userConfig map[string]userConfigEntry
+	for _, s := range p.Servers {
+		if s.UseGramAuth {
+			userConfig = map[string]userConfigEntry{
+				"GRAM_API_KEY": {
+					Description: "Your Gram API key for authenticating MCP server connections",
+					Sensitive:   true,
+				},
+			}
+			break
+		}
+	}
+
+	pluginJSON, err := marshalJSON(claudePluginMeta{
+		Name:        p.Slug,
+		Description: p.Description,
+		Version:     "0.1.0",
+		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
+		Homepage:    "https://getgram.ai",
+		UserConfig:  userConfig,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal plugin.json: %w", err)
+	}
+	files[".claude-plugin/plugin.json"] = pluginJSON
+
+	mcpServers := make(map[string]claudeMCPServer)
+	for _, s := range p.Servers {
+		server := claudeMCPServer{
+			Type:    "http",
+			URL:     s.MCPURL,
+			Headers: nil,
+		}
+		if s.UseGramAuth {
+			server.Headers = map[string]string{
+				"Authorization": "Bearer ${user_config.GRAM_API_KEY}",
+			}
+		}
+		mcpServers[s.DisplayName] = server
+	}
+	mcpJSON, err := marshalJSON(claudeMCPConfig{MCPServers: mcpServers})
+	if err != nil {
+		return fmt.Errorf("marshal .mcp.json: %w", err)
+	}
+	files[".mcp.json"] = mcpJSON
+
+	return nil
+}
+
+// generateCursorPluginFlat generates Cursor plugin files at the root level (no prefix).
+func generateCursorPluginFlat(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
+	pluginJSON, err := marshalJSON(cursorPluginMeta{
+		Name:        p.Slug,
+		DisplayName: p.Name,
+		Description: p.Description,
+		Version:     "0.1.0",
+		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
+		Homepage:    "https://getgram.ai",
+	})
+	if err != nil {
+		return fmt.Errorf("marshal plugin.json: %w", err)
+	}
+	files[".cursor-plugin/plugin.json"] = pluginJSON
+
+	mcpServers := make(map[string]cursorMCPServer)
+	for _, s := range p.Servers {
+		server := cursorMCPServer{
+			URL:     s.MCPURL,
+			Headers: nil,
+		}
+		if s.UseGramAuth {
+			server.Headers = map[string]string{
+				"Authorization": "Bearer ${env:GRAM_API_KEY}",
+			}
+		}
+		mcpServers[s.DisplayName] = server
+	}
+	mcpJSON, err := marshalJSON(cursorMCPConfig{MCPServers: mcpServers})
+	if err != nil {
+		return fmt.Errorf("marshal mcp.json: %w", err)
+	}
+	files["mcp.json"] = mcpJSON
+
+	return nil
 }
 
 func generateClaudePlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
@@ -140,6 +208,7 @@ func generateClaudePlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 	mcpServers := make(map[string]claudeMCPServer)
 	for _, s := range p.Servers {
 		server := claudeMCPServer{
+			Type:    "http",
 			URL:     s.MCPURL,
 			Headers: nil,
 		}
@@ -257,6 +326,7 @@ type claudeMCPConfig struct {
 }
 
 type claudeMCPServer struct {
+	Type    string            `json:"type"`
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers,omitempty"`
 }

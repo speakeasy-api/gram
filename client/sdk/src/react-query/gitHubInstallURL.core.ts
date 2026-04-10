@@ -46,7 +46,10 @@ export function buildGitHubInstallURLQuery(
   ) => Promise<GitHubInstallURLQueryData>;
 } {
   return {
-    queryKey: queryKeyGitHubInstallURL({ gramSession: request?.gramSession }),
+    queryKey: queryKeyGitHubInstallURL({
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
     queryFn: async function gitHubInstallURLQueryFn(
       ctx,
     ): Promise<GitHubInstallURLQueryData> {
@@ -72,7 +75,10 @@ export function buildGitHubInstallURLQuery(
 }
 
 export function queryKeyGitHubInstallURL(
-  parameters: { gramSession?: string | undefined },
+  parameters: {
+    gramSession?: string | undefined;
+    gramProject?: string | undefined;
+  },
 ): QueryKey {
   return ["@gram/client", "plugins", "getGitHubInstallURL", parameters];
 }

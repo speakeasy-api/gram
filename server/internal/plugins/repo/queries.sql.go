@@ -96,23 +96,25 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 
 const createPlugin = `-- name: CreatePlugin :one
 
-INSERT INTO plugins (organization_id, name, slug, description)
-VALUES ($1, $2, $3, $4)
-RETURNING id, organization_id, name, slug, description, created_at, updated_at, deleted_at, deleted
+INSERT INTO plugins (organization_id, project_id, name, slug, description)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
 `
 
 type CreatePluginParams struct {
 	OrganizationID string
+	ProjectID      uuid.UUID
 	Name           string
 	Slug           string
 	Description    pgtype.Text
 }
 
-// Queries for managing plugins (org-scoped distributable MCP server bundles).
-// plugins is org-scoped (no project_id); every query is scoped to organization_id.
+// Queries for managing plugins (project-scoped distributable MCP server bundles).
+// plugins is project-scoped; every query is scoped to project_id (and organization_id where needed).
 func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plugin, error) {
 	row := q.db.QueryRow(ctx, createPlugin,
 		arg.OrganizationID,
+		arg.ProjectID,
 		arg.Name,
 		arg.Slug,
 		arg.Description,
@@ -121,6 +123,7 @@ func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plu
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
+		&i.ProjectID,
 		&i.Name,
 		&i.Slug,
 		&i.Description,
@@ -134,11 +137,11 @@ func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plu
 
 const deleteGitHubConnection = `-- name: DeleteGitHubConnection :exec
 DELETE FROM plugin_github_connections
-WHERE organization_id = $1
+WHERE project_id = $1
 `
 
-func (q *Queries) DeleteGitHubConnection(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, deleteGitHubConnection, organizationID)
+func (q *Queries) DeleteGitHubConnection(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteGitHubConnection, projectID)
 	return err
 }
 
@@ -148,31 +151,34 @@ SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = $1
   AND organization_id = $2
+  AND project_id = $3
   AND deleted IS FALSE
 `
 
 type DeletePluginParams struct {
 	ID             uuid.UUID
 	OrganizationID string
+	ProjectID      uuid.UUID
 }
 
 func (q *Queries) DeletePlugin(ctx context.Context, arg DeletePluginParams) error {
-	_, err := q.db.Exec(ctx, deletePlugin, arg.ID, arg.OrganizationID)
+	_, err := q.db.Exec(ctx, deletePlugin, arg.ID, arg.OrganizationID, arg.ProjectID)
 	return err
 }
 
 const getGitHubConnection = `-- name: GetGitHubConnection :one
-SELECT id, organization_id, installation_id, repo_owner, repo_name, created_at, updated_at
+SELECT id, organization_id, project_id, installation_id, repo_owner, repo_name, created_at, updated_at
 FROM plugin_github_connections
-WHERE organization_id = $1
+WHERE project_id = $1
 `
 
-func (q *Queries) GetGitHubConnection(ctx context.Context, organizationID string) (PluginGithubConnection, error) {
-	row := q.db.QueryRow(ctx, getGitHubConnection, organizationID)
+func (q *Queries) GetGitHubConnection(ctx context.Context, projectID uuid.UUID) (PluginGithubConnection, error) {
+	row := q.db.QueryRow(ctx, getGitHubConnection, projectID)
 	var i PluginGithubConnection
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
+		&i.ProjectID,
 		&i.InstallationID,
 		&i.RepoOwner,
 		&i.RepoName,
@@ -194,24 +200,27 @@ func (q *Queries) GetOrganizationName(ctx context.Context, id string) (string, e
 }
 
 const getPlugin = `-- name: GetPlugin :one
-SELECT id, organization_id, name, slug, description, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE id = $1
   AND organization_id = $2
+  AND project_id = $3
   AND deleted IS FALSE
 `
 
 type GetPluginParams struct {
 	ID             uuid.UUID
 	OrganizationID string
+	ProjectID      uuid.UUID
 }
 
 func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, error) {
-	row := q.db.QueryRow(ctx, getPlugin, arg.ID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, getPlugin, arg.ID, arg.OrganizationID, arg.ProjectID)
 	var i Plugin
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
+		&i.ProjectID,
 		&i.Name,
 		&i.Slug,
 		&i.Description,
@@ -255,30 +264,30 @@ func (q *Queries) ListPluginAssignments(ctx context.Context, pluginID uuid.UUID)
 	return items, nil
 }
 
-const listPluginAssignmentsForOrg = `-- name: ListPluginAssignmentsForOrg :many
+const listPluginAssignmentsForProject = `-- name: ListPluginAssignmentsForProject :many
 SELECT
   pa.plugin_id,
   pa.principal_urn
 FROM plugin_assignments pa
 JOIN plugins p ON p.id = pa.plugin_id AND p.deleted IS FALSE
-WHERE pa.organization_id = $1
+WHERE p.project_id = $1
 `
 
-type ListPluginAssignmentsForOrgRow struct {
+type ListPluginAssignmentsForProjectRow struct {
 	PluginID     uuid.UUID
 	PrincipalUrn string
 }
 
-// Used during plugin generation: returns all assignments for an org's plugins.
-func (q *Queries) ListPluginAssignmentsForOrg(ctx context.Context, organizationID string) ([]ListPluginAssignmentsForOrgRow, error) {
-	rows, err := q.db.Query(ctx, listPluginAssignmentsForOrg, organizationID)
+// Used during plugin generation: returns all assignments for a project's plugins.
+func (q *Queries) ListPluginAssignmentsForProject(ctx context.Context, projectID uuid.UUID) ([]ListPluginAssignmentsForProjectRow, error) {
+	rows, err := q.db.Query(ctx, listPluginAssignmentsForProject, projectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListPluginAssignmentsForOrgRow
+	var items []ListPluginAssignmentsForProjectRow
 	for rows.Next() {
-		var i ListPluginAssignmentsForOrgRow
+		var i ListPluginAssignmentsForProjectRow
 		if err := rows.Scan(&i.PluginID, &i.PrincipalUrn); err != nil {
 			return nil, err
 		}
@@ -334,11 +343,11 @@ func (q *Queries) ListPluginServers(ctx context.Context, pluginID uuid.UUID) ([]
 
 const listPlugins = `-- name: ListPlugins :many
 SELECT
-  p.id, p.organization_id, p.name, p.slug, p.description, p.created_at, p.updated_at, p.deleted_at, p.deleted,
+  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.created_at, p.updated_at, p.deleted_at, p.deleted,
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
   (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id) AS assignment_count
 FROM plugins p
-WHERE p.organization_id = $1
+WHERE p.project_id = $1
   AND p.deleted IS FALSE
 ORDER BY p.created_at DESC
 `
@@ -346,6 +355,7 @@ ORDER BY p.created_at DESC
 type ListPluginsRow struct {
 	ID              uuid.UUID
 	OrganizationID  string
+	ProjectID       uuid.UUID
 	Name            string
 	Slug            string
 	Description     pgtype.Text
@@ -357,8 +367,8 @@ type ListPluginsRow struct {
 	AssignmentCount int64
 }
 
-func (q *Queries) ListPlugins(ctx context.Context, organizationID string) ([]ListPluginsRow, error) {
-	rows, err := q.db.Query(ctx, listPlugins, organizationID)
+func (q *Queries) ListPlugins(ctx context.Context, projectID uuid.UUID) ([]ListPluginsRow, error) {
+	rows, err := q.db.Query(ctx, listPlugins, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -369,6 +379,7 @@ func (q *Queries) ListPlugins(ctx context.Context, organizationID string) ([]Lis
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizationID,
+			&i.ProjectID,
 			&i.Name,
 			&i.Slug,
 			&i.Description,
@@ -389,7 +400,7 @@ func (q *Queries) ListPlugins(ctx context.Context, organizationID string) ([]Lis
 	return items, nil
 }
 
-const listPluginsWithServersForOrg = `-- name: ListPluginsWithServersForOrg :many
+const listPluginsWithServersForProject = `-- name: ListPluginsWithServersForProject :many
 SELECT
   p.id AS plugin_id,
   p.name AS plugin_name,
@@ -407,12 +418,12 @@ SELECT
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 LEFT JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
-WHERE p.organization_id = $1
+WHERE p.project_id = $1
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC
 `
 
-type ListPluginsWithServersForOrgRow struct {
+type ListPluginsWithServersForProjectRow struct {
 	PluginID                uuid.UUID
 	PluginName              string
 	PluginSlug              string
@@ -430,15 +441,15 @@ type ListPluginsWithServersForOrgRow struct {
 
 // Used during plugin generation: returns all active plugin servers joined with
 // their parent plugin and optional toolset mcp_slug for URL construction.
-func (q *Queries) ListPluginsWithServersForOrg(ctx context.Context, organizationID string) ([]ListPluginsWithServersForOrgRow, error) {
-	rows, err := q.db.Query(ctx, listPluginsWithServersForOrg, organizationID)
+func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectID uuid.UUID) ([]ListPluginsWithServersForProjectRow, error) {
+	rows, err := q.db.Query(ctx, listPluginsWithServersForProject, projectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListPluginsWithServersForOrgRow
+	var items []ListPluginsWithServersForProjectRow
 	for rows.Next() {
-		var i ListPluginsWithServersForOrgRow
+		var i ListPluginsWithServersForProjectRow
 		if err := rows.Scan(
 			&i.PluginID,
 			&i.PluginName,
@@ -523,8 +534,9 @@ SET name = $1,
     updated_at = clock_timestamp()
 WHERE id = $4
   AND organization_id = $5
+  AND project_id = $6
   AND deleted IS FALSE
-RETURNING id, organization_id, name, slug, description, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdatePluginParams struct {
@@ -533,6 +545,7 @@ type UpdatePluginParams struct {
 	Description    pgtype.Text
 	ID             uuid.UUID
 	OrganizationID string
+	ProjectID      uuid.UUID
 }
 
 func (q *Queries) UpdatePlugin(ctx context.Context, arg UpdatePluginParams) (Plugin, error) {
@@ -542,11 +555,13 @@ func (q *Queries) UpdatePlugin(ctx context.Context, arg UpdatePluginParams) (Plu
 		arg.Description,
 		arg.ID,
 		arg.OrganizationID,
+		arg.ProjectID,
 	)
 	var i Plugin
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
+		&i.ProjectID,
 		&i.Name,
 		&i.Slug,
 		&i.Description,
@@ -606,18 +621,19 @@ func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServer
 }
 
 const upsertGitHubConnection = `-- name: UpsertGitHubConnection :one
-INSERT INTO plugin_github_connections (organization_id, installation_id, repo_owner, repo_name)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (organization_id) DO UPDATE SET
+INSERT INTO plugin_github_connections (organization_id, project_id, installation_id, repo_owner, repo_name)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (project_id) DO UPDATE SET
   installation_id = EXCLUDED.installation_id,
   repo_owner = EXCLUDED.repo_owner,
   repo_name = EXCLUDED.repo_name,
   updated_at = clock_timestamp()
-RETURNING id, organization_id, installation_id, repo_owner, repo_name, created_at, updated_at
+RETURNING id, organization_id, project_id, installation_id, repo_owner, repo_name, created_at, updated_at
 `
 
 type UpsertGitHubConnectionParams struct {
 	OrganizationID string
+	ProjectID      uuid.UUID
 	InstallationID int64
 	RepoOwner      string
 	RepoName       string
@@ -626,6 +642,7 @@ type UpsertGitHubConnectionParams struct {
 func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubConnectionParams) (PluginGithubConnection, error) {
 	row := q.db.QueryRow(ctx, upsertGitHubConnection,
 		arg.OrganizationID,
+		arg.ProjectID,
 		arg.InstallationID,
 		arg.RepoOwner,
 		arg.RepoName,
@@ -634,6 +651,7 @@ func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubCo
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
+		&i.ProjectID,
 		&i.InstallationID,
 		&i.RepoOwner,
 		&i.RepoName,

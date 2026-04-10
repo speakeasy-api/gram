@@ -338,6 +338,20 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  plugins: {
+    title: "Plugins",
+    url: "plugins",
+    icon: "puzzle",
+    component: PluginsRoot,
+    indexComponent: Plugins,
+    subPages: {
+      detail: {
+        title: "Plugin",
+        url: ":pluginId",
+        component: PluginDetail,
+      },
+    },
+  },
   settings: {
     title: "Settings",
     url: "settings",
@@ -578,20 +592,6 @@ const ORG_ROUTE_STRUCTURE = {
         title: "Roles & Permissions",
         url: "members",
         component: Access,
-      },
-    },
-  },
-  plugins: {
-    title: "Plugins",
-    url: "plugins",
-    icon: "puzzle",
-    component: PluginsRoot,
-    indexComponent: Plugins,
-    subPages: {
-      detail: {
-        title: "Plugin",
-        url: ":pluginId",
-        component: PluginDetail,
       },
     },
   },

@@ -102,7 +102,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 		return nil, err
 	}
 
-	rows, err := s.repo.ListPlugins(ctx, ac.ActiveOrganizationID)
+	rows, err := s.repo.ListPlugins(ctx, *ac.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins").Log(ctx, s.logger)
 	}
@@ -144,6 +144,7 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -179,6 +180,7 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 
 	plugin, err := s.repo.CreatePlugin(ctx, repo.CreatePluginParams{
 		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
 		Name:           payload.Name,
 		Slug:           slug,
 		Description:    conv.PtrToPGText(payload.Description),
@@ -208,6 +210,7 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 	plugin, err := s.repo.UpdatePlugin(ctx, repo.UpdatePluginParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
 		Name:           payload.Name,
 		Slug:           payload.Slug,
 		Description:    conv.PtrToPGText(payload.Description),
@@ -250,6 +253,7 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 	if err := s.repo.DeletePlugin(ctx, repo.DeletePluginParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete plugin").Log(ctx, s.logger)
 	}
@@ -273,8 +277,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
 	}
 
-	// Verify the plugin belongs to this org.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID}); err != nil {
+	// Verify the plugin belongs to this project.
+	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
@@ -402,8 +406,8 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
 	}
 
-	// Verify the plugin belongs to this org.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID}); err != nil {
+	// Verify the plugin belongs to this project.
+	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
@@ -514,6 +518,7 @@ func (s *Service) ConnectGitHub(ctx context.Context, payload *gen.ConnectGitHubP
 
 	conn, err := s.repo.UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
 		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
 		InstallationID: installationID,
 		RepoOwner:      repoOwner,
 		RepoName:       repoName,
@@ -535,7 +540,7 @@ func (s *Service) DisconnectGitHub(ctx context.Context, payload *gen.DisconnectG
 		return err
 	}
 
-	if err := s.repo.DeleteGitHubConnection(ctx, ac.ActiveOrganizationID); err != nil {
+	if err := s.repo.DeleteGitHubConnection(ctx, *ac.ProjectID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete github connection").Log(ctx, s.logger)
 	}
 
@@ -552,7 +557,7 @@ func (s *Service) GetGitHubConnection(ctx context.Context, payload *gen.GetGitHu
 		return nil, err
 	}
 
-	conn, err := s.repo.GetGitHubConnection(ctx, ac.ActiveOrganizationID)
+	conn, err := s.repo.GetGitHubConnection(ctx, *ac.ProjectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
@@ -577,7 +582,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("github app not configured"), "GitHub App is not configured on this server").Log(ctx, s.logger)
 	}
 
-	conn, err := s.repo.GetGitHubConnection(ctx, ac.ActiveOrganizationID)
+	conn, err := s.repo.GetGitHubConnection(ctx, *ac.ProjectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("no github connection"), "Connect GitHub first before publishing.").Log(ctx, s.logger)
@@ -585,7 +590,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeUnexpected, err, "get github connection").Log(ctx, s.logger)
 	}
 
-	files, err := s.generateAllPlugins(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+	files, err := s.generateAllPlugins(ctx, *ac.ProjectID, ac.ActiveOrganizationID, ac.OrganizationSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -628,23 +633,52 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 		return nil, nil, err
 	}
 
-	pluginInfos, err := s.resolvePluginInfos(ctx, ac.ActiveOrganizationID)
+	pluginID, err := uuid.Parse(payload.PluginID)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
+	}
+
+	// Look up the plugin to get its slug.
+	dbPlugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
+		ID:             pluginID,
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "get plugin").Log(ctx, s.logger)
+	}
+
+	// Resolve all plugin infos and find the matching one.
+	allInfos, err := s.resolvePluginInfos(ctx, *ac.ProjectID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	cfg := GenerateConfig{
-		OrgName:   ac.OrganizationSlug,
-		OrgEmail:  "admin@" + ac.OrganizationSlug + ".com",
-		ServerURL: s.serverURL,
+	var pluginInfo *PluginInfo
+	for i := range allInfos {
+		if allInfos[i].Slug == dbPlugin.Slug {
+			pluginInfo = &allInfos[i]
+			break
+		}
 	}
-	if orgName, err := s.repo.GetOrganizationName(ctx, ac.ActiveOrganizationID); err == nil {
-		cfg.OrgName = orgName
+	if pluginInfo == nil {
+		// Plugin exists but has no servers — generate an empty plugin.
+		pluginInfo = &PluginInfo{
+			Name:        dbPlugin.Name,
+			Slug:        dbPlugin.Slug,
+			Description: pgTextToString(dbPlugin.Description),
+			Servers:     nil,
+		}
 	}
 
-	files, err := GeneratePluginPackagesForPlatform(pluginInfos, cfg, payload.Platform)
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+
+	files, err := GenerateSinglePluginPackage(*pluginInfo, cfg, payload.Platform)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate plugin packages").Log(ctx, s.logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate plugin package").Log(ctx, s.logger)
 	}
 
 	var buf bytes.Buffer
@@ -664,14 +698,14 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 
 	return &gen.DownloadPluginPackageResult{
 		ContentType:        "application/zip",
-		ContentDisposition: fmt.Sprintf(`attachment; filename="%s-%s-plugins.zip"`, ac.OrganizationSlug, payload.Platform),
+		ContentDisposition: fmt.Sprintf(`attachment; filename="%s.zip"`, dbPlugin.Slug),
 	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 }
 
 // --- Internal helpers ---
 
-func (s *Service) generateAllPlugins(ctx context.Context, orgID, orgSlug string) (map[string][]byte, error) {
-	pluginInfos, err := s.resolvePluginInfos(ctx, orgID)
+func (s *Service) generateAllPlugins(ctx context.Context, projectID uuid.UUID, orgID, orgSlug string) (map[string][]byte, error) {
+	pluginInfos, err := s.resolvePluginInfos(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -679,8 +713,8 @@ func (s *Service) generateAllPlugins(ctx context.Context, orgID, orgSlug string)
 	return GeneratePluginPackages(pluginInfos, s.generateConfig(ctx, orgID, orgSlug))
 }
 
-func (s *Service) resolvePluginInfos(ctx context.Context, orgID string) ([]PluginInfo, error) {
-	rows, err := s.repo.ListPluginsWithServersForOrg(ctx, orgID)
+func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) ([]PluginInfo, error) {
+	rows, err := s.repo.ListPluginsWithServersForProject(ctx, projectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with servers").Log(ctx, s.logger)
 	}
@@ -744,7 +778,7 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug string) Gen
 
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || ac == nil {
+	if !ok || ac == nil || ac.ProjectID == nil {
 		return nil, errors.New("missing auth context")
 	}
 	return ac, nil
