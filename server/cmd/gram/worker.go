@@ -16,8 +16,6 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
-	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
-	"github.com/speakeasy-api/gram/server/internal/agentworkflows/mcpclient"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -33,10 +31,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpclient"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
-	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -532,24 +530,6 @@ func newWorkerCommand() *cli.Command {
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
 
-			platformSvc := platformtoolsruntime.NewService(logger, db, telemetryService)
-
-			// Create agents service for the worker
-			agentsService := agents.NewService(
-				logger,
-				tracerProvider,
-				meterProvider,
-				db,
-				env,
-				encryptionClient,
-				cache.NewRedisCacheAdapter(redisClient),
-				guardianPolicy,
-				functionsOrchestrator,
-				platformSvc,
-				openRouter,
-				chatClient,
-			)
-
 			/**
 			 * END -- Agent client
 			 */
@@ -571,7 +551,6 @@ func newWorkerCommand() *cli.Command {
 				FunctionsDeployer:   functionsOrchestrator,
 				FunctionsVersion:    runnerVersion,
 				RagService:          ragService,
-				AgentsService:       agentsService,
 				MCPRegistryClient:   mcpRegistryClient,
 				TelemetryService:    telemetryService,
 				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
