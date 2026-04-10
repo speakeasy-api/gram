@@ -14,34 +14,37 @@ import (
 )
 
 const createExternalMCPAttachment = `-- name: CreateExternalMCPAttachment :one
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
+INSERT INTO external_mcp_attachments (deployment_id, registry_id, organization_mcp_collection_registry_id, name, slug, registry_server_specifier)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, deployment_id, registry_id, organization_mcp_collection_registry_id, name, slug, registry_server_specifier, created_at, updated_at
 `
 
 type CreateExternalMCPAttachmentParams struct {
-	DeploymentID            uuid.UUID
-	RegistryID              uuid.NullUUID
-	Name                    string
-	Slug                    string
-	RegistryServerSpecifier string
+	DeploymentID                        uuid.UUID
+	RegistryID                          uuid.NullUUID
+	OrganizationMcpCollectionRegistryID uuid.NullUUID
+	Name                                string
+	Slug                                string
+	RegistryServerSpecifier             string
 }
 
 type CreateExternalMCPAttachmentRow struct {
-	ID                      uuid.UUID
-	DeploymentID            uuid.UUID
-	RegistryID              uuid.NullUUID
-	Name                    string
-	Slug                    string
-	RegistryServerSpecifier string
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
+	ID                                  uuid.UUID
+	DeploymentID                        uuid.UUID
+	RegistryID                          uuid.NullUUID
+	OrganizationMcpCollectionRegistryID uuid.NullUUID
+	Name                                string
+	Slug                                string
+	RegistryServerSpecifier             string
+	CreatedAt                           pgtype.Timestamptz
+	UpdatedAt                           pgtype.Timestamptz
 }
 
 func (q *Queries) CreateExternalMCPAttachment(ctx context.Context, arg CreateExternalMCPAttachmentParams) (CreateExternalMCPAttachmentRow, error) {
 	row := q.db.QueryRow(ctx, createExternalMCPAttachment,
 		arg.DeploymentID,
 		arg.RegistryID,
+		arg.OrganizationMcpCollectionRegistryID,
 		arg.Name,
 		arg.Slug,
 		arg.RegistryServerSpecifier,
@@ -51,6 +54,7 @@ func (q *Queries) CreateExternalMCPAttachment(ctx context.Context, arg CreateExt
 		&i.ID,
 		&i.DeploymentID,
 		&i.RegistryID,
+		&i.OrganizationMcpCollectionRegistryID,
 		&i.Name,
 		&i.Slug,
 		&i.RegistryServerSpecifier,
@@ -247,6 +251,7 @@ SELECT
   t.updated_at,
   e.deployment_id,
   e.registry_id,
+  e.organization_mcp_collection_registry_id,
   e.name as registry_server_name,
   e.slug,
   e.registry_server_specifier
@@ -264,34 +269,35 @@ type GetExternalMCPToolDefinitionByURNParams struct {
 }
 
 type GetExternalMCPToolDefinitionByURNRow struct {
-	ID                         uuid.UUID
-	ExternalMcpAttachmentID    uuid.UUID
-	ToolUrn                    string
-	Type                       string
-	Name                       pgtype.Text
-	Description                pgtype.Text
-	Schema                     []byte
-	RemoteUrl                  string
-	TransportType              types.TransportType
-	RequiresOauth              bool
-	OauthVersion               string
-	OauthAuthorizationEndpoint pgtype.Text
-	OauthTokenEndpoint         pgtype.Text
-	OauthRegistrationEndpoint  pgtype.Text
-	OauthScopesSupported       []string
-	HeaderDefinitions          []byte
-	Title                      pgtype.Text
-	ReadOnlyHint               pgtype.Bool
-	DestructiveHint            pgtype.Bool
-	IdempotentHint             pgtype.Bool
-	OpenWorldHint              pgtype.Bool
-	CreatedAt                  pgtype.Timestamptz
-	UpdatedAt                  pgtype.Timestamptz
-	DeploymentID               uuid.UUID
-	RegistryID                 uuid.NullUUID
-	RegistryServerName         string
-	Slug                       string
-	RegistryServerSpecifier    string
+	ID                                  uuid.UUID
+	ExternalMcpAttachmentID             uuid.UUID
+	ToolUrn                             string
+	Type                                string
+	Name                                pgtype.Text
+	Description                         pgtype.Text
+	Schema                              []byte
+	RemoteUrl                           string
+	TransportType                       types.TransportType
+	RequiresOauth                       bool
+	OauthVersion                        string
+	OauthAuthorizationEndpoint          pgtype.Text
+	OauthTokenEndpoint                  pgtype.Text
+	OauthRegistrationEndpoint           pgtype.Text
+	OauthScopesSupported                []string
+	HeaderDefinitions                   []byte
+	Title                               pgtype.Text
+	ReadOnlyHint                        pgtype.Bool
+	DestructiveHint                     pgtype.Bool
+	IdempotentHint                      pgtype.Bool
+	OpenWorldHint                       pgtype.Bool
+	CreatedAt                           pgtype.Timestamptz
+	UpdatedAt                           pgtype.Timestamptz
+	DeploymentID                        uuid.UUID
+	RegistryID                          uuid.NullUUID
+	OrganizationMcpCollectionRegistryID uuid.NullUUID
+	RegistryServerName                  string
+	Slug                                string
+	RegistryServerSpecifier             string
 }
 
 func (q *Queries) GetExternalMCPToolDefinitionByURN(ctx context.Context, arg GetExternalMCPToolDefinitionByURNParams) (GetExternalMCPToolDefinitionByURNRow, error) {
@@ -323,6 +329,7 @@ func (q *Queries) GetExternalMCPToolDefinitionByURN(ctx context.Context, arg Get
 		&i.UpdatedAt,
 		&i.DeploymentID,
 		&i.RegistryID,
+		&i.OrganizationMcpCollectionRegistryID,
 		&i.RegistryServerName,
 		&i.Slug,
 		&i.RegistryServerSpecifier,
@@ -356,6 +363,7 @@ SELECT
   t.updated_at,
   e.deployment_id,
   e.registry_id,
+  e.organization_mcp_collection_registry_id,
   e.name as registry_server_name,
   e.slug,
   e.registry_server_specifier
@@ -368,33 +376,34 @@ WHERE e.deployment_id = $1
 `
 
 type GetExternalMCPToolsRequiringOAuthRow struct {
-	ID                         uuid.UUID
-	ExternalMcpAttachmentID    uuid.UUID
-	ToolUrn                    string
-	Type                       string
-	Name                       pgtype.Text
-	Description                pgtype.Text
-	Schema                     []byte
-	RemoteUrl                  string
-	RequiresOauth              bool
-	OauthVersion               string
-	OauthAuthorizationEndpoint pgtype.Text
-	OauthTokenEndpoint         pgtype.Text
-	OauthRegistrationEndpoint  pgtype.Text
-	OauthScopesSupported       []string
-	HeaderDefinitions          []byte
-	Title                      pgtype.Text
-	ReadOnlyHint               pgtype.Bool
-	DestructiveHint            pgtype.Bool
-	IdempotentHint             pgtype.Bool
-	OpenWorldHint              pgtype.Bool
-	CreatedAt                  pgtype.Timestamptz
-	UpdatedAt                  pgtype.Timestamptz
-	DeploymentID               uuid.UUID
-	RegistryID                 uuid.NullUUID
-	RegistryServerName         string
-	Slug                       string
-	RegistryServerSpecifier    string
+	ID                                  uuid.UUID
+	ExternalMcpAttachmentID             uuid.UUID
+	ToolUrn                             string
+	Type                                string
+	Name                                pgtype.Text
+	Description                         pgtype.Text
+	Schema                              []byte
+	RemoteUrl                           string
+	RequiresOauth                       bool
+	OauthVersion                        string
+	OauthAuthorizationEndpoint          pgtype.Text
+	OauthTokenEndpoint                  pgtype.Text
+	OauthRegistrationEndpoint           pgtype.Text
+	OauthScopesSupported                []string
+	HeaderDefinitions                   []byte
+	Title                               pgtype.Text
+	ReadOnlyHint                        pgtype.Bool
+	DestructiveHint                     pgtype.Bool
+	IdempotentHint                      pgtype.Bool
+	OpenWorldHint                       pgtype.Bool
+	CreatedAt                           pgtype.Timestamptz
+	UpdatedAt                           pgtype.Timestamptz
+	DeploymentID                        uuid.UUID
+	RegistryID                          uuid.NullUUID
+	OrganizationMcpCollectionRegistryID uuid.NullUUID
+	RegistryServerName                  string
+	Slug                                string
+	RegistryServerSpecifier             string
 }
 
 func (q *Queries) GetExternalMCPToolsRequiringOAuth(ctx context.Context, deploymentID uuid.UUID) ([]GetExternalMCPToolsRequiringOAuthRow, error) {
@@ -431,6 +440,7 @@ func (q *Queries) GetExternalMCPToolsRequiringOAuth(ctx context.Context, deploym
 			&i.UpdatedAt,
 			&i.DeploymentID,
 			&i.RegistryID,
+			&i.OrganizationMcpCollectionRegistryID,
 			&i.RegistryServerName,
 			&i.Slug,
 			&i.RegistryServerSpecifier,
@@ -473,21 +483,22 @@ func (q *Queries) GetMCPRegistryByID(ctx context.Context, id uuid.UUID) (GetMCPR
 }
 
 const listExternalMCPAttachments = `-- name: ListExternalMCPAttachments :many
-SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
+SELECT id, deployment_id, registry_id, organization_mcp_collection_registry_id, name, slug, registry_server_specifier, created_at, updated_at
 FROM external_mcp_attachments
 WHERE deployment_id = $1 AND deleted IS FALSE
 ORDER BY created_at ASC
 `
 
 type ListExternalMCPAttachmentsRow struct {
-	ID                      uuid.UUID
-	DeploymentID            uuid.UUID
-	RegistryID              uuid.NullUUID
-	Name                    string
-	Slug                    string
-	RegistryServerSpecifier string
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
+	ID                                  uuid.UUID
+	DeploymentID                        uuid.UUID
+	RegistryID                          uuid.NullUUID
+	OrganizationMcpCollectionRegistryID uuid.NullUUID
+	Name                                string
+	Slug                                string
+	RegistryServerSpecifier             string
+	CreatedAt                           pgtype.Timestamptz
+	UpdatedAt                           pgtype.Timestamptz
 }
 
 func (q *Queries) ListExternalMCPAttachments(ctx context.Context, deploymentID uuid.UUID) ([]ListExternalMCPAttachmentsRow, error) {
@@ -503,6 +514,7 @@ func (q *Queries) ListExternalMCPAttachments(ctx context.Context, deploymentID u
 			&i.ID,
 			&i.DeploymentID,
 			&i.RegistryID,
+			&i.OrganizationMcpCollectionRegistryID,
 			&i.Name,
 			&i.Slug,
 			&i.RegistryServerSpecifier,
@@ -546,6 +558,7 @@ SELECT
   t.updated_at,
   e.deployment_id,
   e.registry_id,
+  e.organization_mcp_collection_registry_id,
   e.name as registry_server_name,
   e.slug,
   e.registry_server_specifier
@@ -558,34 +571,35 @@ ORDER BY e.slug ASC
 `
 
 type ListExternalMCPToolDefinitionsRow struct {
-	ID                         uuid.UUID
-	ExternalMcpAttachmentID    uuid.UUID
-	ToolUrn                    string
-	Type                       string
-	Name                       pgtype.Text
-	Description                pgtype.Text
-	Schema                     []byte
-	RemoteUrl                  string
-	TransportType              types.TransportType
-	RequiresOauth              bool
-	OauthVersion               string
-	OauthAuthorizationEndpoint pgtype.Text
-	OauthTokenEndpoint         pgtype.Text
-	OauthRegistrationEndpoint  pgtype.Text
-	OauthScopesSupported       []string
-	HeaderDefinitions          []byte
-	Title                      pgtype.Text
-	ReadOnlyHint               pgtype.Bool
-	DestructiveHint            pgtype.Bool
-	IdempotentHint             pgtype.Bool
-	OpenWorldHint              pgtype.Bool
-	CreatedAt                  pgtype.Timestamptz
-	UpdatedAt                  pgtype.Timestamptz
-	DeploymentID               uuid.UUID
-	RegistryID                 uuid.NullUUID
-	RegistryServerName         string
-	Slug                       string
-	RegistryServerSpecifier    string
+	ID                                  uuid.UUID
+	ExternalMcpAttachmentID             uuid.UUID
+	ToolUrn                             string
+	Type                                string
+	Name                                pgtype.Text
+	Description                         pgtype.Text
+	Schema                              []byte
+	RemoteUrl                           string
+	TransportType                       types.TransportType
+	RequiresOauth                       bool
+	OauthVersion                        string
+	OauthAuthorizationEndpoint          pgtype.Text
+	OauthTokenEndpoint                  pgtype.Text
+	OauthRegistrationEndpoint           pgtype.Text
+	OauthScopesSupported                []string
+	HeaderDefinitions                   []byte
+	Title                               pgtype.Text
+	ReadOnlyHint                        pgtype.Bool
+	DestructiveHint                     pgtype.Bool
+	IdempotentHint                      pgtype.Bool
+	OpenWorldHint                       pgtype.Bool
+	CreatedAt                           pgtype.Timestamptz
+	UpdatedAt                           pgtype.Timestamptz
+	DeploymentID                        uuid.UUID
+	RegistryID                          uuid.NullUUID
+	OrganizationMcpCollectionRegistryID uuid.NullUUID
+	RegistryServerName                  string
+	Slug                                string
+	RegistryServerSpecifier             string
 }
 
 func (q *Queries) ListExternalMCPToolDefinitions(ctx context.Context, deploymentID uuid.UUID) ([]ListExternalMCPToolDefinitionsRow, error) {
@@ -623,6 +637,7 @@ func (q *Queries) ListExternalMCPToolDefinitions(ctx context.Context, deployment
 			&i.UpdatedAt,
 			&i.DeploymentID,
 			&i.RegistryID,
+			&i.OrganizationMcpCollectionRegistryID,
 			&i.RegistryServerName,
 			&i.Slug,
 			&i.RegistryServerSpecifier,
