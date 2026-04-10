@@ -4,20 +4,14 @@ import (
 	"context"
 	"strings"
 
-	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
-
-// ScopeOverride represents a single scope with optional resource restrictions,
-// parsed from the X-Gram-Scope-Override header in local dev.
-type ScopeOverride struct {
-	Scope     string
-	Resources []string // nil = unrestricted (wildcard)
-}
 
 // getScopeOverrides reads the raw override header from context and parses it
 // into structured overrides. Returns nil, false if no override is present.
-func getScopeOverrides(ctx context.Context) ([]ScopeOverride, bool) {
-	raw, ok := middleware.GetRBACScopeOverrideRaw(ctx)
+// Each override is represented as a RoleGrant since the shape is identical.
+func getScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
+	raw, ok := contextvalues.GetRBACScopeOverride(ctx)
 	if !ok {
 		return nil, false
 	}
@@ -25,10 +19,10 @@ func getScopeOverrides(ctx context.Context) ([]ScopeOverride, bool) {
 	return overrides, len(overrides) > 0
 }
 
-// grantsFromOverrides builds a Grants object from structured scope overrides.
+// grantsFromOverrides builds a Grants object from parsed scope overrides.
 // Scopes with no resources get wildcard access; scopes with resources get
 // one grant per resource ID.
-func grantsFromOverrides(overrides []ScopeOverride) *Grants {
+func grantsFromOverrides(overrides []RoleGrant) *Grants {
 	var rows []Grant
 	for _, o := range overrides {
 		if len(o.Resources) == 0 {
@@ -42,9 +36,9 @@ func grantsFromOverrides(overrides []ScopeOverride) *Grants {
 	return &Grants{rows: rows}
 }
 
-func parseOverrideHeader(value string) []ScopeOverride {
+func parseOverrideHeader(value string) []RoleGrant {
 	parts := strings.Split(value, ",")
-	overrides := make([]ScopeOverride, 0, len(parts))
+	overrides := make([]RoleGrant, 0, len(parts))
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if part == "" {
@@ -57,7 +51,7 @@ func parseOverrideHeader(value string) []ScopeOverride {
 			continue
 		}
 
-		override := ScopeOverride{Scope: scope, Resources: nil}
+		override := RoleGrant{Scope: scope, Resources: nil}
 		if hasResources && resourcesStr != "" {
 			for r := range strings.SplitSeq(resourcesStr, "|") {
 				r = strings.TrimSpace(r)

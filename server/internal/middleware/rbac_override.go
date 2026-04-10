@@ -1,11 +1,10 @@
 package middleware
 
 import (
-	"context"
 	"net/http"
-)
 
-type rbacOverrideKey struct{}
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+)
 
 // RBACOverrideMiddleware reads the X-Gram-Scope-Override header and stores
 // the raw value on the request context. The access package is responsible for
@@ -24,16 +23,9 @@ func RBACOverrideMiddleware(environment string) func(http.Handler) http.Handler 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			value := r.Header.Get("X-Gram-Scope-Override")
 			if value != "" {
-				ctx := context.WithValue(r.Context(), rbacOverrideKey{}, value)
-				r = r.WithContext(ctx)
+				r = r.WithContext(contextvalues.SetRBACScopeOverride(r.Context(), value))
 			}
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-// GetRBACScopeOverrideRaw returns the raw override header value from context, if any.
-func GetRBACScopeOverrideRaw(ctx context.Context) (string, bool) {
-	value, ok := ctx.Value(rbacOverrideKey{}).(string)
-	return value, ok && value != ""
 }
