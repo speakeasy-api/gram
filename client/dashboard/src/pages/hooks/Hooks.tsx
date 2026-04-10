@@ -1246,7 +1246,7 @@ function StackedBarChart({
       const { ctx, data } = chart;
       const lastMeta = chart.getDatasetMeta(data.datasets.length - 1);
       ctx.save();
-      ctx.font = "12px";
+      ctx.font = "12px sans-serif";
       ctx.fillStyle = CHART_COLORS.label;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
