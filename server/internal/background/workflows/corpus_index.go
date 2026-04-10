@@ -2,12 +2,15 @@ package workflows
 
 import (
 	"context"
+	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
+
+const configFileName = ".docs-mcp.json"
 
 // CorpusIndexParams contains the input for the corpus index workflow.
 type CorpusIndexParams struct {
@@ -53,6 +56,7 @@ type DiffCommitParams struct {
 }
 
 // ChunkFilesParams are input for the ChunkFiles activity.
+// If FilePaths is nil, all files in the commit are chunked.
 type ChunkFilesParams struct {
 	ProjectID uuid.UUID
 	CommitSHA string
@@ -109,42 +113,202 @@ type MarkEventStatusParams struct {
 type CorpusIndexActivities struct{}
 
 func (a *CorpusIndexActivities) DiffCommit(ctx context.Context, params DiffCommitParams) (*DiffResult, error) {
-	panic("not implemented")
+	panic("activity not wired")
 }
 
 func (a *CorpusIndexActivities) ChunkFiles(ctx context.Context, params ChunkFilesParams) ([]ChunkResult, error) {
-	panic("not implemented")
+	panic("activity not wired")
 }
 
 func (a *CorpusIndexActivities) EmbedChunks(ctx context.Context, params EmbedChunksParams) ([]EmbedResult, error) {
-	panic("not implemented")
+	panic("activity not wired")
 }
 
 func (a *CorpusIndexActivities) UpsertChunks(ctx context.Context, params UpsertChunksParams) error {
-	panic("not implemented")
+	panic("activity not wired")
 }
 
 func (a *CorpusIndexActivities) DeleteChunks(ctx context.Context, params DeleteChunksParams) error {
-	panic("not implemented")
+	panic("activity not wired")
 }
 
 func (a *CorpusIndexActivities) UpdateIndexState(ctx context.Context, params UpdateIndexStateParams) error {
-	panic("not implemented")
+	panic("activity not wired")
 }
 
 func (a *CorpusIndexActivities) GetIndexState(ctx context.Context, params GetIndexStateParams) (*IndexState, error) {
-	panic("not implemented")
+	panic("activity not wired")
 }
 
 func (a *CorpusIndexActivities) MarkEventStatus(ctx context.Context, params MarkEventStatusParams) error {
-	panic("not implemented")
+	panic("activity not wired")
 }
 
 // CorpusIndexWorkflow is the Temporal workflow that indexes corpus content
 // after a publish event. It diffs the commit, chunks changed files, embeds
 // new chunks, and upserts them into the database.
 func CorpusIndexWorkflow(ctx workflow.Context, params CorpusIndexParams) error {
-	_ = temporal.RetryPolicy{}
-	_ = time.Second
-	panic("not implemented")
+	activityOpts := workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 3,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOpts)
+
+	var activities *CorpusIndexActivities
+
+	// 1. Get current index state.
+	var indexState *IndexState
+	err := workflow.ExecuteActivity(ctx, activities.GetIndexState, GetIndexStateParams{
+		ProjectID: params.ProjectID,
+	}).Get(ctx, &indexState)
+	if err != nil {
+		return err
+	}
+
+	// 2. Idempotency check: if already indexed this commit, mark done and return.
+	if indexState != nil && indexState.LastIndexedSHA == params.CommitSHA {
+		return workflow.ExecuteActivity(ctx, activities.MarkEventStatus, MarkEventStatusParams{
+			EventID:   params.EventID,
+			ProjectID: params.ProjectID,
+			Status:    "indexed",
+		}).Get(ctx, nil)
+	}
+
+	// 3. Mark event as indexing.
+	err = workflow.ExecuteActivity(ctx, activities.MarkEventStatus, MarkEventStatusParams{
+		EventID:   params.EventID,
+		ProjectID: params.ProjectID,
+		Status:    "indexing",
+	}).Get(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	// 4. Diff the commit against previous indexed state.
+	oldSHA := ""
+	if indexState != nil {
+		oldSHA = indexState.LastIndexedSHA
+	}
+
+	var diff DiffResult
+	err = workflow.ExecuteActivity(ctx, activities.DiffCommit, DiffCommitParams{
+		ProjectID: params.ProjectID,
+		OldSHA:    oldSHA,
+		NewSHA:    params.CommitSHA,
+	}).Get(ctx, &diff)
+	if err != nil {
+		return err
+	}
+
+	// 5. Check if config changed — if so, re-chunk everything.
+	configChanged := hasConfigChange(diff)
+
+	// 6. Handle deleted files.
+	if len(diff.Deleted) > 0 {
+		err = workflow.ExecuteActivity(ctx, activities.DeleteChunks, DeleteChunksParams{
+			ProjectID: params.ProjectID,
+			FilePaths: diff.Deleted,
+		}).Get(ctx, nil)
+		if err != nil {
+			return err
+		}
+	}
+
+	// 7. Determine which files to chunk.
+	var filesToChunk []string
+	if configChanged {
+		// Re-chunk all files when config changes. Passing nil signals "all files".
+		filesToChunk = nil
+	} else {
+		filesToChunk = make([]string, 0, len(diff.Added)+len(diff.Modified))
+		filesToChunk = append(filesToChunk, diff.Added...)
+		filesToChunk = append(filesToChunk, diff.Modified...)
+		// Exclude config files from chunking.
+		filesToChunk = filterConfigFiles(filesToChunk)
+	}
+
+	// If there are files to chunk (or config changed), run the chunk+embed pipeline.
+	if configChanged || len(filesToChunk) > 0 {
+		var chunks []ChunkResult
+		err = workflow.ExecuteActivity(ctx, activities.ChunkFiles, ChunkFilesParams{
+			ProjectID: params.ProjectID,
+			CommitSHA: params.CommitSHA,
+			FilePaths: filesToChunk,
+		}).Get(ctx, &chunks)
+		if err != nil {
+			return err
+		}
+
+		if len(chunks) > 0 {
+			var embeddings []EmbedResult
+			err = workflow.ExecuteActivity(ctx, activities.EmbedChunks, EmbedChunksParams{
+				ProjectID: params.ProjectID,
+				Chunks:    chunks,
+			}).Get(ctx, &embeddings)
+			if err != nil {
+				return err
+			}
+
+			err = workflow.ExecuteActivity(ctx, activities.UpsertChunks, UpsertChunksParams{
+				ProjectID:      params.ProjectID,
+				OrganizationID: params.OrganizationID,
+				Chunks:         chunks,
+				Embeddings:     embeddings,
+			}).Get(ctx, nil)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// 8. Update index state.
+	err = workflow.ExecuteActivity(ctx, activities.UpdateIndexState, UpdateIndexStateParams{
+		ProjectID:      params.ProjectID,
+		OrganizationID: params.OrganizationID,
+		CommitSHA:      params.CommitSHA,
+		EmbeddingModel: "text-embedding-3-large",
+	}).Get(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	// 9. Mark event as indexed.
+	return workflow.ExecuteActivity(ctx, activities.MarkEventStatus, MarkEventStatusParams{
+		EventID:   params.EventID,
+		ProjectID: params.ProjectID,
+		Status:    "indexed",
+	}).Get(ctx, nil)
+}
+
+// hasConfigChange checks if any of the changed files is a .docs-mcp.json config.
+func hasConfigChange(diff DiffResult) bool {
+	for _, f := range diff.Added {
+		if filepath.Base(f) == configFileName {
+			return true
+		}
+	}
+	for _, f := range diff.Modified {
+		if filepath.Base(f) == configFileName {
+			return true
+		}
+	}
+	for _, f := range diff.Deleted {
+		if filepath.Base(f) == configFileName {
+			return true
+		}
+	}
+	return false
+}
+
+// filterConfigFiles removes .docs-mcp.json files from the list.
+func filterConfigFiles(paths []string) []string {
+	var filtered []string
+	for _, p := range paths {
+		if filepath.Base(p) != configFileName {
+			filtered = append(filtered, p)
+		}
+	}
+	return filtered
 }

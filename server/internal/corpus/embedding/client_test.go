@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,19 +33,20 @@ type openAIUsage struct {
 func newMockOpenAIServer(t *testing.T, dims int) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodPost, r.Method)
-		require.Equal(t, "/v1/embeddings", r.URL.Path)
-		require.Contains(t, r.Header.Get("Authorization"), "Bearer ")
+		// Use assert in HTTP handlers to avoid goroutine panics.
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/v1/embeddings", r.URL.Path)
+		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
 
 		var reqBody struct {
 			Input []string `json:"input"`
 			Model string   `json:"model"`
 		}
 		err := json.NewDecoder(r.Body).Decode(&reqBody)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 
 		var data []openAIEmbeddingResponseObj
-		for i, _ := range reqBody.Input {
+		for i := range reqBody.Input {
 			vec := make([]float32, dims)
 			for j := range vec {
 				vec[j] = float32(i+1) * 0.001
@@ -65,11 +67,12 @@ func newMockOpenAIServer(t *testing.T, dims int) *httptest.Server {
 
 		w.Header().Set("Content-Type", "application/json")
 		err = json.NewEncoder(w).Encode(resp)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 }
 
 func TestBatchEmbed(t *testing.T) {
+	t.Parallel()
 	server := newMockOpenAIServer(t, EmbeddingDimensions)
 	defer server.Close()
 
@@ -96,6 +99,7 @@ func TestBatchEmbed(t *testing.T) {
 }
 
 func TestBatchEmbed_SkipUnchanged(t *testing.T) {
+	t.Parallel()
 	server := newMockOpenAIServer(t, EmbeddingDimensions)
 	defer server.Close()
 

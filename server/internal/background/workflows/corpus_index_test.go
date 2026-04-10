@@ -13,6 +13,7 @@ import (
 var activityStub = &CorpusIndexActivities{}
 
 func TestCorpusIndexWorkflow_NewCommit(t *testing.T) {
+	t.Parallel()
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
 
@@ -114,6 +115,7 @@ func TestCorpusIndexWorkflow_NewCommit(t *testing.T) {
 }
 
 func TestCorpusIndexWorkflow_DeletedFile(t *testing.T) {
+	t.Parallel()
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
 
@@ -176,6 +178,7 @@ func TestCorpusIndexWorkflow_DeletedFile(t *testing.T) {
 }
 
 func TestCorpusIndexWorkflow_ConfigChange(t *testing.T) {
+	t.Parallel()
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
 
@@ -270,6 +273,7 @@ func TestCorpusIndexWorkflow_ConfigChange(t *testing.T) {
 }
 
 func TestCorpusIndexWorkflow_Idempotent(t *testing.T) {
+	t.Parallel()
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
 

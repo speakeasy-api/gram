@@ -62,6 +62,7 @@ func (m *mockWorkflowStarter) StartCorpusIndexWorkflow(_ context.Context, params
 }
 
 func TestReconciler_PicksPendingOutboxRows(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newReconcilerTest(t)
 
 	// Insert a pending publish event.
@@ -94,6 +95,7 @@ func TestReconciler_PicksPendingOutboxRows(t *testing.T) {
 }
 
 func TestReconciler_SkipsIndexingRows(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newReconcilerTest(t)
 
 	// Insert a publish event and transition to indexing.
@@ -119,5 +121,5 @@ func TestReconciler_SkipsIndexingRows(t *testing.T) {
 	require.NoError(t, err)
 
 	// No workflows should be enqueued because the event is already indexing.
-	require.Len(t, starter.started, 0)
+	require.Empty(t, starter.started)
 }
