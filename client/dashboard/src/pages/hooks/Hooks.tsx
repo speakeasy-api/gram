@@ -756,12 +756,13 @@ function HooksInnerContent({
     () => customRange ?? getPresetRange(dateRange),
     [customRange, dateRange],
   );
+  const [isLogsVisible, setIsLogsVisible] = useState(false);
 
   return (
     <>
       <div className="flex min-h-0 w-full flex-1 flex-col">
-        {/* Header section */}
         <div className="flex shrink-0 flex-col gap-6 px-8 pt-8 pb-4">
+          {/* Header section */}
           <div className="flex items-start justify-between gap-4">
             <div className="flex min-w-0 flex-col gap-1">
               <h1 className="text-xl font-semibold">Hooks</h1>
@@ -819,14 +820,74 @@ function HooksInnerContent({
                 projectSlug={projectSlug}
               />
             </div>
+            <div className="absolute inset-x-0 -bottom-6 h-6 w-full bg-linear-to-b from-white to-white/0" />
           </div>
 
-          <HooksAnalytics
-            groupedTraces={groupedTraces}
-            serverNameMappings={serverNameMappings}
-            from={from}
-            to={to}
-          />
+          <div className="flex flex-wrap gap-4">
+            {/* Content Column */}
+
+            <div className="flex-1 shrink-0">
+              <HooksAnalytics
+                groupedTraces={groupedTraces}
+                serverNameMappings={serverNameMappings}
+                from={from}
+                to={to}
+              />
+            </div>
+
+            {isLogsVisible && (
+              <div className="min-h-0 flex-1 shrink-0 overflow-hidden border">
+                {/* Logs Column */}
+                <div className="bg-background flex h-full flex-col">
+                  {isFetching && groupedTraces.length > 0 && (
+                    <div className="bg-primary/20 absolute top-0 right-0 left-0 z-20 h-1">
+                      <div className="bg-primary h-full animate-pulse" />
+                    </div>
+                  )}
+
+                  {/* Header */}
+                  <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase">
+                    <div className="w-[150px] shrink-0">Timestamp</div>
+                    <div className="w-5 shrink-0" />
+                    <div className="min-w-0 flex-1">Server / Tool</div>
+                    <div className="w-[260px] shrink-0">User</div>
+                    <div className="w-[120px] shrink-0">Source</div>
+                    <div className="w-20 shrink-0 text-right">Status</div>
+                  </div>
+
+                  {/* Scrollable trace list */}
+                  <div
+                    ref={containerRef}
+                    className="flex-1 overflow-y-auto"
+                    onScroll={handleScroll}
+                  >
+                    <HooksTraceContent
+                      error={error}
+                      isLoading={isLoading}
+                      groupedTraces={groupedTraces}
+                      activeFilters={activeFilters}
+                      expandedTraceId={expandedTraceId}
+                      isFetchingNextPage={isFetchingNextPage}
+                      onToggleExpand={toggleExpand}
+                      onLogClick={handleLogClick}
+                      serverNameMappings={serverNameMappings}
+                    />
+                  </div>
+
+                  {/* Footer */}
+                  {groupedTraces.length > 0 && (
+                    <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-4 border-t px-5 py-3 text-sm">
+                      <span>
+                        {groupedTraces.length}{" "}
+                        {groupedTraces.length === 1 ? "trace" : "traces"}
+                        {hasNextPage && " • Scroll to load more"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Summary Tables */}
           {/*{summaryData &&
@@ -866,57 +927,6 @@ function HooksInnerContent({
                 )}
               </div>
             )}*/}
-        </div>
-
-        {/* Content section */}
-        <div className="min-h-0 flex-1 overflow-hidden border-t">
-          <div className="bg-background flex h-full flex-col">
-            {isFetching && groupedTraces.length > 0 && (
-              <div className="bg-primary/20 absolute top-0 right-0 left-0 z-20 h-1">
-                <div className="bg-primary h-full animate-pulse" />
-              </div>
-            )}
-
-            {/* Header */}
-            <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase">
-              <div className="w-[150px] shrink-0">Timestamp</div>
-              <div className="w-5 shrink-0" />
-              <div className="min-w-0 flex-1">Server / Tool</div>
-              <div className="w-[260px] shrink-0">User</div>
-              <div className="w-[120px] shrink-0">Source</div>
-              <div className="w-20 shrink-0 text-right">Status</div>
-            </div>
-
-            {/* Scrollable trace list */}
-            <div
-              ref={containerRef}
-              className="flex-1 overflow-y-auto"
-              onScroll={handleScroll}
-            >
-              <HooksTraceContent
-                error={error}
-                isLoading={isLoading}
-                groupedTraces={groupedTraces}
-                activeFilters={activeFilters}
-                expandedTraceId={expandedTraceId}
-                isFetchingNextPage={isFetchingNextPage}
-                onToggleExpand={toggleExpand}
-                onLogClick={handleLogClick}
-                serverNameMappings={serverNameMappings}
-              />
-            </div>
-
-            {/* Footer */}
-            {groupedTraces.length > 0 && (
-              <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-4 border-t px-5 py-3 text-sm">
-                <span>
-                  {groupedTraces.length}{" "}
-                  {groupedTraces.length === 1 ? "trace" : "traces"}
-                  {hasNextPage && " • Scroll to load more"}
-                </span>
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
