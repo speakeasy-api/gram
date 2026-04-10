@@ -3,7 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import process from "node:process";
 
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
@@ -121,6 +121,11 @@ export default defineConfig(({ command }) => {
           "node_modules/@assistant-ui/react-markdown",
         ),
       },
+    },
+    test: {
+      environment: "happy-dom",
+      globals: true,
+      css: false,
     },
   };
 });
