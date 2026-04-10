@@ -546,7 +546,7 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*gen.ListUserGrantsResult, error) {
 	// Dev-only: return override scopes when the header is present so the
 	// frontend sees the same restricted scopes as the enforcement layer.
-	if overrides, ok := middleware.GetRBACScopeOverride(ctx); ok {
+	if overrides, ok := getScopeOverrides(ctx); ok {
 		return &gen.ListUserGrantsResult{Grants: grantsFromRows(grantsFromOverrides(overrides).rows)}, nil
 	}
 

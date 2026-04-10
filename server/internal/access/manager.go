@@ -10,7 +10,6 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -41,7 +40,7 @@ func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
 
 	// Dev-only: if the request carries a scope override header, use those
 	// scopes instead of loading from the database.
-	if overrides, ok := middleware.GetRBACScopeOverride(ctx); ok {
+	if overrides, ok := getScopeOverrides(ctx); ok {
 		grants := grantsFromOverrides(overrides)
 		return GrantsToContext(ctx, grants), nil
 	}
@@ -71,23 +70,6 @@ func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
 	}
 
 	return GrantsToContext(ctx, grants), nil
-}
-
-// grantsFromOverrides builds a Grants object from structured scope overrides.
-// Scopes with no resources get wildcard access; scopes with resources get
-// one grant per resource ID.
-func grantsFromOverrides(overrides []middleware.ScopeOverride) *Grants {
-	var rows []Grant
-	for _, o := range overrides {
-		if len(o.Resources) == 0 {
-			rows = append(rows, Grant{Scope: Scope(o.Scope), Resource: WildcardResource})
-		} else {
-			for _, r := range o.Resources {
-				rows = append(rows, Grant{Scope: Scope(o.Scope), Resource: r})
-			}
-		}
-	}
-	return &Grants{rows: rows}
 }
 
 func (m *Manager) Require(ctx context.Context, checks ...Check) error {
@@ -179,18 +161,25 @@ func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string)
 }
 
 func (m *Manager) shouldEnforce(ctx context.Context) (bool, error) {
-	// When the dev override header is present, always enforce so the override
-	// scopes take effect regardless of account type or feature flag.
-	if _, ok := middleware.GetRBACScopeOverride(ctx); ok {
-		return true, nil
-	}
-
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return false, oops.C(oops.CodeUnauthorized)
 	}
 
-	if authCtx.AccountType != "enterprise" || authCtx.APIKeyID != "" || authCtx.SessionID == nil {
+	// Never enforce RBAC on API key requests — they have their own scoping.
+	if authCtx.APIKeyID != "" {
+		return false, nil
+	}
+
+	// When the dev override header is present, enforce so the override
+	// scopes take effect regardless of account type or feature flag.
+	// Checked after API key exclusion so the toolbar doesn't interfere
+	// with API key auth flows.
+	if _, ok := getScopeOverrides(ctx); ok {
+		return true, nil
+	}
+
+	if authCtx.AccountType != "enterprise" || authCtx.SessionID == nil {
 		return false, nil
 	}
 
