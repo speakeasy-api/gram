@@ -10,6 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -85,6 +86,10 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 	// Load the toolset; we need its ID and the attached OAuth proxy server reference.
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
 	if err != nil {
+		return nil, err
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: toolsetDetails.ID}); err != nil {
 		return nil, err
 	}
 

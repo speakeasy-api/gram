@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -219,4 +220,50 @@ func TestToolsets_RBAC_WriteOps_AllowedWithToolsetWriteGrant(t *testing.T) {
 		CustomDomainID:         nil,
 	})
 	require.NoError(t, err)
+}
+
+func TestToolsets_RBAC_UpdateOAuthProxyServer_DeniedWithNoGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-update-oauth-proxy-denied-test")
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn)
+
+	audience := "https://api.example.com"
+	_, err := ti.service.UpdateOAuthProxyServer(ctx, &gen.UpdateOAuthProxyServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Slug:             toolset.Slug,
+		OauthProxyServer: &types.OAuthProxyServerUpdateForm{
+			Audience: &audience,
+		},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestToolsets_RBAC_UpdateOAuthProxyServer_DeniedWithReadOnlyGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-update-oauth-proxy-readonly-test")
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeMCPRead, Resource: toolset.ID})
+
+	audience := "https://api.example.com"
+	_, err := ti.service.UpdateOAuthProxyServer(ctx, &gen.UpdateOAuthProxyServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Slug:             toolset.Slug,
+		OauthProxyServer: &types.OAuthProxyServerUpdateForm{
+			Audience: &audience,
+		},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
