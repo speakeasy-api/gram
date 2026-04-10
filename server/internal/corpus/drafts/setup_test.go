@@ -34,7 +34,6 @@ func TestMain(m *testing.M) {
 	}
 
 	infra = res
-
 	code := m.Run()
 
 	if err := cleanup(); err != nil {
@@ -48,9 +47,9 @@ func TestMain(m *testing.M) {
 type testInstance struct {
 	svc       *drafts.Service
 	conn      *pgxpool.Pool
+	git       *testGitRepo
 	projectID uuid.UUID
 	orgID     string
-	repoDir   string
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -64,8 +63,6 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	_ = tracerProvider
-
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
@@ -75,37 +72,50 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.True(t, ok)
 	require.NotNil(t, authctx.ProjectID)
 
-	repoDir := t.TempDir()
-	gitRepo := newTestGitRepo(t, repoDir)
-
+	gitRepo := newTestGitRepo(t, t.TempDir())
 	svc := drafts.NewService(conn, gitRepo)
 
 	return ctx, &testInstance{
 		svc:       svc,
 		conn:      conn,
+		git:       gitRepo,
 		projectID: *authctx.ProjectID,
 		orgID:     authctx.ActiveOrganizationID,
-		repoDir:   repoDir,
 	}
 }
 
-// testGitRepo implements drafts.GitRepo using go-git directly.
+// seedGitFile commits a single file, preserving existing files.
+func (ti *testInstance) seedGitFile(t *testing.T, path string, content []byte) {
+	t.Helper()
+	files := map[string][]byte{path: content}
+
+	// Preserve existing files if any
+	if existing, err := ti.git.readAllFiles("HEAD"); err == nil {
+		for k, v := range existing {
+			if _, ok := files[k]; !ok {
+				files[k] = v
+			}
+		}
+	}
+
+	_, err := ti.git.CommitFiles(files, "seed: "+path)
+	require.NoError(t, err)
+}
+
 type testGitRepo struct {
 	repo *gogit.Repository
-	path string
 }
 
 func newTestGitRepo(t *testing.T, dir string) *testGitRepo {
 	t.Helper()
 	r, err := gogit.PlainInit(dir, true)
 	require.NoError(t, err)
-	return &testGitRepo{repo: r, path: dir}
+	return &testGitRepo{repo: r}
 }
 
 func (r *testGitRepo) CommitFiles(files map[string][]byte, message string) (string, error) {
 	storer := r.repo.Storer
 
-	// Build tree
 	var entries []object.TreeEntry
 	for path, content := range files {
 		obj := storer.NewEncodedObject()
@@ -169,12 +179,10 @@ func (r *testGitRepo) CommitFiles(files map[string][]byte, message string) (stri
 		return "", err
 	}
 
-	ref := plumbing.NewHashReference(plumbing.Master, commitHash)
-	if err := storer.SetReference(ref); err != nil {
+	if err := storer.SetReference(plumbing.NewHashReference(plumbing.Master, commitHash)); err != nil {
 		return "", err
 	}
-	headSymRef := plumbing.NewSymbolicReference(plumbing.HEAD, plumbing.Master)
-	if err := storer.SetReference(headSymRef); err != nil {
+	if err := storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, plumbing.Master)); err != nil {
 		return "", err
 	}
 
@@ -202,7 +210,7 @@ func (r *testGitRepo) ReadBlob(ref string, path string) ([]byte, error) {
 	return io.ReadAll(reader)
 }
 
-func (r *testGitRepo) ReadTree(ref string) ([]drafts.TreeEntry, error) {
+func (r *testGitRepo) readAllFiles(ref string) (map[string][]byte, error) {
 	hash, err := r.repo.ResolveRevision(plumbing.Revision(ref))
 	if err != nil {
 		return nil, err
@@ -215,11 +223,16 @@ func (r *testGitRepo) ReadTree(ref string) ([]drafts.TreeEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	var result []drafts.TreeEntry
+	files := make(map[string][]byte)
 	for _, entry := range tree.Entries {
-		if entry.Mode.IsFile() {
-			result = append(result, drafts.TreeEntry{Path: entry.Name})
+		if !entry.Mode.IsFile() {
+			continue
 		}
+		blob, err := r.ReadBlob(ref, entry.Name)
+		if err != nil {
+			continue
+		}
+		files[entry.Name] = blob
 	}
-	return result, nil
+	return files, nil
 }

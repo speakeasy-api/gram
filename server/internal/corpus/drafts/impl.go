@@ -10,6 +10,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/corpus/drafts/repo"
 )
 
+const (
+	OpCreate = "create"
+	OpUpdate = "update"
+	OpDelete = "delete"
+
+	StatusOpen      = "open"
+	StatusPublished = "published"
+	StatusRejected  = "rejected"
+)
+
 var ErrNotFound = errors.New("draft not found")
 var ErrInvalidOperation = errors.New("invalid operation: must be create, update, or delete")
 var ErrEmptyFilePath = errors.New("file_path must not be empty")
@@ -17,11 +27,6 @@ var ErrEmptyFilePath = errors.New("file_path must not be empty")
 type GitRepo interface {
 	CommitFiles(files map[string][]byte, message string) (string, error)
 	ReadBlob(ref string, path string) ([]byte, error)
-	ReadTree(ref string) ([]TreeEntry, error)
-}
-
-type TreeEntry struct {
-	Path string
 }
 
 type CreateDraftParams struct {
@@ -79,29 +84,4 @@ func (s *Service) Publish(ctx context.Context, projectID uuid.UUID, orgID string
 
 func (s *Service) Enrichments(ctx context.Context, projectID uuid.UUID) (map[string]Enrichment, error) {
 	return nil, errors.New("not implemented")
-}
-
-// ReadGitBlob exposes the git repo for testing published content.
-func (s *Service) ReadGitBlob(ref string, path string) ([]byte, error) {
-	return s.git.ReadBlob(ref, path)
-}
-
-// SeedGitFile commits a single file to the git repo (for test setup).
-func (s *Service) SeedGitFile(path string, content []byte) (string, error) {
-	// Read existing tree to preserve other files
-	var files map[string][]byte
-	if entries, err := s.git.ReadTree("HEAD"); err == nil {
-		files = make(map[string][]byte, len(entries)+1)
-		for _, e := range entries {
-			blob, err := s.git.ReadBlob("HEAD", e.Path)
-			if err != nil {
-				continue
-			}
-			files[e.Path] = blob
-		}
-	} else {
-		files = make(map[string][]byte, 1)
-	}
-	files[path] = content
-	return s.git.CommitFiles(files, "seed: "+path)
 }
