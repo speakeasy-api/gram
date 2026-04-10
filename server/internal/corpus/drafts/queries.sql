@@ -87,6 +87,14 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
+-- name: ListOpenDraftsByIDs :many
+SELECT *
+FROM corpus_drafts
+WHERE id = ANY(@ids::uuid[])
+  AND project_id = @project_id
+  AND status = 'open'
+  AND deleted IS FALSE;
+
 -- name: CountOpenDraftsByFilePath :many
 SELECT file_path, COUNT(*) AS open_drafts
 FROM corpus_drafts

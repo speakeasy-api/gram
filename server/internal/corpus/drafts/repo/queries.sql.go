@@ -232,6 +232,56 @@ func (q *Queries) ListDrafts(ctx context.Context, arg ListDraftsParams) ([]Corpu
 	return items, nil
 }
 
+const listOpenDraftsByIDs = `-- name: ListOpenDraftsByIDs :many
+SELECT id, project_id, organization_id, file_path, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
+FROM corpus_drafts
+WHERE id = ANY($1::uuid[])
+  AND project_id = $2
+  AND status = 'open'
+  AND deleted IS FALSE
+`
+
+type ListOpenDraftsByIDsParams struct {
+	Ids       []uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ListOpenDraftsByIDs(ctx context.Context, arg ListOpenDraftsByIDsParams) ([]CorpusDraft, error) {
+	rows, err := q.db.Query(ctx, listOpenDraftsByIDs, arg.Ids, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CorpusDraft
+	for rows.Next() {
+		var i CorpusDraft
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.FilePath,
+			&i.Content,
+			&i.Operation,
+			&i.Status,
+			&i.Source,
+			&i.AuthorType,
+			&i.Labels,
+			&i.CommitSha,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOpenDraftsByProject = `-- name: ListOpenDraftsByProject :many
 SELECT id, project_id, organization_id, file_path, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
 FROM corpus_drafts

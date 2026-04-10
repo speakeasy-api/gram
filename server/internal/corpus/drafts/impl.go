@@ -29,6 +29,11 @@ const (
 	StatusOpen      = "open"
 	StatusPublished = "published"
 	StatusRejected  = "rejected"
+
+	PublishEventPending  = "pending"
+	PublishEventIndexing = "indexing"
+	PublishEventIndexed  = "indexed"
+	PublishEventFailed   = "failed"
 )
 
 var ErrNotFound = errors.New("draft not found")
@@ -167,26 +172,19 @@ func (s *Service) Publish(ctx context.Context, projectID uuid.UUID, orgID string
 	}
 	defer func() { _ = s.lock.Unlock(ctx, lockKey) }()
 
-	openDrafts, err := s.repo.ListOpenDraftsByProject(ctx, projectID)
+	draftsToPublish, err := s.repo.ListOpenDraftsByIDs(ctx, repo.ListOpenDraftsByIDsParams{
+		Ids:       draftIDs,
+		ProjectID: projectID,
+	})
 	if err != nil {
-		return "", fmt.Errorf("list open drafts: %w", err)
-	}
-
-	idSet := make(map[uuid.UUID]bool, len(draftIDs))
-	for _, id := range draftIDs {
-		idSet[id] = true
+		return "", fmt.Errorf("list drafts by ids: %w", err)
 	}
 
 	// CommitFiles replaces the entire tree. Create/update drafts add content;
 	// delete drafts are excluded so the file disappears from the tree.
 	files := make(map[string][]byte)
-	hasChanges := false
 
-	for _, d := range openDrafts {
-		if !idSet[d.ID] {
-			continue
-		}
-		hasChanges = true
+	for _, d := range draftsToPublish {
 		switch d.Operation {
 		case OpCreate, OpUpdate:
 			if d.Content.Valid {
@@ -197,7 +195,7 @@ func (s *Service) Publish(ctx context.Context, projectID uuid.UUID, orgID string
 		}
 	}
 
-	if !hasChanges {
+	if len(draftsToPublish) == 0 {
 		return "", fmt.Errorf("no changes to publish")
 	}
 
