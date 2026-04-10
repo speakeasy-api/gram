@@ -232,8 +232,12 @@ var ChatOverview = Type("ChatOverview", func() {
 		Description("When the chat was last updated.")
 		Format(FormatDateTime)
 	})
+	Attribute("last_message_timestamp", String, func() {
+		Description("When the last message in the chat was created.")
+		Format(FormatDateTime)
+	})
 
-	Required("id", "title", "num_messages", "created_at", "updated_at")
+	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
 })
 
 var Chat = Type("Chat", func() {

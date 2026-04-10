@@ -76,6 +76,8 @@ type Chat struct {
 	CreatedAt string
 	// When the chat was last updated.
 	UpdatedAt string
+	// When the last message in the chat was created.
+	LastMessageTimestamp string
 }
 
 type ChatMessage struct {
@@ -119,6 +121,8 @@ type ChatOverview struct {
 	CreatedAt string
 	// When the chat was last updated.
 	UpdatedAt string
+	// When the last message in the chat was created.
+	LastMessageTimestamp string
 }
 
 // Chat overview with embedded resolution data
@@ -142,6 +146,8 @@ type ChatOverviewWithResolutions struct {
 	CreatedAt string
 	// When the chat was last updated.
 	UpdatedAt string
+	// When the last message in the chat was created.
+	LastMessageTimestamp string
 }
 
 // Resolution information for a chat
