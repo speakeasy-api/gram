@@ -110,7 +110,8 @@ func TestCorpusDraftsSchema(t *testing.T) {
 	conn := cloneDB(t)
 
 	assertColumnsExist(t, conn, "corpus_drafts", []string{
-		"id", "project_id", "organization_id", "file_path", "content", "operation", "status",
+		"id", "project_id", "organization_id", "file_path", "title", "original_content",
+		"author_user_id", "agent_name", "content", "operation", "status",
 		"source", "author_type", "labels", "commit_sha", "created_at", "updated_at", "deleted_at", "deleted",
 	})
 

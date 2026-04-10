@@ -86,7 +86,7 @@ func (q *Queries) InsertFeedback(ctx context.Context, arg InsertFeedbackParams) 
 }
 
 const queryEligibleDrafts = `-- name: QueryEligibleDrafts :many
-SELECT d.id, d.project_id, d.organization_id, d.file_path, d.content, d.operation, d.status, d.source, d.author_type, d.labels, d.commit_sha, d.created_at, d.updated_at, d.deleted_at, d.deleted
+SELECT d.id, d.project_id, d.organization_id, d.file_path, d.title, d.original_content, d.author_user_id, d.agent_name, d.content, d.operation, d.status, d.source, d.author_type, d.labels, d.commit_sha, d.created_at, d.updated_at, d.deleted_at, d.deleted
 FROM corpus_drafts d
 LEFT JOIN (
     SELECT project_id, file_path, COUNT(*) FILTER (WHERE direction = 'up') AS upvotes
@@ -128,6 +128,10 @@ func (q *Queries) QueryEligibleDrafts(ctx context.Context, arg QueryEligibleDraf
 			&i.ProjectID,
 			&i.OrganizationID,
 			&i.FilePath,
+			&i.Title,
+			&i.OriginalContent,
+			&i.AuthorUserID,
+			&i.AgentName,
 			&i.Content,
 			&i.Operation,
 			&i.Status,

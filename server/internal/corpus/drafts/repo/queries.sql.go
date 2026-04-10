@@ -51,6 +51,10 @@ INSERT INTO corpus_drafts (
     project_id,
     organization_id,
     file_path,
+    title,
+    original_content,
+    author_user_id,
+    agent_name,
     content,
     operation,
     source,
@@ -64,20 +68,28 @@ INSERT INTO corpus_drafts (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9,
+    $10,
+    $11,
+    $12
 )
-RETURNING id, project_id, organization_id, file_path, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, file_path, title, original_content, author_user_id, agent_name, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateDraftParams struct {
-	ProjectID      uuid.UUID
-	OrganizationID string
-	FilePath       string
-	Content        pgtype.Text
-	Operation      string
-	Source         pgtype.Text
-	AuthorType     pgtype.Text
-	Labels         []byte
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	FilePath        string
+	Title           pgtype.Text
+	OriginalContent pgtype.Text
+	AuthorUserID    pgtype.Text
+	AgentName       pgtype.Text
+	Content         pgtype.Text
+	Operation       string
+	Source          pgtype.Text
+	AuthorType      pgtype.Text
+	Labels          []byte
 }
 
 func (q *Queries) CreateDraft(ctx context.Context, arg CreateDraftParams) (CorpusDraft, error) {
@@ -85,6 +97,10 @@ func (q *Queries) CreateDraft(ctx context.Context, arg CreateDraftParams) (Corpu
 		arg.ProjectID,
 		arg.OrganizationID,
 		arg.FilePath,
+		arg.Title,
+		arg.OriginalContent,
+		arg.AuthorUserID,
+		arg.AgentName,
 		arg.Content,
 		arg.Operation,
 		arg.Source,
@@ -97,6 +113,10 @@ func (q *Queries) CreateDraft(ctx context.Context, arg CreateDraftParams) (Corpu
 		&i.ProjectID,
 		&i.OrganizationID,
 		&i.FilePath,
+		&i.Title,
+		&i.OriginalContent,
+		&i.AuthorUserID,
+		&i.AgentName,
 		&i.Content,
 		&i.Operation,
 		&i.Status,
@@ -147,7 +167,7 @@ func (q *Queries) CreatePublishEvent(ctx context.Context, arg CreatePublishEvent
 }
 
 const getDraft = `-- name: GetDraft :one
-SELECT id, project_id, organization_id, file_path, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, file_path, title, original_content, author_user_id, agent_name, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
 FROM corpus_drafts
 WHERE id = $1
   AND project_id = $2
@@ -167,6 +187,10 @@ func (q *Queries) GetDraft(ctx context.Context, arg GetDraftParams) (CorpusDraft
 		&i.ProjectID,
 		&i.OrganizationID,
 		&i.FilePath,
+		&i.Title,
+		&i.OriginalContent,
+		&i.AuthorUserID,
+		&i.AgentName,
 		&i.Content,
 		&i.Operation,
 		&i.Status,
@@ -183,7 +207,7 @@ func (q *Queries) GetDraft(ctx context.Context, arg GetDraftParams) (CorpusDraft
 }
 
 const listDrafts = `-- name: ListDrafts :many
-SELECT id, project_id, organization_id, file_path, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, file_path, title, original_content, author_user_id, agent_name, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
 FROM corpus_drafts
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -210,6 +234,10 @@ func (q *Queries) ListDrafts(ctx context.Context, arg ListDraftsParams) ([]Corpu
 			&i.ProjectID,
 			&i.OrganizationID,
 			&i.FilePath,
+			&i.Title,
+			&i.OriginalContent,
+			&i.AuthorUserID,
+			&i.AgentName,
 			&i.Content,
 			&i.Operation,
 			&i.Status,
@@ -233,7 +261,7 @@ func (q *Queries) ListDrafts(ctx context.Context, arg ListDraftsParams) ([]Corpu
 }
 
 const listOpenDraftsByIDs = `-- name: ListOpenDraftsByIDs :many
-SELECT id, project_id, organization_id, file_path, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, file_path, title, original_content, author_user_id, agent_name, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
 FROM corpus_drafts
 WHERE id = ANY($1::uuid[])
   AND project_id = $2
@@ -260,6 +288,10 @@ func (q *Queries) ListOpenDraftsByIDs(ctx context.Context, arg ListOpenDraftsByI
 			&i.ProjectID,
 			&i.OrganizationID,
 			&i.FilePath,
+			&i.Title,
+			&i.OriginalContent,
+			&i.AuthorUserID,
+			&i.AgentName,
 			&i.Content,
 			&i.Operation,
 			&i.Status,
@@ -283,7 +315,7 @@ func (q *Queries) ListOpenDraftsByIDs(ctx context.Context, arg ListOpenDraftsByI
 }
 
 const listOpenDraftsByProject = `-- name: ListOpenDraftsByProject :many
-SELECT id, project_id, organization_id, file_path, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, file_path, title, original_content, author_user_id, agent_name, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
 FROM corpus_drafts
 WHERE project_id = $1
   AND status = 'open'
@@ -305,6 +337,10 @@ func (q *Queries) ListOpenDraftsByProject(ctx context.Context, projectID uuid.UU
 			&i.ProjectID,
 			&i.OrganizationID,
 			&i.FilePath,
+			&i.Title,
+			&i.OriginalContent,
+			&i.AuthorUserID,
+			&i.AgentName,
 			&i.Content,
 			&i.Operation,
 			&i.Status,
@@ -336,7 +372,7 @@ WHERE id = ANY($2::uuid[])
   AND project_id = $3
   AND status = 'open'
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, file_path, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, file_path, title, original_content, author_user_id, agent_name, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
 `
 
 type MarkDraftsPublishedParams struct {
@@ -359,6 +395,10 @@ func (q *Queries) MarkDraftsPublished(ctx context.Context, arg MarkDraftsPublish
 			&i.ProjectID,
 			&i.OrganizationID,
 			&i.FilePath,
+			&i.Title,
+			&i.OriginalContent,
+			&i.AuthorUserID,
+			&i.AgentName,
 			&i.Content,
 			&i.Operation,
 			&i.Status,
@@ -390,7 +430,7 @@ WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
   AND status = 'open'
-RETURNING id, project_id, organization_id, file_path, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, file_path, title, original_content, author_user_id, agent_name, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteDraftParams struct {
@@ -406,6 +446,10 @@ func (q *Queries) SoftDeleteDraft(ctx context.Context, arg SoftDeleteDraftParams
 		&i.ProjectID,
 		&i.OrganizationID,
 		&i.FilePath,
+		&i.Title,
+		&i.OriginalContent,
+		&i.AuthorUserID,
+		&i.AgentName,
 		&i.Content,
 		&i.Operation,
 		&i.Status,
@@ -429,7 +473,7 @@ WHERE id = $2
   AND project_id = $3
   AND deleted IS FALSE
   AND status = 'open'
-RETURNING id, project_id, organization_id, file_path, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, file_path, title, original_content, author_user_id, agent_name, content, operation, status, source, author_type, labels, commit_sha, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateDraftContentParams struct {
@@ -446,6 +490,10 @@ func (q *Queries) UpdateDraftContent(ctx context.Context, arg UpdateDraftContent
 		&i.ProjectID,
 		&i.OrganizationID,
 		&i.FilePath,
+		&i.Title,
+		&i.OriginalContent,
+		&i.AuthorUserID,
+		&i.AgentName,
 		&i.Content,
 		&i.Operation,
 		&i.Status,

@@ -52,12 +52,16 @@ type GitRepo interface {
 }
 
 type CreateDraftParams struct {
-	FilePath   string
-	Content    *string
-	Operation  string
-	Source     *string
-	AuthorType *string
-	Labels     []byte
+	FilePath        string
+	Title           *string
+	OriginalContent *string
+	AuthorUserID    *string
+	AgentName       *string
+	Content         *string
+	Operation       string
+	Source          *string
+	AuthorType      *string
+	Labels          []byte
 }
 
 type Draft = repo.CorpusDraft
@@ -91,14 +95,18 @@ func (s *Service) Create(ctx context.Context, projectID uuid.UUID, orgID string,
 	}
 
 	d, err := s.repo.CreateDraft(ctx, repo.CreateDraftParams{
-		ProjectID:      projectID,
-		OrganizationID: orgID,
-		FilePath:       params.FilePath,
-		Content:        conv.PtrToPGText(params.Content),
-		Operation:      params.Operation,
-		Source:         conv.PtrToPGText(params.Source),
-		AuthorType:     conv.PtrToPGText(params.AuthorType),
-		Labels:         params.Labels,
+		ProjectID:       projectID,
+		OrganizationID:  orgID,
+		FilePath:        params.FilePath,
+		Title:           conv.PtrToPGText(params.Title),
+		OriginalContent: conv.PtrToPGText(params.OriginalContent),
+		AuthorUserID:    conv.PtrToPGText(params.AuthorUserID),
+		AgentName:       conv.PtrToPGText(params.AgentName),
+		Content:         conv.PtrToPGText(params.Content),
+		Operation:       params.Operation,
+		Source:          conv.PtrToPGText(params.Source),
+		AuthorType:      conv.PtrToPGText(params.AuthorType),
+		Labels:          params.Labels,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create draft: %w", err)

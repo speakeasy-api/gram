@@ -131,24 +131,32 @@ func TestQueryEligibleDrafts_AuthorTypeFilter(t *testing.T) {
 	// Create agent draft
 	c1 := "agent content"
 	agentDraft, err := ti.draftsSvc.Create(ctx, ti.projectID, ti.orgID, drafts.CreateDraftParams{
-		FilePath:   "agent-doc.md",
-		Content:    &c1,
-		Operation:  drafts.OpCreate,
-		Source:     nil,
-		AuthorType: &agentType,
-		Labels:     nil,
+		FilePath:        "agent-doc.md",
+		Title:           nil,
+		OriginalContent: nil,
+		AuthorUserID:    nil,
+		AgentName:       nil,
+		Content:         &c1,
+		Operation:       drafts.OpCreate,
+		Source:          nil,
+		AuthorType:      &agentType,
+		Labels:          nil,
 	})
 	require.NoError(t, err)
 
 	// Create human draft
 	c2 := "human content"
 	_, err = ti.draftsSvc.Create(ctx, ti.projectID, ti.orgID, drafts.CreateDraftParams{
-		FilePath:   "human-doc.md",
-		Content:    &c2,
-		Operation:  drafts.OpCreate,
-		Source:     nil,
-		AuthorType: &humanType,
-		Labels:     nil,
+		FilePath:        "human-doc.md",
+		Title:           nil,
+		OriginalContent: nil,
+		AuthorUserID:    nil,
+		AgentName:       nil,
+		Content:         &c2,
+		Operation:       drafts.OpCreate,
+		Source:          nil,
+		AuthorType:      &humanType,
+		Labels:          nil,
 	})
 	require.NoError(t, err)
 
@@ -195,12 +203,16 @@ func TestQueryEligibleDrafts_AgeThreshold(t *testing.T) {
 func createTestDraft(t *testing.T, ctx context.Context, ti *testInstance, path, op string, content *string) *drafts.Draft {
 	t.Helper()
 	d, err := ti.draftsSvc.Create(ctx, ti.projectID, ti.orgID, drafts.CreateDraftParams{
-		FilePath:   path,
-		Content:    content,
-		Operation:  op,
-		Source:     nil,
-		AuthorType: conv.PtrEmpty("agent"),
-		Labels:     nil,
+		FilePath:        path,
+		Title:           nil,
+		OriginalContent: nil,
+		AuthorUserID:    nil,
+		AgentName:       nil,
+		Content:         content,
+		Operation:       op,
+		Source:          nil,
+		AuthorType:      conv.PtrEmpty("agent"),
+		Labels:          nil,
 	})
 	require.NoError(t, err)
 	return d

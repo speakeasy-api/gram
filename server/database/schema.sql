@@ -1614,6 +1614,10 @@ CREATE TABLE IF NOT EXISTS corpus_drafts (
   organization_id TEXT NOT NULL,
 
   file_path TEXT NOT NULL CHECK (file_path <> ''),
+  title TEXT,
+  original_content TEXT,
+  author_user_id TEXT,
+  agent_name TEXT,
   content TEXT,
   operation TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'open',

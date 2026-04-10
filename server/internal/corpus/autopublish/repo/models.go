@@ -24,21 +24,25 @@ type CorpusAutoPublishConfig struct {
 }
 
 type CorpusDraft struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	FilePath       string
-	Content        pgtype.Text
-	Operation      string
-	Status         string
-	Source         pgtype.Text
-	AuthorType     pgtype.Text
-	Labels         []byte
-	CommitSha      pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	FilePath        string
+	Title           pgtype.Text
+	OriginalContent pgtype.Text
+	AuthorUserID    pgtype.Text
+	AgentName       pgtype.Text
+	Content         pgtype.Text
+	Operation       string
+	Status          string
+	Source          pgtype.Text
+	AuthorType      pgtype.Text
+	Labels          []byte
+	CommitSha       pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type CorpusFeedback struct {

@@ -14,12 +14,16 @@ import (
 func createDraft(t *testing.T, ctx context.Context, ti *testInstance, path, op string, content *string) *drafts.Draft {
 	t.Helper()
 	d, err := ti.svc.Create(ctx, ti.projectID, ti.orgID, drafts.CreateDraftParams{
-		FilePath:   path,
-		Content:    content,
-		Operation:  op,
-		Source:     nil,
-		AuthorType: nil,
-		Labels:     nil,
+		FilePath:        path,
+		Title:           nil,
+		OriginalContent: nil,
+		AuthorUserID:    nil,
+		AgentName:       nil,
+		Content:         content,
+		Operation:       op,
+		Source:          nil,
+		AuthorType:      nil,
+		Labels:          nil,
 	})
 	require.NoError(t, err)
 	return d
@@ -31,12 +35,16 @@ func TestCreateDraft(t *testing.T) {
 
 	content := "# New Document"
 	d, err := ti.svc.Create(ctx, ti.projectID, ti.orgID, drafts.CreateDraftParams{
-		FilePath:   "docs/new.md",
-		Content:    &content,
-		Operation:  drafts.OpCreate,
-		Source:     new("api"),
-		AuthorType: new("human"),
-		Labels:     nil,
+		FilePath:        "docs/new.md",
+		Title:           nil,
+		OriginalContent: nil,
+		AuthorUserID:    nil,
+		AgentName:       nil,
+		Content:         &content,
+		Operation:       drafts.OpCreate,
+		Source:          new("api"),
+		AuthorType:      new("human"),
+		Labels:          nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, d)
@@ -51,16 +59,30 @@ func TestCreateDraftValidation(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	_, err := ti.svc.Create(ctx, ti.projectID, ti.orgID, drafts.CreateDraftParams{
-		FilePath:  "docs/new.md",
-		Operation: "invalid",
-		Content:   nil, Source: nil, AuthorType: nil, Labels: nil,
+		FilePath:        "docs/new.md",
+		Title:           nil,
+		OriginalContent: nil,
+		AuthorUserID:    nil,
+		AgentName:       nil,
+		Operation:       "invalid",
+		Content:         nil,
+		Source:          nil,
+		AuthorType:      nil,
+		Labels:          nil,
 	})
 	require.ErrorIs(t, err, drafts.ErrInvalidOperation)
 
 	_, err = ti.svc.Create(ctx, ti.projectID, ti.orgID, drafts.CreateDraftParams{
-		FilePath:  "",
-		Operation: drafts.OpCreate,
-		Content:   nil, Source: nil, AuthorType: nil, Labels: nil,
+		FilePath:        "",
+		Title:           nil,
+		OriginalContent: nil,
+		AuthorUserID:    nil,
+		AgentName:       nil,
+		Operation:       drafts.OpCreate,
+		Content:         nil,
+		Source:          nil,
+		AuthorType:      nil,
+		Labels:          nil,
 	})
 	require.ErrorIs(t, err, drafts.ErrEmptyFilePath)
 }
