@@ -67,7 +67,7 @@ function Header({
 }) {
   return (
     <div className="[grid-area=header]">
-      <h2 className="text-2xl font-light capitalize">{title}</h2>
+      <h2 className="text-2xl font-normal capitalize">{title}</h2>
       {description && (
         <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       )}
