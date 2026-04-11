@@ -144,7 +144,7 @@ export function MCPPagePreview({
   return (
     <div
       className={cn(
-        `w-full max-h-[${height}px] border-1 rounded-lg overflow-hidden pointer-events-none`,
+        `pointer-events-none w-full overflow-hidden rounded-lg border`,
         className,
       )}
     >
