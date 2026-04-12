@@ -16,13 +16,31 @@ import { useDeploymentSearchParams } from "./use-deployment-search-params";
 
 type LogLevel = "WARN" | "INFO" | "DEBUG" | "ERROR" | "OK" | "SKIP";
 
+// Uses design system tokens where available (destructive, warning, success, muted).
+// INFO/DEBUG have no semantic tokens — hardcoded Tailwind is intentional.
 const levelColors = {
   INFO: { dot: "bg-blue-500", text: "text-blue-700", bg: "bg-blue-50" },
-  WARN: { dot: "bg-yellow-500", text: "text-yellow-700", bg: "bg-yellow-50" },
-  ERROR: { dot: "bg-red-500", text: "text-red-700", bg: "bg-red-50" },
-  SKIP: { dot: "bg-slate-400", text: "text-slate-600", bg: "bg-slate-100" },
-  OK: { dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50" },
-  DEBUG: { dot: "bg-gray-400", text: "text-gray-600", bg: "bg-gray-100" },
+  WARN: { dot: "bg-warning", text: "text-warning", bg: "bg-warning/10" },
+  ERROR: {
+    dot: "bg-destructive",
+    text: "text-destructive",
+    bg: "bg-destructive/10",
+  },
+  SKIP: {
+    dot: "bg-muted-foreground",
+    text: "text-muted-foreground",
+    bg: "bg-muted",
+  },
+  OK: {
+    dot: "bg-success",
+    text: "text-success-foreground",
+    bg: "bg-success/10",
+  },
+  DEBUG: {
+    dot: "bg-muted-foreground",
+    text: "text-muted-foreground",
+    bg: "bg-muted",
+  },
 } as const;
 
 function getLevelColors(level: LogLevel) {
@@ -791,9 +809,9 @@ export const LogsTabContent = ({
                             className={cn(
                               "text-[11px] tabular-nums shrink-0",
                               isError
-                                ? "text-red-700"
+                                ? "text-destructive"
                                 : isWarn
-                                  ? "text-yellow-700"
+                                  ? "text-warning"
                                   : "text-muted-foreground/60",
                             )}
                           >
@@ -854,9 +872,9 @@ export const LogsTabContent = ({
                       className={cn(
                         "text-[11px] tabular-nums shrink-0",
                         isError
-                          ? "text-red-700"
+                          ? "text-destructive"
                           : isWarn
-                            ? "text-yellow-700"
+                            ? "text-warning"
                             : "text-muted-foreground/60",
                       )}
                     >
