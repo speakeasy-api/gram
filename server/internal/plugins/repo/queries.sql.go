@@ -15,7 +15,8 @@ import (
 const addPluginAssignment = `-- name: AddPluginAssignment :one
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
 VALUES ($1, $2, $3)
-ON CONFLICT (plugin_id, organization_id, principal_urn) DO NOTHING
+ON CONFLICT (plugin_id, organization_id, principal_urn) DO UPDATE
+  SET principal_urn = EXCLUDED.principal_urn
 RETURNING id, plugin_id, organization_id, principal_urn, created_at
 `
 
@@ -280,10 +281,16 @@ SELECT
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
   (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id) AS assignment_count
 FROM plugins p
-WHERE p.project_id = $1
+WHERE p.organization_id = $1
+  AND p.project_id = $2
   AND p.deleted IS FALSE
 ORDER BY p.created_at DESC
 `
+
+type ListPluginsParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
 
 type ListPluginsRow struct {
 	ID              uuid.UUID
@@ -300,8 +307,8 @@ type ListPluginsRow struct {
 	AssignmentCount int64
 }
 
-func (q *Queries) ListPlugins(ctx context.Context, projectID uuid.UUID) ([]ListPluginsRow, error) {
-	rows, err := q.db.Query(ctx, listPlugins, projectID)
+func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]ListPluginsRow, error) {
+	rows, err := q.db.Query(ctx, listPlugins, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -415,25 +422,6 @@ WHERE plugin_id = $1
 
 func (q *Queries) RemoveAllPluginAssignments(ctx context.Context, pluginID uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, removeAllPluginAssignments, pluginID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const removePluginAssignment = `-- name: RemovePluginAssignment :execrows
-DELETE FROM plugin_assignments
-WHERE id = $1
-  AND plugin_id = $2
-`
-
-type RemovePluginAssignmentParams struct {
-	ID       uuid.UUID
-	PluginID uuid.UUID
-}
-
-func (q *Queries) RemovePluginAssignment(ctx context.Context, arg RemovePluginAssignmentParams) (int64, error) {
-	result, err := q.db.Exec(ctx, removePluginAssignment, arg.ID, arg.PluginID)
 	if err != nil {
 		return 0, err
 	}

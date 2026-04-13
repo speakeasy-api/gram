@@ -20,7 +20,8 @@ SELECT
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
   (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id) AS assignment_count
 FROM plugins p
-WHERE p.project_id = @project_id
+WHERE p.organization_id = @organization_id
+  AND p.project_id = @project_id
   AND p.deleted IS FALSE
 ORDER BY p.created_at DESC;
 
@@ -88,18 +89,14 @@ WHERE id = @id
 -- name: AddPluginAssignment :one
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
 VALUES (@plugin_id, @organization_id, @principal_urn)
-ON CONFLICT (plugin_id, organization_id, principal_urn) DO NOTHING
+ON CONFLICT (plugin_id, organization_id, principal_urn) DO UPDATE
+  SET principal_urn = EXCLUDED.principal_urn
 RETURNING *;
 
 -- name: ListPluginAssignments :many
 SELECT *
 FROM plugin_assignments
 WHERE plugin_id = @plugin_id;
-
--- name: RemovePluginAssignment :execrows
-DELETE FROM plugin_assignments
-WHERE id = @id
-  AND plugin_id = @plugin_id;
 
 -- name: RemoveAllPluginAssignments :execrows
 DELETE FROM plugin_assignments

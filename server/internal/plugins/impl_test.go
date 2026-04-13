@@ -301,6 +301,25 @@ func TestPluginsService_SetPluginAssignments_NonExistentPluginReturnsNotFound(t 
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
+func TestPluginsService_SetPluginAssignments_InvalidURNReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "URN Validation"})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{"role:engineering", "not a valid urn"},
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
 func TestPluginsService_DownloadPluginPackage(t *testing.T) {
 	t.Parallel()
 

@@ -38,6 +38,7 @@ import (
 )
 
 var slugPattern = regexp.MustCompile(`[^a-z0-9-]+`)
+var validPrincipalURN = regexp.MustCompile(`^(\*|role:[a-zA-Z0-9_-]+|user:[a-zA-Z0-9_-]+)$`)
 
 type Service struct {
 	tracer    trace.Tracer
@@ -99,7 +100,10 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 		return nil, err
 	}
 
-	rows, err := s.repo.ListPlugins(ctx, *ac.ProjectID)
+	rows, err := s.repo.ListPlugins(ctx, repo.ListPluginsParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins").Log(ctx, s.logger)
 	}
@@ -435,6 +439,12 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
 	}
 
+	for _, urn := range payload.PrincipalUrns {
+		if !validPrincipalURN.MatchString(urn) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "invalid principal URN: %s", urn)
+		}
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
@@ -447,7 +457,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.E(oops.CodeUnexpected, err, "remove existing assignments").Log(ctx, s.logger)
 	}
 
-	var assignments []*gen.PluginAssignment
+	assignments := make([]*gen.PluginAssignment, 0, len(payload.PrincipalUrns))
 	for _, urn := range payload.PrincipalUrns {
 		row, err := txRepo.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
 			PluginID:       pluginID,
@@ -457,9 +467,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "add plugin assignment").Log(ctx, s.logger)
 		}
-		if row.ID != uuid.Nil {
-			assignments = append(assignments, pluginAssignmentToGen(row))
-		}
+		assignments = append(assignments, pluginAssignmentToGen(row))
 	}
 
 	if err := tx.Commit(ctx); err != nil {
