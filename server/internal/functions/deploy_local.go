@@ -22,11 +22,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -52,7 +55,7 @@ type LocalRunner struct {
 	codeRootDir    string
 	serverURL      *url.URL
 	assetStore     assets.BlobStore
-	httpClient     *http.Client
+	httpClient     *guardian.HTTPClient
 	proxyServerURL string
 
 	proxyOnce  sync.Once
@@ -64,13 +67,17 @@ type LocalRunner struct {
 
 var _ Orchestrator = (*LocalRunner)(nil)
 
-func NewLocalRunner(logger *slog.Logger, codeRootDir string, serverURL *url.URL, assetStore assets.BlobStore) *LocalRunner {
+func NewLocalRunner(logger *slog.Logger, tracerProvider trace.TracerProvider, codeRootDir string, serverURL *url.URL, assetStore assets.BlobStore) *LocalRunner {
+	policy := must.Value(guardian.NewUnsafePolicy(tracerProvider, []string{}))
+	httpClient := policy.PooledClient()
+	httpClient.Timeout = 30 * time.Second
+
 	return &LocalRunner{
 		logger:         logger.With(attr.SlogComponent("local-functions-orchestrator")),
 		codeRootDir:    filepath.Clean(codeRootDir),
 		serverURL:      serverURL,
 		assetStore:     assetStore,
-		httpClient:     &http.Client{Timeout: 30 * time.Second},
+		httpClient:     httpClient,
 		proxyServerURL: "",
 		proxyOnce:      sync.Once{},
 		proxyErr:       nil,
@@ -675,7 +682,7 @@ func localRuntimeLanguage(runtime Runtime) (string, error) {
 	}
 }
 
-func waitForLocalRunner(ctx context.Context, client *http.Client, healthURL string) error {
+func waitForLocalRunner(ctx context.Context, client *guardian.HTTPClient, healthURL string) error {
 	deadline := time.Now().Add(localRunnerHealthTimeout)
 	for time.Now().Before(deadline) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
