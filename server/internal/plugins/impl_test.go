@@ -339,5 +339,5 @@ func TestPluginsService_DownloadPluginPackage(t *testing.T) {
 	require.Equal(t, "application/zip", result.ContentType)
 	require.Contains(t, result.ContentDisposition, "download-test.zip")
 	require.NotNil(t, body)
-	body.Close()
+	require.NoError(t, body.Close())
 }
