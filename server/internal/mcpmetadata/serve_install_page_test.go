@@ -16,6 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -396,4 +398,421 @@ func TestServeInstallPage_ToolDetails(t *testing.T) {
 
 	// Verify the old badge markup is gone (no tool-names class)
 	assert.NotContains(t, body, `class="tool-names"`, "Should not contain old tool-names class")
+}
+
+// TestServeInstallPage_CustomDomain_WrongDomainReturnsNotFound verifies that a
+// toolset linked to one custom domain cannot be resolved when the request
+// arrives through a different organization's custom domain. This guards against
+// cross-domain toolset leakage in the install page handler.
+func TestServeInstallPage_CustomDomain_WrongDomainReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	domainsRepo := customdomains_repo.New(testInstance.conn)
+
+	// Create a custom domain for this organization and link a toolset to it.
+	domain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "correct-install.example.com",
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	domain, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+		ID:             domain.ID,
+		Verified:       true,
+		Activated:      true,
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	mcpSlug := "cd-install-" + uuid.New().String()[:8]
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Custom Domain Install Test",
+		Slug:                   mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("toolset linked to a custom domain"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	// Make it public so auth isn't the reason for rejection.
+	_, err = testInstance.conn.Exec(ctx,
+		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	// Link the toolset to the custom domain.
+	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+		Name:                   toolset.Name,
+		Description:            toolset.Description,
+		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+		McpSlug:                toolset.McpSlug,
+		McpIsPublic:            true,
+		McpEnabled:             toolset.McpEnabled,
+		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
+		ToolSelectionMode:      toolset.ToolSelectionMode,
+		Slug:                   toolset.Slug,
+		ProjectID:              toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	// Create a different domain belonging to another organization.
+	otherDomain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID: "other-org",
+		Domain:         "wrong-install.example.com",
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	otherDomain, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+		ID:             otherDomain.ID,
+		Verified:       true,
+		Activated:      true,
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	// Request the install page through the wrong custom domain context.
+	wrongCtx := customdomains.WithContext(context.Background(), &customdomains.Context{
+		OrganizationID: "other-org",
+		Domain:         otherDomain.Domain,
+		DomainID:       otherDomain.ID,
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(wrongCtx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err = testInstance.service.ServeInstallPage(rr, req)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "mcp server not found")
+}
+
+// TestServeInstallPage_CustomDomain_CorrectDomainRendersPage verifies that a
+// toolset linked to a custom domain is successfully resolved and rendered when
+// the request arrives through that same domain.
+func TestServeInstallPage_CustomDomain_CorrectDomainRendersPage(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	domainsRepo := customdomains_repo.New(testInstance.conn)
+
+	// Create and activate a custom domain for this organization.
+	domain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "correct-render.example.com",
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	domain, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+		ID:             domain.ID,
+		Verified:       true,
+		Activated:      true,
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	mcpSlug := "cd-correct-" + uuid.New().String()[:8]
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Correct Domain Install Test",
+		Slug:                   mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("toolset linked to a custom domain"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	// Make it public and link it to the custom domain.
+	_, err = testInstance.conn.Exec(ctx,
+		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+		Name:                   toolset.Name,
+		Description:            toolset.Description,
+		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+		McpSlug:                toolset.McpSlug,
+		McpIsPublic:            true,
+		McpEnabled:             toolset.McpEnabled,
+		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
+		ToolSelectionMode:      toolset.ToolSelectionMode,
+		Slug:                   toolset.Slug,
+		ProjectID:              toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	// Request through the correct custom domain context.
+	correctCtx := customdomains.WithContext(context.Background(), &customdomains.Context{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domain.Domain,
+		DomainID:       domain.ID,
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(correctCtx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err = testInstance.service.ServeInstallPage(rr, req)
+
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, "text/html", rr.Header().Get("Content-Type"))
+}
+
+// TestServeInstallPage_CustomDomain_PlatformDomainStillWorks verifies that a
+// toolset linked to a custom domain can still be accessed via the platform
+// domain (i.e. when no custom domain context is present in the request).
+func TestServeInstallPage_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	domainsRepo := customdomains_repo.New(testInstance.conn)
+
+	// Create and activate a custom domain for this organization.
+	domain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "platform-fallback.example.com",
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	domain, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+		ID:             domain.ID,
+		Verified:       true,
+		Activated:      true,
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	mcpSlug := "cd-platform-" + uuid.New().String()[:8]
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Platform Domain Install Test",
+		Slug:                   mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("toolset linked to a custom domain"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	// Make it public and link it to the custom domain.
+	_, err = testInstance.conn.Exec(ctx,
+		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+		Name:                   toolset.Name,
+		Description:            toolset.Description,
+		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+		McpSlug:                toolset.McpSlug,
+		McpIsPublic:            true,
+		McpEnabled:             toolset.McpEnabled,
+		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
+		ToolSelectionMode:      toolset.ToolSelectionMode,
+		Slug:                   toolset.Slug,
+		ProjectID:              toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	// Request via the platform domain — no custom domain in context.
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err = testInstance.service.ServeInstallPage(rr, req)
+
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, "text/html", rr.Header().Get("Content-Type"))
+}
+
+// TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound verifies that
+// when two toolsets from different organizations share the same MCP slug on
+// distinct custom domains and one is soft-deleted, requesting the install page
+// through the deleted toolset's domain returns not-found rather than leaking
+// the other organization's active toolset.
+func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	domainsRepo := customdomains_repo.New(testInstance.conn)
+
+	// --- Org A: the deleted toolset's org (reuse the test-provided org) ---
+
+	domainA, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "deleted-org-a.example.com",
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	domainA, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+		ID:             domainA.ID,
+		Verified:       true,
+		Activated:      true,
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	sharedMCPSlug := "shared-slug-" + uuid.New().String()[:8]
+
+	toolsetA, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Org A Toolset",
+		Slug:                   "org-a-" + sharedMCPSlug,
+		McpSlug:                conv.ToPGText(sharedMCPSlug),
+		Description:            conv.ToPGText("toolset on org A, will be deleted"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	_, err = testInstance.conn.Exec(ctx,
+		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolsetA.ID)
+	require.NoError(t, err)
+
+	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+		Name:                   toolsetA.Name,
+		Description:            toolsetA.Description,
+		DefaultEnvironmentSlug: toolsetA.DefaultEnvironmentSlug,
+		McpSlug:                toolsetA.McpSlug,
+		McpIsPublic:            true,
+		McpEnabled:             toolsetA.McpEnabled,
+		CustomDomainID:         uuid.NullUUID{UUID: domainA.ID, Valid: true},
+		ToolSelectionMode:      toolsetA.ToolSelectionMode,
+		Slug:                   toolsetA.Slug,
+		ProjectID:              toolsetA.ProjectID,
+	})
+	require.NoError(t, err)
+
+	// --- Org B: the active toolset's org ---
+
+	orgBID := "org-b-" + uuid.New().String()[:8]
+	_, err = testInstance.conn.Exec(ctx,
+		"INSERT INTO organization_metadata (id, name, slug) VALUES ($1, $2, $3)",
+		orgBID, "Org B", "org-b-"+uuid.New().String()[:8])
+	require.NoError(t, err)
+
+	var projectBID uuid.UUID
+	err = testInstance.conn.QueryRow(ctx,
+		"INSERT INTO projects (organization_id, name, slug) VALUES ($1, $2, $3) RETURNING id",
+		orgBID, "Org B Project", "org-b-proj-"+uuid.New().String()[:8]).Scan(&projectBID)
+	require.NoError(t, err)
+
+	domainB, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID: orgBID,
+		Domain:         "active-org-b.example.com",
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	domainB, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+		ID:             domainB.ID,
+		Verified:       true,
+		Activated:      true,
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	toolsetB, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         orgBID,
+		ProjectID:              projectBID,
+		Name:                   "Org B Toolset",
+		Slug:                   "org-b-" + sharedMCPSlug,
+		McpSlug:                conv.ToPGText(sharedMCPSlug),
+		Description:            conv.ToPGText("toolset on org B, stays active"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	_, err = testInstance.conn.Exec(ctx,
+		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolsetB.ID)
+	require.NoError(t, err)
+
+	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+		Name:                   toolsetB.Name,
+		Description:            toolsetB.Description,
+		DefaultEnvironmentSlug: toolsetB.DefaultEnvironmentSlug,
+		McpSlug:                toolsetB.McpSlug,
+		McpIsPublic:            true,
+		McpEnabled:             toolsetB.McpEnabled,
+		CustomDomainID:         uuid.NullUUID{UUID: domainB.ID, Valid: true},
+		ToolSelectionMode:      toolsetB.ToolSelectionMode,
+		Slug:                   toolsetB.Slug,
+		ProjectID:              toolsetB.ProjectID,
+	})
+	require.NoError(t, err)
+
+	// Soft-delete toolset A.
+	_, err = testInstance.toolsetRepo.DeleteToolset(ctx, toolsets_repo.DeleteToolsetParams{
+		Slug:      toolsetA.Slug,
+		ProjectID: toolsetA.ProjectID,
+	})
+	require.NoError(t, err)
+
+	// Request the install page through org A's custom domain — should 404
+	// because toolset A is deleted, and the active toolset B on a different
+	// domain must not leak through.
+	domainACtx := customdomains.WithContext(context.Background(), &customdomains.Context{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domainA.Domain,
+		DomainID:       domainA.ID,
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+sharedMCPSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", sharedMCPSlug)
+	req = req.WithContext(context.WithValue(domainACtx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err = testInstance.service.ServeInstallPage(rr, req)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "mcp server not found")
 }
