@@ -1404,8 +1404,53 @@ function HooksTraceContent({
     );
   }
 
-  //TODO
-  return <HooksEmptyState />;
+  if (groupedTraces.length === 0) {
+    // Show the full empty state if no filters are applied
+    const hasFilters = activeFilters.length > 0;
+
+    if (!hasFilters) {
+      return <HooksEmptyState />;
+    }
+
+    // Show filtered empty state
+    return (
+      <div className="py-12 text-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="size-12 rounded-full bg-muted flex items-center justify-center">
+            <Icon name="inbox" className="size-6 text-muted-foreground" />
+          </div>
+          <span className="font-medium text-foreground">
+            No matching hook events
+          </span>
+          <span className="text-sm text-muted-foreground max-w-sm">
+            Try adjusting your search query or time range
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {groupedTraces.map((trace) => (
+        <HookTraceRow
+          key={trace.traceId}
+          trace={trace}
+          isExpanded={expandedTraceId === trace.traceId}
+          onToggle={() => onToggleExpand(trace.traceId)}
+          onLogClick={onLogClick}
+          serverNameMappings={serverNameMappings}
+        />
+      ))}
+
+      {isFetchingNextPage && (
+        <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground border-t">
+          <Icon name="loader-circle" className="size-4 animate-spin" />
+          <span className="text-sm">Loading more events...</span>
+        </div>
+      )}
+    </>
+  );
 }
 
 function HookTraceRow({
