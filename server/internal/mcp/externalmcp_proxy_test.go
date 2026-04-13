@@ -186,7 +186,7 @@ func setupToolsetWithExternalMCP(
 	// Create external MCP attachment
 	attachment, err := externalmcpRepo.CreateExternalMCPAttachment(ctx, externalmcp_repo.CreateExternalMCPAttachmentParams{
 		DeploymentID:            deploymentID,
-		RegistryID:              registryID,
+		RegistryID:              uuid.NullUUID{UUID: registryID, Valid: true},
 		Name:                    "External MCP Server",
 		Slug:                    slug,
 		RegistryServerSpecifier: "test-server",
