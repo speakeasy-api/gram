@@ -31,6 +31,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools, useToolset } from "@/hooks/toolTypes";
@@ -47,17 +48,21 @@ import { useRoutes } from "@/routes";
 import { Confirm, ToolsetEntry } from "@gram/client/models/components";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
+  invalidateAllGetMcpMetadata,
   invalidateAllGetPeriodUsage,
   invalidateAllToolset,
   invalidateTemplate,
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
   useUpdateOAuthProxyServerMutation,
+  useCreateEnvironmentMutation,
   useExportMcpMetadataMutation,
   useGetMcpMetadata,
   useLatestDeployment,
   useListEnvironments,
+  useMcpMetadataSetMutation,
   useRemoveOAuthServerMutation,
+  useUpdateEnvironmentMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
 import { Badge, Button, Grid, Icon, Stack } from "@speakeasy-api/moonshine";
@@ -83,7 +88,6 @@ import React, {
 } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
-import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { useModel } from "../playground/Openrouter";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { AddToolsDialog } from "../toolsets/AddToolsDialog";
@@ -2083,7 +2087,12 @@ function OAuthTabModal({
     return null;
   }, [toolset.rawTools, toolset.mcpSlug]);
 
-  const [activeTab, setActiveTab] = useState("external");
+  const [wizardStep, setWizardStep] = useState<
+    "choose" | "form" | "credentials"
+  >("choose");
+  const [selectedType, setSelectedType] = useState<"external" | "proxy">(
+    "external",
+  );
   const [externalSlug, setExternalSlug] = useState("");
   const [metadataJson, setMetadataJson] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -2102,6 +2111,8 @@ function OAuthTabModal({
     toolset.defaultEnvironmentSlug ?? "",
   );
   const [proxyAudience, setProxyAudience] = useState("");
+  const [proxyClientId, setProxyClientId] = useState("");
+  const [proxyClientSecret, setProxyClientSecret] = useState("");
   const [proxyError, setProxyError] = useState<string | null>(null);
   // Snapshot the prefilled audience so we can detect whether the user actually
   // changed it on submit. Without this, opening the edit modal on a proxy
@@ -2132,9 +2143,20 @@ function OAuthTabModal({
       provider?.tokenEndpointAuthMethodsSupported?.[0] ?? "client_secret_post",
     );
     setProxyEnvironmentSlug(provider?.environmentSlug ?? "");
-    // When editing, force the proxy tab to be active.
-    setActiveTab("proxy");
+    // When editing, skip the wizard choice and go straight to the proxy form.
+    setSelectedType("proxy");
+    setWizardStep("form");
   }, [editProxyServer]);
+
+  // Reset wizard state when the modal closes.
+  useEffect(() => {
+    if (!isOpen) {
+      setWizardStep("choose");
+      setSelectedType("external");
+      setProxyClientId("");
+      setProxyClientSecret("");
+    }
+  }, [isOpen]);
 
   const applyDiscoveredOAuth = useCallback(
     (tab: "external" | "proxy") => {
@@ -2184,6 +2206,7 @@ function OAuthTabModal({
   const addOAuthProxyMutation = useAddOAuthProxyServerMutation({
     onSuccess: () => {
       invalidateAllToolset(queryClient);
+      invalidateAllGetMcpMetadata(queryClient);
 
       telemetry.capture("mcp_event", {
         action: "oauth_proxy_configured",
@@ -2220,6 +2243,17 @@ function OAuthTabModal({
       );
     },
   });
+
+  const session = useSession();
+  const createEnvironmentMutation = useCreateEnvironmentMutation();
+  const updateEnvironmentMutation = useUpdateEnvironmentMutation();
+  const { data: mcpMetadataData } = useGetMcpMetadata(
+    { toolsetSlug },
+    undefined,
+    { throwOnError: false, retry: false },
+  );
+  const mcpMetadata = mcpMetadataData?.metadata;
+  const setMcpMetadataMutation = useMcpMetadataSetMutation();
 
   const handleExternalSubmit = () => {
     // Validate JSON
@@ -2267,27 +2301,22 @@ function OAuthTabModal({
     });
   };
 
-  const handleProxySubmit = () => {
+  const validateProxyForm = (): boolean => {
     setProxyError(null);
 
     if (!proxySlug.trim()) {
       setProxyError("Please provide a slug for the OAuth proxy server");
-      return;
+      return false;
     }
 
     if (!proxyAuthorizationEndpoint.trim()) {
       setProxyError("Authorization endpoint is required");
-      return;
+      return false;
     }
 
     if (!proxyTokenEndpoint.trim()) {
       setProxyError("Token endpoint is required");
-      return;
-    }
-
-    if (!editMode && !proxyEnvironmentSlug.trim()) {
-      setProxyError("Environment slug is required");
-      return;
+      return false;
     }
 
     const scopesArray = proxyScopes
@@ -2297,8 +2326,24 @@ function OAuthTabModal({
 
     if (scopesArray.length === 0) {
       setProxyError("At least one scope is required");
-      return;
+      return false;
     }
+
+    return true;
+  };
+
+  const handleProxyFormNext = () => {
+    if (!validateProxyForm()) return;
+    setWizardStep("credentials");
+  };
+
+  const handleProxySubmit = () => {
+    setProxyError(null);
+
+    const scopesArray = proxyScopes
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
 
     if (editMode) {
       // Only send audience when the user actually changed it. Comparing the
@@ -2327,49 +2372,182 @@ function OAuthTabModal({
       return;
     }
 
-    addOAuthProxyMutation.mutate({
-      request: {
-        slug: toolsetSlug,
-        addOAuthProxyServerRequestBody: {
-          oauthProxyServer: {
-            providerType: "custom",
-            slug: proxySlug,
-            audience: proxyAudience || undefined,
-            authorizationEndpoint: proxyAuthorizationEndpoint,
-            tokenEndpoint: proxyTokenEndpoint,
-            scopesSupported: scopesArray,
-            tokenEndpointAuthMethodsSupported: [proxyTokenAuthMethod],
-            environmentSlug: proxyEnvironmentSlug,
+    if (!proxyClientId.trim() || !proxyClientSecret.trim()) {
+      setProxyError("Client ID and Client Secret are required");
+      return;
+    }
+
+    // Create a new environment, store credentials, attach it to the MCP
+    // server, then create the proxy.
+    const envName = `${toolset.name} OAuth`;
+    createEnvironmentMutation.mutate(
+      {
+        request: {
+          createEnvironmentForm: {
+            name: envName,
+            organizationId: session.activeOrganizationId,
+            entries: [],
           },
         },
       },
-    });
+      {
+        onSuccess: (env) => {
+          // Store CLIENT_ID and CLIENT_SECRET in the new environment.
+          updateEnvironmentMutation.mutate(
+            {
+              request: {
+                slug: env.slug,
+                updateEnvironmentRequestBody: {
+                  entriesToUpdate: [
+                    { name: "CLIENT_ID", value: proxyClientId },
+                    { name: "CLIENT_SECRET", value: proxyClientSecret },
+                  ],
+                  entriesToRemove: [],
+                },
+              },
+            },
+            {
+              onSuccess: () => {
+                // Attach the environment to the MCP server.
+                setMcpMetadataMutation.mutate({
+                  request: {
+                    setMcpMetadataRequestBody: {
+                      ...mcpMetadata,
+                      toolsetSlug,
+                      defaultEnvironmentId: env.id,
+                      environmentConfigs: mcpMetadata?.environmentConfigs || [],
+                    },
+                  },
+                });
+
+                addOAuthProxyMutation.mutate({
+                  request: {
+                    slug: toolsetSlug,
+                    addOAuthProxyServerRequestBody: {
+                      oauthProxyServer: {
+                        providerType: "custom",
+                        slug: proxySlug,
+                        audience: proxyAudience || undefined,
+                        authorizationEndpoint: proxyAuthorizationEndpoint,
+                        tokenEndpoint: proxyTokenEndpoint,
+                        scopesSupported: scopesArray,
+                        tokenEndpointAuthMethodsSupported: [
+                          proxyTokenAuthMethod,
+                        ],
+                        environmentSlug: env.slug,
+                      },
+                    },
+                  },
+                });
+              },
+              onError: (error) => {
+                console.error("Failed to store OAuth credentials:", error);
+                toast.error("Failed to store OAuth credentials");
+              },
+            },
+          );
+        },
+        onError: (error) => {
+          console.error("Failed to create environment:", error);
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Failed to create environment for OAuth credentials",
+          );
+        },
+      },
+    );
   };
+
+  const wizardTitle = editMode
+    ? "Edit OAuth Proxy"
+    : wizardStep === "choose"
+      ? "Connect OAuth"
+      : wizardStep === "credentials"
+        ? "OAuth Client Credentials"
+        : selectedType === "external"
+          ? "Configure External OAuth"
+          : "Configure OAuth Proxy";
 
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
         <Dialog.Content className="max-w-6xl max-h-[90vh] overflow-hidden">
           <Dialog.Header>
-            <Dialog.Title>
-              {editMode ? "Edit OAuth Proxy" : "Connect OAuth"}
-            </Dialog.Title>
+            <Dialog.Title>{wizardTitle}</Dialog.Title>
           </Dialog.Header>
 
-          <Tabs
-            value={activeTab}
-            onValueChange={setActiveTab}
-            className="flex-1"
-          >
-            <TabsList>
-              <TabsTrigger value="external">External Server</TabsTrigger>
-              <TabsTrigger value="proxy">OAuth Proxy</TabsTrigger>
-            </TabsList>
+          {wizardStep === "choose" && (
+            <div className="space-y-4">
+              {discoveredOAuth && (
+                <div className="border border-border bg-muted/50 rounded-md p-4 flex items-start justify-between gap-4">
+                  <div>
+                    <Type small className="font-medium">
+                      OAuth detected from {discoveredOAuth.name}
+                    </Type>
+                    <Type muted small className="mt-1">
+                      We discovered OAuth {discoveredOAuth.version} metadata
+                      from this server. The configuration will be pre-filled for
+                      either configuration below.
+                    </Type>
+                  </div>
+                </div>
+              )}
 
-            <TabsContent
-              value="external"
-              className="space-y-4 overflow-auto max-h-[60vh]"
-            >
+              <Type muted small>
+                Choose how you want to configure OAuth for this MCP server.
+              </Type>
+
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  className={cn(
+                    "flex flex-col items-start gap-2 rounded-lg border border-border p-6 text-left transition-colors",
+                    "hover:border-primary hover:bg-muted/50",
+                  )}
+                  onClick={() => {
+                    setSelectedType("external");
+                    if (discoveredOAuth && !prefilled.external) {
+                      applyDiscoveredOAuth("external");
+                    }
+                    setWizardStep("form");
+                  }}
+                >
+                  <Globe className="h-6 w-6 text-muted-foreground" />
+                  <Type className="font-medium">External OAuth</Type>
+                  <Type muted small>
+                    For APIs that meet the MCP OAuth spec. Uses authorization
+                    code flow with your external authorization server.
+                  </Type>
+                </button>
+
+                <button
+                  type="button"
+                  className={cn(
+                    "flex flex-col items-start gap-2 rounded-lg border border-border p-6 text-left transition-colors",
+                    "hover:border-primary hover:bg-muted/50",
+                  )}
+                  onClick={() => {
+                    setSelectedType("proxy");
+                    if (discoveredOAuth && !prefilled.proxy) {
+                      applyDiscoveredOAuth("proxy");
+                    }
+                    setWizardStep("form");
+                  }}
+                >
+                  <LockIcon className="h-6 w-6 text-muted-foreground" />
+                  <Type className="font-medium">OAuth Proxy</Type>
+                  <Type muted small>
+                    For internal servers that don't natively support MCP OAuth.
+                    Gram proxies OAuth on behalf of your server.
+                  </Type>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {wizardStep === "form" && selectedType === "external" && (
+            <div className="space-y-4 overflow-auto max-h-[60vh]">
               {hasMultipleOAuth2AuthCode && (
                 <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
                   <Type small className="text-red-600 mt-1">
@@ -2398,6 +2576,19 @@ function OAuthTabModal({
                   >
                     Apply
                   </Button>
+                </div>
+              )}
+              {prefilled.external && (
+                <div className="border border-border bg-muted/50 rounded-md p-4 mb-4">
+                  <Type small className="font-medium">
+                    Pre-filled from detected OAuth metadata
+                  </Type>
+                  <Type muted small className="mt-1">
+                    This form has been pre-filled with information Speakeasy
+                    detected about this server's OAuth requirements. Please
+                    review carefully and refer to the MCP server or API's
+                    documentation to confirm these values are correct.
+                  </Type>
                 </div>
               )}
               <div>
@@ -2464,21 +2655,19 @@ function OAuthTabModal({
                   </div>
                 </Stack>
               </div>
-            </TabsContent>
+            </div>
+          )}
 
-            <TabsContent
-              value="proxy"
-              className="space-y-4 overflow-auto max-h-[60vh]"
-            >
+          {wizardStep === "form" && selectedType === "proxy" && (
+            <div className="space-y-4 overflow-auto max-h-[60vh]">
               <div>
-                <Type className="font-medium mb-2">
-                  OAuth Proxy Server Configuration
+                <Type muted small className="font-medium mb-2">
+                  Ideal for internal MCP servers. The OAuth Proxy configuration
+                  can be used to set up auth for an MCP server even though the
+                  underlying API doesn't support MCP OAuth.
                 </Type>
-                <Type muted small className="mb-4">
-                  ONLY USE FOR INTERNAL SERVERS. Configure an OAuth proxy server
-                  to handle OAuth authentication for APIs that don't natively
-                  support MCP OAuth requirements. Getting proxy settings correct
-                  can be tricky. Need help?{" "}
+                <Type muted small className="font-medium mb-4">
+                  Getting proxy settings correct can be tricky. Need help?
                   <Link
                     external
                     to="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call"
@@ -2506,6 +2695,19 @@ function OAuthTabModal({
                     >
                       Apply
                     </Button>
+                  </div>
+                )}
+                {prefilled.proxy && (
+                  <div className="border border-border bg-muted/50 rounded-md p-4 mb-4">
+                    <Type small className="font-medium">
+                      Pre-filled from detected OAuth metadata
+                    </Type>
+                    <Type muted small className="mt-1">
+                      This form has been pre-filled with information Speakeasy
+                      detected about this server's OAuth requirements. Please
+                      review carefully and refer to the MCP server or API's
+                      documentation to confirm these values are correct.
+                    </Type>
                   </div>
                 )}
 
@@ -2594,62 +2796,122 @@ function OAuthTabModal({
                       <option value="none">none</option>
                     </select>
                   </div>
+                </Stack>
+              </div>
+            </div>
+          )}
+
+          {wizardStep === "credentials" && selectedType === "proxy" && (
+            <div className="space-y-4 overflow-auto max-h-[60vh]">
+              <div>
+                <Type muted small className="mb-4">
+                  Enter the client credentials from your OAuth provider. These
+                  will be stored securely in a new environment created for this
+                  proxy.
+                </Type>
+
+                {proxyError && (
+                  <Type className="text-red-500! text-sm mb-4">
+                    {proxyError}
+                  </Type>
+                )}
+
+                <Stack gap={4}>
+                  <div>
+                    <Type className="font-medium mb-2">Client ID</Type>
+                    <Input
+                      placeholder="your-client-id"
+                      value={proxyClientId}
+                      onChange={setProxyClientId}
+                    />
+                  </div>
 
                   <div>
-                    <Type className="font-medium mb-2">Environment</Type>
-                    <EnvironmentDropdown
-                      selectedEnvironment={proxyEnvironmentSlug}
-                      setSelectedEnvironment={setProxyEnvironmentSlug}
-                      tooltip="Select environment for OAuth credentials"
-                      className="w-full max-w-full"
+                    <Type className="font-medium mb-2">Client Secret</Type>
+                    <Input
+                      placeholder="your-client-secret"
+                      value={proxyClientSecret}
+                      onChange={setProxyClientSecret}
+                      type="password"
                     />
-                    <Type muted small className="mt-1">
-                      The environment where OAuth client credentials will be
-                      stored.
-                    </Type>
                   </div>
                 </Stack>
               </div>
-            </TabsContent>
-          </Tabs>
+            </div>
+          )}
 
-          <Dialog.Footer className="flex justify-end">
-            {activeTab === "external" && (
+          {(wizardStep === "form" || wizardStep === "credentials") && (
+            <Dialog.Footer className="flex justify-between">
               <Button
-                onClick={handleExternalSubmit}
-                disabled={
-                  hasMultipleOAuth2AuthCode ||
-                  addExternalOAuthMutation.isPending ||
-                  !externalSlug.trim() ||
-                  !metadataJson.trim()
-                }
+                variant="secondary"
+                onClick={() => {
+                  if (wizardStep === "credentials") {
+                    setWizardStep("form");
+                  } else if (editMode) {
+                    onClose();
+                  } else {
+                    setWizardStep("choose");
+                  }
+                }}
               >
-                {addExternalOAuthMutation.isPending
-                  ? "Configuring..."
-                  : "Configure External OAuth"}
+                {editMode && wizardStep === "form" ? "Cancel" : "Back"}
               </Button>
-            )}
-            {activeTab === "proxy" && (
-              <Button
-                onClick={handleProxySubmit}
-                disabled={
-                  addOAuthProxyMutation.isPending ||
-                  updateOAuthProxyMutation.isPending ||
-                  !proxySlug.trim() ||
-                  !proxyAuthorizationEndpoint.trim() ||
-                  !proxyTokenEndpoint.trim() ||
-                  (!editMode && !proxyEnvironmentSlug.trim())
-                }
-              >
-                {addOAuthProxyMutation.isPending ||
-                updateOAuthProxyMutation.isPending
-                  ? "Saving..."
-                  : editMode
-                    ? "Save changes"
-                    : "Configure OAuth Proxy"}
-              </Button>
-            )}
-          </Dialog.Footer>
+              <div className="ml-auto">
+                {wizardStep === "form" && selectedType === "external" && (
+                  <Button
+                    onClick={handleExternalSubmit}
+                    disabled={
+                      hasMultipleOAuth2AuthCode ||
+                      addExternalOAuthMutation.isPending ||
+                      !externalSlug.trim() ||
+                      !metadataJson.trim()
+                    }
+                  >
+                    {addExternalOAuthMutation.isPending
+                      ? "Configuring..."
+                      : "Configure External OAuth"}
+                  </Button>
+                )}
+                {wizardStep === "form" && selectedType === "proxy" && (
+                  <Button
+                    onClick={editMode ? handleProxySubmit : handleProxyFormNext}
+                    disabled={
+                      (editMode && updateOAuthProxyMutation.isPending) ||
+                      !proxySlug.trim() ||
+                      !proxyAuthorizationEndpoint.trim() ||
+                      !proxyTokenEndpoint.trim()
+                    }
+                  >
+                    {editMode
+                      ? updateOAuthProxyMutation.isPending
+                        ? "Saving..."
+                        : "Save changes"
+                      : "Next"}
+                  </Button>
+                )}
+                {wizardStep === "credentials" && (
+                  <Button
+                    onClick={handleProxySubmit}
+                    disabled={
+                      createEnvironmentMutation.isPending ||
+                      updateEnvironmentMutation.isPending ||
+                      setMcpMetadataMutation.isPending ||
+                      addOAuthProxyMutation.isPending ||
+                      !proxyClientId.trim() ||
+                      !proxyClientSecret.trim()
+                    }
+                  >
+                    {createEnvironmentMutation.isPending ||
+                    updateEnvironmentMutation.isPending ||
+                    setMcpMetadataMutation.isPending ||
+                    addOAuthProxyMutation.isPending
+                      ? "Configuring..."
+                      : "Configure OAuth Proxy"}
+                  </Button>
+                )}
+              </div>
+            </Dialog.Footer>
+          )}
         </Dialog.Content>
       </Dialog>
     </>
