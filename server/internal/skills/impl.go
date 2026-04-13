@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
 const (
@@ -49,6 +50,15 @@ var allowedCaptureContentTypes = map[string]struct{}{
 	"application/x-zip-compressed": {},
 	"application/x-zip":            {},
 }
+
+type CaptureMode string
+
+const (
+	CaptureModeDisabled       CaptureMode = "disabled"
+	CaptureModeProjectOnly    CaptureMode = "project_only"
+	CaptureModeUserOnly       CaptureMode = "user_only"
+	CaptureModeProjectAndUser CaptureMode = "project_and_user"
+)
 
 type Service struct {
 	tracer  trace.Tracer
@@ -102,6 +112,14 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	effectiveMode, err := s.getEffectiveCaptureMode(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	if !captureModeAllowsScope(effectiveMode, payload.Scope) {
+		return nil, oops.E(oops.CodeForbidden, nil, "skill capture is disabled for scope %s", payload.Scope)
 	}
 
 	if payload.ContentLength <= 0 {
@@ -204,6 +222,41 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 			UpdatedAt:     asset.UpdatedAt.Time.Format(time.RFC3339),
 		},
 	}, nil
+}
+
+func (s *Service) getEffectiveCaptureMode(ctx context.Context, organizationID string, projectID uuid.UUID) (CaptureMode, error) {
+	if organizationID == "" {
+		return CaptureModeDisabled, oops.E(oops.CodeUnauthorized, nil, "missing organization context")
+	}
+
+	mode, err := skillsrepo.New(s.db).GetEffectiveCaptureMode(ctx, skillsrepo.GetEffectiveCaptureModeParams{
+		OrganizationID: organizationID,
+		ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
+	})
+	if err != nil {
+		return CaptureModeDisabled, oops.E(oops.CodeUnexpected, fmt.Errorf("get effective capture mode: %w", err), "error loading capture policy")
+	}
+
+	captureMode := CaptureMode(mode)
+	switch captureMode {
+	case CaptureModeDisabled, CaptureModeProjectOnly, CaptureModeUserOnly, CaptureModeProjectAndUser:
+		return captureMode, nil
+	default:
+		return CaptureModeDisabled, oops.E(oops.CodeUnexpected, nil, "invalid capture policy mode")
+	}
+}
+
+func captureModeAllowsScope(mode CaptureMode, scope string) bool {
+	switch mode {
+	case CaptureModeProjectAndUser:
+		return scope == "project" || scope == "user"
+	case CaptureModeProjectOnly:
+		return scope == "project"
+	case CaptureModeUserOnly:
+		return scope == "user"
+	default:
+		return false
+	}
 }
 
 func (s *Service) archiveStaleSkillAsset(ctx context.Context, projectID uuid.UUID, assetID uuid.UUID) error {

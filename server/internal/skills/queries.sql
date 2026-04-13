@@ -160,3 +160,75 @@ WHERE skills.project_id = @project_id
       AND sv.skill_id = skills.id
   )
 RETURNING *;
+
+-- name: UpsertOrganizationCapturePolicy :one
+INSERT INTO skills_capture_policies (
+    organization_id
+  , project_id
+  , mode
+)
+VALUES (
+    @organization_id
+  , NULL
+  , @mode
+)
+ON CONFLICT (organization_id)
+WHERE project_id IS NULL AND deleted IS FALSE
+DO UPDATE
+SET
+    mode = EXCLUDED.mode
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: UpsertProjectCapturePolicyOverride :one
+INSERT INTO skills_capture_policies (
+    organization_id
+  , project_id
+  , mode
+)
+VALUES (
+    @organization_id
+  , @project_id
+  , @mode
+)
+ON CONFLICT (organization_id, project_id)
+WHERE project_id IS NOT NULL AND deleted IS FALSE
+DO UPDATE
+SET
+    mode = EXCLUDED.mode
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: DeleteProjectCapturePolicyOverride :one
+UPDATE skills_capture_policies
+SET
+    deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: GetEffectiveCaptureMode :one
+WITH project_override AS (
+  SELECT scp.mode
+  FROM skills_capture_policies scp
+  WHERE scp.organization_id = @organization_id
+    AND scp.project_id = @project_id
+    AND scp.deleted IS FALSE
+  LIMIT 1
+),
+org_default AS (
+  SELECT scp.mode
+  FROM skills_capture_policies scp
+  WHERE scp.organization_id = @organization_id
+    AND scp.project_id IS NULL
+    AND scp.deleted IS FALSE
+  LIMIT 1
+)
+SELECT
+  coalesce(
+    (SELECT mode FROM project_override),
+    (SELECT mode FROM org_default),
+    'disabled'
+  )::text AS mode;

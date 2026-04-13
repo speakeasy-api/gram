@@ -843,6 +843,17 @@ type SkillVersion struct {
 	SkillID            uuid.UUID
 }
 
+type SkillsCapturePolicy struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Mode           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type SlackApp struct {
 	CreatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
