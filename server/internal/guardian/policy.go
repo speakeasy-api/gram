@@ -220,6 +220,7 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	}
 
 	retryClient := retryablehttp.NewClient()
+	retryClient.Logger = nil // avoid noisy logs from retryablehttp
 	retryClient.HTTPClient = &http.Client{
 		Transport: otelTransport,
 	}
