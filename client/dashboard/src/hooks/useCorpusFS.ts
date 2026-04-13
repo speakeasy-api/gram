@@ -12,7 +12,7 @@ function repoDir(projectId: string): string {
 
 /**
  * Clone the corpus git repo into ZenFS.
- * The server mounts git smart HTTP at /corpus/git/{project_id}/.
+ * The server mounts git smart HTTP at /v1/corpus/git/{project_id}/.
  */
 export async function cloneCorpus(
   projectId: string,
@@ -24,7 +24,7 @@ export async function cloneCorpus(
     fs,
     http,
     dir,
-    url: `${getServerURL()}/corpus/git/${projectId}`,
+    url: `${getServerURL()}/v1/corpus/git/${projectId}`,
     depth: 1,
     ...(token
       ? { onAuth: () => ({ username: "token", password: token }) }
