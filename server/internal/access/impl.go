@@ -521,6 +521,22 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "list org users from workos").Log(ctx, s.logger)
 	}
 
+	// Build a WorkOS-user-ID → Gram-user lookup so the member list returns
+	// Gram user IDs (the stable identity used by UpdateMemberRole and the
+	// organization_user_relationships table).
+	localUsers := make(map[string]usersrepo.User, len(users))
+	for workosUID := range users {
+		gramID, err := usersrepo.New(s.db).GetUserIDByWorkosID(ctx, pgtype.Text{String: workosUID, Valid: true})
+		if err != nil {
+			continue // user exists in WorkOS but hasn't logged into Gram yet
+		}
+		u, err := usersrepo.New(s.db).GetUser(ctx, gramID)
+		if err != nil {
+			continue
+		}
+		localUsers[workosUID] = u
+	}
+
 	result := make([]*gen.AccessMember, 0, len(members))
 	for _, member := range members {
 		user, ok := users[member.UserID]
@@ -528,11 +544,16 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 			continue
 		}
 
+		local, ok := localUsers[member.UserID]
+		if !ok {
+			continue // user exists in WorkOS but hasn't logged into Gram yet
+		}
+
 		result = append(result, &gen.AccessMember{
-			ID:       user.ID,
+			ID:       local.ID,
 			Name:     formatUserName(user),
 			Email:    user.Email,
-			PhotoURL: nil,
+			PhotoURL: conv.FromPGText[string](local.PhotoUrl),
 			RoleID:   roleIDBySlug[member.RoleSlug],
 			JoinedAt: conv.Default(member.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 		})
@@ -639,16 +660,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		attr.AccessRoleSlug(roleSlug),
 	)
 
-	// The frontend sends the member ID returned by ListMembers, which is the
-	// WorkOS user ID. Try resolving it to a local Gram user ID first; if that
-	// fails, fall back to treating it as a Gram user ID directly (backwards
-	// compatibility).
-	userID := payload.UserID
-	if gramID, err := usersrepo.New(s.db).GetUserIDByWorkosID(ctx, pgtype.Text{String: userID, Valid: true}); err == nil {
-		userID = gramID
-	}
-
-	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, userID)
+	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
 	switch {
 	case errors.Is(err, errConnectedUserNotFound):
 		return nil, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").Log(ctx, logger)
