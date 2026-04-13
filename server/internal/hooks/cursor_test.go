@@ -402,6 +402,26 @@ func TestBuildCursorTelemetryAttributes_InvalidSkillsMetadataIgnored(t *testing.
 	require.False(t, hasSkillResolutionStatus)
 }
 
+func TestBuildCursorTelemetryAttributes_NullSkillsIgnored(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "preToolUse",
+		AdditionalData: map[string]any{
+			"skills": nil,
+		},
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	_, hasSkillName := attrs[attr.SkillNameKey]
+	_, hasSkillScope := attrs[attr.SkillScopeKey]
+	require.False(t, hasSkillName)
+	require.False(t, hasSkillScope)
+}
+
 func TestBuildCursorTelemetryAttributes_EmptySkillsSliceIgnored(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
