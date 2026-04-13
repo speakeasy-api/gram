@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -638,7 +639,16 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		attr.AccessRoleSlug(roleSlug),
 	)
 
-	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
+	// The frontend sends the member ID returned by ListMembers, which is the
+	// WorkOS user ID. Try resolving it to a local Gram user ID first; if that
+	// fails, fall back to treating it as a Gram user ID directly (backwards
+	// compatibility).
+	userID := payload.UserID
+	if gramID, err := usersrepo.New(s.db).GetUserIDByWorkosID(ctx, pgtype.Text{String: userID, Valid: true}); err == nil {
+		userID = gramID
+	}
+
+	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, userID)
 	switch {
 	case errors.Is(err, errConnectedUserNotFound):
 		return nil, oops.E(oops.CodeNotFound, nil, "member is not connected locally").Log(ctx, logger)
