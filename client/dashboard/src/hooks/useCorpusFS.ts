@@ -1,3 +1,8 @@
+import { Buffer } from "buffer";
+if (typeof globalThis.Buffer === "undefined") {
+  globalThis.Buffer = Buffer;
+}
+
 import git from "isomorphic-git";
 import http from "isomorphic-git/http/web";
 import { fs } from "@zenfs/core";
@@ -11,41 +16,53 @@ function repoDir(projectId: string): string {
 }
 
 /**
- * Clone the corpus git repo into ZenFS.
- * The server mounts git smart HTTP at /v1/corpus/git/{project_id}/.
+ * Clone or fetch the corpus git repo into ZenFS.
+ * Clones on first visit, fetches on subsequent visits.
  */
 export async function cloneCorpus(
   projectId: string,
   token?: string,
 ): Promise<void> {
   const dir = repoDir(projectId);
+  const url = `${getServerURL()}/v1/corpus/git/${projectId}`;
+  const authOpts = token
+    ? { onAuth: () => ({ username: "token", password: token }) }
+    : {};
 
-  await git.clone({
-    fs,
-    http,
-    dir,
-    url: `${getServerURL()}/v1/corpus/git/${projectId}`,
-    depth: 1,
-    ...(token
-      ? { onAuth: () => ({ username: "token", password: token }) }
-      : {}),
-  });
-}
-
-export async function fetchCorpus(
-  projectId: string,
-  token?: string,
-): Promise<void> {
-  const dir = repoDir(projectId);
-
-  await git.fetch({
-    fs,
-    http,
-    dir,
-    ...(token
-      ? { onAuth: () => ({ username: "token", password: token }) }
-      : {}),
-  });
+  try {
+    // Already cloned — fetch updates and fast-forward
+    await fs.promises.stat(`${dir}/.git/HEAD`);
+    await git.fetch({ fs, http, dir, ...authOpts });
+    const remoteRefs = await git.listBranches({ fs, dir, remote: "origin" });
+    if (remoteRefs.includes("main")) {
+      const remoteOid = await git.resolveRef({
+        fs,
+        dir,
+        ref: "refs/remotes/origin/main",
+      });
+      await git.writeRef({
+        fs,
+        dir,
+        ref: "refs/heads/main",
+        value: remoteOid,
+        force: true,
+      });
+      await git.checkout({ fs, dir, ref: "main", force: true });
+    }
+  } catch {
+    // Not yet cloned — fresh clone + checkout
+    try {
+      await git.clone({ fs, http, dir, url, depth: 1, ...authOpts });
+      const branches = await git.listBranches({ fs, dir });
+      const ref = branches.includes("main") ? "main" : branches[0] || "HEAD";
+      await git.checkout({ fs, dir, ref }).catch(() => {});
+    } catch {
+      // Empty repo — create dir structure
+      try {
+        await fs.promises.mkdir(dir, { recursive: true });
+      } catch {}
+    }
+  }
 }
 
 export async function readCorpusTree(
@@ -56,37 +73,46 @@ export async function readCorpusTree(
 }
 
 async function readDirRecursive(dirPath: string): Promise<ContextNode[]> {
-  const entries = await fs.promises.readdir(dirPath);
+  let entries: string[];
+  try {
+    entries = (await fs.promises.readdir(dirPath)) as unknown as string[];
+  } catch {
+    return [];
+  }
   const nodes: ContextNode[] = [];
 
   for (const name of entries) {
     if (name === ".git") continue;
 
     const fullPath = `${dirPath}/${name}`;
-    const stat = await fs.promises.stat(fullPath);
+    try {
+      const stat = await fs.promises.stat(fullPath);
 
-    if (stat.isDirectory()) {
-      const children = await readDirRecursive(fullPath);
-      nodes.push({
-        type: "folder",
-        name,
-        children,
-        updatedAt: new Date().toISOString(),
-      });
-    } else {
-      nodes.push({
-        type: "file",
-        name,
-        kind:
-          name === ".docs-mcp.json"
-            ? "mcp-docs-config"
-            : name === "SKILL.md"
-              ? "skill"
-              : "markdown",
-        size: stat.size,
-        updatedAt: new Date().toISOString(),
-        versions: [],
-      });
+      if (stat.isDirectory()) {
+        const children = await readDirRecursive(fullPath);
+        nodes.push({
+          type: "folder",
+          name,
+          children,
+          updatedAt: new Date().toISOString(),
+        });
+      } else {
+        nodes.push({
+          type: "file",
+          name,
+          kind:
+            name === ".docs-mcp.json"
+              ? "mcp-docs-config"
+              : name === "SKILL.md"
+                ? "skill"
+                : "markdown",
+          size: stat.size,
+          updatedAt: new Date().toISOString(),
+          versions: [],
+        });
+      }
+    } catch {
+      // Skip entries we can't stat
     }
   }
 

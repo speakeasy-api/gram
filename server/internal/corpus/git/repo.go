@@ -47,6 +47,12 @@ func InitBareRepo(path string) (*Repo, error) {
 		return nil, fmt.Errorf("init bare repo: %w", err)
 	}
 
+	// Set HEAD to point to main (not master) to match modern git defaults
+	headRef := plumbing.NewSymbolicReference(plumbing.HEAD, plumbing.NewBranchReferenceName("main"))
+	if err := r.Storer.SetReference(headRef); err != nil {
+		return nil, fmt.Errorf("set HEAD to main: %w", err)
+	}
+
 	return &Repo{repo: r, path: path}, nil
 }
 
