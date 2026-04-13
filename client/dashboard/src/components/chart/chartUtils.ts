@@ -56,3 +56,28 @@ export function formatChartLabel(date: Date, timeRangeMs: number): string {
     return date.toLocaleDateString([], { month: "short", day: "numeric" });
   }
 }
+
+export type ThresholdConfig = {
+  red: number;
+  amber: number;
+  inverted?: boolean; // Set to true if lower is better (like latency)
+};
+
+export function getValueColor(
+  value: number,
+  thresholds?: ThresholdConfig,
+): string {
+  if (!thresholds) return "";
+
+  if (thresholds.inverted) {
+    // Lower is better (e.g., latency)
+    if (value > thresholds.red) return "text-red-500";
+    if (value > thresholds.amber) return "text-amber-500";
+    return "text-emerald-600";
+  } else {
+    // Higher is better (e.g., chats, resolution rate)
+    if (value < thresholds.red) return "text-red-500";
+    if (value < thresholds.amber) return "text-amber-500";
+    return "text-emerald-600";
+  }
+}
