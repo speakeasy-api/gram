@@ -21,7 +21,7 @@ import {
   useListToolsets,
 } from "@gram/client/react-query/index.js";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
-import { useGramContext } from "@gram/client/react-query/_context";
+import { useGramContext } from "@gram/client/react-query/index.js";
 import { useQuery } from "@tanstack/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components";
