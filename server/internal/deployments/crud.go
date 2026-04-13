@@ -287,7 +287,7 @@ func amendDeployment(
 	for _, e := range externalMCPsToUpsert {
 		_, err := depRepo.UpsertDeploymentExternalMCP(ctx, repo.UpsertDeploymentExternalMCPParams{
 			DeploymentID:            id,
-			RegistryID:              e.registryID,
+			RegistryID:              uuid.NullUUID{UUID: e.registryID, Valid: true},
 			Name:                    e.name,
 			Slug:                    e.slug,
 			RegistryServerSpecifier: e.registryServerSpecifier,
