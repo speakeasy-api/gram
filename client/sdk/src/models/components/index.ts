@@ -127,6 +127,7 @@ export * from "./listprojectsresult.js";
 export * from "./listprompttemplatesresult.js";
 export * from "./listregistriesresponsebody.js";
 export * from "./listresourcesresult.js";
+export * from "./listrolegrant.js";
 export * from "./listrolesresult.js";
 export * from "./listscopesresult.js";
 export * from "./listslackappsresult.js";
