@@ -32,22 +32,22 @@ export default function Collections() {
             <Stack direction="vertical" gap={4}>
               <div className="flex items-center gap-3">
                 <div className="relative w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                   <Input
                     placeholder="Search collections..."
                     value={searchQuery}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                       setSearchQuery(e.target.value)
                     }
-                    className="pl-10 pr-9 h-10"
+                    className="h-10 pr-9 pl-10"
                   />
                   {searchQuery && (
                     <button
                       onClick={() => setSearchQuery("")}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 transition-colors"
                       aria-label="Clear search"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="h-4 w-4" />
                     </button>
                   )}
                 </div>
@@ -72,8 +72,8 @@ function CollectionGrid({ collections }: { collections: Collection[] }) {
   if (collections.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <SearchX className="w-10 h-10 text-muted-foreground mb-3" />
-        <p className="text-sm text-muted-foreground">
+        <SearchX className="text-muted-foreground mb-3 h-10 w-10" />
+        <p className="text-muted-foreground text-sm">
           No collections found. Try a different search.
         </p>
       </div>
@@ -81,7 +81,7 @@ function CollectionGrid({ collections }: { collections: Collection[] }) {
   }
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       {collections.map((collection) => (
         <CollectionCard key={collection.id} collection={collection} />
       ))}

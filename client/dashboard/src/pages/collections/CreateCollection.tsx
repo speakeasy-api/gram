@@ -159,7 +159,7 @@ export default function CreateCollection() {
                 <div>
                   <label
                     htmlFor="name"
-                    className="block text-sm font-medium mb-1"
+                    className="mb-1 block text-sm font-medium"
                   >
                     Name
                   </label>
@@ -175,7 +175,7 @@ export default function CreateCollection() {
                 <div>
                   <label
                     htmlFor="slug"
-                    className="block text-sm font-medium mb-1"
+                    className="mb-1 block text-sm font-medium"
                   >
                     Slug
                   </label>
@@ -194,7 +194,7 @@ export default function CreateCollection() {
                 <div>
                   <label
                     htmlFor="namespace"
-                    className="block text-sm font-medium mb-1"
+                    className="mb-1 block text-sm font-medium"
                   >
                     Registry Namespace
                   </label>
@@ -208,7 +208,7 @@ export default function CreateCollection() {
                     }}
                     required
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-muted-foreground mt-1 text-xs">
                     Unique identifier used to address this collection in the
                     registry
                   </p>
@@ -217,7 +217,7 @@ export default function CreateCollection() {
                 <div>
                   <label
                     htmlFor="description"
-                    className="block text-sm font-medium mb-1"
+                    className="mb-1 block text-sm font-medium"
                   >
                     Description
                   </label>
@@ -231,38 +231,38 @@ export default function CreateCollection() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <label className="mb-2 block text-sm font-medium">
                     Visibility
                   </label>
                   <div className="flex gap-2">
                     <button
                       type="button"
                       className={cn(
-                        "flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm transition-colors",
+                        "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
                         visibility === "public"
                           ? "border-foreground/30 bg-accent"
                           : "border-border hover:bg-accent/50",
                       )}
                       onClick={() => setVisibility("public")}
                     >
-                      <Globe className="w-3.5 h-3.5" />
+                      <Globe className="h-3.5 w-3.5" />
                       Public
                     </button>
                     <button
                       type="button"
                       className={cn(
-                        "flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm transition-colors",
+                        "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
                         visibility === "private"
                           ? "border-foreground/30 bg-accent"
                           : "border-border hover:bg-accent/50",
                       )}
                       onClick={() => setVisibility("private")}
                     >
-                      <Lock className="w-3.5 h-3.5" />
+                      <Lock className="h-3.5 w-3.5" />
                       Private
                     </button>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1.5">
+                  <p className="text-muted-foreground mt-1.5 text-xs">
                     {visibility === "private"
                       ? "Private collections are only visible to your organization."
                       : "Public collections are visible to everyone."}
@@ -270,28 +270,28 @@ export default function CreateCollection() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <label className="mb-2 block text-sm font-medium">
                     MCP Servers ({selectedToolsetIds.size} selected)
                   </label>
-                  <div className="border rounded-md">
+                  <div className="rounded-md border">
                     <div className="relative border-b">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                       <input
                         type="text"
                         placeholder="Search servers..."
                         value={serverSearch}
                         onChange={(e) => setServerSearch(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2.5 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+                        className="placeholder:text-muted-foreground w-full bg-transparent py-2.5 pr-3 pl-9 text-sm outline-none"
                       />
                     </div>
                     <div className="max-h-64 overflow-y-auto">
                       {toolsetsLoading ? (
                         <div className="flex items-center justify-center p-4">
-                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                          <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
                         </div>
                       ) : filteredToolsets.length === 0 ? (
                         <div className="flex flex-col items-center justify-center p-4 text-center">
-                          <ServerIcon className="w-6 h-6 text-muted-foreground mb-1" />
+                          <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
                           <Type small muted>
                             {serverSearch
                               ? "No servers match your search."
@@ -302,7 +302,7 @@ export default function CreateCollection() {
                         filteredToolsets.map((toolset) => (
                           <label
                             key={toolset.id}
-                            className="flex items-start gap-3 px-3 py-2.5 hover:bg-accent/50 cursor-pointer border-b last:border-b-0"
+                            className="hover:bg-accent/50 flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 last:border-b-0"
                           >
                             <Checkbox
                               checked={selectedToolsetIds.has(toolset.id)}
@@ -311,18 +311,18 @@ export default function CreateCollection() {
                             />
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium truncate">
+                                <span className="truncate text-sm font-medium">
                                   {toolset.name}
                                 </span>
                                 <Badge
                                   variant="secondary"
-                                  className="text-xs shrink-0"
+                                  className="shrink-0 text-xs"
                                 >
                                   {toolset.projectName}
                                 </Badge>
                               </div>
                               {toolset.description && (
-                                <div className="text-xs text-muted-foreground truncate mt-0.5">
+                                <div className="text-muted-foreground mt-0.5 truncate text-xs">
                                   {toolset.description}
                                 </div>
                               )}

@@ -20,7 +20,7 @@ export function CollectionCard({ collection }: { collection: Collection }) {
       className="cursor-pointer"
       onClick={() => navigate(detailHref)}
       icon={
-        <LayoutGrid className="w-10 h-10 text-muted-foreground opacity-60" />
+        <LayoutGrid className="text-muted-foreground h-10 w-10 opacity-60" />
       }
       overlay={
         collection.visibility === "private" ? (
@@ -29,37 +29,37 @@ export function CollectionCard({ collection }: { collection: Collection }) {
               variant="outline"
               className="border-muted-foreground/30 bg-background/80 text-muted-foreground backdrop-blur-sm"
             >
-              <Lock className="w-3 h-3 mr-1" />
+              <Lock className="mr-1 h-3 w-3" />
               Private
             </Badge>
           </div>
         ) : undefined
       }
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
+      <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <Type
             variant="subheading"
             as="div"
-            className="truncate text-md group-hover:text-primary transition-colors"
+            className="text-md group-hover:text-primary truncate transition-colors"
             title={collection.name}
           >
             {collection.name}
           </Type>
         </div>
         <Badge variant="secondary">
-          <Server className="w-3 h-3 mr-1" />
+          <Server className="mr-1 h-3 w-3" />
           {serverCount} {serverCount === 1 ? "server" : "servers"}
         </Badge>
       </div>
 
       {collection.description && (
-        <Type small muted className="line-clamp-2 mb-3">
+        <Type small muted className="mb-3 line-clamp-2">
           {collection.description}
         </Type>
       )}
 
-      <div className="flex items-center justify-end gap-2 mt-auto pt-2">
+      <div className="mt-auto flex items-center justify-end gap-2 pt-2">
         {collection.visibility === "public" && (
           <Stack
             direction="horizontal"
@@ -67,7 +67,7 @@ export function CollectionCard({ collection }: { collection: Collection }) {
             align="center"
             className="text-muted-foreground mr-auto"
           >
-            <Eye className="w-3.5 h-3.5" />
+            <Eye className="h-3.5 w-3.5" />
             <Type small muted>
               Public
             </Type>
@@ -78,7 +78,7 @@ export function CollectionCard({ collection }: { collection: Collection }) {
           <Button variant="secondary" size="sm">
             <Button.Text>View</Button.Text>
             <Button.RightIcon>
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="h-4 w-4" />
             </Button.RightIcon>
           </Button>
         </Link>

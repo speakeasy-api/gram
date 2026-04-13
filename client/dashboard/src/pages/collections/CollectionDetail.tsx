@@ -180,8 +180,8 @@ export default function CollectionDetail() {
         </Page.Header>
         <Page.Body>
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <SearchX className="w-10 h-10 text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground">
+            <SearchX className="text-muted-foreground mb-3 h-10 w-10" />
+            <p className="text-muted-foreground text-sm">
               Collection not found.
             </p>
           </div>
@@ -200,31 +200,31 @@ export default function CollectionDetail() {
       <Page.Body>
         <div className="flex gap-8">
           {/* Main content */}
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             {/* Header */}
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex items-center justify-center w-14 h-14 rounded-lg border bg-muted">
-                <Monitor className="w-7 h-7 text-muted-foreground" />
+            <div className="mb-6 flex items-start gap-4">
+              <div className="bg-muted flex h-14 w-14 items-center justify-center rounded-lg border">
+                <Monitor className="text-muted-foreground h-7 w-7" />
               </div>
               <div>
-                <div className="flex items-center gap-2 mb-1">
+                <div className="mb-1 flex items-center gap-2">
                   <h1 className="text-2xl font-semibold">{collection.name}</h1>
                   <Badge variant="outline" className="text-xs">
                     {collection.visibility === "private" ? (
                       <>
-                        <Lock className="w-3 h-3 mr-1" />
+                        <Lock className="mr-1 h-3 w-3" />
                         Private
                       </>
                     ) : (
                       <>
-                        <Globe className="w-3 h-3 mr-1" />
+                        <Globe className="mr-1 h-3 w-3" />
                         Public
                       </>
                     )}
                   </Badge>
                 </div>
                 {collection.description && (
-                  <p className="text-sm text-muted-foreground mb-3">
+                  <p className="text-muted-foreground mb-3 text-sm">
                     {collection.description}
                   </p>
                 )}
@@ -261,10 +261,10 @@ export default function CollectionDetail() {
 
             {/* Edit Form */}
             {editing && (
-              <div className="border rounded-lg p-5 mb-4 space-y-4">
+              <div className="mb-4 space-y-4 rounded-lg border p-5">
                 <h2 className="text-base font-semibold">Edit Collection</h2>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Name</label>
+                  <label className="mb-1 block text-sm font-medium">Name</label>
                   <Input
                     value={editName}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
@@ -273,7 +273,7 @@ export default function CollectionDetail() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">
+                  <label className="mb-1 block text-sm font-medium">
                     Description
                   </label>
                   <Textarea
@@ -283,34 +283,34 @@ export default function CollectionDetail() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <label className="mb-2 block text-sm font-medium">
                     Visibility
                   </label>
                   <div className="flex gap-2">
                     <button
                       type="button"
                       className={cn(
-                        "flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm transition-colors",
+                        "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
                         editVisibility === "public"
                           ? "border-foreground/30 bg-accent"
                           : "border-border hover:bg-accent/50",
                       )}
                       onClick={() => setEditVisibility("public")}
                     >
-                      <Globe className="w-3.5 h-3.5" />
+                      <Globe className="h-3.5 w-3.5" />
                       Public
                     </button>
                     <button
                       type="button"
                       className={cn(
-                        "flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm transition-colors",
+                        "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
                         editVisibility === "private"
                           ? "border-foreground/30 bg-accent"
                           : "border-border hover:bg-accent/50",
                       )}
                       onClick={() => setEditVisibility("private")}
                     >
-                      <Lock className="w-3.5 h-3.5" />
+                      <Lock className="h-3.5 w-3.5" />
                       Private
                     </button>
                   </div>
@@ -318,28 +318,28 @@ export default function CollectionDetail() {
 
                 {/* Server picker (edit mode only) */}
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <label className="mb-2 block text-sm font-medium">
                     MCP Servers ({editSelectedToolsetIds.size} selected)
                   </label>
-                  <div className="border rounded-md">
+                  <div className="rounded-md border">
                     <div className="relative border-b">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                       <input
                         type="text"
                         placeholder="Search servers..."
                         value={serverSearch}
                         onChange={(e) => setServerSearch(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2.5 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+                        className="placeholder:text-muted-foreground w-full bg-transparent py-2.5 pr-3 pl-9 text-sm outline-none"
                       />
                     </div>
                     <div className="max-h-64 overflow-y-auto">
                       {toolsetsLoading ? (
                         <div className="flex items-center justify-center p-4">
-                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                          <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
                         </div>
                       ) : filteredToolsets.length === 0 ? (
                         <div className="flex flex-col items-center justify-center p-4 text-center">
-                          <ServerIcon className="w-6 h-6 text-muted-foreground mb-1" />
+                          <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
                           <Type small muted>
                             {serverSearch
                               ? "No servers match your search."
@@ -350,7 +350,7 @@ export default function CollectionDetail() {
                         filteredToolsets.map((toolset) => (
                           <label
                             key={toolset.id}
-                            className="flex items-start gap-3 px-3 py-2.5 hover:bg-accent/50 cursor-pointer border-b last:border-b-0"
+                            className="hover:bg-accent/50 flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 last:border-b-0"
                           >
                             <Checkbox
                               checked={editSelectedToolsetIds.has(toolset.id)}
@@ -360,18 +360,18 @@ export default function CollectionDetail() {
                             />
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium truncate">
+                                <span className="truncate text-sm font-medium">
                                   {toolset.name}
                                 </span>
                                 <Badge
                                   variant="secondary"
-                                  className="text-xs shrink-0"
+                                  className="shrink-0 text-xs"
                                 >
                                   {toolset.projectName}
                                 </Badge>
                               </div>
                               {toolset.description && (
-                                <div className="text-xs text-muted-foreground truncate mt-0.5">
+                                <div className="text-muted-foreground mt-0.5 truncate text-xs">
                                   {toolset.description}
                                 </div>
                               )}
@@ -462,9 +462,9 @@ export default function CollectionDetail() {
 
             {/* About */}
             {!editing && (
-              <div className="border rounded-lg p-5 mb-4">
-                <h2 className="text-base font-semibold mb-2">About</h2>
-                <p className="text-sm text-muted-foreground">
+              <div className="mb-4 rounded-lg border p-5">
+                <h2 className="mb-2 text-base font-semibold">About</h2>
+                <p className="text-muted-foreground text-sm">
                   {collection.description || "No description provided."}
                 </p>
               </div>
@@ -472,18 +472,18 @@ export default function CollectionDetail() {
 
             {/* MCP Servers (read-only list) */}
             {!editing && (
-              <div className="border rounded-lg p-5">
-                <h2 className="text-base font-semibold mb-4">
+              <div className="rounded-lg border p-5">
+                <h2 className="mb-4 text-base font-semibold">
                   MCP Servers ({servers.length})
                 </h2>
                 {isLoading ? (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     Loading servers...
                   </p>
                 ) : servers.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <Server className="w-8 h-8 text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground">
+                    <Server className="text-muted-foreground mb-2 h-8 w-8" />
+                    <p className="text-muted-foreground text-sm">
                       No servers in this collection yet.
                     </p>
                   </div>
@@ -492,28 +492,28 @@ export default function CollectionDetail() {
                     {servers.map((server) => (
                       <div
                         key={server.registrySpecifier}
-                        className="flex items-center gap-3 p-3 rounded-md border"
+                        className="flex items-center gap-3 rounded-md border p-3"
                       >
-                        <div className="flex items-center justify-center w-9 h-9 rounded border bg-muted shrink-0">
-                          <Monitor className="w-4 h-4 text-muted-foreground" />
+                        <div className="bg-muted flex h-9 w-9 shrink-0 items-center justify-center rounded border">
+                          <Monitor className="text-muted-foreground h-4 w-4" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium truncate">
+                            <span className="truncate text-sm font-medium">
                               {server.title}
                             </span>
                             {server.toolCount > 0 && (
                               <Badge
                                 variant="secondary"
-                                className="text-xs shrink-0"
+                                className="shrink-0 text-xs"
                               >
-                                <Wrench className="w-3 h-3 mr-1" />
+                                <Wrench className="mr-1 h-3 w-3" />
                                 {server.toolCount} tools
                               </Badge>
                             )}
                           </div>
                           {server.description && (
-                            <p className="text-xs text-muted-foreground truncate mt-0.5">
+                            <p className="text-muted-foreground mt-0.5 truncate text-xs">
                               {server.description}
                             </p>
                           )}
@@ -526,11 +526,11 @@ export default function CollectionDetail() {
             )}
 
             {/* Danger Zone */}
-            <div className="border border-destructive/30 rounded-lg p-5 mt-4">
-              <h2 className="text-base font-semibold text-destructive mb-2">
+            <div className="border-destructive/30 mt-4 rounded-lg border p-5">
+              <h2 className="text-destructive mb-2 text-base font-semibold">
                 Danger Zone
               </h2>
-              <p className="text-sm text-muted-foreground mb-3">
+              <p className="text-muted-foreground mb-3 text-sm">
                 Permanently delete this collection. This action cannot be
                 undone.
               </p>
@@ -579,8 +579,8 @@ export default function CollectionDetail() {
           {/* Sidebar */}
           <div className="w-72 shrink-0 space-y-4">
             {/* Stats */}
-            <div className="border rounded-lg p-5">
-              <h3 className="text-base font-semibold mb-3">Stats</h3>
+            <div className="rounded-lg border p-5">
+              <h3 className="mb-3 text-base font-semibold">Stats</h3>
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Servers</span>
@@ -594,8 +594,8 @@ export default function CollectionDetail() {
             </div>
 
             {/* Details */}
-            <div className="border rounded-lg p-5">
-              <h3 className="text-base font-semibold mb-3">Details</h3>
+            <div className="rounded-lg border p-5">
+              <h3 className="mb-3 text-base font-semibold">Details</h3>
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Visibility</span>
@@ -607,7 +607,7 @@ export default function CollectionDetail() {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Created</span>
                     <span className="flex items-center gap-1 font-medium">
-                      <Calendar className="w-3.5 h-3.5" />
+                      <Calendar className="h-3.5 w-3.5" />
                       {new Date(collection.createdAt).toLocaleDateString()}
                     </span>
                   </div>
@@ -629,7 +629,7 @@ export default function CollectionDetail() {
                 <button
                   key={project.id}
                   type="button"
-                  className="flex items-center gap-3 w-full rounded-md px-3 py-2.5 text-left text-sm hover:bg-accent transition-colors"
+                  className="hover:bg-accent flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors"
                   onClick={() => {
                     setSelectedProjectSlug(project.slug);
                     setShowProjectPicker(false);
@@ -642,8 +642,8 @@ export default function CollectionDetail() {
               ))}
               {organization.projects.length === 0 && (
                 <div className="flex flex-col items-center py-6 text-center">
-                  <FolderOpen className="w-8 h-8 text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">
+                  <FolderOpen className="text-muted-foreground mb-2 h-8 w-8" />
+                  <p className="text-muted-foreground text-sm">
                     No projects found.
                   </p>
                 </div>
