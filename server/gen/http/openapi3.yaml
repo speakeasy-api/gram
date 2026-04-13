@@ -3781,6 +3781,1644 @@ paths:
             tags:
                 - chatSessions
             x-speakeasy-name-override: revoke
+    /rpc/corpus.addComment:
+        post:
+            tags:
+                - corpus
+            summary: addComment corpus
+            description: Add a comment to a corpus file.
+            operationId: addComment
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AddCommentRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CorpusFeedbackCommentResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.createAnnotation:
+        post:
+            tags:
+                - corpus
+            summary: createAnnotation corpus
+            description: Create an annotation on a corpus file.
+            operationId: createAnnotation
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateAnnotationRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CorpusAnnotationResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.createDraft:
+        post:
+            tags:
+                - corpus
+            summary: createDraft corpus
+            description: Create a new draft.
+            operationId: createDraft
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateDraftRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CorpusDraftResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.deleteAnnotation:
+        post:
+            tags:
+                - corpus
+            summary: deleteAnnotation corpus
+            description: Delete an annotation by ID.
+            operationId: deleteAnnotation
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ServeImageForm'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CorpusAnnotationResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.deleteDraft:
+        post:
+            tags:
+                - corpus
+            summary: deleteDraft corpus
+            description: Soft-delete a draft.
+            operationId: deleteDraft
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ServeImageForm'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CorpusDraftResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.getAutoPublishConfig:
+        post:
+            tags:
+                - corpus
+            summary: getAutoPublishConfig corpus
+            description: Get the auto-publish configuration for a project.
+            operationId: getAutoPublishConfig
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CorpusAutoPublishConfigResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.getDraft:
+        post:
+            tags:
+                - corpus
+            summary: getDraft corpus
+            description: Get a draft by ID.
+            operationId: getDraft
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ServeImageForm'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CorpusDraftResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.getEnrichments:
+        post:
+            tags:
+                - corpus
+            summary: getEnrichments corpus
+            description: Get open draft counts per file.
+            operationId: getEnrichments
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CorpusEnrichmentsResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.getFeedback:
+        post:
+            tags:
+                - corpus
+            summary: getFeedback corpus
+            description: Get aggregated feedback for a corpus file.
+            operationId: getFeedback
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetFeedbackRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CorpusFeedbackResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.listAnnotations:
+        post:
+            tags:
+                - corpus
+            summary: listAnnotations corpus
+            description: List annotations for a corpus file.
+            operationId: listAnnotations
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetFeedbackRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListCorpusAnnotationsResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.listComments:
+        post:
+            tags:
+                - corpus
+            summary: listComments corpus
+            description: List comments for a corpus file.
+            operationId: listComments
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetFeedbackRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListCorpusCommentsResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.listDrafts:
+        post:
+            tags:
+                - corpus
+            summary: listDrafts corpus
+            description: List drafts for a project, with optional status filter.
+            operationId: listDrafts
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ListDraftsRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListCorpusDraftsResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.publishDrafts:
+        post:
+            tags:
+                - corpus
+            summary: publishDrafts corpus
+            description: Publish one or more drafts.
+            operationId: publishDrafts
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PublishDraftsRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PublishCorpusDraftsResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.searchLogs:
+        post:
+            tags:
+                - corpus
+            summary: searchLogs corpus
+            description: Search corpus search logs for a project.
+            operationId: corpusSearchLogs
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SearchLogsRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CorpusSearchLogsResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.searchStats:
+        post:
+            tags:
+                - corpus
+            summary: searchStats corpus
+            description: Get aggregated corpus search statistics for a project.
+            operationId: corpusSearchStats
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CorpusSearchStatsResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.setAutoPublishConfig:
+        post:
+            tags:
+                - corpus
+            summary: setAutoPublishConfig corpus
+            description: Set the auto-publish configuration for a project.
+            operationId: setAutoPublishConfig
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CorpusAutoPublishConfigResult'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CorpusAutoPublishConfigResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.updateDraft:
+        post:
+            tags:
+                - corpus
+            summary: updateDraft corpus
+            description: Update a draft's content.
+            operationId: updateDraft
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateDraftRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CorpusDraftResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+    /rpc/corpus.voteFeedback:
+        post:
+            tags:
+                - corpus
+            summary: voteFeedback corpus
+            description: Vote on feedback for a corpus file.
+            operationId: voteFeedback
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+                - name: Gram-Project
+                  in: header
+                  description: project header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: project header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/VoteFeedbackRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CorpusFeedbackResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
     /rpc/deployments.active:
         get:
             description: Get the active deployment for a project.
@@ -14639,6 +16277,18 @@ components:
                 - email
                 - role_id
                 - joined_at
+        AddCommentRequestBody:
+            type: object
+            properties:
+                content:
+                    type: string
+                    description: Comment content
+                file_path:
+                    type: string
+                    description: Path of the file in the corpus
+            required:
+                - file_path
+                - content
         AddDeploymentPackageForm:
             type: object
             properties:
@@ -15474,6 +17124,349 @@ components:
                 - slack_client_id
                 - slack_client_secret
                 - slack_signing_secret
+        CorpusAnnotationResult:
+            type: object
+            properties:
+                author:
+                    type: string
+                    description: Annotation author
+                author_type:
+                    type: string
+                    description: Type of author
+                    enum:
+                        - human
+                        - agent
+                content:
+                    type: string
+                    description: Annotation content
+                created_at:
+                    type: string
+                    description: The creation date of the annotation
+                    format: date-time
+                id:
+                    type: string
+                    description: The annotation ID
+                line_end:
+                    type: integer
+                    description: End line for the annotation
+                    format: int32
+                line_start:
+                    type: integer
+                    description: Start line for the annotation
+                    format: int32
+            required:
+                - id
+                - author
+                - author_type
+                - content
+                - created_at
+        CorpusAutoPublishConfigResult:
+            type: object
+            properties:
+                author_type_filter:
+                    type: string
+                    description: Optional author type filter
+                enabled:
+                    type: boolean
+                    description: Whether auto-publish is enabled
+                interval_minutes:
+                    type: integer
+                    description: Auto-publish interval in minutes
+                    format: int32
+                label_filter:
+                    type: array
+                    items:
+                        type: string
+                    description: Optional label filter
+                min_age_hours:
+                    type: integer
+                    description: Minimum draft age in hours
+                    format: int32
+                min_upvotes:
+                    type: integer
+                    description: Minimum upvotes required
+                    format: int32
+            required:
+                - enabled
+                - interval_minutes
+                - min_upvotes
+                - min_age_hours
+        CorpusDraftResult:
+            type: object
+            properties:
+                agent_name:
+                    type: string
+                    description: Name of the agent that authored the draft
+                author_type:
+                    type: string
+                    description: Type of the author
+                author_user_id:
+                    type: string
+                    description: User ID of the author
+                commit_sha:
+                    type: string
+                    description: The commit SHA if published
+                content:
+                    type: string
+                    description: Content body
+                created_at:
+                    type: string
+                    description: The creation date of the draft.
+                    format: date-time
+                file_path:
+                    type: string
+                    description: Path of the file in the corpus
+                id:
+                    type: string
+                    description: The draft ID
+                labels:
+                    type: array
+                    items:
+                        type: string
+                    description: Labels for the draft
+                operation:
+                    type: string
+                    description: The operation type
+                    enum:
+                        - create
+                        - update
+                        - delete
+                original_content:
+                    type: string
+                    description: Original content before changes
+                project_id:
+                    type: string
+                    description: The project ID
+                source:
+                    type: string
+                    description: Source of the draft
+                status:
+                    type: string
+                    description: The status of the draft
+                    enum:
+                        - open
+                        - published
+                        - rejected
+                title:
+                    type: string
+                    description: Title of the draft
+                updated_at:
+                    type: string
+                    description: The last update date of the draft.
+                    format: date-time
+            required:
+                - id
+                - project_id
+                - file_path
+                - operation
+                - status
+                - created_at
+                - updated_at
+        CorpusEnrichmentEntry:
+            type: object
+            properties:
+                file_path:
+                    type: string
+                    description: Path of the file in the corpus
+                open_drafts:
+                    type: integer
+                    description: Number of open drafts for this file
+                    format: int64
+            required:
+                - file_path
+                - open_drafts
+        CorpusEnrichmentsResult:
+            type: object
+            properties:
+                enrichments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CorpusEnrichmentEntry'
+                    description: Enrichment entries per file
+            required:
+                - enrichments
+        CorpusFeedbackCommentResult:
+            type: object
+            properties:
+                author:
+                    type: string
+                    description: Comment author
+                author_type:
+                    type: string
+                    description: Type of author
+                    enum:
+                        - human
+                        - agent
+                content:
+                    type: string
+                    description: Comment content
+                created_at:
+                    type: string
+                    description: The creation date of the comment
+                    format: date-time
+                downvotes:
+                    type: integer
+                    description: Comment downvotes
+                    format: int64
+                id:
+                    type: string
+                    description: The comment ID
+                upvotes:
+                    type: integer
+                    description: Comment upvotes
+                    format: int64
+            required:
+                - id
+                - author
+                - author_type
+                - content
+                - created_at
+                - upvotes
+                - downvotes
+        CorpusFeedbackResult:
+            type: object
+            properties:
+                downvotes:
+                    type: integer
+                    description: Number of downvotes
+                    format: int64
+                labels:
+                    type: array
+                    items:
+                        type: string
+                    description: Feedback labels
+                upvotes:
+                    type: integer
+                    description: Number of upvotes
+                    format: int64
+                user_vote:
+                    type: string
+                    description: Current user's vote direction
+                    enum:
+                        - up
+                        - down
+            required:
+                - upvotes
+                - downvotes
+                - labels
+        CorpusQueryFrequencyResult:
+            type: object
+            properties:
+                count:
+                    type: integer
+                    description: How often the query was searched
+                    format: int64
+                query:
+                    type: string
+                    description: The query string
+            required:
+                - query
+                - count
+        CorpusSearchLogResult:
+            type: object
+            properties:
+                agent:
+                    type: string
+                    description: Agent name
+                filters:
+                    description: Search filters
+                id:
+                    type: string
+                    description: Search log ID
+                latency_ms:
+                    type: number
+                    description: Search latency in milliseconds
+                    format: double
+                project_id:
+                    type: string
+                    description: The project ID
+                query:
+                    type: string
+                    description: The search query
+                result_count:
+                    type: integer
+                    description: Result count
+                    format: int64
+                session_id:
+                    type: string
+                    description: Session ID
+                timestamp:
+                    type: string
+                    description: Search timestamp
+                    format: date-time
+            required:
+                - id
+                - project_id
+                - query
+                - filters
+                - result_count
+                - latency_ms
+                - session_id
+                - agent
+                - timestamp
+        CorpusSearchLogsResult:
+            type: object
+            properties:
+                logs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CorpusSearchLogResult'
+                    description: Search logs
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page
+            required:
+                - logs
+        CorpusSearchStatsResult:
+            type: object
+            properties:
+                latency_p50:
+                    type: number
+                    description: P50 latency in milliseconds
+                    format: double
+                latency_p95:
+                    type: number
+                    description: P95 latency in milliseconds
+                    format: double
+                latency_p99:
+                    type: number
+                    description: P99 latency in milliseconds
+                    format: double
+                top_queries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CorpusQueryFrequencyResult'
+                    description: Top queries by frequency
+                total_events:
+                    type: integer
+                    description: Total number of search events
+                    format: int64
+            required:
+                - top_queries
+                - latency_p50
+                - latency_p95
+                - latency_p99
+                - total_events
+        CreateAnnotationRequestBody:
+            type: object
+            properties:
+                content:
+                    type: string
+                    description: Annotation content
+                file_path:
+                    type: string
+                    description: Path of the file in the corpus
+                line_end:
+                    type: integer
+                    description: End line for the annotation
+                    format: int32
+                line_start:
+                    type: integer
+                    description: Start line for the annotation
+                    format: int32
+            required:
+                - file_path
+                - content
         CreateDeploymentForm:
             type: object
             properties:
@@ -15577,6 +17570,48 @@ components:
                     description: The custom domain
             required:
                 - domain
+        CreateDraftRequestBody:
+            type: object
+            properties:
+                agent_name:
+                    type: string
+                    description: Name of the agent that authored the draft
+                author_type:
+                    type: string
+                    description: Type of the author
+                author_user_id:
+                    type: string
+                    description: User ID of the author
+                content:
+                    type: string
+                    description: Content body
+                file_path:
+                    type: string
+                    description: Path of the file in the corpus
+                labels:
+                    type: array
+                    items:
+                        type: string
+                    description: Labels for the draft
+                operation:
+                    type: string
+                    description: The operation type
+                    enum:
+                        - create
+                        - update
+                        - delete
+                original_content:
+                    type: string
+                    description: Original content before changes
+                source:
+                    type: string
+                    description: Source of the draft
+                title:
+                    type: string
+                    description: Title of the draft
+            required:
+                - file_path
+                - operation
         CreateEnvironmentForm:
             type: object
             properties:
@@ -17116,6 +19151,14 @@ components:
                 - openapiv3_tool_count
                 - functions_tool_count
                 - external_mcp_tool_count
+        GetFeedbackRequestBody:
+            type: object
+            properties:
+                file_path:
+                    type: string
+                    description: Path of the file in the corpus
+            required:
+                - file_path
         GetHooksSummaryPayload:
             type: object
             properties:
@@ -17977,6 +20020,36 @@ components:
             required:
                 - chats
                 - total
+        ListCorpusAnnotationsResult:
+            type: object
+            properties:
+                annotations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CorpusAnnotationResult'
+                    description: Annotations for the file
+            required:
+                - annotations
+        ListCorpusCommentsResult:
+            type: object
+            properties:
+                comments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CorpusFeedbackCommentResult'
+                    description: Comments for the file
+            required:
+                - comments
+        ListCorpusDraftsResult:
+            type: object
+            properties:
+                drafts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CorpusDraftResult'
+                    description: The list of drafts
+            required:
+                - drafts
         ListDeploymentForm:
             type: object
             properties:
@@ -17997,6 +20070,12 @@ components:
                     example: 01jp3f054qc02gbcmpp0qmyzed
             required:
                 - items
+        ListDraftsRequestBody:
+            type: object
+            properties:
+                status:
+                    type: string
+                    description: Filter by draft status
         ListEnvironmentsResult:
             type: object
             properties:
@@ -19524,6 +21603,24 @@ components:
             required:
                 - id
                 - name
+        PublishCorpusDraftsResult:
+            type: object
+            properties:
+                commit_sha:
+                    type: string
+                    description: The commit SHA of the published changes
+            required:
+                - commit_sha
+        PublishDraftsRequestBody:
+            type: object
+            properties:
+                draft_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: List of draft IDs to publish
+            required:
+                - draft_ids
         PublishPackageForm:
             type: object
             properties:
@@ -19939,6 +22036,19 @@ components:
                     example: "2025-12-19T11:00:00Z"
                     format: date-time
             description: Payload for searching telemetry logs
+        SearchLogsRequestBody:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Cursor for pagination
+                limit:
+                    type: integer
+                    description: Number of logs to return
+                    default: 20
+                    format: int64
+                    minimum: 1
+                    maximum: 100
         SearchLogsResult:
             type: object
             properties:
@@ -21188,6 +23298,18 @@ components:
                 - id
                 - toolset_id
                 - environment_id
+        UpdateDraftRequestBody:
+            type: object
+            properties:
+                content:
+                    type: string
+                    description: Updated content body
+                id:
+                    type: string
+                    description: The draft ID
+            required:
+                - id
+                - content
         UpdateEnvironmentForm:
             type: object
             properties:
@@ -21843,6 +23965,21 @@ components:
                 - organization
                 - projects
                 - scopes
+        VoteFeedbackRequestBody:
+            type: object
+            properties:
+                direction:
+                    type: string
+                    description: Vote direction
+                    enum:
+                        - up
+                        - down
+                file_path:
+                    type: string
+                    description: Path of the file in the corpus
+            required:
+                - file_path
+                - direction
         WorkflowAgentRequest:
             type: object
             properties:
@@ -22040,6 +24177,8 @@ tags:
       description: Managed chats for gram AI consumers.
     - name: chatSessions
       description: Manages chat session tokens for client-side authentication
+    - name: corpus
+      description: Manages content corpus drafts and publishing.
     - name: deployments
       description: Manages deployments of tools from upstream sources.
     - name: domains

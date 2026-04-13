@@ -21,6 +21,7 @@ import (
 	authc "github.com/speakeasy-api/gram/server/gen/http/auth/client"
 	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
 	chatsessionsc "github.com/speakeasy-api/gram/server/gen/http/chat_sessions/client"
+	corpusc "github.com/speakeasy-api/gram/server/gen/http/corpus/client"
 	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
 	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
@@ -61,6 +62,7 @@ func UsageCommands() []string {
 		"auth (callback|login|switch-scopes|logout|register|info)",
 		"chat (list-chats|load-chat|generate-title|credit-usage|list-chats-with-resolutions|submit-feedback)",
 		"chat-sessions (create|revoke)",
+		"corpus (create-draft|get-draft|list-drafts|update-draft|delete-draft|publish-drafts|get-enrichments|get-feedback|vote-feedback|list-comments|add-comment|list-annotations|create-annotation|delete-annotation|get-auto-publish-config|set-auto-publish-config|search-logs|search-stats)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|delete-domain)",
 		"environments (create-environment|list-environments|update-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
@@ -343,6 +345,95 @@ func ParseEndpoint(
 		chatSessionsRevokeSessionTokenFlag     = chatSessionsRevokeFlags.String("session-token", "", "")
 		chatSessionsRevokeApikeyTokenFlag      = chatSessionsRevokeFlags.String("apikey-token", "", "")
 		chatSessionsRevokeProjectSlugInputFlag = chatSessionsRevokeFlags.String("project-slug-input", "", "")
+
+		corpusFlags = flag.NewFlagSet("corpus", flag.ContinueOnError)
+
+		corpusCreateDraftFlags                = flag.NewFlagSet("create-draft", flag.ExitOnError)
+		corpusCreateDraftBodyFlag             = corpusCreateDraftFlags.String("body", "REQUIRED", "")
+		corpusCreateDraftSessionTokenFlag     = corpusCreateDraftFlags.String("session-token", "", "")
+		corpusCreateDraftProjectSlugInputFlag = corpusCreateDraftFlags.String("project-slug-input", "", "")
+
+		corpusGetDraftFlags                = flag.NewFlagSet("get-draft", flag.ExitOnError)
+		corpusGetDraftBodyFlag             = corpusGetDraftFlags.String("body", "REQUIRED", "")
+		corpusGetDraftSessionTokenFlag     = corpusGetDraftFlags.String("session-token", "", "")
+		corpusGetDraftProjectSlugInputFlag = corpusGetDraftFlags.String("project-slug-input", "", "")
+
+		corpusListDraftsFlags                = flag.NewFlagSet("list-drafts", flag.ExitOnError)
+		corpusListDraftsBodyFlag             = corpusListDraftsFlags.String("body", "REQUIRED", "")
+		corpusListDraftsSessionTokenFlag     = corpusListDraftsFlags.String("session-token", "", "")
+		corpusListDraftsProjectSlugInputFlag = corpusListDraftsFlags.String("project-slug-input", "", "")
+
+		corpusUpdateDraftFlags                = flag.NewFlagSet("update-draft", flag.ExitOnError)
+		corpusUpdateDraftBodyFlag             = corpusUpdateDraftFlags.String("body", "REQUIRED", "")
+		corpusUpdateDraftSessionTokenFlag     = corpusUpdateDraftFlags.String("session-token", "", "")
+		corpusUpdateDraftProjectSlugInputFlag = corpusUpdateDraftFlags.String("project-slug-input", "", "")
+
+		corpusDeleteDraftFlags                = flag.NewFlagSet("delete-draft", flag.ExitOnError)
+		corpusDeleteDraftBodyFlag             = corpusDeleteDraftFlags.String("body", "REQUIRED", "")
+		corpusDeleteDraftSessionTokenFlag     = corpusDeleteDraftFlags.String("session-token", "", "")
+		corpusDeleteDraftProjectSlugInputFlag = corpusDeleteDraftFlags.String("project-slug-input", "", "")
+
+		corpusPublishDraftsFlags                = flag.NewFlagSet("publish-drafts", flag.ExitOnError)
+		corpusPublishDraftsBodyFlag             = corpusPublishDraftsFlags.String("body", "REQUIRED", "")
+		corpusPublishDraftsSessionTokenFlag     = corpusPublishDraftsFlags.String("session-token", "", "")
+		corpusPublishDraftsProjectSlugInputFlag = corpusPublishDraftsFlags.String("project-slug-input", "", "")
+
+		corpusGetEnrichmentsFlags                = flag.NewFlagSet("get-enrichments", flag.ExitOnError)
+		corpusGetEnrichmentsSessionTokenFlag     = corpusGetEnrichmentsFlags.String("session-token", "", "")
+		corpusGetEnrichmentsProjectSlugInputFlag = corpusGetEnrichmentsFlags.String("project-slug-input", "", "")
+
+		corpusGetFeedbackFlags                = flag.NewFlagSet("get-feedback", flag.ExitOnError)
+		corpusGetFeedbackBodyFlag             = corpusGetFeedbackFlags.String("body", "REQUIRED", "")
+		corpusGetFeedbackSessionTokenFlag     = corpusGetFeedbackFlags.String("session-token", "", "")
+		corpusGetFeedbackProjectSlugInputFlag = corpusGetFeedbackFlags.String("project-slug-input", "", "")
+
+		corpusVoteFeedbackFlags                = flag.NewFlagSet("vote-feedback", flag.ExitOnError)
+		corpusVoteFeedbackBodyFlag             = corpusVoteFeedbackFlags.String("body", "REQUIRED", "")
+		corpusVoteFeedbackSessionTokenFlag     = corpusVoteFeedbackFlags.String("session-token", "", "")
+		corpusVoteFeedbackProjectSlugInputFlag = corpusVoteFeedbackFlags.String("project-slug-input", "", "")
+
+		corpusListCommentsFlags                = flag.NewFlagSet("list-comments", flag.ExitOnError)
+		corpusListCommentsBodyFlag             = corpusListCommentsFlags.String("body", "REQUIRED", "")
+		corpusListCommentsSessionTokenFlag     = corpusListCommentsFlags.String("session-token", "", "")
+		corpusListCommentsProjectSlugInputFlag = corpusListCommentsFlags.String("project-slug-input", "", "")
+
+		corpusAddCommentFlags                = flag.NewFlagSet("add-comment", flag.ExitOnError)
+		corpusAddCommentBodyFlag             = corpusAddCommentFlags.String("body", "REQUIRED", "")
+		corpusAddCommentSessionTokenFlag     = corpusAddCommentFlags.String("session-token", "", "")
+		corpusAddCommentProjectSlugInputFlag = corpusAddCommentFlags.String("project-slug-input", "", "")
+
+		corpusListAnnotationsFlags                = flag.NewFlagSet("list-annotations", flag.ExitOnError)
+		corpusListAnnotationsBodyFlag             = corpusListAnnotationsFlags.String("body", "REQUIRED", "")
+		corpusListAnnotationsSessionTokenFlag     = corpusListAnnotationsFlags.String("session-token", "", "")
+		corpusListAnnotationsProjectSlugInputFlag = corpusListAnnotationsFlags.String("project-slug-input", "", "")
+
+		corpusCreateAnnotationFlags                = flag.NewFlagSet("create-annotation", flag.ExitOnError)
+		corpusCreateAnnotationBodyFlag             = corpusCreateAnnotationFlags.String("body", "REQUIRED", "")
+		corpusCreateAnnotationSessionTokenFlag     = corpusCreateAnnotationFlags.String("session-token", "", "")
+		corpusCreateAnnotationProjectSlugInputFlag = corpusCreateAnnotationFlags.String("project-slug-input", "", "")
+
+		corpusDeleteAnnotationFlags                = flag.NewFlagSet("delete-annotation", flag.ExitOnError)
+		corpusDeleteAnnotationBodyFlag             = corpusDeleteAnnotationFlags.String("body", "REQUIRED", "")
+		corpusDeleteAnnotationSessionTokenFlag     = corpusDeleteAnnotationFlags.String("session-token", "", "")
+		corpusDeleteAnnotationProjectSlugInputFlag = corpusDeleteAnnotationFlags.String("project-slug-input", "", "")
+
+		corpusGetAutoPublishConfigFlags                = flag.NewFlagSet("get-auto-publish-config", flag.ExitOnError)
+		corpusGetAutoPublishConfigSessionTokenFlag     = corpusGetAutoPublishConfigFlags.String("session-token", "", "")
+		corpusGetAutoPublishConfigProjectSlugInputFlag = corpusGetAutoPublishConfigFlags.String("project-slug-input", "", "")
+
+		corpusSetAutoPublishConfigFlags                = flag.NewFlagSet("set-auto-publish-config", flag.ExitOnError)
+		corpusSetAutoPublishConfigBodyFlag             = corpusSetAutoPublishConfigFlags.String("body", "REQUIRED", "")
+		corpusSetAutoPublishConfigSessionTokenFlag     = corpusSetAutoPublishConfigFlags.String("session-token", "", "")
+		corpusSetAutoPublishConfigProjectSlugInputFlag = corpusSetAutoPublishConfigFlags.String("project-slug-input", "", "")
+
+		corpusSearchLogsFlags                = flag.NewFlagSet("search-logs", flag.ExitOnError)
+		corpusSearchLogsBodyFlag             = corpusSearchLogsFlags.String("body", "REQUIRED", "")
+		corpusSearchLogsSessionTokenFlag     = corpusSearchLogsFlags.String("session-token", "", "")
+		corpusSearchLogsProjectSlugInputFlag = corpusSearchLogsFlags.String("project-slug-input", "", "")
+
+		corpusSearchStatsFlags                = flag.NewFlagSet("search-stats", flag.ExitOnError)
+		corpusSearchStatsSessionTokenFlag     = corpusSearchStatsFlags.String("session-token", "", "")
+		corpusSearchStatsProjectSlugInputFlag = corpusSearchStatsFlags.String("project-slug-input", "", "")
 
 		deploymentsFlags = flag.NewFlagSet("deployments", flag.ContinueOnError)
 
@@ -1020,6 +1111,26 @@ func ParseEndpoint(
 	chatSessionsCreateFlags.Usage = chatSessionsCreateUsage
 	chatSessionsRevokeFlags.Usage = chatSessionsRevokeUsage
 
+	corpusFlags.Usage = corpusUsage
+	corpusCreateDraftFlags.Usage = corpusCreateDraftUsage
+	corpusGetDraftFlags.Usage = corpusGetDraftUsage
+	corpusListDraftsFlags.Usage = corpusListDraftsUsage
+	corpusUpdateDraftFlags.Usage = corpusUpdateDraftUsage
+	corpusDeleteDraftFlags.Usage = corpusDeleteDraftUsage
+	corpusPublishDraftsFlags.Usage = corpusPublishDraftsUsage
+	corpusGetEnrichmentsFlags.Usage = corpusGetEnrichmentsUsage
+	corpusGetFeedbackFlags.Usage = corpusGetFeedbackUsage
+	corpusVoteFeedbackFlags.Usage = corpusVoteFeedbackUsage
+	corpusListCommentsFlags.Usage = corpusListCommentsUsage
+	corpusAddCommentFlags.Usage = corpusAddCommentUsage
+	corpusListAnnotationsFlags.Usage = corpusListAnnotationsUsage
+	corpusCreateAnnotationFlags.Usage = corpusCreateAnnotationUsage
+	corpusDeleteAnnotationFlags.Usage = corpusDeleteAnnotationUsage
+	corpusGetAutoPublishConfigFlags.Usage = corpusGetAutoPublishConfigUsage
+	corpusSetAutoPublishConfigFlags.Usage = corpusSetAutoPublishConfigUsage
+	corpusSearchLogsFlags.Usage = corpusSearchLogsUsage
+	corpusSearchStatsFlags.Usage = corpusSearchStatsUsage
+
 	deploymentsFlags.Usage = deploymentsUsage
 	deploymentsGetDeploymentFlags.Usage = deploymentsGetDeploymentUsage
 	deploymentsGetLatestDeploymentFlags.Usage = deploymentsGetLatestDeploymentUsage
@@ -1205,6 +1316,8 @@ func ParseEndpoint(
 			svcf = chatFlags
 		case "chat-sessions":
 			svcf = chatSessionsFlags
+		case "corpus":
+			svcf = corpusFlags
 		case "deployments":
 			svcf = deploymentsFlags
 		case "domains":
@@ -1418,6 +1531,64 @@ func ParseEndpoint(
 
 			case "revoke":
 				epf = chatSessionsRevokeFlags
+
+			}
+
+		case "corpus":
+			switch epn {
+			case "create-draft":
+				epf = corpusCreateDraftFlags
+
+			case "get-draft":
+				epf = corpusGetDraftFlags
+
+			case "list-drafts":
+				epf = corpusListDraftsFlags
+
+			case "update-draft":
+				epf = corpusUpdateDraftFlags
+
+			case "delete-draft":
+				epf = corpusDeleteDraftFlags
+
+			case "publish-drafts":
+				epf = corpusPublishDraftsFlags
+
+			case "get-enrichments":
+				epf = corpusGetEnrichmentsFlags
+
+			case "get-feedback":
+				epf = corpusGetFeedbackFlags
+
+			case "vote-feedback":
+				epf = corpusVoteFeedbackFlags
+
+			case "list-comments":
+				epf = corpusListCommentsFlags
+
+			case "add-comment":
+				epf = corpusAddCommentFlags
+
+			case "list-annotations":
+				epf = corpusListAnnotationsFlags
+
+			case "create-annotation":
+				epf = corpusCreateAnnotationFlags
+
+			case "delete-annotation":
+				epf = corpusDeleteAnnotationFlags
+
+			case "get-auto-publish-config":
+				epf = corpusGetAutoPublishConfigFlags
+
+			case "set-auto-publish-config":
+				epf = corpusSetAutoPublishConfigFlags
+
+			case "search-logs":
+				epf = corpusSearchLogsFlags
+
+			case "search-stats":
+				epf = corpusSearchStatsFlags
 
 			}
 
@@ -2022,6 +2193,64 @@ func ParseEndpoint(
 			case "revoke":
 				endpoint = c.Revoke()
 				data, err = chatsessionsc.BuildRevokePayload(*chatSessionsRevokeTokenFlag, *chatSessionsRevokeSessionTokenFlag, *chatSessionsRevokeApikeyTokenFlag, *chatSessionsRevokeProjectSlugInputFlag)
+			}
+		case "corpus":
+			c := corpusc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-draft":
+				endpoint = c.CreateDraft()
+				data, err = corpusc.BuildCreateDraftPayload(*corpusCreateDraftBodyFlag, *corpusCreateDraftSessionTokenFlag, *corpusCreateDraftProjectSlugInputFlag)
+			case "get-draft":
+				endpoint = c.GetDraft()
+				data, err = corpusc.BuildGetDraftPayload(*corpusGetDraftBodyFlag, *corpusGetDraftSessionTokenFlag, *corpusGetDraftProjectSlugInputFlag)
+			case "list-drafts":
+				endpoint = c.ListDrafts()
+				data, err = corpusc.BuildListDraftsPayload(*corpusListDraftsBodyFlag, *corpusListDraftsSessionTokenFlag, *corpusListDraftsProjectSlugInputFlag)
+			case "update-draft":
+				endpoint = c.UpdateDraft()
+				data, err = corpusc.BuildUpdateDraftPayload(*corpusUpdateDraftBodyFlag, *corpusUpdateDraftSessionTokenFlag, *corpusUpdateDraftProjectSlugInputFlag)
+			case "delete-draft":
+				endpoint = c.DeleteDraft()
+				data, err = corpusc.BuildDeleteDraftPayload(*corpusDeleteDraftBodyFlag, *corpusDeleteDraftSessionTokenFlag, *corpusDeleteDraftProjectSlugInputFlag)
+			case "publish-drafts":
+				endpoint = c.PublishDrafts()
+				data, err = corpusc.BuildPublishDraftsPayload(*corpusPublishDraftsBodyFlag, *corpusPublishDraftsSessionTokenFlag, *corpusPublishDraftsProjectSlugInputFlag)
+			case "get-enrichments":
+				endpoint = c.GetEnrichments()
+				data, err = corpusc.BuildGetEnrichmentsPayload(*corpusGetEnrichmentsSessionTokenFlag, *corpusGetEnrichmentsProjectSlugInputFlag)
+			case "get-feedback":
+				endpoint = c.GetFeedback()
+				data, err = corpusc.BuildGetFeedbackPayload(*corpusGetFeedbackBodyFlag, *corpusGetFeedbackSessionTokenFlag, *corpusGetFeedbackProjectSlugInputFlag)
+			case "vote-feedback":
+				endpoint = c.VoteFeedback()
+				data, err = corpusc.BuildVoteFeedbackPayload(*corpusVoteFeedbackBodyFlag, *corpusVoteFeedbackSessionTokenFlag, *corpusVoteFeedbackProjectSlugInputFlag)
+			case "list-comments":
+				endpoint = c.ListComments()
+				data, err = corpusc.BuildListCommentsPayload(*corpusListCommentsBodyFlag, *corpusListCommentsSessionTokenFlag, *corpusListCommentsProjectSlugInputFlag)
+			case "add-comment":
+				endpoint = c.AddComment()
+				data, err = corpusc.BuildAddCommentPayload(*corpusAddCommentBodyFlag, *corpusAddCommentSessionTokenFlag, *corpusAddCommentProjectSlugInputFlag)
+			case "list-annotations":
+				endpoint = c.ListAnnotations()
+				data, err = corpusc.BuildListAnnotationsPayload(*corpusListAnnotationsBodyFlag, *corpusListAnnotationsSessionTokenFlag, *corpusListAnnotationsProjectSlugInputFlag)
+			case "create-annotation":
+				endpoint = c.CreateAnnotation()
+				data, err = corpusc.BuildCreateAnnotationPayload(*corpusCreateAnnotationBodyFlag, *corpusCreateAnnotationSessionTokenFlag, *corpusCreateAnnotationProjectSlugInputFlag)
+			case "delete-annotation":
+				endpoint = c.DeleteAnnotation()
+				data, err = corpusc.BuildDeleteAnnotationPayload(*corpusDeleteAnnotationBodyFlag, *corpusDeleteAnnotationSessionTokenFlag, *corpusDeleteAnnotationProjectSlugInputFlag)
+			case "get-auto-publish-config":
+				endpoint = c.GetAutoPublishConfig()
+				data, err = corpusc.BuildGetAutoPublishConfigPayload(*corpusGetAutoPublishConfigSessionTokenFlag, *corpusGetAutoPublishConfigProjectSlugInputFlag)
+			case "set-auto-publish-config":
+				endpoint = c.SetAutoPublishConfig()
+				data, err = corpusc.BuildSetAutoPublishConfigPayload(*corpusSetAutoPublishConfigBodyFlag, *corpusSetAutoPublishConfigSessionTokenFlag, *corpusSetAutoPublishConfigProjectSlugInputFlag)
+			case "search-logs":
+				endpoint = c.SearchLogs()
+				data, err = corpusc.BuildSearchLogsPayload(*corpusSearchLogsBodyFlag, *corpusSearchLogsSessionTokenFlag, *corpusSearchLogsProjectSlugInputFlag)
+			case "search-stats":
+				endpoint = c.SearchStats()
+				data, err = corpusc.BuildSearchStatsPayload(*corpusSearchStatsSessionTokenFlag, *corpusSearchStatsProjectSlugInputFlag)
 			}
 		case "deployments":
 			c := deploymentsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3495,6 +3724,423 @@ func chatSessionsRevokeUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat-sessions revoke --token \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// corpusUsage displays the usage of the corpus command and its subcommands.
+func corpusUsage() {
+	fmt.Fprintln(os.Stderr, `Manages content corpus drafts and publishing.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] corpus COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-draft: Create a new draft.`)
+	fmt.Fprintln(os.Stderr, `    get-draft: Get a draft by ID.`)
+	fmt.Fprintln(os.Stderr, `    list-drafts: List drafts for a project, with optional status filter.`)
+	fmt.Fprintln(os.Stderr, `    update-draft: Update a draft's content.`)
+	fmt.Fprintln(os.Stderr, `    delete-draft: Soft-delete a draft.`)
+	fmt.Fprintln(os.Stderr, `    publish-drafts: Publish one or more drafts.`)
+	fmt.Fprintln(os.Stderr, `    get-enrichments: Get open draft counts per file.`)
+	fmt.Fprintln(os.Stderr, `    get-feedback: Get aggregated feedback for a corpus file.`)
+	fmt.Fprintln(os.Stderr, `    vote-feedback: Vote on feedback for a corpus file.`)
+	fmt.Fprintln(os.Stderr, `    list-comments: List comments for a corpus file.`)
+	fmt.Fprintln(os.Stderr, `    add-comment: Add a comment to a corpus file.`)
+	fmt.Fprintln(os.Stderr, `    list-annotations: List annotations for a corpus file.`)
+	fmt.Fprintln(os.Stderr, `    create-annotation: Create an annotation on a corpus file.`)
+	fmt.Fprintln(os.Stderr, `    delete-annotation: Delete an annotation by ID.`)
+	fmt.Fprintln(os.Stderr, `    get-auto-publish-config: Get the auto-publish configuration for a project.`)
+	fmt.Fprintln(os.Stderr, `    set-auto-publish-config: Set the auto-publish configuration for a project.`)
+	fmt.Fprintln(os.Stderr, `    search-logs: Search corpus search logs for a project.`)
+	fmt.Fprintln(os.Stderr, `    search-stats: Get aggregated corpus search statistics for a project.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s corpus COMMAND --help\n", os.Args[0])
+}
+func corpusCreateDraftUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus create-draft", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new draft.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus create-draft --body '{\n      \"agent_name\": \"abc123\",\n      \"author_type\": \"abc123\",\n      \"author_user_id\": \"abc123\",\n      \"content\": \"abc123\",\n      \"file_path\": \"abc123\",\n      \"labels\": [\n         \"abc123\"\n      ],\n      \"operation\": \"update\",\n      \"original_content\": \"abc123\",\n      \"source\": \"abc123\",\n      \"title\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusGetDraftUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus get-draft", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a draft by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus get-draft --body '{\n      \"id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusListDraftsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus list-drafts", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List drafts for a project, with optional status filter.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus list-drafts --body '{\n      \"status\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusUpdateDraftUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus update-draft", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update a draft's content.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus update-draft --body '{\n      \"content\": \"abc123\",\n      \"id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusDeleteDraftUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus delete-draft", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a draft.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus delete-draft --body '{\n      \"id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusPublishDraftsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus publish-drafts", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Publish one or more drafts.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus publish-drafts --body '{\n      \"draft_ids\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusGetEnrichmentsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus get-enrichments", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get open draft counts per file.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus get-enrichments --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusGetFeedbackUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus get-feedback", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get aggregated feedback for a corpus file.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus get-feedback --body '{\n      \"file_path\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusVoteFeedbackUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus vote-feedback", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Vote on feedback for a corpus file.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus vote-feedback --body '{\n      \"direction\": \"down\",\n      \"file_path\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusListCommentsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus list-comments", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List comments for a corpus file.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus list-comments --body '{\n      \"file_path\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusAddCommentUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus add-comment", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Add a comment to a corpus file.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus add-comment --body '{\n      \"content\": \"abc123\",\n      \"file_path\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusListAnnotationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus list-annotations", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List annotations for a corpus file.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus list-annotations --body '{\n      \"file_path\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusCreateAnnotationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus create-annotation", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create an annotation on a corpus file.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus create-annotation --body '{\n      \"content\": \"abc123\",\n      \"file_path\": \"abc123\",\n      \"line_end\": 1,\n      \"line_start\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusDeleteAnnotationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus delete-annotation", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete an annotation by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus delete-annotation --body '{\n      \"id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusGetAutoPublishConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus get-auto-publish-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the auto-publish configuration for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus get-auto-publish-config --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusSetAutoPublishConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus set-auto-publish-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Set the auto-publish configuration for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus set-auto-publish-config --body '{\n      \"author_type_filter\": \"abc123\",\n      \"enabled\": false,\n      \"interval_minutes\": 1,\n      \"label_filter\": [\n         \"abc123\"\n      ],\n      \"min_age_hours\": 1,\n      \"min_upvotes\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusSearchLogsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus search-logs", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Search corpus search logs for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus search-logs --body '{\n      \"cursor\": \"abc123\",\n      \"limit\": 2\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func corpusSearchStatsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] corpus search-stats", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get aggregated corpus search statistics for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "corpus search-stats --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // deploymentsUsage displays the usage of the deployments command and its

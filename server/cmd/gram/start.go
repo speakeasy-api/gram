@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -44,6 +45,9 @@ import (
 	chatsessionssvc "github.com/speakeasy-api/gram/server/internal/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/corpus"
+	corpusgit "github.com/speakeasy-api/gram/server/internal/corpus/git"
+	corpusgithttp "github.com/speakeasy-api/gram/server/internal/corpus/githttp"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -755,7 +759,33 @@ func newStartCommand() *cli.Command {
 				GramSiteURL:       c.String("site-url"),
 				SignInRedirectURL: auth.FormSignInRedirectURL(c.String("site-url")),
 			}, accessManager))
+			// Corpus service
+			corpusRepoBase := os.Getenv("GRAM_CORPUS_REPO_BASE")
+			if corpusRepoBase == "" {
+				corpusRepoBase = ".corpus-repos"
+			}
+			corpusSvc := corpus.NewGoaService(logger, tracerProvider, sessionManager, accessManager, db, chDB, corpusRepoBase)
+			corpus.Attach(mux, corpusSvc)
 
+			// Git smart HTTP for corpus repos
+			gitHTTPHandler := corpusgithttp.NewHandler(func(projectID string) (string, error) {
+				repoPath := filepath.Join(corpusRepoBase, "repos", projectID+".git")
+				if _, err := os.Stat(repoPath); os.IsNotExist(err) {
+					if _, err := corpusgit.InitBareRepo(repoPath); err != nil {
+						return "", fmt.Errorf("init corpus repo: %w", err)
+					}
+				}
+				return repoPath, nil
+			})
+			// The git Backend handles its own routing — strip /v1/corpus/git prefix
+			// so the Backend sees /{project_id}/info/refs, etc.
+			gitStripHandler := http.StripPrefix("/v1/corpus/git", gitHTTPHandler)
+			mux.Handle("GET", "/v1/corpus/git/{*path}", func(w http.ResponseWriter, r *http.Request) {
+				gitStripHandler.ServeHTTP(w, r)
+			})
+			mux.Handle("POST", "/v1/corpus/git/{*path}", func(w http.ResponseWriter, r *http.Request) {
+				gitStripHandler.ServeHTTP(w, r)
+			})
 			srv := &http.Server{
 				Addr:              c.String("address"),
 				Handler:           mux,
