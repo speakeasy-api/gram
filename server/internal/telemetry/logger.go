@@ -74,7 +74,7 @@ func (l *Logger) checkToolIOLogsEnabled(ctx context.Context, organizationID stri
 	return enabled
 }
 
-func (l *Logger) CreateLog(ctx context.Context, params LogParams) {
+func (l *Logger) Log(ctx context.Context, params LogParams) {
 	chRepo := repo.New(l.chConn)
 
 	enabled, err := l.logsEnabled(ctx, params.ToolInfo.OrganizationID)

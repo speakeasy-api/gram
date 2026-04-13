@@ -27,7 +27,7 @@ func TestCreateLog_LogsCorrectly(t *testing.T) {
 	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -67,7 +67,7 @@ func TestCreateLog_NilFunctionID(t *testing.T) {
 	toolInfo.FunctionID = nil
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -91,7 +91,7 @@ func TestCreateLog_NonNilFunctionID(t *testing.T) {
 	toolInfo.FunctionID = &funcID
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -128,7 +128,7 @@ func TestCreateLog_SeverityFromStatusCode(t *testing.T) {
 			toolInfo := newTestToolInfo(ti.orgID)
 			timestamp := time.Now().UTC()
 
-			ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+			ti.telemLogger.Log(ctx, telemetry.LogParams{
 				Timestamp:  timestamp,
 				ToolInfo:   toolInfo,
 				Attributes: attrs,
@@ -153,7 +153,7 @@ func TestCreateLog_DefaultSeverityWithoutStatusCode(t *testing.T) {
 	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -180,7 +180,7 @@ func TestCreateLog_RequestHeaders(t *testing.T) {
 	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -209,7 +209,7 @@ func TestCreateLog_ResponseHeaders(t *testing.T) {
 	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -234,7 +234,7 @@ func TestCreateLog_LogMessageBody(t *testing.T) {
 	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -258,7 +258,7 @@ func TestCreateLog_Timestamp(t *testing.T) {
 	// but still specific enough to verify timestamp storage
 	timestamp := time.Now().UTC().Truncate(time.Second).Add(-24 * time.Hour)
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -282,7 +282,7 @@ func TestCreateLog_NoOpWhenFeatureDisabled(t *testing.T) {
 	toolInfo := newTestToolInfo(ti.disabledLogsOrgID)
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -316,7 +316,7 @@ func TestCreateLog_EmptyDeploymentIDNotInAttributes(t *testing.T) {
 	toolInfo.DeploymentID = ""
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -342,7 +342,7 @@ func TestCreateLog_ChatIDColumn(t *testing.T) {
 	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -365,7 +365,7 @@ func TestCreateLog_NilChatIDWhenNotProvided(t *testing.T) {
 	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -392,7 +392,7 @@ func TestCreateLog_TraceAndSpanIDColumns(t *testing.T) {
 	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -422,7 +422,7 @@ func TestCreateLog_ToolIOBodyContent(t *testing.T) {
 	toolInfo := newTestToolInfo(ti.enabledToolIOOrgID)
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -450,7 +450,7 @@ func TestCreateLog_ToolIOBodyContentScrubbed(t *testing.T) {
 	toolInfo := newTestToolInfo(ti.orgID) // default org has tool IO disabled
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -475,7 +475,7 @@ func TestCreateLog_ToolIOBodyContentNotPresentWhenNotRecorded(t *testing.T) {
 	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
-	ti.telemLogger.CreateLog(ctx, telemetry.LogParams{
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  timestamp,
 		ToolInfo:   toolInfo,
 		Attributes: attrs,

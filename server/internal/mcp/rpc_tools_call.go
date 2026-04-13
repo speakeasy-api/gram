@@ -305,7 +305,7 @@ func handleToolsCall(
 			},
 			Attributes: logAttrs,
 		}
-		telemLogger.CreateLog(ctx, params)
+		telemLogger.Log(ctx, params)
 	}()
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolCallEnv, plan, logAttrs)

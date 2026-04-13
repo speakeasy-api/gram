@@ -145,7 +145,7 @@ type mockTelemetryLogger struct {
 	logs   []telemetry.LogParams
 }
 
-func (m *mockTelemetryLogger) CreateLog(ctx context.Context, params telemetry.LogParams) {
+func (m *mockTelemetryLogger) Log(ctx context.Context, params telemetry.LogParams) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.called = true
@@ -198,7 +198,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	trackingStrategy := &mockUsageTrackingStrategy{}
 	titleGenerator := &mockChatTitleGenerator{}
 	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
-	telemetryService := &mockTelemetryLogger{}
+	telemetryLogger := &mockTelemetryLogger{}
 
 	// Create client
 	client := NewUnifiedClient(
@@ -208,7 +208,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 		trackingStrategy,
 		titleGenerator,
 		resolutionAnalyzer,
-		telemetryService,
+		telemetryLogger,
 	)
 
 	// Override the HTTP client to use the test server
@@ -252,7 +252,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	assert.True(t, trackingStrategy.trackUsageCalled, "TrackUsage should be called")
 	assert.True(t, titleGenerator.called, "ScheduleChatTitleGeneration should be called")
 	assert.True(t, resolutionAnalyzer.called, "ScheduleChatResolutionAnalysis should be called")
-	assert.True(t, telemetryService.called, "CreateLog should be called")
+	assert.True(t, telemetryLogger.called, "CreateLog should be called")
 
 	// Verify captured data
 	assert.Equal(t, "msg_123", captureStrategy.capturedResponse.MessageID)

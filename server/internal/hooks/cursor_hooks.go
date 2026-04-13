@@ -144,7 +144,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 	}
 
 	if s.telemetryLogger != nil {
-		s.telemetryLogger.CreateLog(ctx, telemetry.LogParams{
+		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
 			Attributes: attrs,

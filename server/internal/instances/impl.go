@@ -457,7 +457,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			},
 			Attributes: attrRecorder,
 		}
-		s.telemLogger.CreateLog(ctx, logParams)
+		s.telemLogger.Log(ctx, logParams)
 	}()
 
 	return nil

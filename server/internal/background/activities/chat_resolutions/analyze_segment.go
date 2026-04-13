@@ -192,7 +192,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		attrs[attr.GenAIConversationDuration] = resolutionTimeSecs
 	}
 
-	a.telemetryLogger.CreateLog(ctx, telemetry.LogParams{
+	a.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp: time.Now(),
 		ToolInfo: telemetry.ToolInfo{
 			ID:             "",

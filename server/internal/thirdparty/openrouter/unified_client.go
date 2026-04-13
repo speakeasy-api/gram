@@ -35,7 +35,7 @@ type ChatResolutionAnalyzer interface {
 
 // TelemetryLogger emits telemetry events for observability.
 type TelemetryLogger interface {
-	CreateLog(ctx context.Context, params telemetry.LogParams)
+	Log(ctx context.Context, params telemetry.LogParams)
 }
 
 const (
@@ -664,7 +664,7 @@ func (c *ChatClient) emitGenAITelemetry(
 		OrganizationID: orgID,
 	}
 
-	c.telemetryLogger.CreateLog(ctx, telemetry.LogParams{
+	c.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  time.Now(),
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
