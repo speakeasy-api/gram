@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -144,6 +146,37 @@ func TestService_Capture_ContentLengthExceedsLimit(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 	require.Contains(t, oopsErr.Error(), "content length exceeds 10 MiB limit")
+}
+
+func TestService_Capture_ConflictingNonSkillAssetBySHA(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestSkillsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	content := []byte("PK\x03\x04skill-zip-content-conflict")
+	sha := sha256.Sum256(content)
+	expectedSHA := hex.EncodeToString(sha[:])
+	payload := newCapturePayload("application/zip", int64(len(content)), expectedSHA)
+
+	_, err := ti.repo.CreateAsset(ctx, assetsrepo.CreateAssetParams{
+		Name:          fmt.Sprintf("image-%s.png", expectedSHA),
+		Url:           "file://existing/image",
+		ProjectID:     *authCtx.ProjectID,
+		Sha256:        expectedSHA,
+		Kind:          "image",
+		ContentType:   "image/png",
+		ContentLength: 123,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.Capture(ctx, payload, io.NopCloser(bytes.NewReader(content)))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "non-skill asset")
 }
 
 func TestService_Capture_ContentSHA256Mismatch(t *testing.T) {

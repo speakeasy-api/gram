@@ -17,6 +17,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -36,7 +39,8 @@ import (
 )
 
 const (
-	maxCaptureArtifactBytes = 10 * 1024 * 1024
+	maxCaptureArtifactMiB   = 10
+	maxCaptureArtifactBytes = maxCaptureArtifactMiB * 1024 * 1024
 	skillAssetKind          = "skill"
 )
 
@@ -104,7 +108,7 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 		return nil, oops.E(oops.CodeBadRequest, nil, "content length must be > 0")
 	}
 	if payload.ContentLength > maxCaptureArtifactBytes {
-		return nil, oops.E(oops.CodeBadRequest, nil, "content length exceeds 10 MiB limit")
+		return nil, oops.E(oops.CodeBadRequest, nil, "content length exceeds %d MiB limit", maxCaptureArtifactMiB)
 	}
 
 	mediaType, _, err := mime.ParseMediaType(payload.ContentType)
@@ -119,8 +123,10 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create temp file: %w", err), "error buffering skill artifact")
 	}
-	defer o11y.NoLogDefer(func() error { return file.Close() })
-	defer o11y.NoLogDefer(func() error { return os.Remove(file.Name()) })
+	defer o11y.NoLogDefer(func() error {
+		_ = file.Close()
+		return os.Remove(file.Name())
+	})
 
 	h := sha256.New()
 	n, err := io.Copy(io.MultiWriter(file, h), io.LimitReader(reader, payload.ContentLength+1))
@@ -166,7 +172,21 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 		ContentLength: payload.ContentLength,
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			existing, findErr := s.findExistingAsset(ctx, *authCtx.ProjectID, contentSHA)
+			if findErr != nil {
+				return nil, findErr
+			}
+			if existing != nil {
+				return &gen.CaptureSkillResult{Asset: existing}, nil
+			}
+			return nil, oops.E(oops.CodeConflict, nil, "skill asset already exists with incompatible metadata")
+		}
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create skill asset: %w", err), "error saving skill artifact")
+	}
+	if asset.Kind != skillAssetKind {
+		return nil, oops.E(oops.CodeConflict, nil, "skill asset hash conflicts with existing non-skill asset")
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -186,16 +206,37 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 	}, nil
 }
 
+func (s *Service) archiveStaleSkillAsset(ctx context.Context, projectID uuid.UUID, assetID uuid.UUID) error {
+	_, err := s.db.Exec(ctx, `
+		UPDATE assets
+		SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+		WHERE project_id = $1
+		  AND id = $2
+		  AND deleted IS FALSE
+	`, projectID, assetID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, fmt.Errorf("archive stale skill asset: %w", err), "error loading skill asset")
+	}
+
+	return nil
+}
+
 func (s *Service) findExistingAsset(ctx context.Context, projectID uuid.UUID, sha string) (*gen.CaptureSkillAsset, error) {
 	asset, err := s.repo.GetProjectAssetBySHA256(ctx, assetsrepo.GetProjectAssetBySHA256Params{
 		ProjectID: projectID,
 		Sha256:    sha,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("find existing skill asset: %w", err), "error loading skill asset")
+	}
+	if asset.Deleted {
+		return nil, nil
+	}
+	if asset.Kind != skillAssetKind {
+		return nil, oops.E(oops.CodeConflict, nil, "skill asset hash conflicts with existing non-skill asset")
 	}
 
 	assetURL, err := url.Parse(asset.Url)
@@ -209,6 +250,9 @@ func (s *Service) findExistingAsset(ctx context.Context, projectID uuid.UUID, sh
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check existing skill asset: %w", err), "error loading skill asset")
 	}
 	if !exists {
+		if err := s.archiveStaleSkillAsset(ctx, projectID, asset.ID); err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}
 
