@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
+
 #MISE description="Backfill the attribute_keys table from existing telemetry_logs"
+
 #MISE depends=["clickhouse:migrate"]
 #USAGE flag "--dry" help="Print the query without executing"
 
