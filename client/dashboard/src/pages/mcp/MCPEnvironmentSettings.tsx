@@ -1,6 +1,11 @@
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
@@ -17,14 +22,20 @@ import {
   useMcpMetadataSetMutation,
   useUpdateEnvironmentMutation,
 } from "@gram/client/react-query";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Link, Plus } from "lucide-react";
+import { AlertTriangle, CheckCircle, Link, Plus, Shield } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AddVariableSheet } from "./AddVariableSheet";
 import { EnvironmentSwitcher } from "./EnvironmentSwitcher";
 import { EnvironmentVariableRow } from "./EnvironmentVariableRow";
+import {
+  ConnectOAuthModal,
+  GramOAuthProxyModal,
+  OAuthDetailsModal,
+  PageSection,
+} from "./MCPDetails";
 import {
   EnvVarState,
   EnvironmentVariable,
@@ -72,6 +83,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   // State for the list of environment variables (managed locally for UI updates)
   const [envVars, setEnvVars] = useState<EnvironmentVariable[]>([]);
   const [isAddingNew, setIsAddingNew] = useState(false);
+
   const [selectedEnvironmentView, setSelectedEnvironmentView] =
     useState<string>(toolset.defaultEnvironmentSlug || "default");
 
@@ -681,15 +693,15 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-semibold tracking-tight">
-            Environment Variables
-          </h2>
-          {missingRequiredCount > 0 && (
-            <Badge variant="warning">
+    <Stack className="mb-4">
+      <OAuthSection toolset={toolset} />
+
+      <PageSection
+        heading="Environment Variables"
+        description="Environments store key-value pairs passed to the backend when users connect. They can be shared across multiple MCP servers. Use the state button to set each variable as User Provided (set at runtime), System (set here), or Omitted (not included)."
+        headingExtra={
+          missingRequiredCount > 0 ? (
+            <Badge variant="warning" className="ml-2">
               <Badge.LeftIcon>
                 <AlertTriangle className="h-3.5 w-3.5" />
               </Badge.LeftIcon>
@@ -697,112 +709,100 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 {missingRequiredCount} required not configured
               </Badge.Text>
             </Badge>
+          ) : null
+        }
+        action={
+          <Button onClick={() => setIsAddingNew(true)} disabled={isAddingNew}>
+            <Button.Text>Add Variable</Button.Text>
+          </Button>
+        }
+      >
+        <div>
+          {attachedEnvironment ? (
+            <Badge variant="information">
+              <Badge.LeftIcon>
+                <Link className="h-3.5 w-3.5" />
+              </Badge.LeftIcon>
+              <Badge.Text>
+                Attached:{" "}
+                {attachedEnvironment.slug === "default"
+                  ? "Default"
+                  : attachedEnvironment.name}
+              </Badge.Text>
+            </Badge>
+          ) : (
+            <Badge variant="neutral">
+              <Badge.Text>No environment attached</Badge.Text>
+            </Badge>
           )}
         </div>
-        <Button onClick={() => setIsAddingNew(true)} disabled={isAddingNew}>
-          <Button.Text>Add Variable</Button.Text>
-        </Button>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        Environments store key-value pairs that are passed to the backend when
-        users connect. They can be shared across multiple MCP servers, so you
-        only need to configure common values like API keys once.
-      </p>
-      <p className="text-sm text-muted-foreground">
-        Add variables for API keys, configuration options, or any custom data
-        your backend needs. Use the state button to set each variable as User
-        Provided (set at runtime), System (set here), or Omitted (not included).
-      </p>
 
-      {/* Attached environment badge */}
-      {attachedEnvironment ? (
-        <Badge variant="information">
-          <Badge.LeftIcon>
-            <Link className="h-3.5 w-3.5" />
-          </Badge.LeftIcon>
-          <Badge.Text>
-            Attached:{" "}
-            {attachedEnvironment.slug === "default"
-              ? "Default"
-              : attachedEnvironment.name}
-          </Badge.Text>
-        </Badge>
-      ) : (
-        <Badge variant="neutral">
-          <Badge.Text>No environment attached</Badge.Text>
-        </Badge>
-      )}
-
-      {/* All Variables Section */}
-      <div className="space-y-4">
-        {/* Variables List */}
-        {envVars.length > 0 ? (
-          <div className="border rounded-lg overflow-hidden">
-            {/* Environment Switcher Tabs */}
-            <EnvironmentSwitcher
-              environments={environments}
-              selectedEnvironmentView={selectedEnvironmentView}
-              mcpAttachedEnvironmentSlug={mcpAttachedEnvironmentSlug}
-              defaultEnvironmentSlug={
-                toolset.defaultEnvironmentSlug || "default"
-              }
-              requiredVars={requiredVars}
-              hasAnyUserEdits={hasAnyUnsavedChanges}
-              hasExistingConfigs={environmentConfigs.length > 0}
-              onEnvironmentSelect={setSelectedEnvironmentView}
-              onSaveAll={handleSaveAll}
-              onCancelAll={handleCancelAll}
-              onSetDefaultEnvironment={handleSetDefaultEnvironment}
-              onDetachEnvironment={handleDetachEnvironment}
-              onCreateEnvironment={() => setIsCreateEnvDialogOpen(true)}
-            />
-            {envVars.map((envVar, index) => (
-              <EnvironmentVariableRow
-                key={envVar.id}
-                envVar={envVar}
-                index={index}
-                totalCount={envVars.length}
+        <div className="space-y-4">
+          {envVars.length > 0 ? (
+            <div className="border rounded-lg overflow-hidden">
+              <EnvironmentSwitcher
+                environments={environments}
                 selectedEnvironmentView={selectedEnvironmentView}
                 mcpAttachedEnvironmentSlug={mcpAttachedEnvironmentSlug}
-                environmentConfigs={environmentConfigs}
-                editingState={editingState}
-                editingHeaderId={editingHeaderId}
-                hasUnsavedChanges={hasUnsavedChanges(envVar)}
-                onStateChange={handleStateChange}
-                onValueChange={handleValueChange}
-                onEditHeaderName={setEditingHeaderId}
-                onHeaderDisplayNameChange={handleHeaderDisplayNameChange}
-                onHeaderBlur={() => setEditingHeaderId(null)}
+                defaultEnvironmentSlug={
+                  toolset.defaultEnvironmentSlug || "default"
+                }
+                requiredVars={requiredVars}
+                hasAnyUserEdits={hasAnyUnsavedChanges}
+                hasExistingConfigs={environmentConfigs.length > 0}
+                onEnvironmentSelect={setSelectedEnvironmentView}
+                onSaveAll={handleSaveAll}
+                onCancelAll={handleCancelAll}
+                onSetDefaultEnvironment={handleSetDefaultEnvironment}
+                onDetachEnvironment={handleDetachEnvironment}
+                onCreateEnvironment={() => setIsCreateEnvDialogOpen(true)}
               />
-            ))}
-          </div>
-        ) : (
-          // Empty State
-          <div className="border rounded-lg border-dashed p-8 text-center">
-            <p className="text-muted-foreground mb-2">
-              No environment variables configured yet.
-            </p>
-            <p className="text-sm text-muted-foreground mb-4">
-              Add key-value pairs to pass API keys, configuration, or any custom
-              data to your backend. Environments can be shared across multiple
-              MCP servers.
-            </p>
-            <Button onClick={() => setIsAddingNew(true)} variant="secondary">
-              <Button.LeftIcon>
-                <Plus className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Add Variable</Button.Text>
-            </Button>
-          </div>
-        )}
+              {envVars.map((envVar, index) => (
+                <EnvironmentVariableRow
+                  key={envVar.id}
+                  envVar={envVar}
+                  index={index}
+                  totalCount={envVars.length}
+                  selectedEnvironmentView={selectedEnvironmentView}
+                  mcpAttachedEnvironmentSlug={mcpAttachedEnvironmentSlug}
+                  environmentConfigs={environmentConfigs}
+                  editingState={editingState}
+                  editingHeaderId={editingHeaderId}
+                  hasUnsavedChanges={hasUnsavedChanges(envVar)}
+                  onStateChange={handleStateChange}
+                  onValueChange={handleValueChange}
+                  onEditHeaderName={setEditingHeaderId}
+                  onHeaderDisplayNameChange={handleHeaderDisplayNameChange}
+                  onHeaderBlur={() => setEditingHeaderId(null)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="border rounded-lg border-dashed p-8 text-center">
+              <p className="text-muted-foreground mb-2">
+                No environment variables configured yet.
+              </p>
+              <p className="text-sm text-muted-foreground mb-4">
+                Add key-value pairs to pass API keys, configuration, or any
+                custom data to your backend. Environments can be shared across
+                multiple MCP servers.
+              </p>
+              <Button onClick={() => setIsAddingNew(true)} variant="secondary">
+                <Button.LeftIcon>
+                  <Plus className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Add Variable</Button.Text>
+              </Button>
+            </div>
+          )}
 
-        {/* Manage Environments Link */}
-        <div className="flex justify-end">
-          <routes.environments.Link className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            Manage environments →
-          </routes.environments.Link>
+          <div className="flex justify-end">
+            <routes.environments.Link className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Manage environments →
+            </routes.environments.Link>
+          </div>
         </div>
-      </div>
+      </PageSection>
 
       {/* Add New Variable Sheet */}
       <AddVariableSheet
@@ -863,6 +863,173 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
-    </div>
+    </Stack>
+  );
+}
+
+type OAuthSectionProps = {
+  toolset: Toolset;
+};
+
+function OAuthSection({ toolset }: OAuthSectionProps) {
+  const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
+  const [isOAuthModalEditMode, setIsOAuthModalEditMode] = useState(false);
+  const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
+  const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
+
+  const isOAuthConnected = !!(
+    toolset?.oauthProxyServer || toolset?.externalOauthServer
+  );
+  const availableOAuthAuthCode =
+    toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
+  const isOAuthEligible =
+    toolset.mcpEnabled && (toolset.mcpIsPublic ? availableOAuthAuthCode : true);
+
+  const oauthParadigm = toolset.externalOauthServer
+    ? ("external" as const)
+    : toolset.oauthProxyServer
+      ? toolset.oauthProxyServer.oauthProxyProviders?.[0]?.providerType ===
+        "gram"
+        ? ("gram" as const)
+        : ("proxy" as const)
+      : null;
+
+  return (
+    <PageSection
+      heading="OAuth"
+      description="OAuth let's you control access to MCP servers through an identity provider."
+      headingExtra={undefined}
+      action={
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {!isOAuthEligible ? (
+              <span className="inline-block">
+                <Button disabled>
+                  <Button.Text>Configure</Button.Text>
+                </Button>
+              </span>
+            ) : (
+              <Button
+                onClick={() =>
+                  isOAuthConnected
+                    ? setIsOAuthDetailsModalOpen(true)
+                    : toolset.mcpIsPublic
+                      ? setIsOAuthModalOpen(true)
+                      : setIsGramOAuthModalOpen(true)
+                }
+              >
+                <Button.Text>
+                  {isOAuthConnected ? "Manage" : "Configure"}
+                </Button.Text>
+              </Button>
+            )}
+          </TooltipTrigger>
+          {!isOAuthEligible && (
+            <TooltipContent>
+              {!toolset.mcpEnabled
+                ? "Enable the MCP server to configure OAuth"
+                : "This MCP server does not require the OAuth authorization code flow"}
+            </TooltipContent>
+          )}
+        </Tooltip>
+      }
+    >
+      {isOAuthConnected ? (
+        <div className="border rounded-lg border-dashed p-8 text-center border-success-softest bg-success-softest">
+          <p className="text-success-foreground mb-1">
+            <CheckCircle className="h-5 w-5 mx-auto mb-1 text-success-foreground" />
+            {oauthParadigm === "external"
+              ? "External OAuth"
+              : oauthParadigm === "gram"
+                ? "Gram OAuth"
+                : "OAuth Proxy"}{" "}
+            is configured
+          </p>
+          <p className="text-sm text-success-foreground">
+            {oauthParadigm === "external"
+              ? "Users will authenticate with your external OAuth server before accessing this MCP server."
+              : oauthParadigm === "gram"
+                ? "Users will authenticate with Gram OAuth before accessing this MCP server."
+                : "The attached CLIENT_ID and CLIENT_SECRET environment variables will be used to authenticate with the OAuth provider before users can access this MCP server."}
+          </p>
+        </div>
+      ) : isOAuthEligible ? (
+        <div className="border rounded-lg border-dashed p-4 text-center">
+          <p className="text-muted-foreground mb-1">
+            <Shield className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+            OAuth is available but not configured
+          </p>
+          <p className="text-sm text-muted-foreground mb-3">
+            Enable OAuth to require users to authenticate before accessing this
+            MCP server.
+          </p>
+          <Button
+            variant="secondary"
+            onClick={() =>
+              toolset.mcpIsPublic
+                ? setIsOAuthModalOpen(true)
+                : setIsGramOAuthModalOpen(true)
+            }
+          >
+            <Button.Text>Configure OAuth</Button.Text>
+          </Button>
+        </div>
+      ) : (
+        <div className="border rounded-lg border-dashed p-4 text-center">
+          <p className="text-muted-foreground mb-1">
+            <Shield className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+            OAuth is not applicable
+          </p>
+          {!toolset.mcpEnabled ? (
+            <p className="text-sm text-muted-foreground">
+              Enable the MCP server to configure OAuth.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                OAuth cannot be configured because there are no tools in this
+                server that require OAuth authentication.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                OAuth is available for public MCP servers that have at least one
+                tool requiring OAuth authentication, or private servers (using
+                Speakeasy as an auth provider).
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* OAuth Modals */}
+      <GramOAuthProxyModal
+        isOpen={isGramOAuthModalOpen}
+        onClose={() => setIsGramOAuthModalOpen(false)}
+        toolset={toolset}
+      />
+      <OAuthDetailsModal
+        isOpen={isOAuthDetailsModalOpen}
+        onClose={() => setIsOAuthDetailsModalOpen(false)}
+        toolset={toolset}
+        onEditRequest={() => {
+          setIsOAuthModalEditMode(true);
+          setIsOAuthModalOpen(true);
+        }}
+      />
+      <ConnectOAuthModal
+        key={isOAuthModalEditMode ? "edit" : "create"}
+        isOpen={isOAuthModalOpen}
+        onClose={() => {
+          setIsOAuthModalOpen(false);
+          setIsOAuthModalEditMode(false);
+        }}
+        toolsetSlug={toolset.slug}
+        toolset={toolset}
+        editMode={
+          isOAuthModalEditMode && toolset.oauthProxyServer
+            ? { proxyServer: toolset.oauthProxyServer }
+            : undefined
+        }
+      />
+    </PageSection>
   );
 }

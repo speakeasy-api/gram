@@ -925,17 +925,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;
 
-  // OAuth state
-  const isOAuthConnected = !!(
-    toolset?.oauthProxyServer || toolset?.externalOauthServer
-  );
-  const availableOAuthAuthCode =
-    toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
-  const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
-  const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
-  const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
-  const [isOAuthEditModalOpen, setIsOAuthEditModalOpen] = useState(false);
-
   // Delete mcp server state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingMcpServer, setIsDeletingMcpServer] = useState(false);
@@ -1280,9 +1269,9 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
 
       <PageSection
         heading="Actions"
-        description="Export or configure your MCP server."
+        description="Export your MCP server configuration."
       >
-        <Stack direction="horizontal" gap={3}>
+        <div>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -1303,45 +1292,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
               </TooltipContent>
             )}
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {!toolset?.mcpEnabled ||
-              (toolset.mcpIsPublic && !availableOAuthAuthCode) ? (
-                <span className="inline-block">
-                  <Button variant="secondary" size="md" disabled={true}>
-                    <Button.Text>
-                      {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
-                    </Button.Text>
-                  </Button>
-                </span>
-              ) : (
-                <Button
-                  variant="secondary"
-                  size="md"
-                  onClick={() =>
-                    isOAuthConnected
-                      ? setIsOAuthDetailsModalOpen(true)
-                      : toolset.mcpIsPublic
-                        ? setIsOAuthModalOpen(true)
-                        : setIsGramOAuthModalOpen(true)
-                  }
-                >
-                  <Button.Text>
-                    {isOAuthConnected ? "OAuth Connected" : "Configure OAuth"}
-                  </Button.Text>
-                </Button>
-              )}
-            </TooltipTrigger>
-            {(!toolset?.mcpEnabled ||
-              (toolset.mcpIsPublic && !availableOAuthAuthCode)) && (
-              <TooltipContent>
-                {!toolset?.mcpEnabled
-                  ? "Enable server to configure OAuth"
-                  : "This MCP server does not require the OAuth authorization code flow"}
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </Stack>
+        </div>
       </PageSection>
 
       {/* Danger Zone */}
@@ -1424,34 +1375,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         telemetryData={{ slug: toolset.slug }}
         accountUpgrade
       />
-      <ConnectOAuthModal
-        isOpen={isOAuthModalOpen}
-        onClose={() => setIsOAuthModalOpen(false)}
-        toolsetSlug={toolset.slug}
-        toolset={toolset}
-      />
-      <ConnectOAuthModal
-        isOpen={isOAuthEditModalOpen}
-        onClose={() => setIsOAuthEditModalOpen(false)}
-        toolsetSlug={toolset.slug}
-        toolset={toolset}
-        editMode={
-          toolset.oauthProxyServer
-            ? { proxyServer: toolset.oauthProxyServer }
-            : undefined
-        }
-      />
-      <GramOAuthProxyModal
-        isOpen={isGramOAuthModalOpen}
-        onClose={() => setIsGramOAuthModalOpen(false)}
-        toolset={toolset}
-      />
-      <OAuthDetailsModal
-        isOpen={isOAuthDetailsModalOpen}
-        onClose={() => setIsOAuthDetailsModalOpen(false)}
-        toolset={toolset}
-        onEditRequest={() => setIsOAuthEditModalOpen(true)}
-      />
     </Stack>
   );
 }
@@ -1461,10 +1384,12 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   return <MCPSettingsTab toolset={toolset} />;
 }
 
-function PageSection({
+export function PageSection({
   heading,
   description,
   featureType,
+  action,
+  headingExtra,
   children,
   className,
 }: {
@@ -1472,19 +1397,25 @@ function PageSection({
   description: string;
   fullWidth?: boolean;
   featureType?: "experimental" | "beta";
+  action?: React.ReactNode;
+  headingExtra?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <Stack gap={2} className={cn("mb-8", className)}>
-      <Heading variant="h3" className="flex items-center">
-        {heading}
-        {featureType && (
-          <Badge variant="warning" className="ml-2">
-            {featureType}
-          </Badge>
-        )}
-      </Heading>
+      <div className="flex items-center justify-between">
+        <Heading variant="h3" className="flex items-center">
+          {heading}
+          {featureType && (
+            <Badge variant="warning" className="ml-2">
+              {featureType}
+            </Badge>
+          )}
+          {headingExtra}
+        </Heading>
+        {action}
+      </div>
       <Type muted small className="max-w-2xl">
         {description}
       </Type>
@@ -1691,7 +1622,7 @@ export const randSlug = () => {
   return rand;
 };
 
-function OAuthDetailsModal({
+export function OAuthDetailsModal({
   isOpen,
   onClose,
   toolset,
@@ -1965,7 +1896,7 @@ function OAuthDetailsModal({
   );
 }
 
-function GramOAuthProxyModal({
+export function GramOAuthProxyModal({
   isOpen,
   onClose,
   toolset,
@@ -2044,7 +1975,7 @@ function GramOAuthProxyModal({
   );
 }
 
-function ConnectOAuthModal({
+export function ConnectOAuthModal({
   isOpen,
   onClose,
   toolsetSlug,
