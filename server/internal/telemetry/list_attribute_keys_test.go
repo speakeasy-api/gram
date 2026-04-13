@@ -1,6 +1,8 @@
 package telemetry_test
 
 import (
+	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -60,7 +62,6 @@ func TestListAttributeKeys_ReturnsSystemAndUserKeys(t *testing.T) {
 	now := time.Now().UTC()
 	baseTime := now.Add(-30 * time.Minute)
 
-	// Insert a log with both system attributes and user attributes (app. prefix)
 	insertTelemetryLogWithParams(t, ctx, testLogParams{
 		projectID:    projectID,
 		deploymentID: deploymentID,
@@ -75,25 +76,17 @@ func TestListAttributeKeys_ReturnsSystemAndUserKeys(t *testing.T) {
 		},
 	})
 
-	time.Sleep(200 * time.Millisecond)
+	payload := &gen.ListAttributeKeysPayload{
+		From: baseTime.Add(-10 * time.Minute).Format(time.RFC3339),
+		To:   now.Format(time.RFC3339),
+	}
 
-	from := baseTime.Add(-10 * time.Minute).Format(time.RFC3339)
-	to := now.Format(time.RFC3339)
+	result := waitForAttributeKey(t, ctx, ti.service, payload, "http.route")
 
-	result, err := ti.service.ListAttributeKeys(ctx, &gen.ListAttributeKeysPayload{
-		From: from,
-		To:   to,
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	// Should contain system key (bare) and user keys (@-prefixed)
 	require.Contains(t, result.Keys, "http.route")
 	require.Contains(t, result.Keys, "@user.region")
 	require.Contains(t, result.Keys, "@env")
 
-	// Should NOT contain the raw app. prefix
 	for _, key := range result.Keys {
 		require.NotContains(t, key, "app.", "keys should not contain raw app. prefix, got %q", key)
 	}
@@ -111,7 +104,6 @@ func TestListAttributeKeys_Deduplicated(t *testing.T) {
 	now := time.Now().UTC()
 	baseTime := now.Add(-30 * time.Minute)
 
-	// Insert multiple logs with the same attribute paths
 	for i := range 3 {
 		insertTelemetryLogWithParams(t, ctx, testLogParams{
 			projectID:    projectID,
@@ -127,20 +119,13 @@ func TestListAttributeKeys_Deduplicated(t *testing.T) {
 		})
 	}
 
-	time.Sleep(200 * time.Millisecond)
+	payload := &gen.ListAttributeKeysPayload{
+		From: baseTime.Add(-10 * time.Minute).Format(time.RFC3339),
+		To:   now.Format(time.RFC3339),
+	}
 
-	from := baseTime.Add(-10 * time.Minute).Format(time.RFC3339)
-	to := now.Format(time.RFC3339)
+	result := waitForAttributeKey(t, ctx, ti.service, payload, "http.route")
 
-	result, err := ti.service.ListAttributeKeys(ctx, &gen.ListAttributeKeysPayload{
-		From: from,
-		To:   to,
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	// Count occurrences of each key — should appear exactly once
 	keyCounts := map[string]int{}
 	for _, key := range result.Keys {
 		keyCounts[key]++
@@ -176,21 +161,15 @@ func TestListAttributeKeys_SortedAlphabetically(t *testing.T) {
 		},
 	})
 
-	time.Sleep(200 * time.Millisecond)
+	payload := &gen.ListAttributeKeysPayload{
+		From: baseTime.Add(-10 * time.Minute).Format(time.RFC3339),
+		To:   now.Format(time.RFC3339),
+	}
 
-	from := baseTime.Add(-10 * time.Minute).Format(time.RFC3339)
-	to := now.Format(time.RFC3339)
+	result := waitForAttributeKey(t, ctx, ti.service, payload, "http.method")
 
-	result, err := ti.service.ListAttributeKeys(ctx, &gen.ListAttributeKeysPayload{
-		From: from,
-		To:   to,
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
 	require.GreaterOrEqual(t, len(result.Keys), 3)
 
-	// Keys should be sorted
 	for i := 1; i < len(result.Keys); i++ {
 		require.LessOrEqual(t, result.Keys[i-1], result.Keys[i],
 			"keys should be sorted: %q should come before %q", result.Keys[i-1], result.Keys[i])
@@ -234,24 +213,14 @@ func TestListAttributeKeys_TimeRangeFilter(t *testing.T) {
 		},
 	})
 
-	time.Sleep(200 * time.Millisecond)
+	payload := &gen.ListAttributeKeysPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	}
 
-	// Query for last hour only
-	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
-	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	result := waitForAttributeKey(t, ctx, ti.service, payload, "@in.range")
 
-	result, err := ti.service.ListAttributeKeys(ctx, &gen.ListAttributeKeysPayload{
-		From: from,
-		To:   to,
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	// Should contain the in-range attribute
 	require.Contains(t, result.Keys, "@in.range")
-
-	// Should NOT contain the out-of-range attribute
 	require.NotContains(t, result.Keys, "@out.of.range")
 }
 
@@ -268,7 +237,6 @@ func TestListAttributeKeys_ScopedByProject(t *testing.T) {
 	now := time.Now().UTC()
 	baseTime := now.Add(-30 * time.Minute)
 
-	// Insert log for the authenticated project
 	insertTelemetryLogWithParams(t, ctx, testLogParams{
 		projectID:    projectID,
 		deploymentID: deploymentID,
@@ -281,7 +249,6 @@ func TestListAttributeKeys_ScopedByProject(t *testing.T) {
 		},
 	})
 
-	// Insert log for a different project
 	insertTelemetryLogWithParams(t, ctx, testLogParams{
 		projectID:    otherProjectID,
 		deploymentID: deploymentID,
@@ -294,22 +261,30 @@ func TestListAttributeKeys_ScopedByProject(t *testing.T) {
 		},
 	})
 
-	time.Sleep(200 * time.Millisecond)
+	payload := &gen.ListAttributeKeysPayload{
+		From: baseTime.Add(-10 * time.Minute).Format(time.RFC3339),
+		To:   now.Format(time.RFC3339),
+	}
 
-	from := baseTime.Add(-10 * time.Minute).Format(time.RFC3339)
-	to := now.Format(time.RFC3339)
+	result := waitForAttributeKey(t, ctx, ti.service, payload, "@my.attr")
 
-	result, err := ti.service.ListAttributeKeys(ctx, &gen.ListAttributeKeysPayload{
-		From: from,
-		To:   to,
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	// Should contain our project's attribute
 	require.Contains(t, result.Keys, "@my.attr")
-
-	// Should NOT contain the other project's attribute
 	require.NotContains(t, result.Keys, "@other.project.attr")
+}
+
+// waitForAttributeKey polls ListAttributeKeys until the given key appears in results.
+func waitForAttributeKey(t *testing.T, ctx context.Context, service gen.Service, payload *gen.ListAttributeKeysPayload, key string) *gen.ListAttributeKeysResult {
+	t.Helper()
+
+	var result *gen.ListAttributeKeysResult
+	require.Eventually(t, func() bool {
+		var err error
+		result, err = service.ListAttributeKeys(ctx, payload)
+		if err != nil || result == nil {
+			return false
+		}
+		return slices.Contains(result.Keys, key)
+	}, 2*time.Second, 50*time.Millisecond, "expected attribute key %q to appear in ClickHouse", key)
+
+	return result
 }
