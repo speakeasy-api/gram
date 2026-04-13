@@ -211,6 +211,75 @@ CREATE UNIQUE INDEX IF NOT EXISTS package_versions_package_id_semver_key
 ON package_versions (package_id DESC, major DESC, minor DESC, patch DESC, prerelease, build)
 WHERE deleted IS FALSE;
 
+CREATE TABLE IF NOT EXISTS skills (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
+  description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 2000),
+  skill_uuid TEXT CHECK (skill_uuid <> '' AND CHAR_LENGTH(skill_uuid) <= 100),
+  state TEXT NOT NULL CHECK (state IN ('pending_review', 'published', 'archived')),
+  active_version_id uuid,
+  created_by_user_id TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT skills_pkey PRIMARY KEY (id),
+  CONSTRAINT skills_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_slug_key
+ON skills (project_id, slug)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_skill_uuid_key
+ON skills (project_id, skill_uuid)
+WHERE skill_uuid IS NOT NULL AND deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS skill_versions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  skill_id uuid NOT NULL,
+  asset_id uuid NOT NULL,
+
+  content_sha256 TEXT NOT NULL,
+  asset_format TEXT NOT NULL CHECK (asset_format IN ('zip')),
+  size_bytes BIGINT NOT NULL CHECK (size_bytes >= 0),
+  skill_bytes BIGINT CHECK (skill_bytes >= 0),
+  state TEXT NOT NULL CHECK (state IN ('pending_review', 'active', 'superseded')),
+
+  captured_by_user_id TEXT NOT NULL,
+  author_name TEXT CHECK (author_name <> '' AND CHAR_LENGTH(author_name) <= 255),
+  first_seen_trace_id TEXT CHECK (first_seen_trace_id <> '' AND CHAR_LENGTH(first_seen_trace_id) <= 100),
+  first_seen_session_id TEXT CHECK (first_seen_session_id <> '' AND CHAR_LENGTH(first_seen_session_id) <= 100),
+  first_seen_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_versions_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
+  CONSTRAINT skill_versions_asset_id_fkey FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE CASCADE,
+  CONSTRAINT skill_versions_skill_id_content_sha256_key UNIQUE (skill_id, content_sha256)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_active_skill_id_key
+ON skill_versions (skill_id)
+WHERE state = 'active';
+
+CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_idx
+ON skill_versions (skill_id, created_at DESC);
+
+ALTER TABLE skills
+ADD CONSTRAINT skills_active_version_id_fkey
+FOREIGN KEY (active_version_id)
+REFERENCES skill_versions (id)
+ON DELETE SET NULL;
+
 CREATE TABLE IF NOT EXISTS api_keys (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
