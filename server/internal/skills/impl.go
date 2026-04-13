@@ -272,7 +272,11 @@ func (s *Service) uploadAsset(ctx context.Context, projectID uuid.UUID, filename
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("write to blob storage: %w", err), "error uploading skill artifact")
 	}
+	dstClosed := false
 	defer o11y.LogDefer(ctx, s.logger, func() error {
+		if dstClosed {
+			return nil
+		}
 		if err := dst.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
 			return fmt.Errorf("close blob storage writer: %w", err)
 		}
@@ -294,6 +298,7 @@ func (s *Service) uploadAsset(ctx context.Context, projectID uuid.UUID, filename
 	if err := dst.Close(); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("finalize blob storage: %w", err), "error uploading skill artifact")
 	}
+	dstClosed = true
 
 	return uri, nil
 }
