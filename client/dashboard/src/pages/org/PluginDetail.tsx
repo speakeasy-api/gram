@@ -125,7 +125,7 @@ export default function PluginDetail() {
     a.href = url;
     a.download =
       resp.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ??
-      `plugins-${platform}.zip`;
+      "plugin.zip";
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -246,10 +246,6 @@ export default function PluginDetail() {
         />
 
         {/* Download section */}
-        <Heading variant="h5" className="mb-3">
-          Download
-        </Heading>
-
         <Heading variant="h5" className="mb-3">
           Download
         </Heading>

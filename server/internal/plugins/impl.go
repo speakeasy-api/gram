@@ -9,11 +9,14 @@ import (
 	"io"
 	"log/slog"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -29,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
@@ -179,6 +183,10 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		Description:    conv.PtrToPGText(payload.Description),
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, nil, "a plugin with this slug already exists")
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create plugin").Log(ctx, s.logger)
 	}
 
@@ -211,6 +219,10 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, nil, "a plugin with this slug already exists")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update plugin").Log(ctx, s.logger)
 	}
@@ -337,6 +349,14 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
 	}
 
+	// Verify the plugin belongs to this project.
+	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
+	}
+
 	row, err := s.repo.UpdatePluginServer(ctx, repo.UpdatePluginServerParams{
 		ID:          serverID,
 		PluginID:    pluginID,
@@ -373,6 +393,14 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 		return oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
 	}
 
+	// Verify the plugin belongs to this project.
+	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.C(oops.CodeNotFound)
+		}
+		return oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
+	}
+
 	if err := s.repo.RemovePluginServer(ctx, repo.RemovePluginServerParams{
 		ID:       serverID,
 		PluginID: pluginID,
@@ -407,14 +435,21 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
 	}
 
-	// Remove all existing assignments, then add the new ones.
-	if _, err := s.repo.RemoveAllPluginAssignments(ctx, pluginID); err != nil {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	txRepo := s.repo.WithTx(tx)
+
+	if _, err := txRepo.RemoveAllPluginAssignments(ctx, pluginID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "remove existing assignments").Log(ctx, s.logger)
 	}
 
 	var assignments []*gen.PluginAssignment
 	for _, urn := range payload.PrincipalUrns {
-		row, err := s.repo.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
+		row, err := txRepo.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
 			PluginID:       pluginID,
 			OrganizationID: ac.ActiveOrganizationID,
 			PrincipalUrn:   urn,
@@ -422,10 +457,13 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "add plugin assignment").Log(ctx, s.logger)
 		}
-		// ON CONFLICT DO NOTHING can return nil for the row.
 		if row.ID != uuid.Nil {
 			assignments = append(assignments, pluginAssignmentToGen(row))
 		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
 
 	return &gen.SetPluginAssignmentsResult{Assignments: assignments}, nil
@@ -555,11 +593,14 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		}
 	}
 
-	var pluginInfos []PluginInfo
+	pluginInfos := make([]PluginInfo, 0, len(pluginMap))
 	for _, pb := range pluginMap {
 		pb.info.Servers = pb.servers
 		pluginInfos = append(pluginInfos, pb.info)
 	}
+	sort.Slice(pluginInfos, func(i, j int) bool {
+		return pluginInfos[i].Slug < pluginInfos[j].Slug
+	})
 	return pluginInfos, nil
 }
 

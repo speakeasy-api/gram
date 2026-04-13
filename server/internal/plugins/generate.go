@@ -80,6 +80,8 @@ func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform
 		if err := generateCursorPluginFlat(files, plugin, cfg); err != nil {
 			return nil, fmt.Errorf("generate cursor plugin: %w", err)
 		}
+	default:
+		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
 
 	return files, nil
