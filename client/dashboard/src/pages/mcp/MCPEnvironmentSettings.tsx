@@ -988,8 +988,8 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
           ) : (
             <>
               <p className="text-sm text-muted-foreground">
-                OAuth cannot be configured because there are no tools in this server
-                that require OAuth authentication.
+                OAuth cannot be configured because there are no tools in this
+                server that require OAuth authentication.
               </p>
               <p className="text-sm text-muted-foreground">
                 OAuth is available for public MCP servers that have at least one
