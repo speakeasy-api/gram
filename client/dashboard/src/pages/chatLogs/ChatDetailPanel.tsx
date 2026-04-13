@@ -94,7 +94,7 @@ function TelemetryLogsTab({
 }) {
   if (isLoading) {
     return (
-      <div className="p-6 text-center text-muted-foreground">
+      <div className="text-muted-foreground p-6 text-center">
         Loading telemetry logs...
       </div>
     );
@@ -102,7 +102,7 @@ function TelemetryLogsTab({
 
   if (error) {
     return (
-      <div className="p-6 text-center text-destructive">
+      <div className="text-destructive p-6 text-center">
         Failed to load logs: {error.message}
       </div>
     );
@@ -110,28 +110,28 @@ function TelemetryLogsTab({
 
   if (logs.length === 0) {
     return (
-      <div className="p-6 text-center text-muted-foreground">
+      <div className="text-muted-foreground p-6 text-center">
         No telemetry logs found for this agent session.
       </div>
     );
   }
 
   return (
-    <div className="divide-y divide-border">
+    <div className="divide-border divide-y">
       {logs.map((log) => (
-        <div key={log.id} className="p-4 hover:bg-muted/30 transition-colors">
+        <div key={log.id} className="hover:bg-muted/30 p-4 transition-colors">
           <div className="flex items-start gap-3">
             <Badge
               variant={getSeverityBadgeVariant(log.severityText)}
-              className="shrink-0 mt-0.5"
+              className="mt-0.5 shrink-0"
             >
               {log.severityText || "INFO"}
             </Badge>
-            <div className="flex-1 min-w-0 space-y-1">
+            <div className="min-w-0 flex-1 space-y-1">
               <div className="text-sm font-medium break-words">
                 {log.body.trim()}
               </div>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <div className="text-muted-foreground flex items-center gap-3 text-xs">
                 <span>{formatTimestamp(log.timeUnixNano)}</span>
                 {log.service?.name && (
                   <span className="flex items-center gap-1">
@@ -147,10 +147,10 @@ function TelemetryLogsTab({
               </div>
               {log.attributes && Object.keys(log.attributes).length > 0 && (
                 <details className="mt-2">
-                  <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                  <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-xs">
                     Show attributes
                   </summary>
-                  <pre className="mt-1 p-2 bg-muted/50 rounded text-xs overflow-x-auto">
+                  <pre className="bg-muted/50 mt-1 overflow-x-auto rounded p-2 text-xs">
                     {JSON.stringify(log.attributes, null, 2)}
                   </pre>
                 </details>
@@ -189,7 +189,7 @@ function ToolCallsTab({
 }) {
   if (isLoading) {
     return (
-      <div className="p-6 text-center text-muted-foreground">
+      <div className="text-muted-foreground p-6 text-center">
         Loading tool call logs...
       </div>
     );
@@ -197,7 +197,7 @@ function ToolCallsTab({
 
   if (error) {
     return (
-      <div className="p-6 text-center text-destructive">
+      <div className="text-destructive p-6 text-center">
         Failed to load tool calls: {error.message}
       </div>
     );
@@ -205,14 +205,14 @@ function ToolCallsTab({
 
   if (toolLogs.length === 0) {
     return (
-      <div className="p-6 text-center text-muted-foreground">
+      <div className="text-muted-foreground p-6 text-center">
         No tool call logs found for this agent session.
       </div>
     );
   }
 
   return (
-    <div className="divide-y divide-border">
+    <div className="divide-border divide-y">
       {toolLogs.map((log) => {
         const attrs = log.attributes || {};
         const toolName = attrs.tool_name || attrs.function_name || "Unknown";
@@ -220,11 +220,11 @@ function ToolCallsTab({
         const status = attrs.http_status_code;
 
         return (
-          <div key={log.id} className="p-4 hover:bg-muted/30 transition-colors">
+          <div key={log.id} className="hover:bg-muted/30 p-4 transition-colors">
             <div className="flex items-start gap-3">
               <div
                 className={cn(
-                  "size-8 rounded-full flex items-center justify-center shrink-0",
+                  "flex size-8 shrink-0 items-center justify-center rounded-full",
                   status && status >= 400
                     ? "bg-destructive/10"
                     : "bg-primary/10",
@@ -240,7 +240,7 @@ function ToolCallsTab({
                   )}
                 />
               </div>
-              <div className="flex-1 min-w-0 space-y-1">
+              <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{toolName}</span>
                   {status && (
@@ -250,15 +250,15 @@ function ToolCallsTab({
                   )}
                 </div>
                 {gramUrn && (
-                  <div className="text-xs text-muted-foreground font-mono">
+                  <div className="text-muted-foreground font-mono text-xs">
                     {gramUrn}
                   </div>
                 )}
-                <div className="text-xs text-muted-foreground">
+                <div className="text-muted-foreground text-xs">
                   {formatTimestamp(log.timeUnixNano)}
                 </div>
                 {log.body && (
-                  <div className="text-sm text-muted-foreground mt-1">
+                  <div className="text-muted-foreground mt-1 text-sm">
                     {log.body.trim()}
                   </div>
                 )}
@@ -341,10 +341,10 @@ export function ChatDetailPanel({
   });
 
   return (
-    <div className="h-full flex flex-col bg-background">
+    <div className="bg-background flex h-full flex-col">
       {/* Header */}
-      <div className="p-6 border-b">
-        <div className="flex items-center justify-between mb-2">
+      <div className="border-b p-6">
+        <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-semibold">{getTraceId(chatId)}</h2>
             {status !== "unresolved" && (
@@ -369,56 +369,56 @@ export function ChatDetailPanel({
           <div className="flex items-center gap-1">
             <button
               onClick={() => setShowDeleteConfirm(true)}
-              className="p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+              className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 transition-colors"
               aria-label="Delete chat"
             >
               <Icon name="trash-2" className="size-5" />
             </button>
             <button
               onClick={onClose}
-              className="p-1 rounded-md hover:bg-muted transition-colors"
+              className="hover:bg-muted rounded-md p-1 transition-colors"
               aria-label="Close panel"
             >
               <Icon name="x" className="size-5" />
             </button>
           </div>
         </div>
-        <div className="text-sm text-muted-foreground mb-3">
+        <div className="text-muted-foreground mb-3 text-sm">
           {format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm:ss")}
         </div>
         <div className="text-sm">{chat.title}</div>
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="overview" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="w-full h-auto justify-start px-6 py-0 bg-transparent border-b rounded-none gap-0">
+      <Tabs defaultValue="overview" className="flex min-h-0 flex-1 flex-col">
+        <TabsList className="h-auto w-full justify-start gap-0 rounded-none border-b bg-transparent px-6 py-0">
           <TabsTrigger
             value="overview"
-            className="relative rounded-none border-0 border-b-2 border-transparent shadow-none px-4 py-3 data-[state=active]:border-b-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+            className="data-[state=active]:border-b-primary relative rounded-none border-0 border-b-2 border-transparent px-4 py-3 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
           >
-            <Icon name="message-circle" className="size-4 mr-2" />
+            <Icon name="message-circle" className="mr-2 size-4" />
             Overview
           </TabsTrigger>
           <TabsTrigger
             value="logs"
-            className="relative rounded-none border-0 border-b-2 border-transparent shadow-none px-4 py-3 data-[state=active]:border-b-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+            className="data-[state=active]:border-b-primary relative rounded-none border-0 border-b-2 border-transparent px-4 py-3 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
           >
-            <Icon name="list" className="size-4 mr-2" />
+            <Icon name="list" className="mr-2 size-4" />
             Telemetry Logs
             {logs.length > 0 && (
-              <span className="ml-1.5 text-xs bg-muted px-1.5 rounded-full">
+              <span className="bg-muted ml-1.5 rounded-full px-1.5 text-xs">
                 {logs.length}
               </span>
             )}
           </TabsTrigger>
           <TabsTrigger
             value="tools"
-            className="relative rounded-none border-0 border-b-2 border-transparent shadow-none px-4 py-3 data-[state=active]:border-b-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+            className="data-[state=active]:border-b-primary relative rounded-none border-0 border-b-2 border-transparent px-4 py-3 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
           >
-            <Icon name="zap" className="size-4 mr-2" />
+            <Icon name="zap" className="mr-2 size-4" />
             Tool Calls
             {toolLogs.length > 0 && (
-              <span className="ml-1.5 text-xs bg-muted px-1.5 rounded-full">
+              <span className="bg-muted ml-1.5 rounded-full px-1.5 text-xs">
                 {toolLogs.length}
               </span>
             )}
@@ -426,9 +426,9 @@ export function ChatDetailPanel({
           {systemMessages.length > 0 && (
             <TabsTrigger
               value="system"
-              className="relative rounded-none border-0 border-b-2 border-transparent shadow-none px-4 py-3 data-[state=active]:border-b-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              className="data-[state=active]:border-b-primary relative rounded-none border-0 border-b-2 border-transparent px-4 py-3 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             >
-              <Icon name="settings" className="size-4 mr-2" />
+              <Icon name="settings" className="mr-2 size-4" />
               System Prompt
             </TabsTrigger>
           )}
@@ -437,13 +437,13 @@ export function ChatDetailPanel({
         {/* Overview Tab */}
         <TabsContent
           value="overview"
-          className="flex-1 overflow-y-auto m-0 data-[state=inactive]:hidden"
+          className="m-0 flex-1 overflow-y-auto data-[state=inactive]:hidden"
         >
           {/* Metadata Grid */}
-          <div className="p-6 border-b bg-muted/10">
+          <div className="bg-muted/10 border-b p-6">
             <div className="grid grid-cols-2 gap-x-8 gap-y-4">
               <div>
-                <div className="text-xs text-muted-foreground mb-1">
+                <div className="text-muted-foreground mb-1 text-xs">
                   User ID:
                 </div>
                 <div className="text-sm font-medium">
@@ -452,10 +452,10 @@ export function ChatDetailPanel({
               </div>
               {chat.source && (
                 <div>
-                  <div className="text-xs text-muted-foreground mb-1">
+                  <div className="text-muted-foreground mb-1 text-xs">
                     Source:
                   </div>
-                  <div className="text-sm font-medium flex items-center gap-2">
+                  <div className="flex items-center gap-2 text-sm font-medium">
                     {chat.source.toLowerCase().includes("claude") ||
                     chat.source.toLowerCase().includes("cursor") ? (
                       <HookSourceIcon source={chat.source} className="size-4" />
@@ -467,13 +467,13 @@ export function ChatDetailPanel({
                 </div>
               )}
               <div>
-                <div className="text-xs text-muted-foreground mb-1">
+                <div className="text-muted-foreground mb-1 text-xs">
                   Duration:
                 </div>
                 <div className="text-sm font-medium">{duration}s</div>
               </div>
               <div>
-                <div className="text-xs text-muted-foreground mb-1">
+                <div className="text-muted-foreground mb-1 text-xs">
                   Messages:
                 </div>
                 <div className="text-sm font-medium">
@@ -481,7 +481,7 @@ export function ChatDetailPanel({
                 </div>
               </div>
               <div>
-                <div className="text-xs text-muted-foreground mb-1">
+                <div className="text-muted-foreground mb-1 text-xs">
                   Tool Calls:
                 </div>
                 <div className="text-sm font-medium">{toolLogs.length}</div>
@@ -489,13 +489,13 @@ export function ChatDetailPanel({
               {resolutions.length > 0 && (
                 <>
                   <div>
-                    <div className="text-xs text-muted-foreground mb-1">
+                    <div className="text-muted-foreground mb-1 text-xs">
                       Resolution Score:
                     </div>
                     <div className="text-lg font-medium">{averageScore}%</div>
                   </div>
                   <div>
-                    <div className="text-xs text-muted-foreground mb-1">
+                    <div className="text-muted-foreground mb-1 text-xs">
                       Context Quality:
                     </div>
                     <Badge variant={contextQuality.variant}>
@@ -510,7 +510,7 @@ export function ChatDetailPanel({
 
           {/* Resolutions Summary */}
           {resolutions.length > 0 && (
-            <div className="p-6 border-b">
+            <div className="border-b p-6">
               <Stack direction="vertical" gap={3}>
                 {resolutions.map((resolution) => (
                   <div key={resolution.id} className="flex items-start gap-4">
@@ -524,11 +524,11 @@ export function ChatDetailPanel({
                       }
                       size="sm"
                     />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium mb-1">
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 text-sm font-medium">
                         {resolution.userGoal}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-muted-foreground text-xs">
                         {resolution.resolutionNotes}
                       </div>
                     </div>
@@ -548,7 +548,7 @@ export function ChatDetailPanel({
                   <div key={message.id}>
                     {/* Resolution breakpoint */}
                     {resolution && (
-                      <div className="mb-3 p-3 rounded-lg bg-primary/10 border-l-4 border-primary">
+                      <div className="bg-primary/10 border-primary mb-3 rounded-lg border-l-4 p-3">
                         <div className="text-xs font-semibold">
                           Resolution Point: {resolution.resolution}
                         </div>
@@ -568,23 +568,23 @@ export function ChatDetailPanel({
                                   key={tc.id || idx}
                                   className="flex items-start gap-3"
                                 >
-                                  <div className="size-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                                  <div className="bg-primary flex size-8 flex-shrink-0 items-center justify-center rounded-full">
                                     <Icon
                                       name="zap"
-                                      className="size-4 text-primary-foreground"
+                                      className="text-primary-foreground size-4"
                                     />
                                   </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="mb-1 flex items-center gap-2">
                                       <span className="text-sm font-semibold">
                                         Tool Call
                                       </span>
                                       {tc.id && (
-                                        <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+                                        <code className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
                                           {tc.id}
                                         </code>
                                       )}
-                                      <span className="text-xs text-muted-foreground">
+                                      <span className="text-muted-foreground text-xs">
                                         {message.createdAt &&
                                           format(
                                             new Date(message.createdAt),
@@ -592,12 +592,12 @@ export function ChatDetailPanel({
                                           )}
                                       </span>
                                     </div>
-                                    <div className="rounded-lg text-sm overflow-hidden bg-background border">
-                                      <div className="p-3 border-b bg-muted/30">
+                                    <div className="bg-background overflow-hidden rounded-lg border text-sm">
+                                      <div className="bg-muted/30 border-b p-3">
                                         <div className="flex items-center gap-2">
                                           <Icon
                                             name="zap"
-                                            className="size-4 text-primary"
+                                            className="text-primary size-4"
                                           />
                                           <span className="font-semibold">
                                             {tc.function?.name ||
@@ -633,44 +633,44 @@ export function ChatDetailPanel({
                     ) : (
                       <div className="flex items-start gap-3">
                         {message.role === "user" && (
-                          <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <Icon name="user" className="size-4 text-primary" />
+                          <div className="bg-primary/10 flex size-8 flex-shrink-0 items-center justify-center rounded-full">
+                            <Icon name="user" className="text-primary size-4" />
                           </div>
                         )}
                         {message.role === "assistant" && (
-                          <div className="size-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                          <div className="bg-muted flex size-8 flex-shrink-0 items-center justify-center rounded-full">
                             <Icon name="bot" className="size-4" />
                           </div>
                         )}
                         {message.role === "tool" && (
-                          <div className="size-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                          <div className="bg-primary flex size-8 flex-shrink-0 items-center justify-center rounded-full">
                             <Icon
                               name="zap"
-                              className="size-4 text-primary-foreground"
+                              className="text-primary-foreground size-4"
                             />
                           </div>
                         )}
 
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
+                        <div className="min-w-0 flex-1">
+                          <div className="mb-1 flex items-center gap-2">
                             <span className="text-sm font-semibold capitalize">
                               {message.role === "tool"
                                 ? "Tool Result"
                                 : message.role}
                             </span>
                             {message.toolCallId && (
-                              <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+                              <code className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
                                 {message.toolCallId}
                               </code>
                             )}
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-muted-foreground text-xs">
                               {message.createdAt &&
                                 format(new Date(message.createdAt), "HH:mm:ss")}
                             </span>
                           </div>
                           <div
                             className={cn(
-                              "rounded-lg text-sm overflow-hidden",
+                              "overflow-hidden rounded-lg text-sm",
                               message.role === "user" && "bg-primary/5 p-3",
                               message.role === "assistant" && "bg-muted/50 p-3",
                               message.role === "tool" && "bg-background border",
@@ -702,7 +702,7 @@ export function ChatDetailPanel({
         {/* Telemetry Logs Tab */}
         <TabsContent
           value="logs"
-          className="flex-1 overflow-y-auto m-0 data-[state=inactive]:hidden"
+          className="m-0 flex-1 overflow-y-auto data-[state=inactive]:hidden"
         >
           <TelemetryLogsTab
             logs={logs}
@@ -714,7 +714,7 @@ export function ChatDetailPanel({
         {/* Tool Calls Tab */}
         <TabsContent
           value="tools"
-          className="flex-1 overflow-y-auto m-0 data-[state=inactive]:hidden"
+          className="m-0 flex-1 overflow-y-auto data-[state=inactive]:hidden"
         >
           <ToolCallsTab
             toolLogs={toolLogs}
@@ -727,27 +727,27 @@ export function ChatDetailPanel({
         {systemMessages.length > 0 && (
           <TabsContent
             value="system"
-            className="flex-1 overflow-y-auto m-0 data-[state=inactive]:hidden"
+            className="m-0 flex-1 overflow-y-auto data-[state=inactive]:hidden"
           >
             <div className="p-6">
               <Stack direction="vertical" gap={4}>
                 {systemMessages.map((message) => (
                   <div key={message.id}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="size-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <div className="mb-2 flex items-center gap-2">
+                      <div className="bg-muted flex size-8 flex-shrink-0 items-center justify-center rounded-full">
                         <Icon name="settings" className="size-4" />
                       </div>
                       <span className="text-sm font-semibold">
                         System Prompt
                       </span>
                       {message.createdAt && (
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-muted-foreground text-xs">
                           {format(new Date(message.createdAt), "HH:mm:ss")}
                         </span>
                       )}
                     </div>
-                    <div className="p-4 rounded-lg bg-muted/30 border">
-                      <pre className="text-sm whitespace-pre-wrap font-mono">
+                    <div className="bg-muted/30 rounded-lg border p-4">
+                      <pre className="font-mono text-sm whitespace-pre-wrap">
                         {typeof message.content === "string"
                           ? message.content.trim()
                           : JSON.stringify(message.content, null, 2)}

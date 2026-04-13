@@ -87,7 +87,7 @@ function CopyButton({
     <button
       onClick={handleCopy}
       className={cn(
-        "p-0.5 rounded transition-colors",
+        "rounded p-0.5 transition-colors",
         "opacity-50 hover:opacity-100",
         "hover:bg-muted/80",
         copied && "opacity-100",
@@ -134,7 +134,7 @@ function ScoreRing({
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="relative" style={{ width: size, height: size }}>
-        <svg className="transform -rotate-90" width={size} height={size}>
+        <svg className="-rotate-90 transform" width={size} height={size}>
           {/* Background circle */}
           <circle
             cx={size / 2}
@@ -163,7 +163,7 @@ function ScoreRing({
           <span className="text-xs font-semibold tabular-nums">{score}</span>
         </div>
       </div>
-      <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">
+      <span className="text-muted-foreground text-[9px] font-medium tracking-wider uppercase">
         Score
       </span>
     </div>
@@ -199,10 +199,10 @@ export function ChatLogsTable({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   if (isLoading && chats.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="size-5 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
-          <span className="text-sm text-muted-foreground">
+          <div className="border-muted-foreground/30 border-t-muted-foreground size-5 animate-spin rounded-full border-2" />
+          <span className="text-muted-foreground text-sm">
             Loading traces...
           </span>
         </div>
@@ -212,16 +212,16 @@ export function ChatLogsTable({
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex flex-col items-center gap-3 text-center px-4">
-          <div className="size-10 rounded-full bg-rose-500/10 flex items-center justify-center">
+      <div className="flex h-64 items-center justify-center">
+        <div className="flex flex-col items-center gap-3 px-4 text-center">
+          <div className="flex size-10 items-center justify-center rounded-full bg-rose-500/10">
             <Icon name="triangle-alert" className="size-5 text-rose-500" />
           </div>
           <div>
-            <p className="text-sm font-medium text-foreground">
+            <p className="text-foreground text-sm font-medium">
               Failed to load traces
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-muted-foreground mt-1 text-xs">
               {error.message}
             </p>
           </div>
@@ -232,16 +232,16 @@ export function ChatLogsTable({
 
   if (chats.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex flex-col items-center gap-3 text-center px-4">
-          <div className="size-10 rounded-full bg-muted flex items-center justify-center">
-            <Icon name="inbox" className="size-5 text-muted-foreground" />
+      <div className="flex h-64 items-center justify-center">
+        <div className="flex flex-col items-center gap-3 px-4 text-center">
+          <div className="bg-muted flex size-10 items-center justify-center rounded-full">
+            <Icon name="inbox" className="text-muted-foreground size-5" />
           </div>
           <div>
-            <p className="text-sm font-medium text-foreground">
+            <p className="text-foreground text-sm font-medium">
               No traces found
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-muted-foreground mt-1 text-xs">
               Try adjusting your filters or time range
             </p>
           </div>
@@ -252,7 +252,7 @@ export function ChatLogsTable({
 
   return (
     <>
-      <div className="divide-y divide-border/50">
+      <div className="divide-border/50 divide-y">
         {chats.map((chat) => {
           const status = getOverallResolutionStatus(chat.resolutions);
           const averageScore = getAverageScore(chat.resolutions);
@@ -265,9 +265,9 @@ export function ChatLogsTable({
               key={chat.id}
               onClick={() => onSelectChat(chat)}
               className={cn(
-                "group w-full text-left px-5 py-4 transition-all duration-150",
+                "group w-full px-5 py-4 text-left transition-all duration-150",
                 "hover:bg-muted/50",
-                "focus:outline-none focus-visible:bg-muted/50",
+                "focus-visible:bg-muted/50 focus:outline-none",
                 isSelected && "bg-primary/[0.03] hover:bg-primary/[0.05]",
               )}
             >
@@ -279,12 +279,12 @@ export function ChatLogsTable({
                   ) : (
                     <SimpleTooltip tooltip="This session hasn't been analyzed yet. Scores are generated automatically after a conversation ends.">
                       <div className="flex flex-col items-center gap-1">
-                        <div className="size-[44px] rounded-full border-[3px] border-muted-foreground/30 flex items-center justify-center">
-                          <span className="text-[10px] font-semibold text-muted-foreground">
+                        <div className="border-muted-foreground/30 flex size-[44px] items-center justify-center rounded-full border-[3px]">
+                          <span className="text-muted-foreground text-[10px] font-semibold">
                             N/A
                           </span>
                         </div>
-                        <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">
+                        <span className="text-muted-foreground text-[9px] font-medium tracking-wider uppercase">
                           Score
                         </span>
                       </div>
@@ -293,30 +293,30 @@ export function ChatLogsTable({
                 </div>
 
                 {/* Center: Main content */}
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   {/* Header row */}
-                  <div className="flex items-center gap-2 mb-1.5">
+                  <div className="mb-1.5 flex items-center gap-2">
                     <StatusDot status={status} />
-                    <span className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">
+                    <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
                       {getTraceId(chat.id)}
                     </span>
                     <CopyButton value={chat.id} label="Chat ID" />
                     <span className="text-muted-foreground/40">·</span>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-muted-foreground text-sm">
                       {format(chat.createdAt, "MMM d, HH:mm")}
                     </span>
                   </div>
 
                   {/* Title */}
-                  <h3 className="text-sm font-medium text-foreground leading-snug line-clamp-2 mb-2">
+                  <h3 className="text-foreground mb-2 line-clamp-2 text-sm leading-snug font-medium">
                     {chat.title}
                   </h3>
 
                   {/* Metadata row */}
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <div className="text-muted-foreground flex items-center gap-4 text-sm">
                     <span className="flex items-center gap-1.5">
                       <Icon name="user" className="size-4 opacity-60" />
-                      <span className="truncate max-w-[120px]">
+                      <span className="max-w-[120px] truncate">
                         {chat.externalUserId || "anonymous"}
                       </span>
                     </span>
@@ -341,7 +341,7 @@ export function ChatLogsTable({
                 </div>
 
                 {/* Right: Delete + Chevron */}
-                <div className="shrink-0 pt-2 flex items-center gap-1">
+                <div className="flex shrink-0 items-center gap-1 pt-2">
                   <span
                     role="button"
                     tabIndex={0}
@@ -355,7 +355,7 @@ export function ChatLogsTable({
                         setDeleteConfirmId(chat.id);
                       }
                     }}
-                    className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+                    className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 opacity-0 transition-all group-hover:opacity-100"
                     aria-label="Delete chat"
                   >
                     <Icon name="trash-2" className="size-4" />
