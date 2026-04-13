@@ -31,12 +31,13 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID, "Project ID should be available from test setup")
 
 	tests := []struct {
-		name          string
-		mcpSlug       string
-		setupToolset  func(t *testing.T, ctx context.Context) (toolsetOrgID string)
-		setupAuth     func(t *testing.T, toolsetOrgID string) context.Context
-		expectedError bool
-		shouldContain string
+		name             string
+		mcpSlug          string
+		setupToolset     func(t *testing.T, ctx context.Context) (toolsetOrgID string)
+		setupAuth        func(t *testing.T, toolsetOrgID string) context.Context
+		expectedError    bool
+		expectedNotFound bool
+		shouldContain    string
 	}{
 		{
 			name:          "public toolset renders page without authentication",
@@ -177,8 +178,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 				}
 				return contextvalues.SetAuthContext(context.Background(), wrongAuthCtx)
 			},
-			expectedError: true,
-			shouldContain: "mcp server not found",
+			expectedNotFound: true,
 		},
 	}
 
@@ -210,6 +210,10 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 				if tt.shouldContain != "" {
 					assert.Contains(t, err.Error(), tt.shouldContain, "Error message should contain expected text")
 				}
+			} else if tt.expectedNotFound {
+				require.NoError(t, err, "serveNotFoundPage returns nil after writing HTML")
+				assert.Equal(t, http.StatusNotFound, rr.Code, "Expected 404 status code")
+				assert.Contains(t, rr.Body.String(), "Server Not Found", "Expected not found page content")
 			} else {
 				// For successful cases, check if we got a redirect or successful rendering
 				if tt.name == "private toolset redirects to login without authentication" {
@@ -498,8 +502,9 @@ func TestServeInstallPage_CustomDomain_WrongDomainReturnsNotFound(t *testing.T) 
 	rr := httptest.NewRecorder()
 	err = testInstance.service.ServeInstallPage(rr, req)
 
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "mcp server not found")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Server Not Found")
 }
 
 // TestServeInstallPage_CustomDomain_CorrectDomainRendersPage verifies that a
@@ -813,6 +818,7 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 	rr := httptest.NewRecorder()
 	err = testInstance.service.ServeInstallPage(rr, req)
 
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "mcp server not found")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Server Not Found")
 }
