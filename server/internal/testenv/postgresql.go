@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -16,7 +15,9 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
-var pgCloneMutex sync.Mutex
+// Advisory lock ID used to serialize CREATE DATABASE ... WITH TEMPLATE across
+// concurrent test processes sharing the same PostgreSQL instance.
+const pgCloneAdvisoryLockID int64 = 716713
 
 func nextRandom() string {
 	return fmt.Sprintf("%d", uuid.New().ID())
@@ -24,11 +25,11 @@ func nextRandom() string {
 
 type PostgresDBCloneFunc func(t *testing.T, name string) (*pgxpool.Pool, error)
 
-// NewTestPostgres creates a new Postgres container with a template database built
+// NewPostgresContainer creates a new Postgres container with a template database built
 // from a SQL init script. A reference to the container is returned as well as
 // a function to create test databases from the template. All "clone" databases
 // are automatically dropped when the test ends using t.Cleanup() hooks.
-func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, PostgresDBCloneFunc, error) {
+func NewPostgresContainer(ctx context.Context) (*postgres.PostgresContainer, PostgresDBCloneFunc, error) {
 	container, err := postgres.Run(
 		ctx,
 		"pgvector/pgvector:pg17",
@@ -64,28 +65,31 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 		return nil, nil, fmt.Errorf("mark template database: %w", err)
 	}
 
-	return container, newPostgresCloneFunc(container), nil
+	return container, newPostgresCloneFunc(uri), nil
 }
 
-func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBCloneFunc {
+func newPostgresCloneFunc(uri string) PostgresDBCloneFunc {
+	// Connect to the 'postgres' database for admin operations so we don't hold
+	// sessions on the template database, which would block CREATE DATABASE.
+	adminURI := strings.Replace(uri, "/gotestdb", "/postgres", 1)
+
 	return func(t *testing.T, name string) (*pgxpool.Pool, error) {
 		t.Helper()
 		ctx := t.Context()
-		uri, err := container.ConnectionString(ctx, "sslmode=disable")
-		if err != nil {
-			return nil, fmt.Errorf("read connection string: %w", err)
-		}
 
-		pgCloneMutex.Lock()
-		defer pgCloneMutex.Unlock()
-
-		conn, err := pgx.Connect(ctx, uri)
+		conn, err := pgx.Connect(ctx, adminURI)
 		if err != nil {
-			return nil, fmt.Errorf("connect to template database: %w", err)
+			return nil, fmt.Errorf("connect for database cloning: %w", err)
 		}
 		defer o11y.NoLogDefer(func() error {
 			return conn.Close(ctx)
 		})
+
+		// Acquire an advisory lock to serialize CREATE DATABASE across processes.
+		// Released automatically when the connection is closed.
+		if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", pgCloneAdvisoryLockID); err != nil {
+			return nil, fmt.Errorf("acquire advisory lock: %w", err)
+		}
 
 		clonename := fmt.Sprintf("%s_%s", name, nextRandom())
 		_, err = conn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s WITH TEMPLATE gotestdb;", clonename))
@@ -93,7 +97,7 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 			return nil, fmt.Errorf("create test database: %w", err)
 		}
 
-		cloneuri := strings.Replace(uri, "gotestdb", clonename, 1)
+		cloneuri := strings.Replace(uri, "/gotestdb", "/"+clonename, 1)
 		pool, err := pgxpool.New(ctx, cloneuri)
 		if err != nil {
 			return nil, fmt.Errorf("create pgx pool: %w", err)
@@ -105,7 +109,7 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 
 			pool.Close()
 
-			conn, err := pgx.Connect(timeoutCtx, uri)
+			conn, err := pgx.Connect(timeoutCtx, adminURI)
 			if err != nil {
 				panic(fmt.Errorf("drop test database: connect: %w", err))
 			}

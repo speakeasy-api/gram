@@ -133,7 +133,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}),
 	)
 
-	temporalEnv, _ := infra.NewTemporalEnv(t)
+	temporalEnv := infra.NewTemporalEnv(t)
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)

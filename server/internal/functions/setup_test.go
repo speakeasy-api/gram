@@ -88,7 +88,7 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 	tigrisStore := assets.NewTigrisStore(assetStorage)
 	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
-	temporalEnv, _ := infra.NewTemporalEnv(t)
+	temporalEnv := infra.NewTemporalEnv(t)
 	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -32,7 +33,7 @@ type Environment struct {
 	CloneTestDatabase   PostgresDBCloneFunc
 	NewRedisClient      RedisClientFunc
 	NewClickhouseClient ClickhouseClientFunc
-	NewTemporalEnv      func(t *testing.T) (env *temporal.Environment, server *testsuite.DevServer)
+	NewTemporalEnv      func(t *testing.T) (env *temporal.Environment)
 }
 
 func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error, error) {
@@ -55,45 +56,72 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 	}
 
 	if opts.Postgres {
-		container, cloner, err := NewTestPostgres(ctx)
-		if err != nil {
-			return nil, nil, fmt.Errorf("start postgres container: %w", err)
+		existing := os.Getenv("TESTENV_POSTGRES_URI")
+		if existing == "" {
+			container, cloner, err := NewPostgresContainer(ctx)
+			if err != nil {
+				return nil, nil, fmt.Errorf("start postgres container: %w", err)
+			}
+			pgcontainer = container
+			res.CloneTestDatabase = cloner
+		} else {
+			res.CloneTestDatabase = newPostgresCloneFunc(existing)
 		}
-		pgcontainer = container
-		res.CloneTestDatabase = cloner
 	}
 
 	if opts.Redis {
-		container, rcFactory, err := NewTestRedis(ctx)
-		if err != nil {
-			return nil, nil, fmt.Errorf("start redis container: %w", err)
+		existing := os.Getenv("TESTENV_REDIS_URI")
+		if existing == "" {
+			container, rcFactory, err := NewRedisContainer(ctx)
+			if err != nil {
+				return nil, nil, fmt.Errorf("start redis container: %w", err)
+			}
+			rediscontainer = container
+			res.NewRedisClient = rcFactory
+		} else {
+			res.NewRedisClient = newRedisClientFunc(existing)
 		}
-		rediscontainer = container
-		res.NewRedisClient = rcFactory
 	}
 
 	if opts.ClickHouse {
-		container, chFactory, err := NewTestClickhouse(ctx)
-		if err != nil {
-			return nil, nil, fmt.Errorf("start clickhouse container: %w", err)
+		existing := os.Getenv("TESTENV_CLICKHOUSE_URI")
+		if existing == "" {
+			container, chFactory, err := NewClickhouseContainer(ctx)
+			if err != nil {
+				return nil, nil, fmt.Errorf("start clickhouse container: %w", err)
+			}
+			clickhousecontainer = container
+			res.NewClickhouseClient = chFactory
+		} else {
+			res.NewClickhouseClient = newClickhouseClientFunc(existing)
 		}
-		clickhousecontainer = container
-		res.NewClickhouseClient = chFactory
 	}
 
 	if opts.Temporal {
-		res.NewTemporalEnv = func(t *testing.T) (*temporal.Environment, *testsuite.DevServer) {
-			t.Helper()
+		existing := os.Getenv("TESTENV_TEMPORAL_URI")
+		if existing == "" {
+			res.NewTemporalEnv = func(t *testing.T) *temporal.Environment {
+				t.Helper()
 
-			temporalserverOnce.Do(func() {
-				temporalserver, temporalserverErr = NewTemporalDevServer(ctx)
-			})
-			require.NoError(t, temporalserverErr, "start temporal dev server")
+				var uri string
 
-			env, err := NewTemporalEnvironment(t, temporalserver)
-			require.NoError(t, err, "create temporal environment")
+				temporalserverOnce.Do(func() {
+					temporalserver, uri, temporalserverErr = NewTemporalDevServer(ctx)
+				})
+				require.NoError(t, temporalserverErr, "start temporal dev server")
 
-			return env, temporalserver
+				env, err := NewTemporalEnvironment(t, uri)
+				require.NoError(t, err, "create temporal environment")
+
+				return env
+			}
+		} else {
+			res.NewTemporalEnv = func(t *testing.T) *temporal.Environment {
+				env, err := NewTemporalEnvironment(t, existing)
+				require.NoError(t, err, "create temporal environment")
+
+				return env
+			}
 		}
 	}
 
@@ -165,10 +193,10 @@ func unsupportedClickhouseClientFunc() ClickhouseClientFunc {
 	}
 }
 
-func unsupportedTemporalEnvFunc() func(t *testing.T) (env *temporal.Environment, server *testsuite.DevServer) {
-	return func(t *testing.T) (*temporal.Environment, *testsuite.DevServer) {
+func unsupportedTemporalEnvFunc() func(t *testing.T) (env *temporal.Environment) {
+	return func(t *testing.T) *temporal.Environment {
 		t.Helper()
 		require.FailNow(t, fmt.Errorf("new temporal environment: %w", errCapabilityNotEnabled).Error())
-		return nil, nil
+		return nil
 	}
 }

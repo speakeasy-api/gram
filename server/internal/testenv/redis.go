@@ -16,7 +16,7 @@ import (
 
 type RedisClientFunc func(t *testing.T, db int) (*redis.Client, error)
 
-func NewTestRedis(ctx context.Context) (*tcr.RedisContainer, RedisClientFunc, error) {
+func NewRedisContainer(ctx context.Context) (*tcr.RedisContainer, RedisClientFunc, error) {
 	container, err := tcr.Run(
 		ctx, "redis:6.2-alpine",
 		testcontainers.WithLogger(NewTestcontainersLogger()),
@@ -29,24 +29,24 @@ func NewTestRedis(ctx context.Context) (*tcr.RedisContainer, RedisClientFunc, er
 		return nil, nil, fmt.Errorf("failed to start redis container: %w", err)
 	}
 
-	return container, newRedisClientFunc(container), nil
+	uri, err := container.ConnectionString(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get redis connection string: %w", err)
+	}
+
+	return container, newRedisClientFunc(uri), nil
 }
 
-func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
+func newRedisClientFunc(uri string) RedisClientFunc {
 	return func(t *testing.T, db int) (*redis.Client, error) {
 		t.Helper()
 
-		cstr, err := container.ConnectionString(t.Context())
-		if err != nil {
-			return nil, fmt.Errorf("failed to get redis connection string: %w", err)
-		}
-
-		uri, err := url.Parse(cstr)
+		parsed, err := url.Parse(uri)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse redis connection string: %w", err)
 		}
 
-		host, port, err := net.SplitHostPort(uri.Host)
+		host, port, err := net.SplitHostPort(parsed.Host)
 		if err != nil {
 			return nil, fmt.Errorf("split redis host/port: %w", err)
 		}

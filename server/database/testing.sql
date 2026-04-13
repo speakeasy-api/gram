@@ -1,0 +1,1 @@
+ALTER DATABASE gotestdb WITH is_template = true;

@@ -84,7 +84,7 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 
 	f := &feature.InMemory{}
 
-	temporalEnv, _ := infra.NewTemporalEnv(t)
+	temporalEnv := infra.NewTemporalEnv(t)
 	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
