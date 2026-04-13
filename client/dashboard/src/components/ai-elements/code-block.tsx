@@ -105,24 +105,24 @@ export const CodeBlock = ({
       <div className="group relative">
         <div
           className={cn(
-            "w-full rounded-md border bg-background text-foreground overflow-hidden",
+            "bg-background text-foreground w-full overflow-hidden rounded-md border",
             className,
           )}
           {...props}
         >
           <div
-            className="overflow-x-auto dark:hidden [&>pre]:m-0 [&>pre]:bg-background! [&>pre]:p-4 [&>pre]:text-foreground! [&>pre]:text-sm [&_code]:font-mono [&_code]:text-sm"
+            className="[&>pre]:bg-background! [&>pre]:text-foreground! overflow-x-auto dark:hidden [&_code]:font-mono [&_code]:text-sm [&>pre]:m-0 [&>pre]:p-4 [&>pre]:text-sm"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: "this is needed."
             dangerouslySetInnerHTML={{ __html: html }}
           />
           <div
-            className="hidden overflow-x-auto dark:block [&>pre]:m-0 [&>pre]:bg-background! [&>pre]:p-4 [&>pre]:text-foreground! [&>pre]:text-sm [&_code]:font-mono [&_code]:text-sm"
+            className="[&>pre]:bg-background! [&>pre]:text-foreground! hidden overflow-x-auto dark:block [&_code]:font-mono [&_code]:text-sm [&>pre]:m-0 [&>pre]:p-4 [&>pre]:text-sm"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: "this is needed."
             dangerouslySetInnerHTML={{ __html: darkHtml }}
           />
         </div>
         {children && (
-          <div className="absolute top-2 right-2 flex items-center gap-2 z-10">
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
             {children}
           </div>
         )}

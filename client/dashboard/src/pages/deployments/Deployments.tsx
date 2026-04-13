@@ -109,7 +109,7 @@ function DeploymentActionsDropdown({
           disabled={redeployMutation.isPending}
           className="cursor-pointer"
         >
-          <Icon name="refresh-cw" className="size-4 mr-2" />
+          <Icon name="refresh-cw" className="mr-2 size-4" />
           {buttonText}
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -139,19 +139,19 @@ export function DeploymentsTable({
         switch (row.status) {
           case "completed":
             return (
-              <div className="flex items-center justify-center rounded-full bg-success p-1">
+              <div className="bg-success flex items-center justify-center rounded-full p-1">
                 <Icon name="check" className="text-success-foreground" />
               </div>
             );
           case "failed":
             return (
-              <div className="flex items-center justify-center rounded-full bg-destructive/20 p-1">
+              <div className="bg-destructive/20 flex items-center justify-center rounded-full p-1">
                 <Icon name="x" className="text-destructive-foreground" />
               </div>
             );
           default:
             return (
-              <div className="flex items-center justify-center rounded-full bg-warning p-1">
+              <div className="bg-warning flex items-center justify-center rounded-full p-1">
                 <Icon
                   name="circle-dashed"
                   className="text-warning-foreground"
@@ -173,7 +173,7 @@ export function DeploymentsTable({
             <div className="flex gap-2">
               <p className="text-muted-foreground text-sm">{createdAt}</p>
               {activeDeployment === row && (
-                <Badge variant="success" className="py-0.25 px-1.5">
+                <Badge variant="success" className="px-1.5 py-0.25">
                   Active
                 </Badge>
               )}
@@ -219,7 +219,7 @@ export function DeploymentsTable({
     <>
       {showHeader && (
         <>
-          <div className="flex items-center justify-between mb-2">
+          <div className="mb-2 flex items-center justify-between">
             <Heading variant="h2">Recent Deployments</Heading>
             {activeDeployment && (
               <routes.deployments.deployment.Link
@@ -235,12 +235,12 @@ export function DeploymentsTable({
             )}
           </div>
 
-          <div className="bg-secondary p-6 rounded-lg mb-6 space-y-2">
-            <p className="text-sm text-muted-foreground">
+          <div className="bg-secondary mb-6 space-y-2 rounded-lg p-6">
+            <p className="text-muted-foreground text-sm">
               Each time you add a new source or update an existing source a new
               deployment is created.
             </p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               For each deployment all sources are analyzed in the project to
               generate or update the corresponding tool definitions.
             </p>

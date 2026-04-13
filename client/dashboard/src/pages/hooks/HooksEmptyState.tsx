@@ -33,17 +33,17 @@ function ProviderCard({
     <button
       onClick={onInstall}
       className={cn(
-        "relative flex flex-col items-center p-6 rounded-lg border transition-all min-w-[160px]",
+        "relative flex min-w-[160px] flex-col items-center rounded-lg border p-6 transition-all",
         status === "available"
           ? "border-border hover:border-primary hover:bg-muted/50 cursor-pointer"
           : "border-border/50 hover:border-primary/50 hover:bg-muted/30 cursor-pointer opacity-60",
       )}
     >
-      <IconComponent className="size-12 mb-3" />
-      <span className="font-medium text-sm">{name}</span>
+      <IconComponent className="mb-3 size-12" />
+      <span className="text-sm font-medium">{name}</span>
       {isComingSoon && (
         <div className="absolute top-3 right-3">
-          <span className="text-[10px] font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full uppercase tracking-wide">
+          <span className="text-muted-foreground bg-muted rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase">
             Coming Soon
           </span>
         </div>
@@ -73,16 +73,16 @@ export function HooksEmptyState() {
 
   return (
     <>
-      <div className="flex flex-col items-center justify-center py-16 px-4">
-        <div className="max-w-2xl w-full text-center space-y-8">
+      <div className="flex flex-col items-center justify-center px-4 py-16">
+        <div className="w-full max-w-2xl space-y-8 text-center">
           {/* Icon and Title */}
           <div className="flex flex-col items-center gap-4">
-            <div className="size-16 rounded-full bg-muted flex items-center justify-center">
-              <Icon name="workflow" className="size-8 text-muted-foreground" />
+            <div className="bg-muted flex size-16 items-center justify-center rounded-full">
+              <Icon name="workflow" className="text-muted-foreground size-8" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold mb-2">No Hook Logs Yet</h2>
-              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              <h2 className="mb-2 text-xl font-semibold">No Hook Logs Yet</h2>
+              <p className="text-muted-foreground mx-auto max-w-md text-sm">
                 Install Gram Hooks in your AI coding assistant to start
                 capturing tool execution logs
               </p>
@@ -91,10 +91,10 @@ export function HooksEmptyState() {
 
           {/* Installation Options */}
           <div>
-            <h3 className="text-sm font-medium mb-4">
+            <h3 className="mb-4 text-sm font-medium">
               Choose Your AI Coding Assistant
             </h3>
-            <div className="flex items-center justify-center gap-4 flex-wrap">
+            <div className="flex flex-wrap items-center justify-center gap-4">
               <ProviderCard
                 name="Claude Code"
                 icon={ClaudeCodeIcon}

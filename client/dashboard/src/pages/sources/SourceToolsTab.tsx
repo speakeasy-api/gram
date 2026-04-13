@@ -60,30 +60,30 @@ function FilterPill({
 
 function HttpToolRow({ tool }: { tool: HttpTool }) {
   return (
-    <div className="grid grid-cols-[80px_40%_1fr] items-center px-4 py-3 border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+    <div className="hover:bg-muted/30 grid grid-cols-[80px_40%_1fr] items-center border-b px-4 py-3 transition-colors last:border-b-0">
       <div>
         <Badge variant={HTTP_METHOD_VARIANT[tool.httpMethod] ?? "neutral"}>
           <Badge.Text>{tool.httpMethod}</Badge.Text>
         </Badge>
       </div>
-      <div className="font-mono text-sm text-muted-foreground truncate pr-3">
+      <div className="text-muted-foreground truncate pr-3 font-mono text-sm">
         {tool.path}
       </div>
-      <div className="text-sm truncate">{tool.name}</div>
+      <div className="truncate text-sm">{tool.name}</div>
     </div>
   );
 }
 
 function FunctionToolRow({ tool }: { tool: FunctionTool }) {
   return (
-    <div className="grid grid-cols-[120px_1fr_1.5fr] gap-4 items-center px-4 py-3 border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+    <div className="hover:bg-muted/30 grid grid-cols-[120px_1fr_1.5fr] items-center gap-4 border-b px-4 py-3 transition-colors last:border-b-0">
       <div>
         <Badge variant={runtimeBadgeVariant(tool.runtime)}>
           <Badge.Text>{tool.runtime}</Badge.Text>
         </Badge>
       </div>
-      <div className="font-mono text-sm truncate">{tool.name}</div>
-      <div className="text-sm text-muted-foreground truncate">
+      <div className="truncate font-mono text-sm">{tool.name}</div>
+      <div className="text-muted-foreground truncate text-sm">
         {tool.description}
       </div>
     </div>
@@ -102,7 +102,7 @@ function ToolsTableHeader({
   const columnClass =
     "text-xs font-medium text-muted-foreground uppercase tracking-wider";
   return (
-    <div className="border-b bg-muted/50 shrink-0">
+    <div className="bg-muted/50 shrink-0 border-b">
       {isOpenAPI ? (
         <div className="grid grid-cols-[80px_40%_1fr] items-center px-4 py-1">
           <div className={columnClass}>Method</div>
@@ -118,7 +118,7 @@ function ToolsTableHeader({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-[120px_1fr_1.5fr] gap-4 items-center px-4 py-1">
+        <div className="grid grid-cols-[120px_1fr_1.5fr] items-center gap-4 px-4 py-1">
           <div className={columnClass}>Runtime</div>
           <div className={columnClass}>Function Name</div>
           <div className={`${columnClass} flex items-center justify-between`}>
@@ -176,7 +176,7 @@ function FilteredToolsList({
 
   if (filtered.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex h-full items-center justify-center">
         <Type muted>No matching tools found</Type>
       </div>
     );
@@ -210,8 +210,8 @@ export function SourceToolsTab({
 
   if (relatedTools.length === 0) {
     return (
-      <div className="max-w-[1270px] mx-auto px-8 py-6 w-full">
-        <div className="text-center py-12">
+      <div className="mx-auto w-full max-w-[1270px] px-8 py-6">
+        <div className="py-12 text-center">
           <Type muted>No tools derived from this source yet.</Type>
         </div>
       </div>
@@ -219,11 +219,11 @@ export function SourceToolsTab({
   }
 
   return (
-    <div className="max-w-[1270px] mx-auto px-8 py-6 w-full flex-1 flex flex-col min-h-0">
-      <div className="flex flex-col gap-4 flex-1 min-h-0">
+    <div className="mx-auto flex min-h-0 w-full max-w-[1270px] flex-1 flex-col px-8 py-6">
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
         {/* HTTP method filter pills */}
         {isOpenAPI && (
-          <div className="flex gap-2 flex-wrap shrink-0">
+          <div className="flex shrink-0 flex-wrap gap-2">
             <button onClick={() => setMethodFilter(null)}>
               <Badge
                 variant={methodFilter === null ? "information" : "neutral"}
@@ -257,7 +257,7 @@ export function SourceToolsTab({
 
         {/* Runtime filter pills (only when multiple runtimes) */}
         {!isOpenAPI && uniqueRuntimes.length > 1 && (
-          <div className="flex gap-2 flex-wrap shrink-0">
+          <div className="flex shrink-0 flex-wrap gap-2">
             <button onClick={() => setRuntimeFilter(null)}>
               <Badge
                 variant={runtimeFilter === null ? "information" : "neutral"}
@@ -290,7 +290,7 @@ export function SourceToolsTab({
         )}
 
         {/* Tools table */}
-        <div className="border rounded-lg flex flex-col overflow-hidden flex-1 min-h-0 mb-4">
+        <div className="mb-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
           <ToolsTableHeader
             isOpenAPI={isOpenAPI}
             searchQuery={searchQuery}

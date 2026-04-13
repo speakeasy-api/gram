@@ -190,7 +190,7 @@ export function ToolMentionAutocomplete({
     <div
       ref={suggestionsRef}
       className={cn(
-        "absolute z-[100] min-w-[200px] max-w-[400px] rounded-md border bg-popover shadow-md",
+        "bg-popover absolute z-[100] max-w-[400px] min-w-[200px] rounded-md border shadow-md",
         "max-h-[200px] overflow-auto",
       )}
       style={{
@@ -220,7 +220,7 @@ export function ToolMentionAutocomplete({
               name={tool.type === "http" ? "globe" : "message-square"}
               className="mt-0.5 h-3 w-3 flex-shrink-0 opacity-50"
             />
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1">
                 <Type variant="small" className="font-medium">
                   {tool.name}
@@ -262,7 +262,7 @@ export function MentionedToolsBadges({
   if (mentionedTools.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap gap-1 p-2 border-t bg-background">
+    <div className="bg-background flex flex-wrap gap-1 border-t p-2">
       <Type variant="small" className="text-muted-foreground mr-1">
         Selected tools:
       </Type>

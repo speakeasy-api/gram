@@ -120,7 +120,7 @@ export default function ExternalMCPDetails() {
 
       <Page.Body fullWidth noPadding fullHeight overflowHidden>
         {/* Hero Header with Illustration - full width */}
-        <div className="relative w-full h-64 shrink-0 overflow-hidden">
+        <div className="relative h-64 w-full shrink-0 overflow-hidden">
           <ExternalMCPIllustration
             logoUrl={catalogIconMap.get(source?.registryServerSpecifier || "")}
             name={source?.name}
@@ -129,10 +129,10 @@ export default function ExternalMCPDetails() {
           />
 
           {/* Overlay for text readability */}
-          <div className="absolute inset-0 bg-linear-to-t from-foreground/50 via-foreground/20 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
+          <div className="from-foreground/50 via-foreground/20 absolute inset-0 bg-linear-to-t to-transparent" />
+          <div className="absolute right-0 bottom-0 left-0 mx-auto w-full max-w-[1270px] px-8 py-8">
             <Stack gap={2}>
-              <div className="flex items-center gap-3 ml-1">
+              <div className="ml-1 flex items-center gap-3">
                 <Heading variant="h1" className="text-background">
                   {source?.name || sourceSlug}
                 </Heading>
@@ -140,8 +140,8 @@ export default function ExternalMCPDetails() {
                   <Badge.Text>External MCP</Badge.Text>
                 </Badge>
               </div>
-              <div className="flex items-center gap-2 ml-1">
-                <Type className="max-w-2xl truncate text-background/70!">
+              <div className="ml-1 flex items-center gap-2">
+                <Type className="text-background/70! max-w-2xl truncate">
                   {source?.slug}
                 </Type>
               </div>
@@ -153,20 +153,20 @@ export default function ExternalMCPDetails() {
         <Tabs
           value={activeTab}
           onValueChange={handleTabChange}
-          className="w-full flex-1 flex flex-col min-h-0"
+          className="flex min-h-0 w-full flex-1 flex-col"
         >
-          <div className="border-b shrink-0">
-            <div className="max-w-[1270px] mx-auto px-8">
-              <TabsList className="h-auto bg-transparent p-0 gap-6 rounded-none">
+          <div className="shrink-0 border-b">
+            <div className="mx-auto max-w-[1270px] px-8">
+              <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
                 <TabsTrigger
                   value="overview"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                  className="text-muted-foreground data-[state=active]:text-foreground data-[state=active]:after:bg-primary relative h-11 rounded-none border-none bg-transparent! px-1 pt-3 pb-3 shadow-none! after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent data-[state=active]:bg-transparent!"
                 >
                   Overview
                 </TabsTrigger>
                 <TabsTrigger
                   value="mcp-servers"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                  className="text-muted-foreground data-[state=active]:text-foreground data-[state=active]:after:bg-primary relative h-11 rounded-none border-none bg-transparent! px-1 pt-3 pb-3 shadow-none! after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent data-[state=active]:bg-transparent!"
                 >
                   MCP Servers{" "}
                   {associatedToolsets.length > 0 &&
@@ -174,7 +174,7 @@ export default function ExternalMCPDetails() {
                 </TabsTrigger>
                 <TabsTrigger
                   value="settings"
-                  className="relative h-11 px-1 pb-3 pt-3 bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+                  className="text-muted-foreground data-[state=active]:text-foreground data-[state=active]:after:bg-primary relative h-11 rounded-none border-none bg-transparent! px-1 pt-3 pb-3 shadow-none! after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent data-[state=active]:bg-transparent!"
                 >
                   Settings
                 </TabsTrigger>
@@ -184,7 +184,7 @@ export default function ExternalMCPDetails() {
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="mt-0 flex-1">
-            <div className="max-w-[1270px] mx-auto px-8 py-8 w-full space-y-6">
+            <div className="mx-auto w-full max-w-[1270px] space-y-6 px-8 py-8">
               {/* Row 1: Name, Registry ID */}
               <div className="flex gap-16">
                 <div>
@@ -221,7 +221,7 @@ export default function ExternalMCPDetails() {
                 {deployment?.deployment?.id ? (
                   <routes.deployments.deployment.Link
                     params={[deployment.deployment.id]}
-                    className="hover:underline text-primary font-mono"
+                    className="text-primary font-mono hover:underline"
                   >
                     {deployment.deployment.id.slice(0, 8)}
                   </routes.deployments.deployment.Link>
@@ -234,19 +234,19 @@ export default function ExternalMCPDetails() {
 
           {/* MCP Servers Tab */}
           <TabsContent value="mcp-servers" className="mt-0 flex-1">
-            <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+            <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
               {isLoadingToolsets ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {[1, 2, 3].map((i) => (
                     <div
                       key={i}
-                      className="rounded-xl border bg-card p-6 animate-pulse"
+                      className="bg-card animate-pulse rounded-xl border p-6"
                     >
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 rounded-lg bg-muted" />
+                      <div className="mb-4 flex items-center gap-3">
+                        <div className="bg-muted h-10 w-10 rounded-lg" />
                         <div className="flex-1">
-                          <div className="h-4 w-24 bg-muted rounded mb-2" />
-                          <div className="h-3 w-32 bg-muted rounded" />
+                          <div className="bg-muted mb-2 h-4 w-24 rounded" />
+                          <div className="bg-muted h-3 w-32 rounded" />
                         </div>
                       </div>
                     </div>
@@ -259,8 +259,8 @@ export default function ExternalMCPDetails() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12">
-                  <Server className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+                <div className="py-12 text-center">
+                  <Server className="text-muted-foreground/50 mx-auto mb-3 h-12 w-12" />
                   <Type muted>No MCP servers are using this source yet.</Type>
                 </div>
               )}
@@ -269,9 +269,9 @@ export default function ExternalMCPDetails() {
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="mt-0 flex-1">
-            <div className="max-w-[1270px] mx-auto px-8 py-8 w-full space-y-8">
+            <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
               {/* Danger Zone */}
-              <div className="border border-destructive/30 rounded-lg p-6">
+              <div className="border-destructive/30 rounded-lg border p-6">
                 <Type variant="subheading" className="text-destructive mb-1">
                   Danger Zone
                 </Type>
@@ -318,38 +318,38 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
   return (
     <routes.mcp.details.Link
       params={[toolset.slug]}
-      className="group block rounded-xl border bg-card hover:bg-surface-secondary hover:border-primary/30 transition-all duration-200 cursor-pointer hover:no-underline hover:shadow-lg"
+      className="group bg-card hover:bg-surface-secondary hover:border-primary/30 block cursor-pointer rounded-xl border transition-all duration-200 hover:no-underline hover:shadow-lg"
     >
       <div className="p-5">
         {/* Header with icon */}
-        <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="mb-3 flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Server className="h-5 w-5 text-primary" />
+            <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
+              <Server className="text-primary h-5 w-5" />
             </div>
             <div>
-              <Type className="font-semibold text-base group-hover:text-primary transition-colors">
+              <Type className="group-hover:text-primary text-base font-semibold transition-colors">
                 {toolset.name}
               </Type>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="mt-1 flex items-center gap-2">
                 <McpEnabledBadge enabled={!!toolset.mcpEnabled} />
                 <McpPublicBadge isPublic={!!toolset.mcpIsPublic} />
               </div>
             </div>
           </div>
-          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0 mt-2" />
+          <ChevronRight className="text-muted-foreground group-hover:text-primary mt-2 h-5 w-5 shrink-0 transition-all group-hover:translate-x-0.5" />
         </div>
 
         {/* Description */}
         {toolset.description && (
-          <Type className="text-sm text-muted-foreground line-clamp-2">
+          <Type className="text-muted-foreground line-clamp-2 text-sm">
             {toolset.description}
           </Type>
         )}
 
         {/* Footer with tool count */}
-        <div className="mt-4 pt-3 border-t">
-          <Type className="text-xs text-muted-foreground">
+        <div className="mt-4 border-t pt-3">
+          <Type className="text-muted-foreground text-xs">
             {toolset.toolUrns?.length || 0} tool
             {(toolset.toolUrns?.length || 0) !== 1 ? "s" : ""} available
           </Type>

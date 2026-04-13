@@ -13,12 +13,12 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
       params={[toolset.slug]}
       className="hover:no-underline"
     >
-      <DotCard icon={<Network className="w-10 h-10 text-muted-foreground" />}>
-        <div className="flex items-start justify-between gap-2 mb-1">
+      <DotCard icon={<Network className="text-muted-foreground h-10 w-10" />}>
+        <div className="mb-1 flex items-start justify-between gap-2">
           <Type
             variant="subheading"
             as="div"
-            className="truncate text-md group-hover:text-primary transition-colors"
+            className="text-md group-hover:text-primary truncate transition-colors"
           >
             {toolset.name}
           </Type>
@@ -30,18 +30,18 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
           {toolset.slug}
         </Type>
         {toolset.description && (
-          <Type small muted className="line-clamp-2 mt-2">
+          <Type small muted className="mt-2 line-clamp-2">
             {toolset.description}
           </Type>
         )}
-        <div className="flex items-center justify-between gap-2 mt-auto pt-2">
+        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           <div className="flex items-center gap-2">
             <div className="relative flex h-2.5 w-2.5">
               {toolset.mcpEnabled && (
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-green-400" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
               )}
               <span
-                className={`relative inline-flex rounded-full h-2.5 w-2.5 ${toolset.mcpEnabled ? "bg-green-500" : "bg-red-500"}`}
+                className={`relative inline-flex h-2.5 w-2.5 rounded-full ${toolset.mcpEnabled ? "bg-green-500" : "bg-red-500"}`}
               />
             </div>
             <Type variant="small" muted>
@@ -52,9 +52,9 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
                 : "Disabled"}
             </Type>
           </div>
-          <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
+          <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
             <span>Open</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <ArrowRight className="h-3.5 w-3.5" />
           </div>
         </div>
       </DotCard>
@@ -70,18 +70,18 @@ export function SourceMCPServersTab({
   const routes = useRoutes();
 
   return (
-    <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+    <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
       {associatedToolsets.length > 0 ? (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {associatedToolsets.map((toolset) => (
             <MCPServerPortalCard key={toolset.slug} toolset={toolset} />
           ))}
         </div>
       ) : (
-        <div className="border rounded-lg p-12 text-center">
-          <Server className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-40" />
-          <Type className="block mb-1 font-medium">No MCP servers yet</Type>
-          <Type muted small className="block max-w-sm mx-auto mb-4">
+        <div className="rounded-lg border p-12 text-center">
+          <Server className="text-muted-foreground mx-auto mb-3 h-10 w-10 opacity-40" />
+          <Type className="mb-1 block font-medium">No MCP servers yet</Type>
+          <Type muted small className="mx-auto mb-4 block max-w-sm">
             Create an MCP server that includes tools from this source to expose
             them to AI agents and clients.
           </Type>

@@ -27,7 +27,7 @@ const CATEGORIES: CategoryConfig[] = [
   {
     value: "popular",
     label: "Popular",
-    icon: <Flame className="w-3.5 h-3.5" />,
+    icon: <Flame className="h-3.5 w-3.5" />,
     description: "Most used servers",
   },
 ];
@@ -51,9 +51,9 @@ export function CategoryTabs({ value, onChange, counts }: CategoryTabsProps) {
             key={category.value}
             onClick={() => onChange(category.value)}
             className={cn(
-              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all",
+              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all",
               "hover:border-primary/50 hover:bg-primary/5",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "focus-visible:ring-ring focus:outline-none focus-visible:ring-2",
               isActive
                 ? "border-primary bg-primary/10 text-primary"
                 : "border-border bg-background text-muted-foreground hover:text-foreground",
@@ -65,7 +65,7 @@ export function CategoryTabs({ value, onChange, counts }: CategoryTabsProps) {
             {count !== undefined && (
               <span
                 className={cn(
-                  "ml-1 px-1.5 py-0.5 rounded text-xs",
+                  "ml-1 rounded px-1.5 py-0.5 text-xs",
                   isActive
                     ? "bg-primary text-white"
                     : "bg-muted text-muted-foreground",

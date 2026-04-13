@@ -71,7 +71,7 @@ function getDateKey(date: Date, mode: "utc" | "local") {
 }
 
 function StrongName({ children }: { children: ReactNode }) {
-  return <strong className="font-semibold text-foreground">{children}</strong>;
+  return <strong className="text-foreground font-semibold">{children}</strong>;
 }
 
 function getActorLabel(log: AuditLog) {
@@ -352,7 +352,7 @@ function AuditLogRow({
           <StrongName>
             {highlightMatch ? highlightMatch(actorLabel) : actorLabel}
           </StrongName>
-          <span className="mx-1.5 text-muted-foreground">
+          <span className="text-muted-foreground mx-1.5">
             {highlightMatch ? highlightMatch(verbText) : verbText}
           </span>
           {renderSubject(log, orgSlug)}
@@ -367,7 +367,7 @@ function AuditLogRow({
           </button>
         )}
       </div>
-      <span className="shrink-0 font-mono text-xs text-muted-foreground">
+      <span className="text-muted-foreground shrink-0 font-mono text-xs">
         {formatTimeOnly(log.createdAt, timestampMode)}
       </span>
     </div>
@@ -377,7 +377,7 @@ function AuditLogRow({
     return (
       <div
         ref={rowRef}
-        className={cn(isHighlighted && "border-l-4 border-l-foreground")}
+        className={cn(isHighlighted && "border-l-foreground border-l-4")}
       >
         <div
           className={cn(
@@ -387,7 +387,7 @@ function AuditLogRow({
         >
           {rowContent}
         </div>
-        <div className="rounded-b-lg border border-t-0 bg-background px-4 pb-3 pt-2">
+        <div className="bg-background rounded-b-lg border border-t-0 px-4 pt-2 pb-3">
           <StructuredDiff log={log} />
         </div>
       </div>
@@ -400,7 +400,7 @@ function AuditLogRow({
       className={cn(
         "rounded-none transition-colors",
         isOdd ? "bg-muted/30" : "bg-background",
-        isHighlighted && "border-l-4 border-l-foreground",
+        isHighlighted && "border-l-foreground border-l-4",
       )}
     >
       {rowContent}
@@ -417,10 +417,10 @@ function DateGroupHeader({
 }) {
   return (
     <div className="flex items-center gap-3 px-4 py-2">
-      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <span className="text-muted-foreground shrink-0 text-[11px] font-semibold tracking-wide uppercase">
         {formatDateHeader(date, mode)}
       </span>
-      <div className="h-px flex-1 bg-border" />
+      <div className="bg-border h-px flex-1" />
     </div>
   );
 }
@@ -474,7 +474,7 @@ function FacetSelect({
         {label}
       </Type>
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger size="sm" className="min-w-[220px] bg-background">
+        <SelectTrigger size="sm" className="bg-background min-w-[220px]">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
@@ -691,7 +691,7 @@ export default function OrgAuditLogs() {
             part.toLowerCase() === searchQuery.toLowerCase() ? (
               <mark
                 key={i}
-                className="bg-yellow-200 dark:bg-yellow-800 text-inherit"
+                className="bg-yellow-200 text-inherit dark:bg-yellow-800"
               >
                 {part}
               </mark>
@@ -874,7 +874,7 @@ export default function OrgAuditLogs() {
               <Type small muted>
                 Timestamp
               </Type>
-              <div className="flex h-8 items-center gap-2 rounded-md border bg-background px-3">
+              <div className="bg-background flex h-8 items-center gap-2 rounded-md border px-3">
                 <Type
                   small
                   className={
@@ -906,25 +906,25 @@ export default function OrgAuditLogs() {
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-lg border bg-background">
+          <div className="bg-background overflow-hidden rounded-lg border">
             {/* Search toolbar */}
             {!isLoading && !error && logs.length > 0 && (
-              <div className="flex items-center gap-2 border-b bg-surface/50 p-2">
-                <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+              <div className="bg-surface/50 flex items-center gap-2 border-b p-2">
+                <div className="text-muted-foreground flex items-center gap-3 text-[11px]">
                   {searchQuery ? (
                     <>
                       <span className="flex items-center gap-1">
-                        <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                        <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                           N
                         </kbd>
                         <span>/</span>
-                        <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                        <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                           ⇧N
                         </kbd>
                         <span className="ml-0.5">results</span>
                       </span>
                       <span className="flex items-center gap-1">
-                        <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                        <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                           ESC
                         </kbd>
                         <span>clear</span>
@@ -933,23 +933,23 @@ export default function OrgAuditLogs() {
                   ) : (
                     <>
                       <span className="flex items-center gap-1">
-                        <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                        <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                           J
                         </kbd>
                         <span>/</span>
-                        <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                        <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                           K
                         </kbd>
                         <span className="ml-0.5">navigate</span>
                       </span>
                       <span className="flex items-center gap-1">
-                        <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                        <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                           G
                         </kbd>
                         <span>first</span>
                       </span>
                       <span className="flex items-center gap-1">
-                        <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                        <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                           ⇧G
                         </kbd>
                         <span>last</span>
@@ -957,10 +957,10 @@ export default function OrgAuditLogs() {
                     </>
                   )}
                 </div>
-                <div className="ml-auto relative">
+                <div className="relative ml-auto">
                   <Icon
                     name="search"
-                    className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none"
+                    className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2"
                   />
                   <Input
                     data-audit-search-input
@@ -970,28 +970,28 @@ export default function OrgAuditLogs() {
                     onChange={(e) => handleSearchChange(e.target.value)}
                     onFocus={() => setSearchInputFocused(true)}
                     onBlur={() => setSearchInputFocused(false)}
-                    className="pl-7 pr-16 w-56 text-xs py-1 rounded-sm"
+                    className="w-56 rounded-sm py-1 pr-16 pl-7 text-xs"
                   />
                   {searchQuery || searchInputFocused ? (
                     searchMatchIndices.length > 0 ? (
-                      <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                        <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm">
+                      <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
+                        <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
                           ESC
                         </span>
-                        <span className="text-[10px] text-muted-foreground mx-0.5">
+                        <span className="text-muted-foreground mx-0.5 text-[10px]">
                           {effectiveSearchIndex + 1}/{searchMatchIndices.length}
                         </span>
                         <div className="flex items-center">
                           <button
                             onClick={() => navigateToResult("prev")}
-                            className="p-0.5 hover:bg-muted rounded-sm opacity-60 hover:opacity-100 transition-opacity"
+                            className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
                             title="Previous (Shift+N)"
                           >
                             <Icon name="chevron-up" className="size-2.5" />
                           </button>
                           <button
                             onClick={() => navigateToResult("next")}
-                            className="p-0.5 hover:bg-muted rounded-sm opacity-60 hover:opacity-100 transition-opacity"
+                            className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
                             title="Next (N)"
                           >
                             <Icon name="chevron-down" className="size-2.5" />
@@ -999,18 +999,18 @@ export default function OrgAuditLogs() {
                         </div>
                       </div>
                     ) : (
-                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                        <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm">
+                      <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
+                        <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
                           ESC
                         </span>
-                        <span className="text-[10px] text-muted-foreground ml-0.5">
+                        <span className="text-muted-foreground ml-0.5 text-[10px]">
                           0/0
                         </span>
                       </div>
                     )
                   ) : (
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
-                      <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm font-mono">
+                    <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
+                      <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                         /
                       </span>
                     </div>
@@ -1025,7 +1025,7 @@ export default function OrgAuditLogs() {
               className="focus:outline-none"
             >
               {isLoading ? (
-                <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
                   <Icon name="loader-circle" className="size-4 animate-spin" />
                   <span>Loading audit logs...</span>
                 </div>
@@ -1079,7 +1079,7 @@ export default function OrgAuditLogs() {
             </div>
 
             {(logs.length > 0 || isFetchingNextPage) && (
-              <div className="flex items-center justify-between border-t bg-muted/20 px-4 py-3">
+              <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
                 <Type muted small>
                   {logs.length.toLocaleString()} audit log
                   {logs.length === 1 ? "" : "s"}

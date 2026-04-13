@@ -29,7 +29,7 @@ export function UpdatedAt({
       variant="body"
       muted
       className={cn(
-        "text-sm flex items-center gap-1",
+        "flex items-center gap-1 text-sm",
         italic && "italic",
         recentnessClassName,
         className,

@@ -204,7 +204,7 @@ export default function OrgApiKeys() {
           noResultsMessage={
             <Stack
               gap={2}
-              className="h-full p-4 bg-background"
+              className="bg-background h-full p-4"
               align="center"
               justify="center"
             >
@@ -239,11 +239,11 @@ export default function OrgApiKeys() {
             </Dialog.Header>
             {newlyCreatedKey ? (
               <div className="space-y-4 py-4">
-                <div className="rounded-lg border border-yellow-500/50 bg-yellow-600/50 text-foreground p-4 text-sm">
+                <div className="text-foreground rounded-lg border border-yellow-500/50 bg-yellow-600/50 p-4 text-sm">
                   You will not be able to see this token value again once you
                   close this dialog. Copy it now and store it securely.
                 </div>
-                <div className="flex items-center space-x-2 bg-muted p-3 rounded-md">
+                <div className="bg-muted flex items-center space-x-2 rounded-md p-3">
                   <code className="flex-1 break-all">
                     {newlyCreatedKey.key}
                   </code>
@@ -342,7 +342,7 @@ export default function OrgApiKeys() {
             <div className="space-y-4 py-4">
               <Type variant="body">
                 Are you sure you want to revoke the API key{" "}
-                <span className="italic font-bold">{keyToRevoke?.name}</span>?
+                <span className="font-bold italic">{keyToRevoke?.name}</span>?
                 This action cannot be undone.
               </Type>
               <div className="flex justify-end space-x-2">

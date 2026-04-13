@@ -24,7 +24,7 @@ function TabsList({
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
-        "text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-1 bg-muted",
+        "text-muted-foreground bg-muted inline-flex h-9 w-fit items-center justify-center rounded-lg p-1",
         className,
       )}
       {...props}
@@ -70,7 +70,7 @@ function PageTabsTrigger({
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        "relative h-11 px-1 pb-3 pt-3 text-sm bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary",
+        "text-muted-foreground data-[state=active]:text-foreground data-[state=active]:after:bg-primary relative h-11 rounded-none border-none bg-transparent! px-1 pt-3 pb-3 text-sm shadow-none! after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent data-[state=active]:bg-transparent!",
         className,
       )}
       {...props}

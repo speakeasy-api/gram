@@ -256,7 +256,7 @@ function CarouselDots({ className, ...props }: React.ComponentProps<"div">) {
       direction={"horizontal"}
       gap={2}
       className={cn(
-        "flex absolute bottom-2 left-1/2 -translate-x-1/2",
+        "absolute bottom-2 left-1/2 flex -translate-x-1/2",
         className,
       )}
       {...props}
@@ -265,7 +265,7 @@ function CarouselDots({ className, ...props }: React.ComponentProps<"div">) {
         <button
           key={index}
           className={cn(
-            "w-2 h-2 rounded-full bg-muted-foreground/30",
+            "bg-muted-foreground/30 h-2 w-2 rounded-full",
             activeIndex === index && "bg-muted-foreground",
           )}
           onClick={() => setActiveIndex(index)}

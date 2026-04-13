@@ -248,15 +248,15 @@ function DeploymentDetailsCollapsible({
 
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+      <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors">
         <ChevronDownIcon
           className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`}
         />
         Deployment details
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2">
-        <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-          <div className="font-mono text-xs max-h-60 overflow-y-scroll space-y-1">
+        <div className="bg-muted/30 space-y-2 rounded-md border p-3">
+          <div className="max-h-60 space-y-1 overflow-y-scroll font-mono text-xs">
             {logs.map((log) => (
               <div
                 key={log.id}
@@ -266,10 +266,10 @@ function DeploymentDetailsCollapsible({
               </div>
             ))}
           </div>
-          <div className="pt-2 border-t">
+          <div className="border-t pt-2">
             <routes.deployments.deployment.Link
               params={[deployment.id]}
-              className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
             >
               View full deployment details
               <ExternalLinkIcon className="h-3 w-3" />

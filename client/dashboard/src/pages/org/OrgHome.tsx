@@ -63,13 +63,13 @@ export default function OrgHome() {
                   setNewProjectName(search);
                   setCreateDialogOpen(true);
                 }}
-                className="text-left hover:no-underline w-full max-w-md"
+                className="w-full max-w-md text-left hover:no-underline"
               >
                 <DotCard
                   icon={
-                    <Plus className="h-10 w-10 text-muted-foreground group-hover:text-primary transition-colors" />
+                    <Plus className="text-muted-foreground group-hover:text-primary h-10 w-10 transition-colors" />
                   }
-                  className="border-dashed !border-foreground/10 hover:!border-foreground/20"
+                  className="!border-foreground/10 hover:!border-foreground/20 border-dashed"
                 >
                   <Type
                     variant="subheading"
@@ -82,10 +82,10 @@ export default function OrgHome() {
                     Create a new project with this name
                   </Type>
 
-                  <div className="flex items-center justify-end mt-auto pt-2">
-                    <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
+                  <div className="mt-auto flex items-center justify-end pt-2">
+                    <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
                       <span>Create</span>
-                      <Plus className="w-3.5 h-3.5" />
+                      <Plus className="h-3.5 w-3.5" />
                     </div>
                   </div>
                 </DotCard>
@@ -93,7 +93,7 @@ export default function OrgHome() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             {projects.map((project) => (
               <Link
                 key={project.id}
@@ -111,18 +111,18 @@ export default function OrgHome() {
                   <Type
                     variant="subheading"
                     as="div"
-                    className="truncate text-md group-hover:text-primary transition-colors"
+                    className="text-md group-hover:text-primary truncate transition-colors"
                   >
                     {project.name}
                   </Type>
-                  <Type small muted className="truncate mb-3">
+                  <Type small muted className="mb-3 truncate">
                     {project.slug}
                   </Type>
 
-                  <div className="flex items-center justify-end mt-auto pt-2">
-                    <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
+                  <div className="mt-auto flex items-center justify-end pt-2">
+                    <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
                       <span>Open</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
+                      <ArrowRight className="h-3.5 w-3.5" />
                     </div>
                   </div>
                 </DotCard>
@@ -135,9 +135,9 @@ export default function OrgHome() {
             >
               <DotCard
                 icon={
-                  <Plus className="h-10 w-10 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <Plus className="text-muted-foreground group-hover:text-primary h-10 w-10 transition-colors" />
                 }
-                className="border-dashed !border-foreground/10 hover:!border-foreground/20"
+                className="!border-foreground/10 hover:!border-foreground/20 border-dashed"
               >
                 <Type
                   variant="subheading"
@@ -150,10 +150,10 @@ export default function OrgHome() {
                   Create a new project for your organization
                 </Type>
 
-                <div className="flex items-center justify-end mt-auto pt-2">
-                  <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
+                <div className="mt-auto flex items-center justify-end pt-2">
+                  <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
                     <span>Create</span>
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="h-3.5 w-3.5" />
                   </div>
                 </div>
               </DotCard>

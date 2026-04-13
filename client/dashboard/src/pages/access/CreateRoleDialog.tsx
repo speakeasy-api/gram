@@ -248,13 +248,13 @@ export function CreateRoleDialog({
     <Sheet open={open} onOpenChange={handleClose}>
       <SheetContent
         side="right"
-        className="sm:max-w-lg w-full flex flex-col overflow-hidden"
+        className="flex w-full flex-col overflow-hidden sm:max-w-lg"
       >
         <SheetHeader>
           <SheetTitle>{isEditing ? "Edit Role" : "Create Role"}</SheetTitle>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto px-4 space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-4">
           <InputField
             label="Name"
             placeholder="e.g., Project Manager"
@@ -276,17 +276,17 @@ export function CreateRoleDialog({
                 placeholder="Describe what this role can do..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
               />
             )}
           />
 
           {/* Permissions / Grants */}
-          <div className="border-t border-border pt-4">
+          <div className="border-border border-t pt-4">
             <button
               type="button"
               onClick={() => setShowPermissions(!showPermissions)}
-              className="flex items-center gap-1 w-full text-left"
+              className="flex w-full items-center gap-1 text-left"
             >
               <ChevronRight
                 className={cn(
@@ -317,7 +317,7 @@ export function CreateRoleDialog({
                   return (
                     <div
                       key={group.label}
-                      className="border border-border rounded-md"
+                      className="border-border rounded-md border"
                     >
                       {/* Group header */}
                       <div className="flex items-center justify-between px-3 py-2">
@@ -342,13 +342,13 @@ export function CreateRoleDialog({
                           >
                             <ChevronRight
                               className={cn(
-                                "h-3.5 w-3.5 transition-transform text-muted-foreground",
+                                "text-muted-foreground h-3.5 w-3.5 transition-transform",
                                 isExpanded && "rotate-90",
                               )}
                             />
                             <Type
                               variant="body"
-                              className="font-medium text-sm"
+                              className="text-sm font-medium"
                             >
                               {group.label}
                             </Type>
@@ -364,7 +364,7 @@ export function CreateRoleDialog({
 
                       {/* Expanded scope rows */}
                       {isExpanded && (
-                        <div className="border-t border-border bg-muted/40">
+                        <div className="border-border bg-muted/40 border-t">
                           {group.scopes.map((scopeDef) => {
                             const grant = grants[scopeDef.slug];
                             const isChecked = !!grant;
@@ -372,21 +372,21 @@ export function CreateRoleDialog({
                             return (
                               <div
                                 key={scopeDef.slug}
-                                className="flex items-start gap-3 px-3 py-2.5 pl-10 hover:bg-muted/50"
+                                className="hover:bg-muted/50 flex items-start gap-3 px-3 py-2.5 pl-10"
                               >
-                                <label className="flex items-start gap-3 flex-1 min-w-0 cursor-pointer">
+                                <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
                                   <Checkbox
                                     disabled={isSystemRole}
                                     checked={isChecked}
                                     onCheckedChange={() =>
                                       toggleScope(scopeDef.slug)
                                     }
-                                    className="mt-0.5 bg-background"
+                                    className="bg-background mt-0.5"
                                   />
-                                  <div className="flex-1 min-w-0">
+                                  <div className="min-w-0 flex-1">
                                     <Type
                                       variant="body"
-                                      className="font-medium text-sm font-mono"
+                                      className="font-mono text-sm font-medium"
                                     >
                                       {scopeDef.slug}
                                     </Type>
@@ -399,7 +399,7 @@ export function CreateRoleDialog({
                                   </div>
                                 </label>
 
-                                <div className="w-[110px] shrink-0 flex justify-end">
+                                <div className="flex w-[110px] shrink-0 justify-end">
                                   {isChecked && !isSystemRole && (
                                     <ScopePickerPopover
                                       resourceType={scopeDef.resourceType}
@@ -426,11 +426,11 @@ export function CreateRoleDialog({
           </div>
 
           {/* Assign Members */}
-          <div className="border-t border-border pt-4 pb-4">
+          <div className="border-border border-t pt-4 pb-4">
             <button
               type="button"
               onClick={() => setShowMembers(!showMembers)}
-              className="flex items-center gap-1 w-full text-left"
+              className="flex w-full items-center gap-1 text-left"
             >
               <ChevronRight
                 className={cn(
@@ -447,7 +447,7 @@ export function CreateRoleDialog({
             </button>
 
             {showMembers && (
-              <div className="mt-3 border border-border rounded-md divide-y divide-border">
+              <div className="border-border divide-border mt-3 divide-y rounded-md border">
                 {members.map((member) => {
                   const alreadyHasRole =
                     isEditing && member.roleId === editingRole?.id;
@@ -455,8 +455,8 @@ export function CreateRoleDialog({
                     <label
                       key={member.id}
                       className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 cursor-pointer",
-                        alreadyHasRole && "opacity-50 cursor-default",
+                        "hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5",
+                        alreadyHasRole && "cursor-default opacity-50",
                       )}
                     >
                       <Checkbox
@@ -484,9 +484,9 @@ export function CreateRoleDialog({
                             .slice(0, 2)}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex-1 min-w-0 space-y-0.5">
+                      <div className="min-w-0 flex-1 space-y-0.5">
                         <div className="flex items-center gap-2">
-                          <Type variant="body" className="font-medium text-sm">
+                          <Type variant="body" className="text-sm font-medium">
                             {member.name}
                           </Type>
                           {member.roleId && roleNameById.get(member.roleId) && (
@@ -508,11 +508,11 @@ export function CreateRoleDialog({
                                 member.roleId !== editingRole?.id &&
                                 name.trim() && (
                                   <>
-                                    <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                    <ArrowRight className="text-muted-foreground h-3 w-3 shrink-0" />
                                     <Badge
                                       variant="outline"
                                       size="sm"
-                                      className="font-mono text-[10px] uppercase border-primary text-primary"
+                                      className="border-primary text-primary font-mono text-[10px] uppercase"
                                     >
                                       {name}
                                     </Badge>
@@ -536,7 +536,7 @@ export function CreateRoleDialog({
           </div>
         </div>
 
-        <SheetFooter className="border-t border-border flex-row justify-end">
+        <SheetFooter className="border-border flex-row justify-end border-t">
           <Button variant="secondary" onClick={handleClose}>
             Cancel
           </Button>

@@ -59,9 +59,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <div className="mt-auto px-2 py-3">
           <Link
             to={`/${orgSlug}`}
-            className="flex items-center gap-1.5 px-2 py-1 text-sm text-muted-foreground hover:text-foreground transition-colors hover:no-underline"
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 px-2 py-1 text-sm transition-colors hover:no-underline"
           >
-            <Undo2 className="w-3.5 h-3.5" />
+            <Undo2 className="h-3.5 w-3.5" />
             <span>Back to org</span>
           </Link>
         </div>
@@ -107,7 +107,7 @@ const FreeTierExceededNotification = () => {
           <Type small>
             Free tier limits exceeded. Upgrade to continue using Gram.
           </Type>
-          <orgRoutes.billing.Link className="w-full mt-auto">
+          <orgRoutes.billing.Link className="mt-auto w-full">
             <Button size="sm" className="w-full">
               Billing →
             </Button>
@@ -145,7 +145,7 @@ const PersistentNotification = ({
       className="absolute top-0 right-0 hover:bg-transparent"
       onClick={() => setIsMinimized(true)}
     >
-      <MinusIcon className="w-4 h-4" />
+      <MinusIcon className="h-4 w-4" />
     </Button>
   );
 
@@ -167,7 +167,7 @@ const PersistentNotification = ({
         <Button
           variant="ghost"
           size="icon"
-          className="flex items-center justify-center h-full w-full"
+          className="flex h-full w-full items-center justify-center"
         >
           <Type>?</Type>
         </Button>

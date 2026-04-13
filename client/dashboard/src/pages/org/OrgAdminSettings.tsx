@@ -37,9 +37,9 @@ export default function OrgAdminSettings() {
         <Type muted small className="mb-4">
           Details about the current organization.
         </Type>
-        <div className="rounded-lg border border-border bg-card p-4 mb-8">
+        <div className="border-border bg-card mb-8 rounded-lg border p-4">
           <Stack direction="horizontal" align="center" gap={2} className="mb-3">
-            <Building2 className="h-4 w-4 text-muted-foreground" />
+            <Building2 className="text-muted-foreground h-4 w-4" />
             <Type variant="body" className="font-medium">
               Organization
             </Type>
@@ -71,9 +71,9 @@ export default function OrgAdminSettings() {
           Impersonate a different organization by switching to its slug. This
           will log you out and redirect you to the target organization.
         </Type>
-        <div className="rounded-lg border border-border bg-card p-4">
+        <div className="border-border bg-card rounded-lg border p-4">
           <Stack direction="horizontal" align="center" gap={2} className="mb-4">
-            <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
+            <ArrowRightLeft className="text-muted-foreground h-4 w-4" />
             <Type variant="body" className="font-medium">
               Switch Organization
             </Type>
@@ -91,7 +91,7 @@ export default function OrgAdminSettings() {
               await client.auth.logout();
               window.location.href = "/login";
             }}
-            className="ml-6 flex gap-2 max-w-md"
+            className="ml-6 flex max-w-md gap-2"
           >
             <Input
               placeholder="organization-slug"

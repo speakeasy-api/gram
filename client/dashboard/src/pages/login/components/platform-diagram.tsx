@@ -11,13 +11,13 @@ const BRAND_COLORS = {
 
 // Service logo components (simplified SVG icons)
 const GitHubLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
     <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
   </svg>
 );
 
 const FigmaLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-5 h-5">
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
     <path
       d="M8 24c2.2 0 4-1.8 4-4v-4H8c-2.2 0-4 1.8-4 4s1.8 4 4 4z"
       fill="#0ACF83"
@@ -33,7 +33,7 @@ const FigmaLogo = () => (
 );
 
 const SlackLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-5 h-5">
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
     <path
       d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"
       fill="#E01E5A"
@@ -42,13 +42,13 @@ const SlackLogo = () => (
 );
 
 const NotionLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
     <path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.98-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.841-.046.935-.56.935-1.167V6.354c0-.606-.233-.933-.748-.886l-15.177.887c-.56.047-.747.327-.747.933zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.748 0-.935-.234-1.495-.933l-4.577-7.186v6.952L12.21 19s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.139c-.093-.514.28-.886.747-.933zM2.081 1.333C3.153.4 4.459.026 6.09.166L18.38.926c1.495.14 1.869.42 2.802 1.12l3.921 2.799c.653.466.839.7.839 1.213v14.089c0 1.12-.373 1.773-1.588 1.866l-15.085.933c-.934.047-1.401-.14-1.915-.746L2.221 18.2c-.653-.793-.935-1.4-.935-2.146V2.5c0-.933.373-1.026.795-1.167z" />
   </svg>
 );
 
 const LinearLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-5 h-5">
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
     <path
       d="M3.152 14.192c-.166-.164-.166-.428 0-.592l7.048-6.956c.166-.164.434-.164.6 0l6.952 6.956c.166.164.166.428 0 .592l-7.048 6.956c-.166.164-.434.164-.6 0z"
       fill="#5E6AD2"
@@ -57,7 +57,7 @@ const LinearLogo = () => (
 );
 
 const JiraLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-5 h-5">
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
     <path
       d="M12.005 0C8.41 0 5.705 3.105 5.705 6.523c0 .105 0 .21.007.315h-.007v10.639l6.3 6.523 6.295-6.523V6.838h-.007c.007-.105.007-.21.007-.315C18.3 3.105 15.596 0 12.005 0zm0 2.526c2.108 0 3.818 1.79 3.818 4 0 2.206-1.71 4-3.818 4s-3.818-1.794-3.818-4c0-2.21 1.71-4 3.818-4z"
       fill="#2684FF"
@@ -155,7 +155,7 @@ function ClientCluster({
       {Array.from({ length: count - 1 }).map((_, i) => (
         <div
           key={i}
-          className="absolute bg-white border border-slate-200 rounded-lg shadow-sm"
+          className="absolute rounded-lg border border-slate-200 bg-white shadow-sm"
           style={{
             top: i * 5,
             left: i * 5,
@@ -165,8 +165,8 @@ function ClientCluster({
         />
       ))}
       {/* Front card */}
-      <div className="relative flex items-center gap-2 px-3 py-2.5 bg-white border border-slate-200 rounded-lg shadow-sm">
-        <Icon className="w-5 h-5" />
+      <div className="relative flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+        <Icon className="h-5 w-5" />
         <span className="text-xs font-medium text-slate-600">{name}</span>
       </div>
     </motion.div>
@@ -180,27 +180,27 @@ function MiniChatApp({ label, delay }: { label: string; delay: number }) {
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.25, delay }}
-      className="bg-white border border-slate-200 rounded shadow-sm overflow-hidden"
+      className="overflow-hidden rounded border border-slate-200 bg-white shadow-sm"
     >
-      <div className="flex items-center gap-1 px-2 py-1 bg-slate-100 border-b border-slate-200">
+      <div className="flex items-center gap-1 border-b border-slate-200 bg-slate-100 px-2 py-1">
         <div className="flex gap-0.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-          <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-          <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+          <div className="h-1.5 w-1.5 rounded-full bg-red-400" />
+          <div className="h-1.5 w-1.5 rounded-full bg-yellow-400" />
+          <div className="h-1.5 w-1.5 rounded-full bg-green-400" />
         </div>
-        <span className="text-[7px] text-slate-400 font-mono ml-1">
+        <span className="ml-1 font-mono text-[7px] text-slate-400">
           {label}
         </span>
       </div>
-      <div className="p-1.5 flex gap-1">
-        <div className="flex-1 flex flex-col gap-0.5">
-          <div className="h-1 w-full bg-slate-100 rounded" />
-          <div className="h-1 w-3/4 bg-slate-100 rounded" />
-          <div className="h-1 w-1/2 bg-slate-100 rounded" />
+      <div className="flex gap-1 p-1.5">
+        <div className="flex flex-1 flex-col gap-0.5">
+          <div className="h-1 w-full rounded bg-slate-100" />
+          <div className="h-1 w-3/4 rounded bg-slate-100" />
+          <div className="h-1 w-1/2 rounded bg-slate-100" />
         </div>
-        <div className="w-8 bg-slate-50 rounded border border-slate-100 flex items-center justify-center">
+        <div className="flex w-8 items-center justify-center rounded border border-slate-100 bg-slate-50">
           <svg
-            className="w-2.5 h-2.5 text-slate-300"
+            className="h-2.5 w-2.5 text-slate-300"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -225,7 +225,7 @@ function DistributedClients({ delay }: { delay: number }) {
     >
       {/* Left: AI Client clusters */}
       <div className="flex-1">
-        <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-3">
+        <div className="mb-3 text-[10px] font-medium tracking-wider text-slate-400 uppercase">
           AI Agents
         </div>
         <div className="flex flex-wrap gap-4">
@@ -258,7 +258,7 @@ function DistributedClients({ delay }: { delay: number }) {
 
       {/* Right: Chat apps */}
       <div className="flex-1">
-        <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-3">
+        <div className="mb-3 text-[10px] font-medium tracking-wider text-slate-400 uppercase">
           Product Agents
         </div>
         <div className="flex flex-col gap-1.5">
@@ -286,7 +286,7 @@ function FeatureBar({
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.4, delay }}
-      className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded text-xs text-slate-600"
+      className="flex items-center gap-2 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
     >
       <span className="text-slate-400">{icon}</span>
       <span className="font-medium">{label}</span>
@@ -340,11 +340,11 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
   return (
     <div
       className={cn(
-        "relative w-full h-full flex flex-col justify-center",
+        "relative flex h-full w-full flex-col justify-center",
         className,
       )}
     >
-      <div className="flex flex-col items-center gap-4 max-w-md mx-auto py-6">
+      <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-6">
         {/* Top - Distributed AI clients and chat apps across the org */}
         <DistributedClients delay={0.1} />
 
@@ -356,11 +356,11 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.6 }}
-          className="w-full bg-white border border-slate-200 rounded-lg p-3"
+          className="w-full rounded-lg border border-slate-200 bg-white p-3"
         >
-          <div className="flex items-center mb-3">
+          <div className="mb-3 flex items-center">
             <GramLogo variant="horizontal" className="w-20" />
-            <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-1">
+            <span className="ml-1 text-[10px] font-medium tracking-wider text-slate-400 uppercase">
               Control Plane
             </span>
           </div>
@@ -369,7 +369,7 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
               delay={0.7}
               icon={
                 <svg
-                  className="w-3.5 h-3.5"
+                  className="h-3.5 w-3.5"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -384,7 +384,7 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
               delay={0.75}
               icon={
                 <svg
-                  className="w-3.5 h-3.5"
+                  className="h-3.5 w-3.5"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -400,7 +400,7 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
               delay={0.8}
               icon={
                 <svg
-                  className="w-3.5 h-3.5"
+                  className="h-3.5 w-3.5"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -440,10 +440,10 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
                 : { duration: 3, repeat: Infinity, ease: "easeInOut" }
             }
           />
-          <div className="relative bg-white rounded-lg p-3">
-            <div className="flex items-center mb-3">
+          <div className="relative rounded-lg bg-white p-3">
+            <div className="mb-3 flex items-center">
               <GramLogo variant="horizontal" className="w-20" />
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-1">
+              <span className="ml-1 text-[10px] font-medium tracking-wider text-slate-400 uppercase">
                 Tools Platform
               </span>
             </div>
@@ -452,7 +452,7 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
                 delay={1.0}
                 icon={
                   <svg
-                    className="w-3.5 h-3.5"
+                    className="h-3.5 w-3.5"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -467,7 +467,7 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
                 delay={1.05}
                 icon={
                   <svg
-                    className="w-3.5 h-3.5"
+                    className="h-3.5 w-3.5"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -483,7 +483,7 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
                 delay={1.1}
                 icon={
                   <svg
-                    className="w-3.5 h-3.5"
+                    className="h-3.5 w-3.5"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -503,21 +503,21 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
         <PulseConnector delay={0.8} disabled={prefersReducedMotion ?? false} />
 
         {/* Bottom - Data Sources */}
-        <div className="grid grid-cols-2 gap-3 w-full">
+        <div className="grid w-full grid-cols-2 gap-3">
           {/* Your Data */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 1.2 }}
-            className="bg-white border border-slate-200 rounded-lg p-3"
+            className="rounded-lg border border-slate-200 bg-white p-3"
           >
-            <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-2">
+            <div className="mb-2 text-[10px] font-medium tracking-wider text-slate-400 uppercase">
               Your Data
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-slate-600 flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5 text-xs text-slate-600">
                 <svg
-                  className="w-3 h-3 text-slate-400"
+                  className="h-3 w-3 text-slate-400"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -527,9 +527,9 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
                 </svg>
                 APIs
               </span>
-              <span className="text-xs text-slate-600 flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5 text-xs text-slate-600">
                 <svg
-                  className="w-3 h-3 text-slate-400"
+                  className="h-3 w-3 text-slate-400"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -548,28 +548,28 @@ export function PlatformDiagram({ className }: PlatformDiagramProps) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 1.3 }}
-            className="bg-white border border-slate-200 rounded-lg p-3"
+            className="rounded-lg border border-slate-200 bg-white p-3"
           >
-            <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-2">
+            <div className="mb-2 text-[10px] font-medium tracking-wider text-slate-400 uppercase">
               Your SaaS
             </div>
             <div className="grid grid-cols-3 gap-1.5">
-              <div className="flex items-center justify-center p-1 bg-slate-50 rounded">
+              <div className="flex items-center justify-center rounded bg-slate-50 p-1">
                 <GitHubLogo />
               </div>
-              <div className="flex items-center justify-center p-1 bg-slate-50 rounded">
+              <div className="flex items-center justify-center rounded bg-slate-50 p-1">
                 <FigmaLogo />
               </div>
-              <div className="flex items-center justify-center p-1 bg-slate-50 rounded">
+              <div className="flex items-center justify-center rounded bg-slate-50 p-1">
                 <SlackLogo />
               </div>
-              <div className="flex items-center justify-center p-1 bg-slate-50 rounded">
+              <div className="flex items-center justify-center rounded bg-slate-50 p-1">
                 <NotionLogo />
               </div>
-              <div className="flex items-center justify-center p-1 bg-slate-50 rounded">
+              <div className="flex items-center justify-center rounded bg-slate-50 p-1">
                 <LinearLogo />
               </div>
-              <div className="flex items-center justify-center p-1 bg-slate-50 rounded">
+              <div className="flex items-center justify-center rounded bg-slate-50 p-1">
                 <JiraLogo />
               </div>
             </div>

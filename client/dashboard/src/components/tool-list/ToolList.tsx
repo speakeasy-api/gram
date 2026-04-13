@@ -404,13 +404,13 @@ function ToolRow({
     <>
       <div
         className={cn(
-          "group flex items-center justify-between overflow-hidden pl-4 pr-3 py-4 relative border-b border-neutral-softest last:border-b-0 transition-colors hover:bg-muted",
+          "group border-neutral-softest hover:bg-muted relative flex items-center justify-between overflow-hidden border-b py-4 pr-3 pl-4 transition-colors last:border-b-0",
           isFocused && "bg-muted",
           onToolClick && "cursor-pointer",
         )}
         onClick={() => onToolClick?.(tool)}
       >
-        <div className="flex gap-4 items-center min-w-0 flex-[0_1_60%]">
+        <div className="flex min-w-0 flex-[0_1_60%] items-center gap-4">
           <Checkbox
             checked={isSelected}
             onCheckedChange={onCheckboxChange}
@@ -420,9 +420,9 @@ function ToolRow({
               !isSelected && !isFocused && "opacity-0 group-hover:opacity-100",
             )}
           />
-          <div className="flex flex-col min-w-0 flex-1">
+          <div className="flex min-w-0 flex-1 flex-col">
             <Stack direction="horizontal" gap={2} align="center">
-              <p className="text-sm leading-6 text-foreground truncate">
+              <p className="text-foreground truncate text-sm leading-6">
                 {toolPrefix && (
                   <Type small muted className="inline">
                     {toolPrefix}
@@ -433,12 +433,12 @@ function ToolRow({
               <ToolVariationBadge tool={tool} />
               <AnnotationBadges tool={tool} />
             </Stack>
-            <p className="text-sm leading-6 text-muted-foreground truncate">
+            <p className="text-muted-foreground truncate text-sm leading-6">
               {tool.description || "No description"}
             </p>
           </div>
         </div>
-        <div className="flex gap-4 items-center shrink-0">
+        <div className="flex shrink-0 items-center gap-4">
           {tool.type === "http" && tool.httpMethod && (
             <MethodBadge method={tool.httpMethod} />
           )}
@@ -487,7 +487,7 @@ function ToolRow({
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm">Read-only</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-muted-foreground text-xs">
                           Tool does not modify its environment
                         </p>
                       </div>
@@ -500,7 +500,7 @@ function ToolRow({
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm">Destructive</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-muted-foreground text-xs">
                           Tool may perform destructive updates
                         </p>
                       </div>
@@ -513,7 +513,7 @@ function ToolRow({
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm">Idempotent</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-muted-foreground text-xs">
                           Repeated calls with same arguments have no additional
                           effect
                         </p>
@@ -527,7 +527,7 @@ function ToolRow({
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm">Open-world</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-muted-foreground text-xs">
                           Tool interacts with external entities
                         </p>
                       </div>
@@ -575,7 +575,7 @@ function ToolRow({
                 {tool.variation?.description &&
                   tool.variation?.description !==
                     tool.canonical?.description && (
-                    <Stack className="p-2 border rounded-md border-border/70">
+                    <Stack className="border-border/70 rounded-md border p-2">
                       <Type small muted className="inline font-medium">
                         <Icon
                           name="layers-2"
@@ -591,7 +591,7 @@ function ToolRow({
                   )}
               </Stack>
             )}
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
           <Dialog.Footer>
             <Button variant="ghost" onClick={() => setEditDialogOpen(false)}>
@@ -625,21 +625,21 @@ function ToolGroupHeader({
   return (
     <div
       className={cn(
-        "group/header bg-surface-secondary-default flex items-center justify-between pl-4 pr-3 py-4 w-full",
-        isExpanded && "border-b border-neutral-softest",
-        !isFirstGroup && "border-t border-neutral-softest",
+        "group/header bg-surface-secondary-default flex w-full items-center justify-between py-4 pr-3 pl-4",
+        isExpanded && "border-neutral-softest border-b",
+        !isFirstGroup && "border-neutral-softest border-t",
       )}
     >
       <button
         onClick={onToggle}
         aria-expanded={isExpanded}
         aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
-        className="flex gap-4 items-center hover:opacity-70 transition-opacity"
+        className="flex items-center gap-4 transition-opacity hover:opacity-70"
       >
         <div className="relative size-4 shrink-0">
           <Icon
             className={cn(
-              "size-4 absolute inset-0 transition-opacity",
+              "absolute inset-0 size-4 transition-opacity",
               "group-hover/header:opacity-0",
             )}
             strokeWidth={1.5}
@@ -654,19 +654,19 @@ function ToolGroupHeader({
                 e.stopPropagation();
               }}
               className={cn(
-                "absolute inset-0 transition-opacity opacity-0",
+                "absolute inset-0 opacity-0 transition-opacity",
                 "group-hover/header:opacity-100",
               )}
             />
           </SimpleTooltip>
         </div>
-        <p className="text-sm leading-6 text-foreground">{group.title}</p>
+        <p className="text-foreground text-sm leading-6">{group.title}</p>
       </button>
       <button
         onClick={onToggle}
         aria-expanded={isExpanded}
         aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
-        className="hover:opacity-70 transition-opacity"
+        className="transition-opacity hover:opacity-70"
       >
         <ChevronDown
           className={cn(
@@ -983,7 +983,7 @@ export function ToolList({
     <div className="relative w-full">
       <div
         className={cn(
-          "border border-neutral-softest rounded-lg overflow-hidden w-full",
+          "border-neutral-softest w-full overflow-hidden rounded-lg border",
           className,
         )}
       >
@@ -1051,16 +1051,16 @@ export function ToolList({
       </div>
 
       {hasChanges && !selectionMode && (
-        <div className="sticky bottom-0 left-0 right-0 flex justify-center mt-4">
-          <div className="border border-neutral-softest bg-background shadow-lg rounded-lg px-4 py-3 flex items-center gap-4">
-            <p className="text-sm text-foreground">
+        <div className="sticky right-0 bottom-0 left-0 mt-4 flex justify-center">
+          <div className="border-neutral-softest bg-background flex items-center gap-4 rounded-lg border px-4 py-3 shadow-lg">
+            <p className="text-foreground text-sm">
               {selectedForRemoval.size} tool(s) selected
             </p>
             <div className="flex items-center gap-2">
-              <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-neutral-softest bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+              <kbd className="border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium opacity-100 select-none">
                 <span className="text-xs">⌘</span>K
               </kbd>
-              <span className="text-sm text-muted-foreground">for actions</span>
+              <span className="text-muted-foreground text-sm">for actions</span>
             </div>
             <Button variant="outline" onClick={handleCancel}>
               Cancel

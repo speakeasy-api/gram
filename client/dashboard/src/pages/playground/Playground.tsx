@@ -100,7 +100,7 @@ function PlaygroundInner() {
           <Page.Header.Breadcrumbs fullWidth />
         </Page.Header>
         <Page.Body>
-          <div className="h-full flex m-8">
+          <div className="m-8 flex h-full">
             <ToolsetsEmptyState onCreateToolset={() => routes.mcp.goTo()} />
           </div>
         </Page.Body>
@@ -110,7 +110,7 @@ function PlaygroundInner() {
 
   const logsButton = (
     <Button size="sm" variant="ghost" onClick={() => setShowLogs(!showLogs)}>
-      <ScrollTextIcon className="size-4 mr-2" />
+      <ScrollTextIcon className="mr-2 size-4" />
       {showLogs ? "Hide" : "Show"} Logs
     </Button>
   );
@@ -123,7 +123,7 @@ function PlaygroundInner() {
       <Page.Body fullWidth fullHeight className="p-0">
         <ResizablePanel
           direction="horizontal"
-          className="h-full [&>[role='separator']]:w-px [&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:border-0 [&>[role='separator']]:hover:bg-primary [&>[role='separator']]:relative [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:cursor-col-resize"
+          className="[&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:hover:bg-primary h-full [&>[role='separator']]:relative [&>[role='separator']]:w-px [&>[role='separator']]:border-0 [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:cursor-col-resize"
         >
           <ResizablePanel.Pane minSize={20} defaultSize={25}>
             <ToolsetPanel
@@ -140,14 +140,14 @@ function PlaygroundInner() {
             />
           </ResizablePanel.Pane>
           <ResizablePanel.Pane minSize={35} order={0}>
-            <div className="h-full flex flex-col">
+            <div className="flex h-full flex-col">
               <PlaygroundElements
                 toolsetSlug={selectedToolset}
                 environmentSlug={selectedEnvironment}
                 model={model}
                 playgroundEnvironmentSlug={playgroundEnvironmentSlug}
                 additionalActions={
-                  <div className="flex items-center justify-end w-full px-4">
+                  <div className="flex w-full items-center justify-end px-4">
                     <ShareChatButton />
                     {logsButton}
                   </div>
@@ -370,7 +370,7 @@ export function ToolsetPanel({
   // If listToolsets has completed and there's nothing there, show the onboarding panel
   if (toolsets !== undefined && !configRef.current.toolsetSlug) {
     return (
-      <div className="h-full flex items-center justify-center p-8">
+      <div className="flex h-full items-center justify-center p-8">
         <ToolsetsEmptyState onCreateToolset={() => routes.mcp.goTo()} />
       </div>
     );

@@ -78,7 +78,7 @@ export function ChangeRoleDialog({
 
         {member && (
           <div className="space-y-4 py-2">
-            <div className="flex items-center gap-3 rounded-md border border-border p-3">
+            <div className="border-border flex items-center gap-3 rounded-md border p-3">
               <Avatar className="h-9 w-9">
                 {member.photoUrl && (
                   <AvatarImage src={member.photoUrl} alt={member.name} />

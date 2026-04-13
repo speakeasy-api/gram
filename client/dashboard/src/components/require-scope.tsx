@@ -52,7 +52,7 @@ export function RequireScope(props: RequireScopeProps) {
     if (level === "section") return null;
     // For component-level, show disabled state while loading
     return (
-      <div className="opacity-50 pointer-events-none select-none">
+      <div className="pointer-events-none opacity-50 select-none">
         {children}
       </div>
     );
@@ -88,7 +88,7 @@ function ScopeDisabled({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="opacity-50 pointer-events-none select-none cursor-not-allowed inline-flex">
+          <div className="pointer-events-none inline-flex cursor-not-allowed opacity-50 select-none">
             {/* Wrapper div that re-enables pointer events for the tooltip to work */}
             <div
               className="pointer-events-auto"
@@ -118,13 +118,13 @@ export function Unauthorized({
   description?: string;
 }) {
   return (
-    <div className="flex items-center justify-center h-full w-full min-h-[400px]">
-      <div className="flex flex-col items-center gap-3 max-w-sm text-center">
-        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-muted">
-          <Icon name="lock" className="h-5 w-5 text-muted-foreground" />
+    <div className="flex h-full min-h-[400px] w-full items-center justify-center">
+      <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+        <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
+          <Icon name="lock" className="text-muted-foreground h-5 w-5" />
         </div>
         <h2 className="text-lg font-medium">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
+        <p className="text-muted-foreground text-sm">{description}</p>
       </div>
     </div>
   );

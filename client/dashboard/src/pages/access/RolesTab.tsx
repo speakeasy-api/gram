@@ -123,7 +123,7 @@ export function RolesTab() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
+      <div className="mb-1 flex items-center justify-between">
         <div>
           <Heading variant="h4">Roles</Heading>
           <Type muted small className="mt-1">
@@ -151,7 +151,7 @@ export function RolesTab() {
         />
       )}
 
-      <div className="mt-12 rounded-md border border-border/50 bg-muted/30 px-4 py-3">
+      <div className="border-border/50 bg-muted/30 mt-12 rounded-md border px-4 py-3">
         <Type variant="subheading" className="mb-4">
           About System roles
         </Type>
@@ -159,7 +159,7 @@ export function RolesTab() {
           <Badge
             variant="outline"
             size="sm"
-            className="shrink-0 mt-0.5 bg-white dark:bg-zinc-900 w-16 justify-center"
+            className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
           >
             Member
           </Badge>
@@ -168,11 +168,11 @@ export function RolesTab() {
             organization and the ability to connect to MCP servers.
           </Type>
         </div>
-        <div className="flex items-start gap-3 text-sm mt-2">
+        <div className="mt-2 flex items-start gap-3 text-sm">
           <Badge
             variant="outline"
             size="sm"
-            className="shrink-0 mt-0.5 bg-white dark:bg-zinc-900 w-16 justify-center"
+            className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
           >
             Admin
           </Badge>

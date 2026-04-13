@@ -78,7 +78,7 @@ export function ToolsetsGraphic({ className }: { className?: string }) {
         {toolsets.map((toolset, index) => (
           <motion.div
             key={toolset.id}
-            className="bg-white rounded-xl p-4 border border-neutral-200"
+            className="rounded-xl border border-neutral-200 bg-white p-4"
             initial={{ opacity: 1, y: 0 }}
             animate={{
               opacity: 1,
@@ -95,9 +95,9 @@ export function ToolsetsGraphic({ className }: { className?: string }) {
               boxShadow: "0px 8px 16px rgba(0,0,0,0.08)",
             }}
           >
-            <div className="flex items-center gap-3 mb-3">
+            <div className="mb-3 flex items-center gap-3">
               <motion.div
-                className="w-8 h-8 rounded-lg bg-neutral-100 flex items-center justify-center"
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-100"
                 animate={{
                   backgroundColor: isHovered ? "#f3f4f6" : "#f5f5f5",
                 }}
@@ -124,9 +124,9 @@ export function ToolsetsGraphic({ className }: { className?: string }) {
               {toolset.tools.map((tool, toolIndex) => (
                 <motion.div
                   key={tool.name}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium ${
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium ${
                     tool.type === "internal"
-                      ? "bg-neutral-100 text-neutral-900 ring-1 ring-inset ring-neutral-900/10"
+                      ? "bg-neutral-100 text-neutral-900 ring-1 ring-neutral-900/10 ring-inset"
                       : "bg-neutral-50 text-neutral-600"
                   }`}
                   initial={{ opacity: 1, scale: 1 }}

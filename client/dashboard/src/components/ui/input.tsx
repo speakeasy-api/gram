@@ -132,11 +132,11 @@ function Input({
     );
 
   return (
-    <div className="mb-[-8px] relative">
+    <div className="relative mb-[-8px]">
       {requiredPrefix && (
         <span
           ref={prefixRef}
-          className="absolute left-3 top-[8px] text-muted-foreground text-sm pointer-events-none select-none"
+          className="text-muted-foreground pointer-events-none absolute top-[8px] left-3 text-sm select-none"
           aria-hidden="true"
         >
           {requiredPrefix}

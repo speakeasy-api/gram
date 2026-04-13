@@ -62,7 +62,7 @@ export default function NameDeploymentStep() {
           <Stack
             direction={"horizontal"}
             gap={2}
-            className="max-w-sm z-10 items-center"
+            className="z-10 max-w-sm items-center"
           >
             <Input
               value={value}

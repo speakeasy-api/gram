@@ -5,10 +5,10 @@ export const AutoSummarizeBadge = () => {
   return (
     <Badge
       size="sm"
-      className="text-sm capitalize rounded-full px-1 py-0"
+      className="rounded-full px-1 py-0 text-sm capitalize"
       tooltip="Responses from this tool are automatically summarized"
     >
-      <AArrowDown size={4} className="w-4! h-4!" />
+      <AArrowDown size={4} className="h-4! w-4!" />
     </Badge>
   );
 };

@@ -27,7 +27,7 @@ const Slider = forwardRef<HTMLInputElement, SliderProps>(
         max={max}
         step={step}
         className={cn(
-          "w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer",
+          "bg-muted h-2 w-full cursor-pointer appearance-none rounded-lg",
           "[&::-webkit-slider-thumb]:appearance-none",
           "[&::-webkit-slider-thumb]:w-4",
           "[&::-webkit-slider-thumb]:h-4",
@@ -44,7 +44,7 @@ const Slider = forwardRef<HTMLInputElement, SliderProps>(
           "[&::-moz-range-thumb]:cursor-pointer",
           "[&::-moz-range-thumb]:hover:bg-foreground/80",
           "[&::-moz-range-thumb]:transition-colors",
-          "disabled:opacity-50 disabled:cursor-not-allowed",
+          "disabled:cursor-not-allowed disabled:opacity-50",
           className,
         )}
         {...props}

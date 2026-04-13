@@ -51,22 +51,22 @@ export default function OrgProjects() {
             No projects yet.
           </Type>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map((project) => (
               <Link
                 key={project.id}
                 to={`/${orgSlug}/projects/${project.slug}`}
-                className="group rounded-lg border border-border bg-card p-4 hover:border-foreground/20 hover:bg-accent/50 transition-colors hover:no-underline"
+                className="group border-border bg-card hover:border-foreground/20 hover:bg-accent/50 rounded-lg border p-4 transition-colors hover:no-underline"
               >
                 <div className="flex items-center gap-3">
                   <ProjectAvatar
                     project={project}
-                    className="h-8 w-8 rounded-md shrink-0"
+                    className="h-8 w-8 shrink-0 rounded-md"
                   />
                   <div className="min-w-0">
                     <Type
                       variant="body"
-                      className="font-medium truncate block text-foreground"
+                      className="text-foreground block truncate font-medium"
                     >
                       {project.name}
                     </Type>

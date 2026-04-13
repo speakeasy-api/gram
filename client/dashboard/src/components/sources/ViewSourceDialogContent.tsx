@@ -126,7 +126,7 @@ export function ViewSourceDialogContent({
           {isOpenAPI ? "OpenAPI Specification" : "Tool Manifest"}
         </Dialog.Title>
         {!isOpenAPI && (
-          <Type className="text-muted-foreground text-sm mt-1">
+          <Type className="text-muted-foreground mt-1 text-sm">
             Shows the tool definitions extracted from the function bundle
           </Type>
         )}
@@ -135,7 +135,7 @@ export function ViewSourceDialogContent({
         {isLoading ? (
           <SkeletonCode lines={20} />
         ) : error ? (
-          <div className="text-center py-8">
+          <div className="py-8 text-center">
             <Type className="text-destructive">
               {error instanceof Error
                 ? error.message
@@ -157,7 +157,7 @@ export function ViewSourceDialogContent({
             height="calc(90vh - 120px)"
           />
         ) : (
-          <Type className="text-muted-foreground text-center py-8">
+          <Type className="text-muted-foreground py-8 text-center">
             No content available
           </Type>
         )}
