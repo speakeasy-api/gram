@@ -38,6 +38,7 @@ import (
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	resourcesc "github.com/speakeasy-api/gram/server/gen/http/resources/client"
+	skillsc "github.com/speakeasy-api/gram/server/gen/http/skills/client"
 	slackc "github.com/speakeasy-api/gram/server/gen/http/slack/client"
 	telemetryc "github.com/speakeasy-api/gram/server/gen/http/telemetry/client"
 	templatesc "github.com/speakeasy-api/gram/server/gen/http/templates/client"
@@ -80,6 +81,7 @@ func UsageCommands() []string {
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"resources list-resources",
+		"skills capture",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -798,6 +800,24 @@ func ParseEndpoint(
 		resourcesListResourcesSessionTokenFlag     = resourcesListResourcesFlags.String("session-token", "", "")
 		resourcesListResourcesProjectSlugInputFlag = resourcesListResourcesFlags.String("project-slug-input", "", "")
 
+		skillsFlags = flag.NewFlagSet("skills", flag.ContinueOnError)
+
+		skillsCaptureFlags                = flag.NewFlagSet("capture", flag.ExitOnError)
+		skillsCaptureNameFlag             = skillsCaptureFlags.String("name", "REQUIRED", "")
+		skillsCaptureScopeFlag            = skillsCaptureFlags.String("scope", "REQUIRED", "")
+		skillsCaptureDiscoveryRootFlag    = skillsCaptureFlags.String("discovery-root", "REQUIRED", "")
+		skillsCaptureSourceTypeFlag       = skillsCaptureFlags.String("source-type", "REQUIRED", "")
+		skillsCaptureContentSha256Flag    = skillsCaptureFlags.String("content-sha256", "REQUIRED", "")
+		skillsCaptureAssetFormatFlag      = skillsCaptureFlags.String("asset-format", "REQUIRED", "")
+		skillsCaptureResolutionStatusFlag = skillsCaptureFlags.String("resolution-status", "REQUIRED", "")
+		skillsCaptureSkillIDFlag          = skillsCaptureFlags.String("skill-id", "", "")
+		skillsCaptureSkillVersionIDFlag   = skillsCaptureFlags.String("skill-version-id", "", "")
+		skillsCaptureContentTypeFlag      = skillsCaptureFlags.String("content-type", "REQUIRED", "")
+		skillsCaptureContentLengthFlag    = skillsCaptureFlags.String("content-length", "REQUIRED", "")
+		skillsCaptureApikeyTokenFlag      = skillsCaptureFlags.String("apikey-token", "", "")
+		skillsCaptureProjectSlugInputFlag = skillsCaptureFlags.String("project-slug-input", "", "")
+		skillsCaptureStreamFlag           = skillsCaptureFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+
 		slackFlags = flag.NewFlagSet("slack", flag.ContinueOnError)
 
 		slackCreateSlackAppFlags                = flag.NewFlagSet("create-slack-app", flag.ExitOnError)
@@ -1286,6 +1306,9 @@ func ParseEndpoint(
 	resourcesFlags.Usage = resourcesUsage
 	resourcesListResourcesFlags.Usage = resourcesListResourcesUsage
 
+	skillsFlags.Usage = skillsUsage
+	skillsCaptureFlags.Usage = skillsCaptureUsage
+
 	slackFlags.Usage = slackUsage
 	slackCreateSlackAppFlags.Usage = slackCreateSlackAppUsage
 	slackListSlackAppsFlags.Usage = slackListSlackAppsUsage
@@ -1421,6 +1444,8 @@ func ParseEndpoint(
 			svcf = projectsFlags
 		case "resources":
 			svcf = resourcesFlags
+		case "skills":
+			svcf = skillsFlags
 		case "slack":
 			svcf = slackFlags
 		case "telemetry":
@@ -1918,6 +1943,13 @@ func ParseEndpoint(
 			switch epn {
 			case "list-resources":
 				epf = resourcesListResourcesFlags
+
+			}
+
+		case "skills":
+			switch epn {
+			case "capture":
+				epf = skillsCaptureFlags
 
 			}
 
@@ -2614,6 +2646,16 @@ func ParseEndpoint(
 			case "list-resources":
 				endpoint = c.ListResources()
 				data, err = resourcesc.BuildListResourcesPayload(*resourcesListResourcesCursorFlag, *resourcesListResourcesLimitFlag, *resourcesListResourcesDeploymentIDFlag, *resourcesListResourcesSessionTokenFlag, *resourcesListResourcesProjectSlugInputFlag)
+			}
+		case "skills":
+			c := skillsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "capture":
+				endpoint = c.Capture()
+				data, err = skillsc.BuildCapturePayload(*skillsCaptureNameFlag, *skillsCaptureScopeFlag, *skillsCaptureDiscoveryRootFlag, *skillsCaptureSourceTypeFlag, *skillsCaptureContentSha256Flag, *skillsCaptureAssetFormatFlag, *skillsCaptureResolutionStatusFlag, *skillsCaptureSkillIDFlag, *skillsCaptureSkillVersionIDFlag, *skillsCaptureContentTypeFlag, *skillsCaptureContentLengthFlag, *skillsCaptureApikeyTokenFlag, *skillsCaptureProjectSlugInputFlag)
+				if err == nil {
+					data, err = skillsc.BuildCaptureStreamPayload(data, *skillsCaptureStreamFlag)
+				}
 			}
 		case "slack":
 			c := slackc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -5926,6 +5968,60 @@ func resourcesListResourcesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "resources list-resources --cursor \"abc123\" --limit 1 --deployment-id \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// skillsUsage displays the usage of the skills command and its subcommands.
+func skillsUsage() {
+	fmt.Fprintln(os.Stderr, `Capture skill artifacts and metadata from local hook producers.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] skills COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    capture: Capture a skill artifact and associated metadata.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s skills COMMAND --help\n", os.Args[0])
+}
+func skillsCaptureUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills capture", os.Args[0])
+	fmt.Fprint(os.Stderr, " -name STRING")
+	fmt.Fprint(os.Stderr, " -scope STRING")
+	fmt.Fprint(os.Stderr, " -discovery-root STRING")
+	fmt.Fprint(os.Stderr, " -source-type STRING")
+	fmt.Fprint(os.Stderr, " -content-sha256 STRING")
+	fmt.Fprint(os.Stderr, " -asset-format STRING")
+	fmt.Fprint(os.Stderr, " -resolution-status STRING")
+	fmt.Fprint(os.Stderr, " -skill-id STRING")
+	fmt.Fprint(os.Stderr, " -skill-version-id STRING")
+	fmt.Fprint(os.Stderr, " -content-type STRING")
+	fmt.Fprint(os.Stderr, " -content-length INT64")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Capture a skill artifact and associated metadata.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -scope STRING: `)
+	fmt.Fprintln(os.Stderr, `    -discovery-root STRING: `)
+	fmt.Fprintln(os.Stderr, `    -source-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-sha256 STRING: `)
+	fmt.Fprintln(os.Stderr, `    -asset-format STRING: `)
+	fmt.Fprintln(os.Stderr, `    -resolution-status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -skill-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -skill-version-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-length INT64: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills capture --name \"aa\" --scope \"user\" --discovery-root \"project_claude\" --source-type \"local_filesystem\" --content-sha256 \"1111111111111111111111111111111111111111111111111111111111111111\" --asset-format \"zip\" --resolution-status \"unresolved_name_only\" --skill-id \"abc123\" --skill-version-id \"abc123\" --content-type \"abc123\" --content-length 1 --apikey-token \"abc123\" --project-slug-input \"abc123\" --stream \"goa.png\"")
 }
 
 // slackUsage displays the usage of the slack command and its subcommands.

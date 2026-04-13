@@ -11853,6 +11853,180 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListResources
+    /rpc/skills.capture:
+        post:
+            description: Capture a skill artifact and associated metadata.
+            operationId: captureSkill
+            parameters:
+                - allowEmptyValue: true
+                  in: header
+                  name: X-Gram-Skill-Name
+                  required: true
+                  schema:
+                    maxLength: 100
+                    minLength: 1
+                    type: string
+                - allowEmptyValue: true
+                  in: header
+                  name: X-Gram-Skill-Scope
+                  required: true
+                  schema:
+                    enum:
+                        - project
+                        - user
+                    type: string
+                - allowEmptyValue: true
+                  in: header
+                  name: X-Gram-Skill-Discovery-Root
+                  required: true
+                  schema:
+                    enum:
+                        - project_agents
+                        - project_claude
+                        - project_cursor
+                        - user_agents
+                        - user_claude
+                        - user_cursor
+                    type: string
+                - allowEmptyValue: true
+                  in: header
+                  name: X-Gram-Skill-Source-Type
+                  required: true
+                  schema:
+                    enum:
+                        - local_filesystem
+                    type: string
+                - allowEmptyValue: true
+                  in: header
+                  name: X-Gram-Skill-Content-Sha256
+                  required: true
+                  schema:
+                    pattern: ^[a-fA-F0-9]{64}$
+                    type: string
+                - allowEmptyValue: true
+                  in: header
+                  name: X-Gram-Skill-Asset-Format
+                  required: true
+                  schema:
+                    enum:
+                        - zip
+                    type: string
+                - allowEmptyValue: true
+                  in: header
+                  name: X-Gram-Skill-Resolution-Status
+                  required: true
+                  schema:
+                    enum:
+                        - resolved
+                        - unresolved_name_only
+                        - invalid_skill_root
+                        - skipped_by_author
+                    type: string
+                - allowEmptyValue: true
+                  in: header
+                  name: X-Gram-Skill-Id
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  in: header
+                  name: X-Gram-Skill-Version-Id
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  in: header
+                  name: Content-Type
+                  required: true
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  in: header
+                  name: Content-Length
+                  required: true
+                  schema:
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CaptureSkillResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: capture skills
+            tags:
+                - skills
+            x-speakeasy-name-override: capture
     /rpc/slack-apps.configure:
         post:
             description: Store Slack credentials (client ID, client secret, signing secret) for an app.
@@ -17843,6 +18017,105 @@ components:
             description: Result of capturing a telemetry event
             required:
                 - success
+        CaptureSkillAsset:
+            type: object
+            properties:
+                content_length:
+                    type: integer
+                    format: int64
+                content_type:
+                    type: string
+                created_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                kind:
+                    type: string
+                    enum:
+                        - skill
+                sha256:
+                    type: string
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - kind
+                - sha256
+                - content_type
+                - content_length
+                - created_at
+                - updated_at
+        CaptureSkillForm:
+            type: object
+            properties:
+                apikey_token:
+                    type: string
+                asset_format:
+                    type: string
+                    enum:
+                        - zip
+                content_length:
+                    type: integer
+                    format: int64
+                content_sha256:
+                    type: string
+                    pattern: ^[a-fA-F0-9]{64}$
+                content_type:
+                    type: string
+                discovery_root:
+                    type: string
+                    enum:
+                        - project_agents
+                        - project_claude
+                        - project_cursor
+                        - user_agents
+                        - user_claude
+                        - user_cursor
+                name:
+                    type: string
+                    minLength: 1
+                    maxLength: 100
+                project_slug_input:
+                    type: string
+                resolution_status:
+                    type: string
+                    enum:
+                        - resolved
+                        - unresolved_name_only
+                        - invalid_skill_root
+                        - skipped_by_author
+                scope:
+                    type: string
+                    enum:
+                        - project
+                        - user
+                skill_id:
+                    type: string
+                skill_version_id:
+                    type: string
+                source_type:
+                    type: string
+                    enum:
+                        - local_filesystem
+            required:
+                - name
+                - scope
+                - discovery_root
+                - source_type
+                - content_sha256
+                - asset_format
+                - resolution_status
+                - content_type
+                - content_length
+        CaptureSkillResult:
+            type: object
+            properties:
+                asset:
+                    $ref: '#/components/schemas/CaptureSkillAsset'
+            required:
+                - asset
         Chat:
             type: object
             properties:
@@ -25562,6 +25835,8 @@ tags:
       description: Manages projects in Gram.
     - name: resources
       description: Dashboard API for interacting with resources.
+    - name: skills
+      description: Capture skill artifacts and metadata from local hook producers.
     - name: slack
       description: Auth and interactions for the Gram Slack App.
     - name: telemetry
