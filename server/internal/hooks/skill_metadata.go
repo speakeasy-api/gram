@@ -6,16 +6,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
-type skillTelemetryFields struct {
-	Name             string
-	Scope            string
-	DiscoveryRoot    string
-	SourceType       string
-	ID               string
-	VersionID        string
-	ResolutionStatus string
-}
-
 func (s *Service) extractSkillTelemetryAttributes(ctx context.Context, additionalData map[string]any) map[attr.Key]any {
 	if len(additionalData) == 0 {
 		return nil
@@ -36,21 +26,22 @@ func (s *Service) extractSkillTelemetryAttributes(ctx context.Context, additiona
 		return nil
 	}
 
+	// Use the first skill item with at least one populated field and ignore the rest.
 	for _, item := range skillsSlice {
 		skillMap, ok := item.(map[string]any)
 		if !ok {
+			s.logger.WarnContext(ctx, "skipping non-map skill item")
 			continue
 		}
 
-		fields := skillTelemetryFields{}
 		attrs := map[attr.Key]any{}
-		setSkillFieldAndAttr(skillMap, "name", attr.SkillNameKey, &fields.Name, attrs)
-		setSkillFieldAndAttr(skillMap, "scope", attr.SkillScopeKey, &fields.Scope, attrs)
-		setSkillFieldAndAttr(skillMap, "discovery_root", attr.SkillDiscoveryRootKey, &fields.DiscoveryRoot, attrs)
-		setSkillFieldAndAttr(skillMap, "source_type", attr.SkillSourceTypeKey, &fields.SourceType, attrs)
-		setSkillFieldAndAttr(skillMap, "skill_id", attr.SkillIDKey, &fields.ID, attrs)
-		setSkillFieldAndAttr(skillMap, "skill_version_id", attr.SkillVersionIDKey, &fields.VersionID, attrs)
-		setSkillFieldAndAttr(skillMap, "resolution_status", attr.SkillResolutionStatusKey, &fields.ResolutionStatus, attrs)
+		setSkillAttr(skillMap, "name", attr.SkillNameKey, attrs)
+		setSkillAttr(skillMap, "scope", attr.SkillScopeKey, attrs)
+		setSkillAttr(skillMap, "discovery_root", attr.SkillDiscoveryRootKey, attrs)
+		setSkillAttr(skillMap, "source_type", attr.SkillSourceTypeKey, attrs)
+		setSkillAttr(skillMap, "skill_id", attr.SkillIDKey, attrs)
+		setSkillAttr(skillMap, "skill_version_id", attr.SkillVersionIDKey, attrs)
+		setSkillAttr(skillMap, "resolution_status", attr.SkillResolutionStatusKey, attrs)
 
 		if len(attrs) == 0 {
 			continue
@@ -62,12 +53,11 @@ func (s *Service) extractSkillTelemetryAttributes(ctx context.Context, additiona
 	return nil
 }
 
-func setSkillFieldAndAttr(raw map[string]any, sourceKey string, attrKey attr.Key, field *string, attrs map[attr.Key]any) {
+func setSkillAttr(raw map[string]any, sourceKey string, attrKey attr.Key, attrs map[attr.Key]any) {
 	value, ok := raw[sourceKey].(string)
 	if !ok || value == "" {
 		return
 	}
 
-	*field = value
 	attrs[attrKey] = value
 }
