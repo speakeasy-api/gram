@@ -258,16 +258,18 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch server details from registry").Log(ctx, s.logger)
 	}
 
+	registryIDStr := registryID.String()
 	return &types.ExternalMCPServer{
-		RegistrySpecifier: details.Name,
-		Version:           details.Version,
-		Description:       details.Description,
-		RegistryID:        registryID.String(),
-		Title:             nil, // Not available from details endpoint
-		IconURL:           nil, // Not available from details endpoint
-		Meta:              nil, // Not available from details endpoint
-		Tools:             details.Tools,
-		Remotes:           details.Remotes,
+		RegistrySpecifier:                   details.Name,
+		Version:                             details.Version,
+		Description:                         details.Description,
+		RegistryID:                          &registryIDStr,
+		OrganizationMcpCollectionRegistryID: nil,
+		Title:                               nil,
+		IconURL:                             nil,
+		Meta:                                nil,
+		Tools:                               details.Tools,
+		Remotes:                             details.Remotes,
 	}, nil
 }
 

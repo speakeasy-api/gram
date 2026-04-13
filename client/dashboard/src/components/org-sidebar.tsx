@@ -39,6 +39,12 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
+          <SidebarGroupLabel>catalog</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <NavMenu items={[orgRoutes.collections]} />
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
           <SidebarGroupLabel>settings</SidebarGroupLabel>
           <SidebarGroupContent>
             <NavMenu
