@@ -58,19 +58,6 @@ function getLevelColors(level: LogLevel) {
   return levelColors[level] ?? levelColors.INFO;
 }
 
-function formatSourceLabel(attachmentType: string): string {
-  switch (attachmentType) {
-    case "openapi":
-      return "OpenAPI";
-    case "functions":
-      return "Functions";
-    case "external_mcp":
-      return "External MCP";
-    default:
-      return attachmentType.replace(/_/g, " ");
-  }
-}
-
 type LogFocus = "all" | "warns" | "errors" | "skipped";
 
 interface ParsedLogEntry {
@@ -288,16 +275,6 @@ export const LogsTabContent = ({
 
   useEffect(() => {
     setCurrentLogIndex(null);
-  }, [parsedLogs]);
-
-  const logStats = useMemo(() => {
-    const stats = { warns: 0, errors: 0, skipped: 0 };
-    parsedLogs.forEach((log) => {
-      if (log.level === "WARN") stats.warns++;
-      if (log.level === "ERROR") stats.errors++;
-      if (log.level === "SKIP") stats.skipped++;
-    });
-    return stats;
   }, [parsedLogs]);
 
   const groupedLogs = useMemo(() => {
