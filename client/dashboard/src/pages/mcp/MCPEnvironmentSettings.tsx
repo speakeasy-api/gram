@@ -873,9 +873,9 @@ type OAuthSectionProps = {
 
 function OAuthSection({ toolset }: OAuthSectionProps) {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
+  const [isOAuthModalEditMode, setIsOAuthModalEditMode] = useState(false);
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
-  const [isOAuthEditModalOpen, setIsOAuthEditModalOpen] = useState(false);
 
   const isOAuthConnected = !!(
     toolset?.oauthProxyServer || toolset?.externalOauthServer
@@ -1011,21 +1011,21 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
         isOpen={isOAuthDetailsModalOpen}
         onClose={() => setIsOAuthDetailsModalOpen(false)}
         toolset={toolset}
-        onEditRequest={() => setIsOAuthEditModalOpen(true)}
+        onEditRequest={() => {
+          setIsOAuthModalEditMode(true);
+          setIsOAuthModalOpen(true);
+        }}
       />
       <ConnectOAuthModal
         isOpen={isOAuthModalOpen}
-        onClose={() => setIsOAuthModalOpen(false)}
-        toolsetSlug={toolset.slug}
-        toolset={toolset}
-      />
-      <ConnectOAuthModal
-        isOpen={isOAuthEditModalOpen}
-        onClose={() => setIsOAuthEditModalOpen(false)}
+        onClose={() => {
+          setIsOAuthModalOpen(false);
+          setIsOAuthModalEditMode(false);
+        }}
         toolsetSlug={toolset.slug}
         toolset={toolset}
         editMode={
-          toolset.oauthProxyServer
+          isOAuthModalEditMode && toolset.oauthProxyServer
             ? { proxyServer: toolset.oauthProxyServer }
             : undefined
         }
