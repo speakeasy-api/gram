@@ -71,7 +71,7 @@ func TestService_ListGrants_NotConnected(t *testing.T) {
 
 	_, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "current user is not connected locally")
+	require.Contains(t, err.Error(), "current user has not joined this organization")
 }
 
 func TestService_ListGrants_WorkOSMembersFailure(t *testing.T) {
