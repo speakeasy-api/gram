@@ -698,7 +698,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
 
       <PageSection
         heading="Environment Variables"
-        description="Environments store key-value pairs passed to the backend when users connect. They can be shared across multiple MCP servers. Use the state button to set each variable as User Provided, System, or Omitted."
+        description="Environments store key-value pairs passed to the backend when users connect. They can be shared across multiple MCP servers. Use the state button to set each variable as User Provided (set at runtime), System (set here), or Omitted (not included)."
         headingExtra={
           missingRequiredCount > 0 ? (
             <Badge variant="warning" className="ml-2">
@@ -898,7 +898,7 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   return (
     <PageSection
       heading="OAuth"
-      description="OAuth allows you to secure your MCP server using an identity provider. When enabled, users will need to authenticate through the provider before accessing the MCP server."
+      description="OAuth let's you control access to MCP servers through an identity provider."
       headingExtra={undefined}
       action={
         <Tooltip>
@@ -979,13 +979,25 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
         <div className="border rounded-lg border-dashed p-4 text-center">
           <p className="text-muted-foreground mb-1">
             <Shield className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
-            OAuth is not available
+            OAuth is not applicable
           </p>
-          <p className="text-sm text-muted-foreground">
-            {!toolset.mcpEnabled
-              ? "Enable the MCP server to configure OAuth."
-              : "This MCP server does not require the OAuth authorization code flow."}
-          </p>
+          {!toolset.mcpEnabled ? (
+            <p className="text-sm text-muted-foreground">
+              Enable the MCP server to configure OAuth.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                OAuth cannot be configured because there are no tools in this
+                that require OAuth authentication.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                OAuth is available for public MCP servers that have at least one
+                tool requiring OAuth authentication, or private servers (using
+                Speakeasy as an auth provider).
+              </p>
+            </>
+          )}
         </div>
       )}
 
