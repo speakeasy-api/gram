@@ -22,7 +22,8 @@ import type { GetObservabilityOverviewResult } from "@gram/client/models/compone
 import { FilterType } from "@gram/client/models/components/listfilteroptionspayload";
 import React, { useState, useRef, useCallback, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router";
-import { Icon, IconName } from "@speakeasy-api/moonshine";
+import { Icon } from "@speakeasy-api/moonshine";
+import { MetricCard } from "@/components/chart/MetricCard";
 import {
   Popover,
   PopoverContent,
@@ -1471,89 +1472,6 @@ function getValueColor(value: number, thresholds?: ThresholdConfig): string {
     if (value < thresholds.amber) return "text-amber-500";
     return "text-emerald-600";
   }
-}
-
-function MetricCard({
-  title,
-  value,
-  previousValue,
-  format = "number",
-  icon,
-  invertDelta = false,
-  thresholds,
-  comparisonLabel,
-}: {
-  title: string;
-  value: number;
-  previousValue: number;
-  format?: "number" | "percent" | "ms" | "seconds";
-  icon: IconName;
-  invertDelta?: boolean;
-  thresholds?: ThresholdConfig;
-  comparisonLabel?: string;
-}) {
-  const formatValue = (v: number) => {
-    switch (format) {
-      case "percent":
-        return `${v.toFixed(1)}%`;
-      case "ms":
-        return `${v.toFixed(0)}ms`;
-      case "seconds":
-        if (v >= 60) {
-          const mins = Math.floor(v / 60);
-          const secs = Math.round(v % 60);
-          return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
-        }
-        return `${v.toFixed(1)}s`;
-      default:
-        return v.toLocaleString();
-    }
-  };
-
-  const rawDelta =
-    previousValue > 0 ? ((value - previousValue) / previousValue) * 100 : 0;
-  // Cap delta display at 999% to avoid absurd numbers
-  const delta = Math.min(Math.abs(rawDelta), 999);
-  const isPositive = rawDelta > 0;
-  const isGood = invertDelta ? !isPositive : isPositive;
-
-  const valueColor = getValueColor(value, thresholds);
-
-  return (
-    <div className="border-border bg-card rounded-lg border p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-semibold">{title}</span>
-        <div className="bg-muted/50 rounded-lg p-2">
-          <Icon name={icon} className="text-muted-foreground size-4" />
-        </div>
-      </div>
-      <div className="flex items-end justify-between">
-        <span className={`text-3xl font-semibold tracking-tight ${valueColor}`}>
-          {formatValue(value)}
-        </span>
-        {previousValue > 0 && delta !== 0 && (
-          <div className="flex flex-col items-end gap-0.5">
-            <div
-              className={`flex items-center gap-1 text-xs font-medium ${
-                isGood ? "text-emerald-600" : "text-red-500"
-              }`}
-            >
-              <Icon
-                name={isPositive ? "trending-up" : "trending-down"}
-                className="size-3"
-              />
-              <span>{delta.toFixed(1)}%</span>
-            </div>
-            {comparisonLabel && (
-              <span className="text-muted-foreground text-[10px]">
-                {comparisonLabel}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }
 
 function formatChartLabel(date: Date, timeRangeMs: number): string {

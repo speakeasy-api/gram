@@ -38,6 +38,7 @@ import type {
 import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
+import { MetricCard } from "@/components/chart/MetricCard";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Filter, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
