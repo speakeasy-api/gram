@@ -75,15 +75,17 @@ func (l *Logger) checkToolIOLogsEnabled(ctx context.Context, organizationID stri
 }
 
 func (l *Logger) Log(ctx context.Context, params LogParams) {
+	shutdownCtx := l.shutdownCtx()
+
 	chRepo := repo.New(l.chConn)
 
-	enabled, err := l.logsEnabled(ctx, params.ToolInfo.OrganizationID)
+	enabled, err := l.logsEnabled(shutdownCtx, params.ToolInfo.OrganizationID)
 	if err != nil || !enabled {
 		return
 	}
 
 	// Scrub tool IO content if the feature is disabled for this organization.
-	if !l.checkToolIOLogsEnabled(ctx, params.ToolInfo.OrganizationID) {
+	if !l.checkToolIOLogsEnabled(shutdownCtx, params.ToolInfo.OrganizationID) {
 		delete(params.Attributes, attr.GenAIToolCallArgumentsKey)
 		delete(params.Attributes, attr.GenAIToolCallResultKey)
 	}
@@ -94,7 +96,7 @@ func (l *Logger) Log(ctx context.Context, params LogParams) {
 		return
 	}
 
-	if err := chRepo.InsertTelemetryLog(l.shutdownCtx(), *logParams); err != nil {
+	if err := chRepo.InsertTelemetryLog(shutdownCtx, *logParams); err != nil {
 		l.logger.ErrorContext(ctx, "failed to insert telemetry log", attr.SlogError(err))
 	}
 }
