@@ -54,21 +54,9 @@ type Client struct {
 	// setPluginAssignments endpoint.
 	SetPluginAssignmentsDoer goahttp.Doer
 
-	// GetGitHubInstallURL Doer is the HTTP client used to make requests to the
-	// getGitHubInstallURL endpoint.
-	GetGitHubInstallURLDoer goahttp.Doer
-
-	// ConnectGitHub Doer is the HTTP client used to make requests to the
-	// connectGitHub endpoint.
-	ConnectGitHubDoer goahttp.Doer
-
-	// DisconnectGitHub Doer is the HTTP client used to make requests to the
-	// disconnectGitHub endpoint.
-	DisconnectGitHubDoer goahttp.Doer
-
-	// GetGitHubConnection Doer is the HTTP client used to make requests to the
-	// getGitHubConnection endpoint.
-	GetGitHubConnectionDoer goahttp.Doer
+	// GetPublishStatus Doer is the HTTP client used to make requests to the
+	// getPublishStatus endpoint.
+	GetPublishStatusDoer goahttp.Doer
 
 	// PublishPlugins Doer is the HTTP client used to make requests to the
 	// publishPlugins endpoint.
@@ -107,10 +95,7 @@ func NewClient(
 		UpdatePluginServerDoer:    doer,
 		RemovePluginServerDoer:    doer,
 		SetPluginAssignmentsDoer:  doer,
-		GetGitHubInstallURLDoer:   doer,
-		ConnectGitHubDoer:         doer,
-		DisconnectGitHubDoer:      doer,
-		GetGitHubConnectionDoer:   doer,
+		GetPublishStatusDoer:      doer,
 		PublishPluginsDoer:        doer,
 		DownloadPluginPackageDoer: doer,
 		RestoreResponseBody:       restoreBody,
@@ -337,15 +322,15 @@ func (c *Client) SetPluginAssignments() goa.Endpoint {
 	}
 }
 
-// GetGitHubInstallURL returns an endpoint that makes HTTP requests to the
-// plugins service getGitHubInstallURL server.
-func (c *Client) GetGitHubInstallURL() goa.Endpoint {
+// GetPublishStatus returns an endpoint that makes HTTP requests to the plugins
+// service getPublishStatus server.
+func (c *Client) GetPublishStatus() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeGetGitHubInstallURLRequest(c.encoder)
-		decodeResponse = DecodeGetGitHubInstallURLResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeGetPublishStatusRequest(c.encoder)
+		decodeResponse = DecodeGetPublishStatusResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetGitHubInstallURLRequest(ctx, v)
+		req, err := c.BuildGetPublishStatusRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -353,81 +338,9 @@ func (c *Client) GetGitHubInstallURL() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.GetGitHubInstallURLDoer.Do(req)
+		resp, err := c.GetPublishStatusDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("plugins", "getGitHubInstallURL", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// ConnectGitHub returns an endpoint that makes HTTP requests to the plugins
-// service connectGitHub server.
-func (c *Client) ConnectGitHub() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeConnectGitHubRequest(c.encoder)
-		decodeResponse = DecodeConnectGitHubResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildConnectGitHubRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.ConnectGitHubDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("plugins", "connectGitHub", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// DisconnectGitHub returns an endpoint that makes HTTP requests to the plugins
-// service disconnectGitHub server.
-func (c *Client) DisconnectGitHub() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeDisconnectGitHubRequest(c.encoder)
-		decodeResponse = DecodeDisconnectGitHubResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildDisconnectGitHubRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.DisconnectGitHubDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("plugins", "disconnectGitHub", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// GetGitHubConnection returns an endpoint that makes HTTP requests to the
-// plugins service getGitHubConnection server.
-func (c *Client) GetGitHubConnection() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeGetGitHubConnectionRequest(c.encoder)
-		decodeResponse = DecodeGetGitHubConnectionResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetGitHubConnectionRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.GetGitHubConnectionDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("plugins", "getGitHubConnection", err)
+			return nil, goahttp.ErrRequestError("plugins", "getPublishStatus", err)
 		}
 		return decodeResponse(resp)
 	}

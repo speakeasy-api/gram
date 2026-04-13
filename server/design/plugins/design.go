@@ -159,23 +159,11 @@ var PublishPluginsResult = Type("PublishPluginsResult", func() {
 	Attribute("commit_sha", String, "Git commit SHA of the push.")
 })
 
-var GitHubConnectionModel = Type("PluginGitHubConnection", func() {
-	Required("id", "installation_id", "repo_owner", "repo_name", "created_at")
-
-	Attribute("id", String, func() {
-		Description("Unique connection identifier.")
-		Format(FormatUUID)
-	})
-	Attribute("installation_id", Int64, "GitHub App installation ID.")
-	Attribute("repo_owner", String, "GitHub org or user that owns the repo.")
-	Attribute("repo_name", String, "Repository name.")
-	Attribute("created_at", String, func() {
-		Format(FormatDateTime)
-	})
-})
-
-var ConnectGitHubForm = Type("ConnectGitHubForm", func() {
-	Attribute("installation_id", Int64, "GitHub App installation ID. Auto-detected if omitted.")
+var PublishStatusResult = Type("PublishStatusResult", func() {
+	Required("available", "published")
+	Attribute("available", Boolean, "Whether GitHub publishing is configured on this server.")
+	Attribute("published", Boolean, "Whether plugins have been published for this project.")
+	Attribute("repo_url", String, "GitHub repository URL, if published.")
 })
 
 // --- Service ---
@@ -407,99 +395,30 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetPluginAssignments"}`)
 	})
 
-	Method("getGitHubInstallURL", func() {
-		Description("Get the GitHub App installation URL and whether it is already installed.")
+	Method("getPublishStatus", func() {
+		Description("Check whether plugins have been published for this project.")
 
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
 
-		Result(func() {
-			Required("url", "installed")
-			Attribute("url", String, "GitHub App installation URL.")
-			Attribute("installed", Boolean, "Whether the app is already installed on at least one account.")
-		})
+		Result(PublishStatusResult)
 
 		HTTP(func() {
-			GET("/rpc/plugins.getGitHubInstallURL")
+			GET("/rpc/plugins.getPublishStatus")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "getGitHubInstallURL")
-		Meta("openapi:extension:x-speakeasy-name-override", "getGitHubInstallURL")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GitHubInstallURL"}`)
-	})
-
-	Method("connectGitHub", func() {
-		Description("Connect the project to a GitHub App installation, creating a repo in the customer's org.")
-
-		Payload(func() {
-			Extend(ConnectGitHubForm)
-			security.SessionPayload()
-			security.ProjectPayload()
-		})
-
-		Result(GitHubConnectionModel)
-
-		HTTP(func() {
-			POST("/rpc/plugins.connectGitHub")
-			security.SessionHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "connectGitHub")
-		Meta("openapi:extension:x-speakeasy-name-override", "connectGitHub")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ConnectGitHub"}`)
-	})
-
-	Method("disconnectGitHub", func() {
-		Description("Disconnect the project's GitHub integration.")
-
-		Payload(func() {
-			security.SessionPayload()
-			security.ProjectPayload()
-		})
-
-		HTTP(func() {
-			DELETE("/rpc/plugins.disconnectGitHub")
-			security.SessionHeader()
-			security.ProjectHeader()
-			Response(StatusNoContent)
-		})
-
-		Meta("openapi:operationId", "disconnectGitHub")
-		Meta("openapi:extension:x-speakeasy-name-override", "disconnectGitHub")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DisconnectGitHub"}`)
-	})
-
-	Method("getGitHubConnection", func() {
-		Description("Get the current GitHub connection for the project.")
-
-		Payload(func() {
-			security.SessionPayload()
-			security.ProjectPayload()
-		})
-
-		Result(GitHubConnectionModel)
-
-		HTTP(func() {
-			GET("/rpc/plugins.getGitHubConnection")
-			security.SessionHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "getGitHubConnection")
-		Meta("openapi:extension:x-speakeasy-name-override", "getGitHubConnection")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GitHubConnection"}`)
+		Meta("openapi:operationId", "getPublishStatus")
+		Meta("openapi:extension:x-speakeasy-name-override", "getPublishStatus")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PublishStatus"}`)
 	})
 
 	Method("publishPlugins", func() {
-		Description("Generate platform-specific plugin packages and push them to the connected GitHub repository.")
+		Description("Generate plugin packages and push them to a Gram-managed GitHub repository.")
 
 		Payload(func() {
 			security.SessionPayload()

@@ -5,12 +5,12 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type GetGitHubInstallURLSecurity = {
+export type GetPublishStatusSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type GetGitHubInstallURLRequest = {
+export type GetPublishStatusRequest = {
   /**
    * Session header
    */
@@ -22,15 +22,15 @@ export type GetGitHubInstallURLRequest = {
 };
 
 /** @internal */
-export type GetGitHubInstallURLSecurity$Outbound = {
+export type GetPublishStatusSecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const GetGitHubInstallURLSecurity$outboundSchema: z.ZodMiniType<
-  GetGitHubInstallURLSecurity$Outbound,
-  GetGitHubInstallURLSecurity
+export const GetPublishStatusSecurity$outboundSchema: z.ZodMiniType<
+  GetPublishStatusSecurity$Outbound,
+  GetPublishStatusSecurity
 > = z.pipe(
   z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
@@ -44,26 +44,24 @@ export const GetGitHubInstallURLSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function getGitHubInstallURLSecurityToJSON(
-  getGitHubInstallURLSecurity: GetGitHubInstallURLSecurity,
+export function getPublishStatusSecurityToJSON(
+  getPublishStatusSecurity: GetPublishStatusSecurity,
 ): string {
   return JSON.stringify(
-    GetGitHubInstallURLSecurity$outboundSchema.parse(
-      getGitHubInstallURLSecurity,
-    ),
+    GetPublishStatusSecurity$outboundSchema.parse(getPublishStatusSecurity),
   );
 }
 
 /** @internal */
-export type GetGitHubInstallURLRequest$Outbound = {
+export type GetPublishStatusRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
-export const GetGitHubInstallURLRequest$outboundSchema: z.ZodMiniType<
-  GetGitHubInstallURLRequest$Outbound,
-  GetGitHubInstallURLRequest
+export const GetPublishStatusRequest$outboundSchema: z.ZodMiniType<
+  GetPublishStatusRequest$Outbound,
+  GetPublishStatusRequest
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
@@ -77,10 +75,10 @@ export const GetGitHubInstallURLRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function getGitHubInstallURLRequestToJSON(
-  getGitHubInstallURLRequest: GetGitHubInstallURLRequest,
+export function getPublishStatusRequestToJSON(
+  getPublishStatusRequest: GetPublishStatusRequest,
 ): string {
   return JSON.stringify(
-    GetGitHubInstallURLRequest$outboundSchema.parse(getGitHubInstallURLRequest),
+    GetPublishStatusRequest$outboundSchema.parse(getPublishStatusRequest),
   );
 }

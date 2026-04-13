@@ -28,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getGitHubInstallURL plugins
+ * getPublishStatus plugins
  *
  * @remarks
- * Get the GitHub App installation URL and whether it is already installed.
+ * Check whether plugins have been published for this project.
  */
-export function pluginsGetGitHubInstallURL(
+export function pluginsGetPublishStatus(
   client: GramCore,
-  request?: operations.GetGitHubInstallURLRequest | undefined,
-  security?: operations.GetGitHubInstallURLSecurity | undefined,
+  request?: operations.GetPublishStatusRequest | undefined,
+  security?: operations.GetPublishStatusSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.GetGitHubInstallURLResponseBody,
+    components.PublishStatusResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +62,13 @@ export function pluginsGetGitHubInstallURL(
 
 async function $do(
   client: GramCore,
-  request?: operations.GetGitHubInstallURLRequest | undefined,
-  security?: operations.GetGitHubInstallURLSecurity | undefined,
+  request?: operations.GetPublishStatusRequest | undefined,
+  security?: operations.GetPublishStatusSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.GetGitHubInstallURLResponseBody,
+      components.PublishStatusResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -86,7 +86,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        z.optional(operations.GetGitHubInstallURLRequest$outboundSchema),
+        z.optional(operations.GetPublishStatusRequest$outboundSchema),
         value,
       ),
     "Input validation failed",
@@ -97,7 +97,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/plugins.getGitHubInstallURL")();
+  const path = pathToFunc("/rpc/plugins.getPublishStatus")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
@@ -129,7 +129,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getGitHubInstallURL",
+    operationID: "getPublishStatus",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -184,7 +184,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.GetGitHubInstallURLResponseBody,
+    components.PublishStatusResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -195,7 +195,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.GetGitHubInstallURLResponseBody$inboundSchema),
+    M.json(200, components.PublishStatusResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

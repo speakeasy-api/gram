@@ -1995,23 +1995,23 @@ func EncodeSetPluginAssignmentsError(encoder func(context.Context, http.Response
 	}
 }
 
-// EncodeGetGitHubInstallURLResponse returns an encoder for responses returned
-// by the plugins getGitHubInstallURL endpoint.
-func EncodeGetGitHubInstallURLResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeGetPublishStatusResponse returns an encoder for responses returned by
+// the plugins getPublishStatus endpoint.
+func EncodeGetPublishStatusResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*plugins.GetGitHubInstallURLResult)
+		res, _ := v.(*plugins.PublishStatusResult)
 		enc := encoder(ctx, w)
-		body := NewGetGitHubInstallURLResponseBody(res)
+		body := NewGetPublishStatusResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeGetGitHubInstallURLRequest returns a decoder for requests sent to the
-// plugins getGitHubInstallURL endpoint.
-func DecodeGetGitHubInstallURLRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*plugins.GetGitHubInstallURLPayload, error) {
-	return func(r *http.Request) (*plugins.GetGitHubInstallURLPayload, error) {
-		var payload *plugins.GetGitHubInstallURLPayload
+// DecodeGetPublishStatusRequest returns a decoder for requests sent to the
+// plugins getPublishStatus endpoint.
+func DecodeGetPublishStatusRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*plugins.GetPublishStatusPayload, error) {
+	return func(r *http.Request) (*plugins.GetPublishStatusPayload, error) {
+		var payload *plugins.GetPublishStatusPayload
 		var (
 			sessionToken     *string
 			projectSlugInput *string
@@ -2024,7 +2024,7 @@ func DecodeGetGitHubInstallURLRequest(mux goahttp.Muxer, decoder func(*http.Requ
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewGetGitHubInstallURLPayload(sessionToken, projectSlugInput)
+		payload = NewGetPublishStatusPayload(sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2044,9 +2044,9 @@ func DecodeGetGitHubInstallURLRequest(mux goahttp.Muxer, decoder func(*http.Requ
 	}
 }
 
-// EncodeGetGitHubInstallURLError returns an encoder for errors returned by the
-// getGitHubInstallURL plugins endpoint.
-func EncodeGetGitHubInstallURLError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeGetPublishStatusError returns an encoder for errors returned by the
+// getPublishStatus plugins endpoint.
+func EncodeGetPublishStatusError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -2063,7 +2063,7 @@ func EncodeGetGitHubInstallURLError(encoder func(context.Context, http.ResponseW
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetGitHubInstallURLUnauthorizedResponseBody(res)
+				body = NewGetPublishStatusUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -2077,7 +2077,7 @@ func EncodeGetGitHubInstallURLError(encoder func(context.Context, http.ResponseW
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetGitHubInstallURLForbiddenResponseBody(res)
+				body = NewGetPublishStatusForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -2091,7 +2091,7 @@ func EncodeGetGitHubInstallURLError(encoder func(context.Context, http.ResponseW
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetGitHubInstallURLBadRequestResponseBody(res)
+				body = NewGetPublishStatusBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -2105,7 +2105,7 @@ func EncodeGetGitHubInstallURLError(encoder func(context.Context, http.ResponseW
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetGitHubInstallURLNotFoundResponseBody(res)
+				body = NewGetPublishStatusNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -2119,7 +2119,7 @@ func EncodeGetGitHubInstallURLError(encoder func(context.Context, http.ResponseW
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetGitHubInstallURLConflictResponseBody(res)
+				body = NewGetPublishStatusConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -2133,7 +2133,7 @@ func EncodeGetGitHubInstallURLError(encoder func(context.Context, http.ResponseW
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetGitHubInstallURLUnsupportedMediaResponseBody(res)
+				body = NewGetPublishStatusUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -2147,7 +2147,7 @@ func EncodeGetGitHubInstallURLError(encoder func(context.Context, http.ResponseW
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetGitHubInstallURLInvalidResponseBody(res)
+				body = NewGetPublishStatusInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -2161,7 +2161,7 @@ func EncodeGetGitHubInstallURLError(encoder func(context.Context, http.ResponseW
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetGitHubInstallURLInvariantViolationResponseBody(res)
+				body = NewGetPublishStatusInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2175,7 +2175,7 @@ func EncodeGetGitHubInstallURLError(encoder func(context.Context, http.ResponseW
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetGitHubInstallURLUnexpectedResponseBody(res)
+				body = NewGetPublishStatusUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2189,635 +2189,7 @@ func EncodeGetGitHubInstallURLError(encoder func(context.Context, http.ResponseW
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetGitHubInstallURLGatewayErrorResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadGateway)
-			return enc.Encode(body)
-		default:
-			return encodeError(ctx, w, v)
-		}
-	}
-}
-
-// EncodeConnectGitHubResponse returns an encoder for responses returned by the
-// plugins connectGitHub endpoint.
-func EncodeConnectGitHubResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
-	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*plugins.PluginGitHubConnection)
-		enc := encoder(ctx, w)
-		body := NewConnectGitHubResponseBody(res)
-		w.WriteHeader(http.StatusOK)
-		return enc.Encode(body)
-	}
-}
-
-// DecodeConnectGitHubRequest returns a decoder for requests sent to the
-// plugins connectGitHub endpoint.
-func DecodeConnectGitHubRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*plugins.ConnectGitHubPayload, error) {
-	return func(r *http.Request) (*plugins.ConnectGitHubPayload, error) {
-		var payload *plugins.ConnectGitHubPayload
-		var (
-			body ConnectGitHubRequestBody
-			err  error
-		)
-		err = decoder(r).Decode(&body)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return payload, goa.MissingPayloadError()
-			}
-			var gerr *goa.ServiceError
-			if errors.As(err, &gerr) {
-				return payload, gerr
-			}
-			return payload, goa.DecodePayloadError(err.Error())
-		}
-
-		var (
-			sessionToken     *string
-			projectSlugInput *string
-		)
-		sessionTokenRaw := r.Header.Get("Gram-Session")
-		if sessionTokenRaw != "" {
-			sessionToken = &sessionTokenRaw
-		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewConnectGitHubPayload(&body, sessionToken, projectSlugInput)
-		if payload.SessionToken != nil {
-			if strings.Contains(*payload.SessionToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
-				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
-			}
-		}
-
-		return payload, nil
-	}
-}
-
-// EncodeConnectGitHubError returns an encoder for errors returned by the
-// connectGitHub plugins endpoint.
-func EncodeConnectGitHubError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
-	encodeError := goahttp.ErrorEncoder(encoder, formatter)
-	return func(ctx context.Context, w http.ResponseWriter, v error) error {
-		var en goa.GoaErrorNamer
-		if !errors.As(v, &en) {
-			return encodeError(ctx, w, v)
-		}
-		switch en.GoaErrorName() {
-		case "unauthorized":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewConnectGitHubUnauthorizedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnauthorized)
-			return enc.Encode(body)
-		case "forbidden":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewConnectGitHubForbiddenResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
-		case "bad_request":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewConnectGitHubBadRequestResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadRequest)
-			return enc.Encode(body)
-		case "not_found":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewConnectGitHubNotFoundResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusNotFound)
-			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewConnectGitHubConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "unsupported_media":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewConnectGitHubUnsupportedMediaResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnsupportedMediaType)
-			return enc.Encode(body)
-		case "invalid":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewConnectGitHubInvalidResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			return enc.Encode(body)
-		case "invariant_violation":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewConnectGitHubInvariantViolationResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "unexpected":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewConnectGitHubUnexpectedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "gateway_error":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewConnectGitHubGatewayErrorResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadGateway)
-			return enc.Encode(body)
-		default:
-			return encodeError(ctx, w, v)
-		}
-	}
-}
-
-// EncodeDisconnectGitHubResponse returns an encoder for responses returned by
-// the plugins disconnectGitHub endpoint.
-func EncodeDisconnectGitHubResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
-	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		w.WriteHeader(http.StatusNoContent)
-		return nil
-	}
-}
-
-// DecodeDisconnectGitHubRequest returns a decoder for requests sent to the
-// plugins disconnectGitHub endpoint.
-func DecodeDisconnectGitHubRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*plugins.DisconnectGitHubPayload, error) {
-	return func(r *http.Request) (*plugins.DisconnectGitHubPayload, error) {
-		var payload *plugins.DisconnectGitHubPayload
-		var (
-			sessionToken     *string
-			projectSlugInput *string
-		)
-		sessionTokenRaw := r.Header.Get("Gram-Session")
-		if sessionTokenRaw != "" {
-			sessionToken = &sessionTokenRaw
-		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewDisconnectGitHubPayload(sessionToken, projectSlugInput)
-		if payload.SessionToken != nil {
-			if strings.Contains(*payload.SessionToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
-				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
-			}
-		}
-
-		return payload, nil
-	}
-}
-
-// EncodeDisconnectGitHubError returns an encoder for errors returned by the
-// disconnectGitHub plugins endpoint.
-func EncodeDisconnectGitHubError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
-	encodeError := goahttp.ErrorEncoder(encoder, formatter)
-	return func(ctx context.Context, w http.ResponseWriter, v error) error {
-		var en goa.GoaErrorNamer
-		if !errors.As(v, &en) {
-			return encodeError(ctx, w, v)
-		}
-		switch en.GoaErrorName() {
-		case "unauthorized":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisconnectGitHubUnauthorizedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnauthorized)
-			return enc.Encode(body)
-		case "forbidden":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisconnectGitHubForbiddenResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
-		case "bad_request":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisconnectGitHubBadRequestResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadRequest)
-			return enc.Encode(body)
-		case "not_found":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisconnectGitHubNotFoundResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusNotFound)
-			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisconnectGitHubConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "unsupported_media":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisconnectGitHubUnsupportedMediaResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnsupportedMediaType)
-			return enc.Encode(body)
-		case "invalid":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisconnectGitHubInvalidResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			return enc.Encode(body)
-		case "invariant_violation":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisconnectGitHubInvariantViolationResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "unexpected":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisconnectGitHubUnexpectedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "gateway_error":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisconnectGitHubGatewayErrorResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadGateway)
-			return enc.Encode(body)
-		default:
-			return encodeError(ctx, w, v)
-		}
-	}
-}
-
-// EncodeGetGitHubConnectionResponse returns an encoder for responses returned
-// by the plugins getGitHubConnection endpoint.
-func EncodeGetGitHubConnectionResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
-	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*plugins.PluginGitHubConnection)
-		enc := encoder(ctx, w)
-		body := NewGetGitHubConnectionResponseBody(res)
-		w.WriteHeader(http.StatusOK)
-		return enc.Encode(body)
-	}
-}
-
-// DecodeGetGitHubConnectionRequest returns a decoder for requests sent to the
-// plugins getGitHubConnection endpoint.
-func DecodeGetGitHubConnectionRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*plugins.GetGitHubConnectionPayload, error) {
-	return func(r *http.Request) (*plugins.GetGitHubConnectionPayload, error) {
-		var payload *plugins.GetGitHubConnectionPayload
-		var (
-			sessionToken     *string
-			projectSlugInput *string
-		)
-		sessionTokenRaw := r.Header.Get("Gram-Session")
-		if sessionTokenRaw != "" {
-			sessionToken = &sessionTokenRaw
-		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewGetGitHubConnectionPayload(sessionToken, projectSlugInput)
-		if payload.SessionToken != nil {
-			if strings.Contains(*payload.SessionToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
-				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
-			}
-		}
-
-		return payload, nil
-	}
-}
-
-// EncodeGetGitHubConnectionError returns an encoder for errors returned by the
-// getGitHubConnection plugins endpoint.
-func EncodeGetGitHubConnectionError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
-	encodeError := goahttp.ErrorEncoder(encoder, formatter)
-	return func(ctx context.Context, w http.ResponseWriter, v error) error {
-		var en goa.GoaErrorNamer
-		if !errors.As(v, &en) {
-			return encodeError(ctx, w, v)
-		}
-		switch en.GoaErrorName() {
-		case "unauthorized":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewGetGitHubConnectionUnauthorizedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnauthorized)
-			return enc.Encode(body)
-		case "forbidden":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewGetGitHubConnectionForbiddenResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
-		case "bad_request":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewGetGitHubConnectionBadRequestResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadRequest)
-			return enc.Encode(body)
-		case "not_found":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewGetGitHubConnectionNotFoundResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusNotFound)
-			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewGetGitHubConnectionConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "unsupported_media":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewGetGitHubConnectionUnsupportedMediaResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnsupportedMediaType)
-			return enc.Encode(body)
-		case "invalid":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewGetGitHubConnectionInvalidResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			return enc.Encode(body)
-		case "invariant_violation":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewGetGitHubConnectionInvariantViolationResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "unexpected":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewGetGitHubConnectionUnexpectedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "gateway_error":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewGetGitHubConnectionGatewayErrorResponseBody(res)
+				body = NewGetPublishStatusGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

@@ -36,16 +36,23 @@ import (
 
 var slugPattern = regexp.MustCompile(`[^a-z0-9-]+`)
 
+// GitHubConfig holds credentials for the Gram-owned GitHub org where plugin
+// repos are created. Nil means GitHub publishing is disabled.
+type GitHubConfig struct {
+	Client         *ghclient.Client
+	Org            string // GitHub org that owns plugin repos (e.g. "gram-plugins")
+	InstallationID int64  // GitHub App installation ID on that org
+}
+
 type Service struct {
-	tracer        trace.Tracer
-	logger        *slog.Logger
-	db            *pgxpool.Pool
-	repo          *repo.Queries
-	auth          *auth.Auth
-	access        *access.Manager
-	github        *ghclient.Client // nil if not configured
-	githubAppSlug string
-	serverURL     string
+	tracer    trace.Tracer
+	logger    *slog.Logger
+	db        *pgxpool.Pool
+	repo      *repo.Queries
+	auth      *auth.Auth
+	access    *access.Manager
+	github    *GitHubConfig // nil if not configured
+	serverURL string
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -57,22 +64,20 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	accessManager *access.Manager,
-	github *ghclient.Client,
-	githubAppSlug string,
+	github *GitHubConfig,
 	serverURL string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
 	return &Service{
-		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/plugins"),
-		logger:        logger,
-		db:            db,
-		repo:          repo.New(db),
-		auth:          auth.New(logger, db, sessions, accessManager),
-		access:        accessManager,
-		github:        github,
-		githubAppSlug: githubAppSlug,
-		serverURL:     serverURL,
+		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/plugins"),
+		logger:    logger,
+		db:        db,
+		repo:      repo.New(db),
+		auth:      auth.New(logger, db, sessions, accessManager),
+		access:    accessManager,
+		github:    github,
+		serverURL: serverURL,
 	}
 }
 
@@ -438,9 +443,9 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	return &gen.SetPluginAssignmentsResult{Assignments: assignments}, nil
 }
 
-// --- GitHub Connection & Publish ---
+// --- Publish & Distribution ---
 
-func (s *Service) GetGitHubInstallURL(ctx context.Context, payload *gen.GetGitHubInstallURLPayload) (*gen.GetGitHubInstallURLResult, error) {
+func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishStatusPayload) (*gen.PublishStatusResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -450,122 +455,20 @@ func (s *Service) GetGitHubInstallURL(ctx context.Context, payload *gen.GetGitHu
 		return nil, err
 	}
 
-	installURL := fmt.Sprintf("https://github.com/apps/%s/installations/new", s.githubAppSlug)
-
-	installed := false
-	if s.github != nil {
-		installations, err := s.github.ListInstallations(ctx)
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to list github installations",
-				attr.SlogOrganizationID(ac.ActiveOrganizationID),
-				attr.SlogError(err),
-			)
-		} else {
-			installed = len(installations) > 0
-		}
-	}
-
-	return &gen.GetGitHubInstallURLResult{
-		URL:       installURL,
-		Installed: installed,
-	}, nil
-}
-
-func (s *Service) ConnectGitHub(ctx context.Context, payload *gen.ConnectGitHubPayload) (*gen.PluginGitHubConnection, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
-		return nil, err
-	}
-
-	if s.github == nil {
-		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("github app not configured"), "GitHub App is not configured on this server").Log(ctx, s.logger)
-	}
-
-	var installationID int64
-	if payload.InstallationID != nil {
-		installationID = *payload.InstallationID
-	} else {
-		// Auto-detect: pick the first installation.
-		installations, err := s.github.ListInstallations(ctx)
-		if err != nil {
-			return nil, oops.E(oops.CodeGatewayError, err, "list github installations").Log(ctx, s.logger)
-		}
-		if len(installations) == 0 {
-			return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("no github app installations found"), "No GitHub App installations found. Install the app first.").Log(ctx, s.logger)
-		}
-		installationID = installations[0].ID
-	}
-
-	inst, err := s.github.GetInstallation(ctx, installationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "get github installation").Log(ctx, s.logger)
-	}
-
-	repoOwner := inst.Account.Login
-	repoName := ac.OrganizationSlug + "-plugins"
-
-	// Best-effort create repo in customer's org.
-	if err := s.github.CreateRepo(ctx, installationID, repoOwner, repoName, false, inst.Account.Type); err != nil {
-		s.logger.WarnContext(ctx, "repo creation returned error (may already exist)",
-			attr.SlogOrganizationID(ac.ActiveOrganizationID),
-			attr.SlogError(err),
-		)
-	}
-
-	conn, err := s.repo.UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
-		InstallationID: installationID,
-		RepoOwner:      repoOwner,
-		RepoName:       repoName,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "upsert github connection").Log(ctx, s.logger)
-	}
-
-	return githubConnectionToGen(conn), nil
-}
-
-func (s *Service) DisconnectGitHub(ctx context.Context, payload *gen.DisconnectGitHubPayload) error {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
-		return err
-	}
-
-	if err := s.repo.DeleteGitHubConnection(ctx, *ac.ProjectID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete github connection").Log(ctx, s.logger)
-	}
-
-	return nil
-}
-
-func (s *Service) GetGitHubConnection(ctx context.Context, payload *gen.GetGitHubConnectionPayload) (*gen.PluginGitHubConnection, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
-		return nil, err
+	result := &gen.PublishStatusResult{
+		Available: s.github != nil,
+		Published: false,
+		RepoURL:   nil,
 	}
 
 	conn, err := s.repo.GetGitHubConnection(ctx, *ac.ProjectID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.C(oops.CodeNotFound)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get github connection").Log(ctx, s.logger)
+	if err == nil {
+		result.Published = true
+		repoURL := fmt.Sprintf("https://github.com/%s/%s", conn.RepoOwner, conn.RepoName)
+		result.RepoURL = &repoURL
 	}
 
-	return githubConnectionToGen(conn), nil
+	return result, nil
 }
 
 func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPluginsPayload) (*gen.PublishPluginsResult, error) {
@@ -579,15 +482,17 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	}
 
 	if s.github == nil {
-		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("github app not configured"), "GitHub App is not configured on this server").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("github publishing not configured"), "GitHub publishing is not configured on this server").Log(ctx, s.logger)
 	}
 
-	conn, err := s.repo.GetGitHubConnection(ctx, *ac.ProjectID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("no github connection"), "Connect GitHub first before publishing.").Log(ctx, s.logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get github connection").Log(ctx, s.logger)
+	repoName := ac.OrganizationSlug + "-plugins"
+
+	// Create repo in Gram's org (idempotent).
+	if err := s.github.Client.CreateRepo(ctx, s.github.InstallationID, s.github.Org, repoName, false, "Organization"); err != nil {
+		s.logger.WarnContext(ctx, "repo creation returned error (may already exist)",
+			attr.SlogOrganizationID(ac.ActiveOrganizationID),
+			attr.SlogError(err),
+		)
 	}
 
 	files, err := s.generateAllPlugins(ctx, *ac.ProjectID, ac.ActiveOrganizationID, ac.OrganizationSlug)
@@ -595,11 +500,11 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, err
 	}
 
-	commitSHA, err := s.github.PushFiles(
+	commitSHA, err := s.github.Client.PushFiles(
 		ctx,
-		conn.InstallationID,
-		conn.RepoOwner,
-		conn.RepoName,
+		s.github.InstallationID,
+		s.github.Org,
+		repoName,
 		"main",
 		fmt.Sprintf("Update plugin packages (%s)", time.Now().UTC().Format(time.RFC3339)),
 		files,
@@ -608,7 +513,21 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeGatewayError, err, "push to github").Log(ctx, s.logger)
 	}
 
-	repoURL := fmt.Sprintf("https://github.com/%s/%s", conn.RepoOwner, conn.RepoName)
+	repoURL := fmt.Sprintf("https://github.com/%s/%s", s.github.Org, repoName)
+
+	// Record the publish so getPublishStatus can return the URL.
+	if _, err := s.repo.UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
+		InstallationID: s.github.InstallationID,
+		RepoOwner:      s.github.Org,
+		RepoName:       repoName,
+	}); err != nil {
+		s.logger.WarnContext(ctx, "failed to record publish status",
+			attr.SlogOrganizationID(ac.ActiveOrganizationID),
+			attr.SlogError(err),
+		)
+	}
 
 	s.logger.InfoContext(ctx, "published plugins to github",
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
@@ -849,16 +768,6 @@ func pluginAssignmentToGen(a repo.PluginAssignment) *gen.PluginAssignment {
 		ID:           a.ID.String(),
 		PrincipalUrn: a.PrincipalUrn,
 		CreatedAt:    formatTime(a.CreatedAt),
-	}
-}
-
-func githubConnectionToGen(c repo.PluginGithubConnection) *gen.PluginGitHubConnection {
-	return &gen.PluginGitHubConnection{
-		ID:             c.ID.String(),
-		InstallationID: c.InstallationID,
-		RepoOwner:      c.RepoOwner,
-		RepoName:       c.RepoName,
-		CreatedAt:      formatTime(c.CreatedAt),
 	}
 }
 

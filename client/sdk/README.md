@@ -289,14 +289,11 @@ run();
 ### [Plugins](docs/sdks/plugins/README.md)
 
 * [addPluginServer](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
-* [connectGitHub](docs/sdks/plugins/README.md#connectgithub) - connectGitHub plugins
 * [createPlugin](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 * [deletePlugin](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
-* [disconnectGitHub](docs/sdks/plugins/README.md#disconnectgithub) - disconnectGitHub plugins
 * [downloadPluginPackage](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
-* [getGitHubConnection](docs/sdks/plugins/README.md#getgithubconnection) - getGitHubConnection plugins
-* [getGitHubInstallURL](docs/sdks/plugins/README.md#getgithubinstallurl) - getGitHubInstallURL plugins
 * [getPlugin](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
+* [getPublishStatus](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 * [listPlugins](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
 * [publishPlugins](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
 * [removePluginServer](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
@@ -497,14 +494,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`packagesPublish`](docs/sdks/packages/README.md#publish) - publish packages
 - [`packagesUpdate`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`pluginsAddPluginServer`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
-- [`pluginsConnectGitHub`](docs/sdks/plugins/README.md#connectgithub) - connectGitHub plugins
 - [`pluginsCreatePlugin`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 - [`pluginsDeletePlugin`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
-- [`pluginsDisconnectGitHub`](docs/sdks/plugins/README.md#disconnectgithub) - disconnectGitHub plugins
 - [`pluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
-- [`pluginsGetGitHubConnection`](docs/sdks/plugins/README.md#getgithubconnection) - getGitHubConnection plugins
-- [`pluginsGetGitHubInstallURL`](docs/sdks/plugins/README.md#getgithubinstallurl) - getGitHubInstallURL plugins
 - [`pluginsGetPlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
+- [`pluginsGetPublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`pluginsListPlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
 - [`pluginsPublishPlugins`](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
 - [`pluginsRemovePluginServer`](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
@@ -606,7 +600,6 @@ To learn about this feature and how to get started, check
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`useConfigureSlackAppMutation`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
-- [`useConnectGitHubMutation`](docs/sdks/plugins/README.md#connectgithub) - connectGitHub plugins
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
@@ -633,7 +626,6 @@ To learn about this feature and how to get started, check
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
-- [`useDisconnectGitHubMutation`](docs/sdks/plugins/README.md#disconnectgithub) - disconnectGitHub plugins
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useExportMcpMetadataMutation`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 - [`useFeaturesGet`](docs/sdks/features/README.md#get) - getProductFeatures features
@@ -652,8 +644,6 @@ To learn about this feature and how to get started, check
 - [`useGetToolsetEnvironment`](docs/sdks/environments/README.md#getbytoolset) - getToolsetEnvironment environments
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
-- [`useGitHubConnection`](docs/sdks/plugins/README.md#getgithubconnection) - getGitHubConnection plugins
-- [`useGitHubInstallURL`](docs/sdks/plugins/README.md#getgithubinstallurl) - getGitHubInstallURL plugins
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`useGrants`](docs/sdks/access/README.md#listgrants) - listGrants access
 - [`useHooksHooksNumberClaudeMutation`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
@@ -702,6 +692,7 @@ To learn about this feature and how to get started, check
 - [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`usePublishPluginsMutation`](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
+- [`usePublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth

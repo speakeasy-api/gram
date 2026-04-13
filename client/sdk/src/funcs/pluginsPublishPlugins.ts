@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * publishPlugins plugins
  *
  * @remarks
- * Generate platform-specific plugin packages and push them to the connected GitHub repository.
+ * Generate plugin packages and push them to a Gram-managed GitHub repository.
  */
 export function pluginsPublishPlugins(
   client: GramCore,

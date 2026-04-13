@@ -13,16 +13,14 @@ import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginSe
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
 import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 import {
-  invalidateAllGitHubConnection,
-  useGitHubConnection,
-} from "@gram/client/react-query/gitHubConnection";
-import { useGitHubInstallURL } from "@gram/client/react-query/gitHubInstallURL";
-import { useConnectGitHubMutation } from "@gram/client/react-query/connectGitHub";
+  invalidateAllPublishStatus,
+  usePublishStatus,
+} from "@gram/client/react-query/publishStatus";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg";
 import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "react-router";
+import { useState } from "react";
+import { useParams } from "react-router";
 import type { PluginServer } from "@gram/client/models/components";
 
 export default function PluginDetail() {
@@ -36,12 +34,7 @@ export default function PluginDetail() {
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
 
-  const { data: ghConnection } = useGitHubConnection(undefined, undefined, {
-    retry: false,
-    throwOnError: false,
-  });
-
-  const { data: installURLData } = useGitHubInstallURL(undefined, undefined, {
+  const { data: publishStatus } = usePublishStatus(undefined, undefined, {
     retry: false,
     throwOnError: false,
   });
@@ -52,7 +45,7 @@ export default function PluginDetail() {
   const invalidateAll = async () => {
     await invalidateAllPlugin(queryClient);
     await invalidateAllPlugins(queryClient);
-    await invalidateAllGitHubConnection(queryClient);
+    await invalidateAllPublishStatus(queryClient);
   };
 
   const updateMutation = useUpdatePluginMutation({
@@ -73,44 +66,9 @@ export default function PluginDetail() {
     onSuccess: () => invalidateAll(),
   });
 
-  const connectGitHubMutation = useConnectGitHubMutation({
-    onSuccess: () => invalidateAll(),
-  });
-
   const publishMutation = usePublishPluginsMutation({
     onSuccess: () => invalidateAll(),
   });
-
-  // Handle GitHub App installation callback — GitHub redirects back with
-  // installation_id in the URL after the admin installs the app.
-  const [searchParams, setSearchParams] = useSearchParams();
-  useEffect(() => {
-    const installationId = searchParams.get("installation_id");
-    if (installationId && !ghConnection && !connectGitHubMutation.isPending) {
-      connectGitHubMutation.mutate({
-        security: { sessionHeaderGramSession: "" },
-        request: {
-          connectGitHubForm: {
-            installationId: parseInt(installationId, 10),
-          },
-        },
-      });
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams]);
-
-  const handleConnectGitHub = () => {
-    if (installURLData?.installed) {
-      // App is already installed — auto-detect and connect.
-      connectGitHubMutation.mutate({
-        security: { sessionHeaderGramSession: "" },
-        request: { connectGitHubForm: {} },
-      });
-    } else if (installURLData?.url) {
-      // Redirect to GitHub to install the app.
-      window.location.href = installURLData.url;
-    }
-  };
 
   const handleUpdate: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
@@ -238,9 +196,7 @@ export default function PluginDetail() {
 
   if (!plugin) return null;
 
-  const repoURL = ghConnection
-    ? `https://github.com/${ghConnection.repoOwner}/${ghConnection.repoName}`
-    : publishMutation.data?.repoUrl;
+  const repoURL = publishStatus?.repoUrl ?? publishMutation.data?.repoUrl;
 
   return (
     <Page>
@@ -318,7 +274,7 @@ export default function PluginDetail() {
         </Heading>
 
         <div className="border rounded-lg p-4 mb-6">
-          {ghConnection ? (
+          {repoURL ? (
             <Stack gap={3}>
               <Stack
                 direction="horizontal"
@@ -326,61 +282,52 @@ export default function PluginDetail() {
                 align="center"
               >
                 <div>
-                  <Type variant="body">
-                    Connected to{" "}
+                  <Type variant="body">Published</Type>
+                  <Type muted small className="mt-1">
+                    Plugin packages are available at{" "}
                     <a
                       href={repoURL}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="underline"
                     >
-                      {ghConnection.repoOwner}/{ghConnection.repoName}
+                      {repoURL.replace("https://github.com/", "")}
                     </a>
-                  </Type>
-                  <Type muted small className="mt-1">
-                    Publish generates Claude Code and Cursor plugin packages and
-                    pushes them to this repo. Add the repo URL to your platform
-                    marketplace settings to distribute to your team.
                   </Type>
                 </div>
                 <Button
                   onClick={handlePublish}
                   disabled={publishMutation.isPending}
                 >
-                  {publishMutation.isPending ? "Publishing..." : "Publish"}
+                  {publishMutation.isPending ? "Publishing..." : "Republish"}
                 </Button>
               </Stack>
+              <Type muted small>
+                Add this repository URL to your Claude Code or Cursor
+                marketplace settings to distribute plugins to your team.
+              </Type>
+            </Stack>
+          ) : publishStatus?.available ? (
+            <Stack gap={3} align="center" className="py-4">
+              <Type variant="body">Ready to publish</Type>
+              <Type muted small className="text-center max-w-sm">
+                Publish generates Claude Code and Cursor plugin packages and
+                pushes them to a GitHub repository. You&apos;ll get a URL to add
+                to your platform marketplace settings.
+              </Type>
+              <Button
+                onClick={handlePublish}
+                disabled={publishMutation.isPending}
+              >
+                {publishMutation.isPending ? "Publishing..." : "Publish"}
+              </Button>
             </Stack>
           ) : (
-            <Stack gap={3} align="center" className="py-4">
-              <div className="size-12 rounded-full bg-muted flex items-center justify-center">
-                <Icon name="github" className="size-6 text-muted-foreground" />
-              </div>
-              <div className="text-center max-w-sm">
-                <Type variant="body" className="mb-1">
-                  Connect GitHub
-                </Type>
-                <Type muted small>
-                  Install the Gram GitHub App on your GitHub organization. Gram
-                  will create a repository and push plugin packages when you
-                  publish.
-                </Type>
-              </div>
-              <Button
-                onClick={handleConnectGitHub}
-                disabled={connectGitHubMutation.isPending}
-              >
-                <Button.LeftIcon>
-                  <Icon name="github" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>
-                  {connectGitHubMutation.isPending
-                    ? "Connecting..."
-                    : installURLData?.installed
-                      ? "Connect"
-                      : "Install GitHub App"}
-                </Button.Text>
-              </Button>
+            <Stack gap={2} align="center" className="py-4">
+              <Type muted small className="text-center">
+                GitHub publishing is not configured on this server. Use the ZIP
+                downloads below instead.
+              </Type>
             </Stack>
           )}
         </div>
@@ -394,7 +341,7 @@ export default function PluginDetail() {
             <Button.LeftIcon>
               <Icon name="download" className="h-4 w-4" />
             </Button.LeftIcon>
-            <Button.Text>Download Claude Code ZIP</Button.Text>
+            <Button.Text>Download Claude ZIP</Button.Text>
           </Button>
           <Button
             variant="secondary"

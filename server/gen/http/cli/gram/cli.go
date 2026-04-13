@@ -75,7 +75,7 @@ func UsageCommands() []string {
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|get-git-hub-install-url|connect-git-hub|disconnect-git-hub|get-git-hub-connection|publish-plugins|download-plugin-package)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|get-publish-status|publish-plugins|download-plugin-package)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"resources list-resources",
@@ -689,22 +689,9 @@ func ParseEndpoint(
 		pluginsSetPluginAssignmentsSessionTokenFlag     = pluginsSetPluginAssignmentsFlags.String("session-token", "", "")
 		pluginsSetPluginAssignmentsProjectSlugInputFlag = pluginsSetPluginAssignmentsFlags.String("project-slug-input", "", "")
 
-		pluginsGetGitHubInstallURLFlags                = flag.NewFlagSet("get-git-hub-install-url", flag.ExitOnError)
-		pluginsGetGitHubInstallURLSessionTokenFlag     = pluginsGetGitHubInstallURLFlags.String("session-token", "", "")
-		pluginsGetGitHubInstallURLProjectSlugInputFlag = pluginsGetGitHubInstallURLFlags.String("project-slug-input", "", "")
-
-		pluginsConnectGitHubFlags                = flag.NewFlagSet("connect-git-hub", flag.ExitOnError)
-		pluginsConnectGitHubBodyFlag             = pluginsConnectGitHubFlags.String("body", "REQUIRED", "")
-		pluginsConnectGitHubSessionTokenFlag     = pluginsConnectGitHubFlags.String("session-token", "", "")
-		pluginsConnectGitHubProjectSlugInputFlag = pluginsConnectGitHubFlags.String("project-slug-input", "", "")
-
-		pluginsDisconnectGitHubFlags                = flag.NewFlagSet("disconnect-git-hub", flag.ExitOnError)
-		pluginsDisconnectGitHubSessionTokenFlag     = pluginsDisconnectGitHubFlags.String("session-token", "", "")
-		pluginsDisconnectGitHubProjectSlugInputFlag = pluginsDisconnectGitHubFlags.String("project-slug-input", "", "")
-
-		pluginsGetGitHubConnectionFlags                = flag.NewFlagSet("get-git-hub-connection", flag.ExitOnError)
-		pluginsGetGitHubConnectionSessionTokenFlag     = pluginsGetGitHubConnectionFlags.String("session-token", "", "")
-		pluginsGetGitHubConnectionProjectSlugInputFlag = pluginsGetGitHubConnectionFlags.String("project-slug-input", "", "")
+		pluginsGetPublishStatusFlags                = flag.NewFlagSet("get-publish-status", flag.ExitOnError)
+		pluginsGetPublishStatusSessionTokenFlag     = pluginsGetPublishStatusFlags.String("session-token", "", "")
+		pluginsGetPublishStatusProjectSlugInputFlag = pluginsGetPublishStatusFlags.String("project-slug-input", "", "")
 
 		pluginsPublishPluginsFlags                = flag.NewFlagSet("publish-plugins", flag.ExitOnError)
 		pluginsPublishPluginsSessionTokenFlag     = pluginsPublishPluginsFlags.String("session-token", "", "")
@@ -1185,10 +1172,7 @@ func ParseEndpoint(
 	pluginsUpdatePluginServerFlags.Usage = pluginsUpdatePluginServerUsage
 	pluginsRemovePluginServerFlags.Usage = pluginsRemovePluginServerUsage
 	pluginsSetPluginAssignmentsFlags.Usage = pluginsSetPluginAssignmentsUsage
-	pluginsGetGitHubInstallURLFlags.Usage = pluginsGetGitHubInstallURLUsage
-	pluginsConnectGitHubFlags.Usage = pluginsConnectGitHubUsage
-	pluginsDisconnectGitHubFlags.Usage = pluginsDisconnectGitHubUsage
-	pluginsGetGitHubConnectionFlags.Usage = pluginsGetGitHubConnectionUsage
+	pluginsGetPublishStatusFlags.Usage = pluginsGetPublishStatusUsage
 	pluginsPublishPluginsFlags.Usage = pluginsPublishPluginsUsage
 	pluginsDownloadPluginPackageFlags.Usage = pluginsDownloadPluginPackageUsage
 
@@ -1756,17 +1740,8 @@ func ParseEndpoint(
 			case "set-plugin-assignments":
 				epf = pluginsSetPluginAssignmentsFlags
 
-			case "get-git-hub-install-url":
-				epf = pluginsGetGitHubInstallURLFlags
-
-			case "connect-git-hub":
-				epf = pluginsConnectGitHubFlags
-
-			case "disconnect-git-hub":
-				epf = pluginsDisconnectGitHubFlags
-
-			case "get-git-hub-connection":
-				epf = pluginsGetGitHubConnectionFlags
+			case "get-publish-status":
+				epf = pluginsGetPublishStatusFlags
 
 			case "publish-plugins":
 				epf = pluginsPublishPluginsFlags
@@ -2408,18 +2383,9 @@ func ParseEndpoint(
 			case "set-plugin-assignments":
 				endpoint = c.SetPluginAssignments()
 				data, err = pluginsc.BuildSetPluginAssignmentsPayload(*pluginsSetPluginAssignmentsBodyFlag, *pluginsSetPluginAssignmentsSessionTokenFlag, *pluginsSetPluginAssignmentsProjectSlugInputFlag)
-			case "get-git-hub-install-url":
-				endpoint = c.GetGitHubInstallURL()
-				data, err = pluginsc.BuildGetGitHubInstallURLPayload(*pluginsGetGitHubInstallURLSessionTokenFlag, *pluginsGetGitHubInstallURLProjectSlugInputFlag)
-			case "connect-git-hub":
-				endpoint = c.ConnectGitHub()
-				data, err = pluginsc.BuildConnectGitHubPayload(*pluginsConnectGitHubBodyFlag, *pluginsConnectGitHubSessionTokenFlag, *pluginsConnectGitHubProjectSlugInputFlag)
-			case "disconnect-git-hub":
-				endpoint = c.DisconnectGitHub()
-				data, err = pluginsc.BuildDisconnectGitHubPayload(*pluginsDisconnectGitHubSessionTokenFlag, *pluginsDisconnectGitHubProjectSlugInputFlag)
-			case "get-git-hub-connection":
-				endpoint = c.GetGitHubConnection()
-				data, err = pluginsc.BuildGetGitHubConnectionPayload(*pluginsGetGitHubConnectionSessionTokenFlag, *pluginsGetGitHubConnectionProjectSlugInputFlag)
+			case "get-publish-status":
+				endpoint = c.GetPublishStatus()
+				data, err = pluginsc.BuildGetPublishStatusPayload(*pluginsGetPublishStatusSessionTokenFlag, *pluginsGetPublishStatusProjectSlugInputFlag)
 			case "publish-plugins":
 				endpoint = c.PublishPlugins()
 				data, err = pluginsc.BuildPublishPluginsPayload(*pluginsPublishPluginsSessionTokenFlag, *pluginsPublishPluginsProjectSlugInputFlag)
@@ -5059,11 +5025,8 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    update-plugin-server: Update a server's configuration within a plugin.`)
 	fmt.Fprintln(os.Stderr, `    remove-plugin-server: Remove a server from a plugin.`)
 	fmt.Fprintln(os.Stderr, `    set-plugin-assignments: Replace all assignments for a plugin with the given list of principal URNs.`)
-	fmt.Fprintln(os.Stderr, `    get-git-hub-install-url: Get the GitHub App installation URL and whether it is already installed.`)
-	fmt.Fprintln(os.Stderr, `    connect-git-hub: Connect the project to a GitHub App installation, creating a repo in the customer's org.`)
-	fmt.Fprintln(os.Stderr, `    disconnect-git-hub: Disconnect the project's GitHub integration.`)
-	fmt.Fprintln(os.Stderr, `    get-git-hub-connection: Get the current GitHub connection for the project.`)
-	fmt.Fprintln(os.Stderr, `    publish-plugins: Generate platform-specific plugin packages and push them to the connected GitHub repository.`)
+	fmt.Fprintln(os.Stderr, `    get-publish-status: Check whether plugins have been published for this project.`)
+	fmt.Fprintln(os.Stderr, `    publish-plugins: Generate plugin packages and push them to a Gram-managed GitHub repository.`)
 	fmt.Fprintln(os.Stderr, `    download-plugin-package: Download a ZIP of a single plugin package for direct installation.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -5267,16 +5230,16 @@ func pluginsSetPluginAssignmentsUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins set-plugin-assignments --body '{\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_urns\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func pluginsGetGitHubInstallURLUsage() {
+func pluginsGetPublishStatusUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-git-hub-install-url", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-publish-status", os.Args[0])
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the GitHub App installation URL and whether it is already installed.`)
+	fmt.Fprintln(os.Stderr, `Check whether plugins have been published for this project.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -5284,69 +5247,7 @@ func pluginsGetGitHubInstallURLUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-git-hub-install-url --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func pluginsConnectGitHubUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] plugins connect-git-hub", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Connect the project to a GitHub App installation, creating a repo in the customer's org.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins connect-git-hub --body '{\n      \"installation_id\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func pluginsDisconnectGitHubUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] plugins disconnect-git-hub", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Disconnect the project's GitHub integration.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins disconnect-git-hub --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func pluginsGetGitHubConnectionUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-git-hub-connection", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the current GitHub connection for the project.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-git-hub-connection --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-publish-status --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsPublishPluginsUsage() {
@@ -5358,7 +5259,7 @@ func pluginsPublishPluginsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Generate platform-specific plugin packages and push them to the connected GitHub repository.`)
+	fmt.Fprintln(os.Stderr, `Generate plugin packages and push them to a Gram-managed GitHub repository.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)

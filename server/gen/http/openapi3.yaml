@@ -8904,101 +8904,6 @@ paths:
             x-speakeasy-name-override: addPluginServer
             x-speakeasy-react-hook:
                 name: AddPluginServer
-    /rpc/plugins.connectGitHub:
-        post:
-            description: Connect the project to a GitHub App installation, creating a repo in the customer's org.
-            operationId: connectGitHub
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/ConnectGitHubForm'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/PluginGitHubConnection'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: connectGitHub plugins
-            tags:
-                - plugins
-            x-speakeasy-name-override: connectGitHub
-            x-speakeasy-react-hook:
-                name: ConnectGitHub
     /rpc/plugins.createPlugin:
         post:
             description: Create a new plugin.
@@ -9186,91 +9091,6 @@ paths:
             x-speakeasy-name-override: deletePlugin
             x-speakeasy-react-hook:
                 name: DeletePlugin
-    /rpc/plugins.disconnectGitHub:
-        delete:
-            description: Disconnect the project's GitHub integration.
-            operationId: disconnectGitHub
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "204":
-                    description: No Content response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: disconnectGitHub plugins
-            tags:
-                - plugins
-            x-speakeasy-name-override: disconnectGitHub
-            x-speakeasy-react-hook:
-                name: DisconnectGitHub
     /rpc/plugins.downloadPluginPackage:
         get:
             description: Download a ZIP of a single plugin package for direct installation.
@@ -9386,184 +9206,6 @@ paths:
             tags:
                 - plugins
             x-speakeasy-name-override: downloadPluginPackage
-    /rpc/plugins.getGitHubConnection:
-        get:
-            description: Get the current GitHub connection for the project.
-            operationId: getGitHubConnection
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/PluginGitHubConnection'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: getGitHubConnection plugins
-            tags:
-                - plugins
-            x-speakeasy-name-override: getGitHubConnection
-            x-speakeasy-react-hook:
-                name: GitHubConnection
-    /rpc/plugins.getGitHubInstallURL:
-        get:
-            description: Get the GitHub App installation URL and whether it is already installed.
-            operationId: getGitHubInstallURL
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/GetGitHubInstallURLResponseBody'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: getGitHubInstallURL plugins
-            tags:
-                - plugins
-            x-speakeasy-name-override: getGitHubInstallURL
-            x-speakeasy-react-hook:
-                name: GitHubInstallURL
     /rpc/plugins.getPlugin:
         get:
             description: Get a plugin with its servers and assignments.
@@ -9660,6 +9302,95 @@ paths:
             x-speakeasy-name-override: getPlugin
             x-speakeasy-react-hook:
                 name: Plugin
+    /rpc/plugins.getPublishStatus:
+        get:
+            description: Check whether plugins have been published for this project.
+            operationId: getPublishStatus
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PublishStatusResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getPublishStatus plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: getPublishStatus
+            x-speakeasy-react-hook:
+                name: PublishStatus
     /rpc/plugins.listPlugins:
         get:
             description: List all plugins for the current project.
@@ -9751,7 +9482,7 @@ paths:
                 name: Plugins
     /rpc/plugins.publishPlugins:
         post:
-            description: Generate platform-specific plugin packages and push them to the connected GitHub repository.
+            description: Generate plugin packages and push them to a Gram-managed GitHub repository.
             operationId: publishPlugins
             parameters:
                 - allowEmptyValue: true
@@ -16921,13 +16652,6 @@ components:
                 - slack_client_id
                 - slack_client_secret
                 - slack_signing_secret
-        ConnectGitHubForm:
-            type: object
-            properties:
-                installation_id:
-                    type: integer
-                    description: GitHub App installation ID. Auto-detected if omitted.
-                    format: int64
         CreateDeploymentForm:
             type: object
             properties:
@@ -18581,18 +18305,6 @@ components:
                 - openapiv3_tool_count
                 - functions_tool_count
                 - external_mcp_tool_count
-        GetGitHubInstallURLResponseBody:
-            type: object
-            properties:
-                installed:
-                    type: boolean
-                    description: Whether the app is already installed on at least one account.
-                url:
-                    type: string
-                    description: GitHub App installation URL.
-            required:
-                - url
-                - installed
         GetHooksSummaryPayload:
             type: object
             properties:
@@ -20781,32 +20493,6 @@ components:
                 - id
                 - principal_urn
                 - created_at
-        PluginGitHubConnection:
-            type: object
-            properties:
-                created_at:
-                    type: string
-                    format: date-time
-                id:
-                    type: string
-                    description: Unique connection identifier.
-                    format: uuid
-                installation_id:
-                    type: integer
-                    description: GitHub App installation ID.
-                    format: int64
-                repo_name:
-                    type: string
-                    description: Repository name.
-                repo_owner:
-                    type: string
-                    description: GitHub org or user that owns the repo.
-            required:
-                - id
-                - installation_id
-                - repo_owner
-                - repo_name
-                - created_at
         PluginServer:
             type: object
             properties:
@@ -21191,6 +20877,21 @@ components:
             required:
                 - published
                 - repo_url
+        PublishStatusResult:
+            type: object
+            properties:
+                available:
+                    type: boolean
+                    description: Whether GitHub publishing is configured on this server.
+                published:
+                    type: boolean
+                    description: Whether plugins have been published for this project.
+                repo_url:
+                    type: string
+                    description: GitHub repository URL, if published.
+            required:
+                - available
+                - published
         RedeployRequestBody:
             type: object
             properties:

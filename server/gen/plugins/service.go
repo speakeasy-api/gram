@@ -35,17 +35,9 @@ type Service interface {
 	RemovePluginServer(context.Context, *RemovePluginServerPayload) (err error)
 	// Replace all assignments for a plugin with the given list of principal URNs.
 	SetPluginAssignments(context.Context, *SetPluginAssignmentsPayload) (res *SetPluginAssignmentsResult, err error)
-	// Get the GitHub App installation URL and whether it is already installed.
-	GetGitHubInstallURL(context.Context, *GetGitHubInstallURLPayload) (res *GetGitHubInstallURLResult, err error)
-	// Connect the project to a GitHub App installation, creating a repo in the
-	// customer's org.
-	ConnectGitHub(context.Context, *ConnectGitHubPayload) (res *PluginGitHubConnection, err error)
-	// Disconnect the project's GitHub integration.
-	DisconnectGitHub(context.Context, *DisconnectGitHubPayload) (err error)
-	// Get the current GitHub connection for the project.
-	GetGitHubConnection(context.Context, *GetGitHubConnectionPayload) (res *PluginGitHubConnection, err error)
-	// Generate platform-specific plugin packages and push them to the connected
-	// GitHub repository.
+	// Check whether plugins have been published for this project.
+	GetPublishStatus(context.Context, *GetPublishStatusPayload) (res *PublishStatusResult, err error)
+	// Generate plugin packages and push them to a Gram-managed GitHub repository.
 	PublishPlugins(context.Context, *PublishPluginsPayload) (res *PublishPluginsResult, err error)
 	// Download a ZIP of a single plugin package for direct installation.
 
@@ -75,7 +67,7 @@ const ServiceName = "plugins"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [15]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "getGitHubInstallURL", "connectGitHub", "disconnectGitHub", "getGitHubConnection", "publishPlugins", "downloadPluginPackage"}
+var MethodNames = [12]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "getPublishStatus", "publishPlugins", "downloadPluginPackage"}
 
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
@@ -93,15 +85,6 @@ type AddPluginServerPayload struct {
 	SortOrder   int32
 }
 
-// ConnectGitHubPayload is the payload type of the plugins service
-// connectGitHub method.
-type ConnectGitHubPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
-	// GitHub App installation ID. Auto-detected if omitted.
-	InstallationID *int64
-}
-
 // CreatePluginPayload is the payload type of the plugins service createPlugin
 // method.
 type CreatePluginPayload struct {
@@ -117,13 +100,6 @@ type CreatePluginPayload struct {
 // method.
 type DeletePluginPayload struct {
 	ID               string
-	SessionToken     *string
-	ProjectSlugInput *string
-}
-
-// DisconnectGitHubPayload is the payload type of the plugins service
-// disconnectGitHub method.
-type DisconnectGitHubPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -146,32 +122,16 @@ type DownloadPluginPackageResult struct {
 	ContentDisposition string
 }
 
-// GetGitHubConnectionPayload is the payload type of the plugins service
-// getGitHubConnection method.
-type GetGitHubConnectionPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
-}
-
-// GetGitHubInstallURLPayload is the payload type of the plugins service
-// getGitHubInstallURL method.
-type GetGitHubInstallURLPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
-}
-
-// GetGitHubInstallURLResult is the result type of the plugins service
-// getGitHubInstallURL method.
-type GetGitHubInstallURLResult struct {
-	// GitHub App installation URL.
-	URL string
-	// Whether the app is already installed on at least one account.
-	Installed bool
-}
-
 // GetPluginPayload is the payload type of the plugins service getPlugin method.
 type GetPluginPayload struct {
 	ID               string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// GetPublishStatusPayload is the payload type of the plugins service
+// getPublishStatus method.
+type GetPublishStatusPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -220,20 +180,6 @@ type PluginAssignment struct {
 	CreatedAt    string
 }
 
-// PluginGitHubConnection is the result type of the plugins service
-// connectGitHub method.
-type PluginGitHubConnection struct {
-	// Unique connection identifier.
-	ID string
-	// GitHub App installation ID.
-	InstallationID int64
-	// GitHub org or user that owns the repo.
-	RepoOwner string
-	// Repository name.
-	RepoName  string
-	CreatedAt string
-}
-
 // PluginServer is the result type of the plugins service addPluginServer
 // method.
 type PluginServer struct {
@@ -272,6 +218,17 @@ type PublishPluginsResult struct {
 	RepoURL string
 	// Git commit SHA of the push.
 	CommitSha *string
+}
+
+// PublishStatusResult is the result type of the plugins service
+// getPublishStatus method.
+type PublishStatusResult struct {
+	// Whether GitHub publishing is configured on this server.
+	Available bool
+	// Whether plugins have been published for this project.
+	Published bool
+	// GitHub repository URL, if published.
+	RepoURL *string
 }
 
 // RemovePluginServerPayload is the payload type of the plugins service

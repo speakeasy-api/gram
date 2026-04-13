@@ -381,98 +381,22 @@ func BuildSetPluginAssignmentsPayload(pluginsSetPluginAssignmentsBody string, pl
 	return v, nil
 }
 
-// BuildGetGitHubInstallURLPayload builds the payload for the plugins
-// getGitHubInstallURL endpoint from CLI flags.
-func BuildGetGitHubInstallURLPayload(pluginsGetGitHubInstallURLSessionToken string, pluginsGetGitHubInstallURLProjectSlugInput string) (*plugins.GetGitHubInstallURLPayload, error) {
+// BuildGetPublishStatusPayload builds the payload for the plugins
+// getPublishStatus endpoint from CLI flags.
+func BuildGetPublishStatusPayload(pluginsGetPublishStatusSessionToken string, pluginsGetPublishStatusProjectSlugInput string) (*plugins.GetPublishStatusPayload, error) {
 	var sessionToken *string
 	{
-		if pluginsGetGitHubInstallURLSessionToken != "" {
-			sessionToken = &pluginsGetGitHubInstallURLSessionToken
+		if pluginsGetPublishStatusSessionToken != "" {
+			sessionToken = &pluginsGetPublishStatusSessionToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if pluginsGetGitHubInstallURLProjectSlugInput != "" {
-			projectSlugInput = &pluginsGetGitHubInstallURLProjectSlugInput
+		if pluginsGetPublishStatusProjectSlugInput != "" {
+			projectSlugInput = &pluginsGetPublishStatusProjectSlugInput
 		}
 	}
-	v := &plugins.GetGitHubInstallURLPayload{}
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildConnectGitHubPayload builds the payload for the plugins connectGitHub
-// endpoint from CLI flags.
-func BuildConnectGitHubPayload(pluginsConnectGitHubBody string, pluginsConnectGitHubSessionToken string, pluginsConnectGitHubProjectSlugInput string) (*plugins.ConnectGitHubPayload, error) {
-	var err error
-	var body ConnectGitHubRequestBody
-	{
-		err = json.Unmarshal([]byte(pluginsConnectGitHubBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"installation_id\": 1\n   }'")
-		}
-	}
-	var sessionToken *string
-	{
-		if pluginsConnectGitHubSessionToken != "" {
-			sessionToken = &pluginsConnectGitHubSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if pluginsConnectGitHubProjectSlugInput != "" {
-			projectSlugInput = &pluginsConnectGitHubProjectSlugInput
-		}
-	}
-	v := &plugins.ConnectGitHubPayload{
-		InstallationID: body.InstallationID,
-	}
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildDisconnectGitHubPayload builds the payload for the plugins
-// disconnectGitHub endpoint from CLI flags.
-func BuildDisconnectGitHubPayload(pluginsDisconnectGitHubSessionToken string, pluginsDisconnectGitHubProjectSlugInput string) (*plugins.DisconnectGitHubPayload, error) {
-	var sessionToken *string
-	{
-		if pluginsDisconnectGitHubSessionToken != "" {
-			sessionToken = &pluginsDisconnectGitHubSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if pluginsDisconnectGitHubProjectSlugInput != "" {
-			projectSlugInput = &pluginsDisconnectGitHubProjectSlugInput
-		}
-	}
-	v := &plugins.DisconnectGitHubPayload{}
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildGetGitHubConnectionPayload builds the payload for the plugins
-// getGitHubConnection endpoint from CLI flags.
-func BuildGetGitHubConnectionPayload(pluginsGetGitHubConnectionSessionToken string, pluginsGetGitHubConnectionProjectSlugInput string) (*plugins.GetGitHubConnectionPayload, error) {
-	var sessionToken *string
-	{
-		if pluginsGetGitHubConnectionSessionToken != "" {
-			sessionToken = &pluginsGetGitHubConnectionSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if pluginsGetGitHubConnectionProjectSlugInput != "" {
-			projectSlugInput = &pluginsGetGitHubConnectionProjectSlugInput
-		}
-	}
-	v := &plugins.GetGitHubConnectionPayload{}
+	v := &plugins.GetPublishStatusPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

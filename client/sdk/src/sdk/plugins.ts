@@ -3,14 +3,11 @@
  */
 
 import { pluginsAddPluginServer } from "../funcs/pluginsAddPluginServer.js";
-import { pluginsConnectGitHub } from "../funcs/pluginsConnectGitHub.js";
 import { pluginsCreatePlugin } from "../funcs/pluginsCreatePlugin.js";
 import { pluginsDeletePlugin } from "../funcs/pluginsDeletePlugin.js";
-import { pluginsDisconnectGitHub } from "../funcs/pluginsDisconnectGitHub.js";
 import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPackage.js";
-import { pluginsGetGitHubConnection } from "../funcs/pluginsGetGitHubConnection.js";
-import { pluginsGetGitHubInstallURL } from "../funcs/pluginsGetGitHubInstallURL.js";
 import { pluginsGetPlugin } from "../funcs/pluginsGetPlugin.js";
+import { pluginsGetPublishStatus } from "../funcs/pluginsGetPublishStatus.js";
 import { pluginsListPlugins } from "../funcs/pluginsListPlugins.js";
 import { pluginsPublishPlugins } from "../funcs/pluginsPublishPlugins.js";
 import { pluginsRemovePluginServer } from "../funcs/pluginsRemovePluginServer.js";
@@ -35,25 +32,6 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.PluginServer> {
     return unwrapAsync(pluginsAddPluginServer(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * connectGitHub plugins
-   *
-   * @remarks
-   * Connect the project to a GitHub App installation, creating a repo in the customer's org.
-   */
-  async connectGitHub(
-    request: operations.ConnectGitHubRequest,
-    security?: operations.ConnectGitHubSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.PluginGitHubConnection> {
-    return unwrapAsync(pluginsConnectGitHub(
       this,
       request,
       security,
@@ -100,25 +78,6 @@ export class Plugins extends ClientSDK {
   }
 
   /**
-   * disconnectGitHub plugins
-   *
-   * @remarks
-   * Disconnect the project's GitHub integration.
-   */
-  async disconnectGitHub(
-    request?: operations.DisconnectGitHubRequest | undefined,
-    security?: operations.DisconnectGitHubSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<void> {
-    return unwrapAsync(pluginsDisconnectGitHub(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * downloadPluginPackage plugins
    *
    * @remarks
@@ -138,44 +97,6 @@ export class Plugins extends ClientSDK {
   }
 
   /**
-   * getGitHubConnection plugins
-   *
-   * @remarks
-   * Get the current GitHub connection for the project.
-   */
-  async getGitHubConnection(
-    request?: operations.GetGitHubConnectionRequest | undefined,
-    security?: operations.GetGitHubConnectionSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.PluginGitHubConnection> {
-    return unwrapAsync(pluginsGetGitHubConnection(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * getGitHubInstallURL plugins
-   *
-   * @remarks
-   * Get the GitHub App installation URL and whether it is already installed.
-   */
-  async getGitHubInstallURL(
-    request?: operations.GetGitHubInstallURLRequest | undefined,
-    security?: operations.GetGitHubInstallURLSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.GetGitHubInstallURLResponseBody> {
-    return unwrapAsync(pluginsGetGitHubInstallURL(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * getPlugin plugins
    *
    * @remarks
@@ -187,6 +108,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Plugin> {
     return unwrapAsync(pluginsGetPlugin(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getPublishStatus plugins
+   *
+   * @remarks
+   * Check whether plugins have been published for this project.
+   */
+  async getPublishStatus(
+    request?: operations.GetPublishStatusRequest | undefined,
+    security?: operations.GetPublishStatusSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.PublishStatusResult> {
+    return unwrapAsync(pluginsGetPublishStatus(
       this,
       request,
       security,
@@ -217,7 +157,7 @@ export class Plugins extends ClientSDK {
    * publishPlugins plugins
    *
    * @remarks
-   * Generate platform-specific plugin packages and push them to the connected GitHub repository.
+   * Generate plugin packages and push them to a Gram-managed GitHub repository.
    */
   async publishPlugins(
     request?: operations.PublishPluginsRequest | undefined,

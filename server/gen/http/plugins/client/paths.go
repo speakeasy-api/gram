@@ -52,24 +52,9 @@ func SetPluginAssignmentsPluginsPath() string {
 	return "/rpc/plugins.setPluginAssignments"
 }
 
-// GetGitHubInstallURLPluginsPath returns the URL path to the plugins service getGitHubInstallURL HTTP endpoint.
-func GetGitHubInstallURLPluginsPath() string {
-	return "/rpc/plugins.getGitHubInstallURL"
-}
-
-// ConnectGitHubPluginsPath returns the URL path to the plugins service connectGitHub HTTP endpoint.
-func ConnectGitHubPluginsPath() string {
-	return "/rpc/plugins.connectGitHub"
-}
-
-// DisconnectGitHubPluginsPath returns the URL path to the plugins service disconnectGitHub HTTP endpoint.
-func DisconnectGitHubPluginsPath() string {
-	return "/rpc/plugins.disconnectGitHub"
-}
-
-// GetGitHubConnectionPluginsPath returns the URL path to the plugins service getGitHubConnection HTTP endpoint.
-func GetGitHubConnectionPluginsPath() string {
-	return "/rpc/plugins.getGitHubConnection"
+// GetPublishStatusPluginsPath returns the URL path to the plugins service getPublishStatus HTTP endpoint.
+func GetPublishStatusPluginsPath() string {
+	return "/rpc/plugins.getPublishStatus"
 }
 
 // PublishPluginsPluginsPath returns the URL path to the plugins service publishPlugins HTTP endpoint.

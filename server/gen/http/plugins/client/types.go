@@ -65,13 +65,6 @@ type SetPluginAssignmentsRequestBody struct {
 	PrincipalUrns []string `form:"principal_urns" json:"principal_urns" xml:"principal_urns"`
 }
 
-// ConnectGitHubRequestBody is the type of the "plugins" service
-// "connectGitHub" endpoint HTTP request body.
-type ConnectGitHubRequestBody struct {
-	// GitHub App installation ID. Auto-detected if omitted.
-	InstallationID *int64 `form:"installation_id,omitempty" json:"installation_id,omitempty" xml:"installation_id,omitempty"`
-}
-
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
 // endpoint HTTP response body.
 type ListPluginsResponseBody struct {
@@ -199,41 +192,15 @@ type SetPluginAssignmentsResponseBody struct {
 	Assignments []*PluginAssignmentResponseBody `form:"assignments,omitempty" json:"assignments,omitempty" xml:"assignments,omitempty"`
 }
 
-// GetGitHubInstallURLResponseBody is the type of the "plugins" service
-// "getGitHubInstallURL" endpoint HTTP response body.
-type GetGitHubInstallURLResponseBody struct {
-	// GitHub App installation URL.
-	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
-	// Whether the app is already installed on at least one account.
-	Installed *bool `form:"installed,omitempty" json:"installed,omitempty" xml:"installed,omitempty"`
-}
-
-// ConnectGitHubResponseBody is the type of the "plugins" service
-// "connectGitHub" endpoint HTTP response body.
-type ConnectGitHubResponseBody struct {
-	// Unique connection identifier.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// GitHub App installation ID.
-	InstallationID *int64 `form:"installation_id,omitempty" json:"installation_id,omitempty" xml:"installation_id,omitempty"`
-	// GitHub org or user that owns the repo.
-	RepoOwner *string `form:"repo_owner,omitempty" json:"repo_owner,omitempty" xml:"repo_owner,omitempty"`
-	// Repository name.
-	RepoName  *string `form:"repo_name,omitempty" json:"repo_name,omitempty" xml:"repo_name,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-}
-
-// GetGitHubConnectionResponseBody is the type of the "plugins" service
-// "getGitHubConnection" endpoint HTTP response body.
-type GetGitHubConnectionResponseBody struct {
-	// Unique connection identifier.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// GitHub App installation ID.
-	InstallationID *int64 `form:"installation_id,omitempty" json:"installation_id,omitempty" xml:"installation_id,omitempty"`
-	// GitHub org or user that owns the repo.
-	RepoOwner *string `form:"repo_owner,omitempty" json:"repo_owner,omitempty" xml:"repo_owner,omitempty"`
-	// Repository name.
-	RepoName  *string `form:"repo_name,omitempty" json:"repo_name,omitempty" xml:"repo_name,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+// GetPublishStatusResponseBody is the type of the "plugins" service
+// "getPublishStatus" endpoint HTTP response body.
+type GetPublishStatusResponseBody struct {
+	// Whether GitHub publishing is configured on this server.
+	Available *bool `form:"available,omitempty" json:"available,omitempty" xml:"available,omitempty"`
+	// Whether plugins have been published for this project.
+	Published *bool `form:"published,omitempty" json:"published,omitempty" xml:"published,omitempty"`
+	// GitHub repository URL, if published.
+	RepoURL *string `form:"repo_url,omitempty" json:"repo_url,omitempty" xml:"repo_url,omitempty"`
 }
 
 // PublishPluginsResponseBody is the type of the "plugins" service
@@ -1897,10 +1864,10 @@ type SetPluginAssignmentsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetGitHubInstallURLUnauthorizedResponseBody is the type of the "plugins"
-// service "getGitHubInstallURL" endpoint HTTP response body for the
+// GetPublishStatusUnauthorizedResponseBody is the type of the "plugins"
+// service "getPublishStatus" endpoint HTTP response body for the
 // "unauthorized" error.
-type GetGitHubInstallURLUnauthorizedResponseBody struct {
+type GetPublishStatusUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1916,10 +1883,9 @@ type GetGitHubInstallURLUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetGitHubInstallURLForbiddenResponseBody is the type of the "plugins"
-// service "getGitHubInstallURL" endpoint HTTP response body for the
-// "forbidden" error.
-type GetGitHubInstallURLForbiddenResponseBody struct {
+// GetPublishStatusForbiddenResponseBody is the type of the "plugins" service
+// "getPublishStatus" endpoint HTTP response body for the "forbidden" error.
+type GetPublishStatusForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1935,10 +1901,9 @@ type GetGitHubInstallURLForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetGitHubInstallURLBadRequestResponseBody is the type of the "plugins"
-// service "getGitHubInstallURL" endpoint HTTP response body for the
-// "bad_request" error.
-type GetGitHubInstallURLBadRequestResponseBody struct {
+// GetPublishStatusBadRequestResponseBody is the type of the "plugins" service
+// "getPublishStatus" endpoint HTTP response body for the "bad_request" error.
+type GetPublishStatusBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1954,9 +1919,9 @@ type GetGitHubInstallURLBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetGitHubInstallURLNotFoundResponseBody is the type of the "plugins" service
-// "getGitHubInstallURL" endpoint HTTP response body for the "not_found" error.
-type GetGitHubInstallURLNotFoundResponseBody struct {
+// GetPublishStatusNotFoundResponseBody is the type of the "plugins" service
+// "getPublishStatus" endpoint HTTP response body for the "not_found" error.
+type GetPublishStatusNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1972,9 +1937,9 @@ type GetGitHubInstallURLNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetGitHubInstallURLConflictResponseBody is the type of the "plugins" service
-// "getGitHubInstallURL" endpoint HTTP response body for the "conflict" error.
-type GetGitHubInstallURLConflictResponseBody struct {
+// GetPublishStatusConflictResponseBody is the type of the "plugins" service
+// "getPublishStatus" endpoint HTTP response body for the "conflict" error.
+type GetPublishStatusConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1990,10 +1955,10 @@ type GetGitHubInstallURLConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetGitHubInstallURLUnsupportedMediaResponseBody is the type of the "plugins"
-// service "getGitHubInstallURL" endpoint HTTP response body for the
+// GetPublishStatusUnsupportedMediaResponseBody is the type of the "plugins"
+// service "getPublishStatus" endpoint HTTP response body for the
 // "unsupported_media" error.
-type GetGitHubInstallURLUnsupportedMediaResponseBody struct {
+type GetPublishStatusUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2009,9 +1974,9 @@ type GetGitHubInstallURLUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetGitHubInstallURLInvalidResponseBody is the type of the "plugins" service
-// "getGitHubInstallURL" endpoint HTTP response body for the "invalid" error.
-type GetGitHubInstallURLInvalidResponseBody struct {
+// GetPublishStatusInvalidResponseBody is the type of the "plugins" service
+// "getPublishStatus" endpoint HTTP response body for the "invalid" error.
+type GetPublishStatusInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2027,10 +1992,10 @@ type GetGitHubInstallURLInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetGitHubInstallURLInvariantViolationResponseBody is the type of the
-// "plugins" service "getGitHubInstallURL" endpoint HTTP response body for the
+// GetPublishStatusInvariantViolationResponseBody is the type of the "plugins"
+// service "getPublishStatus" endpoint HTTP response body for the
 // "invariant_violation" error.
-type GetGitHubInstallURLInvariantViolationResponseBody struct {
+type GetPublishStatusInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2046,10 +2011,9 @@ type GetGitHubInstallURLInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetGitHubInstallURLUnexpectedResponseBody is the type of the "plugins"
-// service "getGitHubInstallURL" endpoint HTTP response body for the
-// "unexpected" error.
-type GetGitHubInstallURLUnexpectedResponseBody struct {
+// GetPublishStatusUnexpectedResponseBody is the type of the "plugins" service
+// "getPublishStatus" endpoint HTTP response body for the "unexpected" error.
+type GetPublishStatusUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2065,563 +2029,10 @@ type GetGitHubInstallURLUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetGitHubInstallURLGatewayErrorResponseBody is the type of the "plugins"
-// service "getGitHubInstallURL" endpoint HTTP response body for the
+// GetPublishStatusGatewayErrorResponseBody is the type of the "plugins"
+// service "getPublishStatus" endpoint HTTP response body for the
 // "gateway_error" error.
-type GetGitHubInstallURLGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ConnectGitHubUnauthorizedResponseBody is the type of the "plugins" service
-// "connectGitHub" endpoint HTTP response body for the "unauthorized" error.
-type ConnectGitHubUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ConnectGitHubForbiddenResponseBody is the type of the "plugins" service
-// "connectGitHub" endpoint HTTP response body for the "forbidden" error.
-type ConnectGitHubForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ConnectGitHubBadRequestResponseBody is the type of the "plugins" service
-// "connectGitHub" endpoint HTTP response body for the "bad_request" error.
-type ConnectGitHubBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ConnectGitHubNotFoundResponseBody is the type of the "plugins" service
-// "connectGitHub" endpoint HTTP response body for the "not_found" error.
-type ConnectGitHubNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ConnectGitHubConflictResponseBody is the type of the "plugins" service
-// "connectGitHub" endpoint HTTP response body for the "conflict" error.
-type ConnectGitHubConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ConnectGitHubUnsupportedMediaResponseBody is the type of the "plugins"
-// service "connectGitHub" endpoint HTTP response body for the
-// "unsupported_media" error.
-type ConnectGitHubUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ConnectGitHubInvalidResponseBody is the type of the "plugins" service
-// "connectGitHub" endpoint HTTP response body for the "invalid" error.
-type ConnectGitHubInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ConnectGitHubInvariantViolationResponseBody is the type of the "plugins"
-// service "connectGitHub" endpoint HTTP response body for the
-// "invariant_violation" error.
-type ConnectGitHubInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ConnectGitHubUnexpectedResponseBody is the type of the "plugins" service
-// "connectGitHub" endpoint HTTP response body for the "unexpected" error.
-type ConnectGitHubUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ConnectGitHubGatewayErrorResponseBody is the type of the "plugins" service
-// "connectGitHub" endpoint HTTP response body for the "gateway_error" error.
-type ConnectGitHubGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DisconnectGitHubUnauthorizedResponseBody is the type of the "plugins"
-// service "disconnectGitHub" endpoint HTTP response body for the
-// "unauthorized" error.
-type DisconnectGitHubUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DisconnectGitHubForbiddenResponseBody is the type of the "plugins" service
-// "disconnectGitHub" endpoint HTTP response body for the "forbidden" error.
-type DisconnectGitHubForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DisconnectGitHubBadRequestResponseBody is the type of the "plugins" service
-// "disconnectGitHub" endpoint HTTP response body for the "bad_request" error.
-type DisconnectGitHubBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DisconnectGitHubNotFoundResponseBody is the type of the "plugins" service
-// "disconnectGitHub" endpoint HTTP response body for the "not_found" error.
-type DisconnectGitHubNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DisconnectGitHubConflictResponseBody is the type of the "plugins" service
-// "disconnectGitHub" endpoint HTTP response body for the "conflict" error.
-type DisconnectGitHubConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DisconnectGitHubUnsupportedMediaResponseBody is the type of the "plugins"
-// service "disconnectGitHub" endpoint HTTP response body for the
-// "unsupported_media" error.
-type DisconnectGitHubUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DisconnectGitHubInvalidResponseBody is the type of the "plugins" service
-// "disconnectGitHub" endpoint HTTP response body for the "invalid" error.
-type DisconnectGitHubInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DisconnectGitHubInvariantViolationResponseBody is the type of the "plugins"
-// service "disconnectGitHub" endpoint HTTP response body for the
-// "invariant_violation" error.
-type DisconnectGitHubInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DisconnectGitHubUnexpectedResponseBody is the type of the "plugins" service
-// "disconnectGitHub" endpoint HTTP response body for the "unexpected" error.
-type DisconnectGitHubUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DisconnectGitHubGatewayErrorResponseBody is the type of the "plugins"
-// service "disconnectGitHub" endpoint HTTP response body for the
-// "gateway_error" error.
-type DisconnectGitHubGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetGitHubConnectionUnauthorizedResponseBody is the type of the "plugins"
-// service "getGitHubConnection" endpoint HTTP response body for the
-// "unauthorized" error.
-type GetGitHubConnectionUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetGitHubConnectionForbiddenResponseBody is the type of the "plugins"
-// service "getGitHubConnection" endpoint HTTP response body for the
-// "forbidden" error.
-type GetGitHubConnectionForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetGitHubConnectionBadRequestResponseBody is the type of the "plugins"
-// service "getGitHubConnection" endpoint HTTP response body for the
-// "bad_request" error.
-type GetGitHubConnectionBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetGitHubConnectionNotFoundResponseBody is the type of the "plugins" service
-// "getGitHubConnection" endpoint HTTP response body for the "not_found" error.
-type GetGitHubConnectionNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetGitHubConnectionConflictResponseBody is the type of the "plugins" service
-// "getGitHubConnection" endpoint HTTP response body for the "conflict" error.
-type GetGitHubConnectionConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetGitHubConnectionUnsupportedMediaResponseBody is the type of the "plugins"
-// service "getGitHubConnection" endpoint HTTP response body for the
-// "unsupported_media" error.
-type GetGitHubConnectionUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetGitHubConnectionInvalidResponseBody is the type of the "plugins" service
-// "getGitHubConnection" endpoint HTTP response body for the "invalid" error.
-type GetGitHubConnectionInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetGitHubConnectionInvariantViolationResponseBody is the type of the
-// "plugins" service "getGitHubConnection" endpoint HTTP response body for the
-// "invariant_violation" error.
-type GetGitHubConnectionInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetGitHubConnectionUnexpectedResponseBody is the type of the "plugins"
-// service "getGitHubConnection" endpoint HTTP response body for the
-// "unexpected" error.
-type GetGitHubConnectionUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetGitHubConnectionGatewayErrorResponseBody is the type of the "plugins"
-// service "getGitHubConnection" endpoint HTTP response body for the
-// "gateway_error" error.
-type GetGitHubConnectionGatewayErrorResponseBody struct {
+type GetPublishStatusGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3149,15 +2560,6 @@ func NewSetPluginAssignmentsRequestBody(p *plugins.SetPluginAssignmentsPayload) 
 		}
 	} else {
 		body.PrincipalUrns = []string{}
-	}
-	return body
-}
-
-// NewConnectGitHubRequestBody builds the HTTP request body from the payload of
-// the "connectGitHub" endpoint of the "plugins" service.
-func NewConnectGitHubRequestBody(p *plugins.ConnectGitHubPayload) *ConnectGitHubRequestBody {
-	body := &ConnectGitHubRequestBody{
-		InstallationID: p.InstallationID,
 	}
 	return body
 }
@@ -4691,334 +4093,21 @@ func NewSetPluginAssignmentsGatewayError(body *SetPluginAssignmentsGatewayErrorR
 	return v
 }
 
-// NewGetGitHubInstallURLResultOK builds a "plugins" service
-// "getGitHubInstallURL" endpoint result from a HTTP "OK" response.
-func NewGetGitHubInstallURLResultOK(body *GetGitHubInstallURLResponseBody) *plugins.GetGitHubInstallURLResult {
-	v := &plugins.GetGitHubInstallURLResult{
-		URL:       *body.URL,
-		Installed: *body.Installed,
+// NewGetPublishStatusPublishStatusResultOK builds a "plugins" service
+// "getPublishStatus" endpoint result from a HTTP "OK" response.
+func NewGetPublishStatusPublishStatusResultOK(body *GetPublishStatusResponseBody) *plugins.PublishStatusResult {
+	v := &plugins.PublishStatusResult{
+		Available: *body.Available,
+		Published: *body.Published,
+		RepoURL:   body.RepoURL,
 	}
 
 	return v
 }
 
-// NewGetGitHubInstallURLUnauthorized builds a plugins service
-// getGitHubInstallURL endpoint unauthorized error.
-func NewGetGitHubInstallURLUnauthorized(body *GetGitHubInstallURLUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubInstallURLForbidden builds a plugins service getGitHubInstallURL
-// endpoint forbidden error.
-func NewGetGitHubInstallURLForbidden(body *GetGitHubInstallURLForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubInstallURLBadRequest builds a plugins service
-// getGitHubInstallURL endpoint bad_request error.
-func NewGetGitHubInstallURLBadRequest(body *GetGitHubInstallURLBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubInstallURLNotFound builds a plugins service getGitHubInstallURL
-// endpoint not_found error.
-func NewGetGitHubInstallURLNotFound(body *GetGitHubInstallURLNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubInstallURLConflict builds a plugins service getGitHubInstallURL
-// endpoint conflict error.
-func NewGetGitHubInstallURLConflict(body *GetGitHubInstallURLConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubInstallURLUnsupportedMedia builds a plugins service
-// getGitHubInstallURL endpoint unsupported_media error.
-func NewGetGitHubInstallURLUnsupportedMedia(body *GetGitHubInstallURLUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubInstallURLInvalid builds a plugins service getGitHubInstallURL
-// endpoint invalid error.
-func NewGetGitHubInstallURLInvalid(body *GetGitHubInstallURLInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubInstallURLInvariantViolation builds a plugins service
-// getGitHubInstallURL endpoint invariant_violation error.
-func NewGetGitHubInstallURLInvariantViolation(body *GetGitHubInstallURLInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubInstallURLUnexpected builds a plugins service
-// getGitHubInstallURL endpoint unexpected error.
-func NewGetGitHubInstallURLUnexpected(body *GetGitHubInstallURLUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubInstallURLGatewayError builds a plugins service
-// getGitHubInstallURL endpoint gateway_error error.
-func NewGetGitHubInstallURLGatewayError(body *GetGitHubInstallURLGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewConnectGitHubPluginGitHubConnectionOK builds a "plugins" service
-// "connectGitHub" endpoint result from a HTTP "OK" response.
-func NewConnectGitHubPluginGitHubConnectionOK(body *ConnectGitHubResponseBody) *plugins.PluginGitHubConnection {
-	v := &plugins.PluginGitHubConnection{
-		ID:             *body.ID,
-		InstallationID: *body.InstallationID,
-		RepoOwner:      *body.RepoOwner,
-		RepoName:       *body.RepoName,
-		CreatedAt:      *body.CreatedAt,
-	}
-
-	return v
-}
-
-// NewConnectGitHubUnauthorized builds a plugins service connectGitHub endpoint
-// unauthorized error.
-func NewConnectGitHubUnauthorized(body *ConnectGitHubUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewConnectGitHubForbidden builds a plugins service connectGitHub endpoint
-// forbidden error.
-func NewConnectGitHubForbidden(body *ConnectGitHubForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewConnectGitHubBadRequest builds a plugins service connectGitHub endpoint
-// bad_request error.
-func NewConnectGitHubBadRequest(body *ConnectGitHubBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewConnectGitHubNotFound builds a plugins service connectGitHub endpoint
-// not_found error.
-func NewConnectGitHubNotFound(body *ConnectGitHubNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewConnectGitHubConflict builds a plugins service connectGitHub endpoint
-// conflict error.
-func NewConnectGitHubConflict(body *ConnectGitHubConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewConnectGitHubUnsupportedMedia builds a plugins service connectGitHub
-// endpoint unsupported_media error.
-func NewConnectGitHubUnsupportedMedia(body *ConnectGitHubUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewConnectGitHubInvalid builds a plugins service connectGitHub endpoint
-// invalid error.
-func NewConnectGitHubInvalid(body *ConnectGitHubInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewConnectGitHubInvariantViolation builds a plugins service connectGitHub
-// endpoint invariant_violation error.
-func NewConnectGitHubInvariantViolation(body *ConnectGitHubInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewConnectGitHubUnexpected builds a plugins service connectGitHub endpoint
-// unexpected error.
-func NewConnectGitHubUnexpected(body *ConnectGitHubUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewConnectGitHubGatewayError builds a plugins service connectGitHub endpoint
-// gateway_error error.
-func NewConnectGitHubGatewayError(body *ConnectGitHubGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewDisconnectGitHubUnauthorized builds a plugins service disconnectGitHub
+// NewGetPublishStatusUnauthorized builds a plugins service getPublishStatus
 // endpoint unauthorized error.
-func NewDisconnectGitHubUnauthorized(body *DisconnectGitHubUnauthorizedResponseBody) *goa.ServiceError {
+func NewGetPublishStatusUnauthorized(body *GetPublishStatusUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5031,9 +4120,9 @@ func NewDisconnectGitHubUnauthorized(body *DisconnectGitHubUnauthorizedResponseB
 	return v
 }
 
-// NewDisconnectGitHubForbidden builds a plugins service disconnectGitHub
+// NewGetPublishStatusForbidden builds a plugins service getPublishStatus
 // endpoint forbidden error.
-func NewDisconnectGitHubForbidden(body *DisconnectGitHubForbiddenResponseBody) *goa.ServiceError {
+func NewGetPublishStatusForbidden(body *GetPublishStatusForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5046,9 +4135,9 @@ func NewDisconnectGitHubForbidden(body *DisconnectGitHubForbiddenResponseBody) *
 	return v
 }
 
-// NewDisconnectGitHubBadRequest builds a plugins service disconnectGitHub
+// NewGetPublishStatusBadRequest builds a plugins service getPublishStatus
 // endpoint bad_request error.
-func NewDisconnectGitHubBadRequest(body *DisconnectGitHubBadRequestResponseBody) *goa.ServiceError {
+func NewGetPublishStatusBadRequest(body *GetPublishStatusBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5061,9 +4150,9 @@ func NewDisconnectGitHubBadRequest(body *DisconnectGitHubBadRequestResponseBody)
 	return v
 }
 
-// NewDisconnectGitHubNotFound builds a plugins service disconnectGitHub
+// NewGetPublishStatusNotFound builds a plugins service getPublishStatus
 // endpoint not_found error.
-func NewDisconnectGitHubNotFound(body *DisconnectGitHubNotFoundResponseBody) *goa.ServiceError {
+func NewGetPublishStatusNotFound(body *GetPublishStatusNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5076,9 +4165,9 @@ func NewDisconnectGitHubNotFound(body *DisconnectGitHubNotFoundResponseBody) *go
 	return v
 }
 
-// NewDisconnectGitHubConflict builds a plugins service disconnectGitHub
+// NewGetPublishStatusConflict builds a plugins service getPublishStatus
 // endpoint conflict error.
-func NewDisconnectGitHubConflict(body *DisconnectGitHubConflictResponseBody) *goa.ServiceError {
+func NewGetPublishStatusConflict(body *GetPublishStatusConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5091,9 +4180,9 @@ func NewDisconnectGitHubConflict(body *DisconnectGitHubConflictResponseBody) *go
 	return v
 }
 
-// NewDisconnectGitHubUnsupportedMedia builds a plugins service
-// disconnectGitHub endpoint unsupported_media error.
-func NewDisconnectGitHubUnsupportedMedia(body *DisconnectGitHubUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewGetPublishStatusUnsupportedMedia builds a plugins service
+// getPublishStatus endpoint unsupported_media error.
+func NewGetPublishStatusUnsupportedMedia(body *GetPublishStatusUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5106,9 +4195,9 @@ func NewDisconnectGitHubUnsupportedMedia(body *DisconnectGitHubUnsupportedMediaR
 	return v
 }
 
-// NewDisconnectGitHubInvalid builds a plugins service disconnectGitHub
+// NewGetPublishStatusInvalid builds a plugins service getPublishStatus
 // endpoint invalid error.
-func NewDisconnectGitHubInvalid(body *DisconnectGitHubInvalidResponseBody) *goa.ServiceError {
+func NewGetPublishStatusInvalid(body *GetPublishStatusInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5121,9 +4210,9 @@ func NewDisconnectGitHubInvalid(body *DisconnectGitHubInvalidResponseBody) *goa.
 	return v
 }
 
-// NewDisconnectGitHubInvariantViolation builds a plugins service
-// disconnectGitHub endpoint invariant_violation error.
-func NewDisconnectGitHubInvariantViolation(body *DisconnectGitHubInvariantViolationResponseBody) *goa.ServiceError {
+// NewGetPublishStatusInvariantViolation builds a plugins service
+// getPublishStatus endpoint invariant_violation error.
+func NewGetPublishStatusInvariantViolation(body *GetPublishStatusInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5136,9 +4225,9 @@ func NewDisconnectGitHubInvariantViolation(body *DisconnectGitHubInvariantViolat
 	return v
 }
 
-// NewDisconnectGitHubUnexpected builds a plugins service disconnectGitHub
+// NewGetPublishStatusUnexpected builds a plugins service getPublishStatus
 // endpoint unexpected error.
-func NewDisconnectGitHubUnexpected(body *DisconnectGitHubUnexpectedResponseBody) *goa.ServiceError {
+func NewGetPublishStatusUnexpected(body *GetPublishStatusUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5151,173 +4240,9 @@ func NewDisconnectGitHubUnexpected(body *DisconnectGitHubUnexpectedResponseBody)
 	return v
 }
 
-// NewDisconnectGitHubGatewayError builds a plugins service disconnectGitHub
+// NewGetPublishStatusGatewayError builds a plugins service getPublishStatus
 // endpoint gateway_error error.
-func NewDisconnectGitHubGatewayError(body *DisconnectGitHubGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubConnectionPluginGitHubConnectionOK builds a "plugins" service
-// "getGitHubConnection" endpoint result from a HTTP "OK" response.
-func NewGetGitHubConnectionPluginGitHubConnectionOK(body *GetGitHubConnectionResponseBody) *plugins.PluginGitHubConnection {
-	v := &plugins.PluginGitHubConnection{
-		ID:             *body.ID,
-		InstallationID: *body.InstallationID,
-		RepoOwner:      *body.RepoOwner,
-		RepoName:       *body.RepoName,
-		CreatedAt:      *body.CreatedAt,
-	}
-
-	return v
-}
-
-// NewGetGitHubConnectionUnauthorized builds a plugins service
-// getGitHubConnection endpoint unauthorized error.
-func NewGetGitHubConnectionUnauthorized(body *GetGitHubConnectionUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubConnectionForbidden builds a plugins service getGitHubConnection
-// endpoint forbidden error.
-func NewGetGitHubConnectionForbidden(body *GetGitHubConnectionForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubConnectionBadRequest builds a plugins service
-// getGitHubConnection endpoint bad_request error.
-func NewGetGitHubConnectionBadRequest(body *GetGitHubConnectionBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubConnectionNotFound builds a plugins service getGitHubConnection
-// endpoint not_found error.
-func NewGetGitHubConnectionNotFound(body *GetGitHubConnectionNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubConnectionConflict builds a plugins service getGitHubConnection
-// endpoint conflict error.
-func NewGetGitHubConnectionConflict(body *GetGitHubConnectionConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubConnectionUnsupportedMedia builds a plugins service
-// getGitHubConnection endpoint unsupported_media error.
-func NewGetGitHubConnectionUnsupportedMedia(body *GetGitHubConnectionUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubConnectionInvalid builds a plugins service getGitHubConnection
-// endpoint invalid error.
-func NewGetGitHubConnectionInvalid(body *GetGitHubConnectionInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubConnectionInvariantViolation builds a plugins service
-// getGitHubConnection endpoint invariant_violation error.
-func NewGetGitHubConnectionInvariantViolation(body *GetGitHubConnectionInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubConnectionUnexpected builds a plugins service
-// getGitHubConnection endpoint unexpected error.
-func NewGetGitHubConnectionUnexpected(body *GetGitHubConnectionUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetGitHubConnectionGatewayError builds a plugins service
-// getGitHubConnection endpoint gateway_error error.
-func NewGetGitHubConnectionGatewayError(body *GetGitHubConnectionGatewayErrorResponseBody) *goa.ServiceError {
+func NewGetPublishStatusGatewayError(body *GetPublishStatusGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5892,68 +4817,14 @@ func ValidateSetPluginAssignmentsResponseBody(body *SetPluginAssignmentsResponse
 	return
 }
 
-// ValidateGetGitHubInstallURLResponseBody runs the validations defined on
-// GetGitHubInstallURLResponseBody
-func ValidateGetGitHubInstallURLResponseBody(body *GetGitHubInstallURLResponseBody) (err error) {
-	if body.URL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+// ValidateGetPublishStatusResponseBody runs the validations defined on
+// GetPublishStatusResponseBody
+func ValidateGetPublishStatusResponseBody(body *GetPublishStatusResponseBody) (err error) {
+	if body.Available == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("available", "body"))
 	}
-	if body.Installed == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("installed", "body"))
-	}
-	return
-}
-
-// ValidateConnectGitHubResponseBody runs the validations defined on
-// ConnectGitHubResponseBody
-func ValidateConnectGitHubResponseBody(body *ConnectGitHubResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.InstallationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("installation_id", "body"))
-	}
-	if body.RepoOwner == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("repo_owner", "body"))
-	}
-	if body.RepoName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("repo_name", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	return
-}
-
-// ValidateGetGitHubConnectionResponseBody runs the validations defined on
-// GetGitHubConnectionResponseBody
-func ValidateGetGitHubConnectionResponseBody(body *GetGitHubConnectionResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.InstallationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("installation_id", "body"))
-	}
-	if body.RepoOwner == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("repo_owner", "body"))
-	}
-	if body.RepoName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("repo_name", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	if body.Published == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("published", "body"))
 	}
 	return
 }
@@ -8130,9 +7001,9 @@ func ValidateSetPluginAssignmentsGatewayErrorResponseBody(body *SetPluginAssignm
 	return
 }
 
-// ValidateGetGitHubInstallURLUnauthorizedResponseBody runs the validations
-// defined on getGitHubInstallURL_unauthorized_response_body
-func ValidateGetGitHubInstallURLUnauthorizedResponseBody(body *GetGitHubInstallURLUnauthorizedResponseBody) (err error) {
+// ValidateGetPublishStatusUnauthorizedResponseBody runs the validations
+// defined on getPublishStatus_unauthorized_response_body
+func ValidateGetPublishStatusUnauthorizedResponseBody(body *GetPublishStatusUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8154,9 +7025,9 @@ func ValidateGetGitHubInstallURLUnauthorizedResponseBody(body *GetGitHubInstallU
 	return
 }
 
-// ValidateGetGitHubInstallURLForbiddenResponseBody runs the validations
-// defined on getGitHubInstallURL_forbidden_response_body
-func ValidateGetGitHubInstallURLForbiddenResponseBody(body *GetGitHubInstallURLForbiddenResponseBody) (err error) {
+// ValidateGetPublishStatusForbiddenResponseBody runs the validations defined
+// on getPublishStatus_forbidden_response_body
+func ValidateGetPublishStatusForbiddenResponseBody(body *GetPublishStatusForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8178,9 +7049,9 @@ func ValidateGetGitHubInstallURLForbiddenResponseBody(body *GetGitHubInstallURLF
 	return
 }
 
-// ValidateGetGitHubInstallURLBadRequestResponseBody runs the validations
-// defined on getGitHubInstallURL_bad_request_response_body
-func ValidateGetGitHubInstallURLBadRequestResponseBody(body *GetGitHubInstallURLBadRequestResponseBody) (err error) {
+// ValidateGetPublishStatusBadRequestResponseBody runs the validations defined
+// on getPublishStatus_bad_request_response_body
+func ValidateGetPublishStatusBadRequestResponseBody(body *GetPublishStatusBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8202,9 +7073,9 @@ func ValidateGetGitHubInstallURLBadRequestResponseBody(body *GetGitHubInstallURL
 	return
 }
 
-// ValidateGetGitHubInstallURLNotFoundResponseBody runs the validations defined
-// on getGitHubInstallURL_not_found_response_body
-func ValidateGetGitHubInstallURLNotFoundResponseBody(body *GetGitHubInstallURLNotFoundResponseBody) (err error) {
+// ValidateGetPublishStatusNotFoundResponseBody runs the validations defined on
+// getPublishStatus_not_found_response_body
+func ValidateGetPublishStatusNotFoundResponseBody(body *GetPublishStatusNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8226,9 +7097,9 @@ func ValidateGetGitHubInstallURLNotFoundResponseBody(body *GetGitHubInstallURLNo
 	return
 }
 
-// ValidateGetGitHubInstallURLConflictResponseBody runs the validations defined
-// on getGitHubInstallURL_conflict_response_body
-func ValidateGetGitHubInstallURLConflictResponseBody(body *GetGitHubInstallURLConflictResponseBody) (err error) {
+// ValidateGetPublishStatusConflictResponseBody runs the validations defined on
+// getPublishStatus_conflict_response_body
+func ValidateGetPublishStatusConflictResponseBody(body *GetPublishStatusConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8250,9 +7121,9 @@ func ValidateGetGitHubInstallURLConflictResponseBody(body *GetGitHubInstallURLCo
 	return
 }
 
-// ValidateGetGitHubInstallURLUnsupportedMediaResponseBody runs the validations
-// defined on getGitHubInstallURL_unsupported_media_response_body
-func ValidateGetGitHubInstallURLUnsupportedMediaResponseBody(body *GetGitHubInstallURLUnsupportedMediaResponseBody) (err error) {
+// ValidateGetPublishStatusUnsupportedMediaResponseBody runs the validations
+// defined on getPublishStatus_unsupported_media_response_body
+func ValidateGetPublishStatusUnsupportedMediaResponseBody(body *GetPublishStatusUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8274,9 +7145,9 @@ func ValidateGetGitHubInstallURLUnsupportedMediaResponseBody(body *GetGitHubInst
 	return
 }
 
-// ValidateGetGitHubInstallURLInvalidResponseBody runs the validations defined
-// on getGitHubInstallURL_invalid_response_body
-func ValidateGetGitHubInstallURLInvalidResponseBody(body *GetGitHubInstallURLInvalidResponseBody) (err error) {
+// ValidateGetPublishStatusInvalidResponseBody runs the validations defined on
+// getPublishStatus_invalid_response_body
+func ValidateGetPublishStatusInvalidResponseBody(body *GetPublishStatusInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8298,9 +7169,9 @@ func ValidateGetGitHubInstallURLInvalidResponseBody(body *GetGitHubInstallURLInv
 	return
 }
 
-// ValidateGetGitHubInstallURLInvariantViolationResponseBody runs the
-// validations defined on getGitHubInstallURL_invariant_violation_response_body
-func ValidateGetGitHubInstallURLInvariantViolationResponseBody(body *GetGitHubInstallURLInvariantViolationResponseBody) (err error) {
+// ValidateGetPublishStatusInvariantViolationResponseBody runs the validations
+// defined on getPublishStatus_invariant_violation_response_body
+func ValidateGetPublishStatusInvariantViolationResponseBody(body *GetPublishStatusInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8322,9 +7193,9 @@ func ValidateGetGitHubInstallURLInvariantViolationResponseBody(body *GetGitHubIn
 	return
 }
 
-// ValidateGetGitHubInstallURLUnexpectedResponseBody runs the validations
-// defined on getGitHubInstallURL_unexpected_response_body
-func ValidateGetGitHubInstallURLUnexpectedResponseBody(body *GetGitHubInstallURLUnexpectedResponseBody) (err error) {
+// ValidateGetPublishStatusUnexpectedResponseBody runs the validations defined
+// on getPublishStatus_unexpected_response_body
+func ValidateGetPublishStatusUnexpectedResponseBody(body *GetPublishStatusUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8346,729 +7217,9 @@ func ValidateGetGitHubInstallURLUnexpectedResponseBody(body *GetGitHubInstallURL
 	return
 }
 
-// ValidateGetGitHubInstallURLGatewayErrorResponseBody runs the validations
-// defined on getGitHubInstallURL_gateway_error_response_body
-func ValidateGetGitHubInstallURLGatewayErrorResponseBody(body *GetGitHubInstallURLGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateConnectGitHubUnauthorizedResponseBody runs the validations defined
-// on connectGitHub_unauthorized_response_body
-func ValidateConnectGitHubUnauthorizedResponseBody(body *ConnectGitHubUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateConnectGitHubForbiddenResponseBody runs the validations defined on
-// connectGitHub_forbidden_response_body
-func ValidateConnectGitHubForbiddenResponseBody(body *ConnectGitHubForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateConnectGitHubBadRequestResponseBody runs the validations defined on
-// connectGitHub_bad_request_response_body
-func ValidateConnectGitHubBadRequestResponseBody(body *ConnectGitHubBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateConnectGitHubNotFoundResponseBody runs the validations defined on
-// connectGitHub_not_found_response_body
-func ValidateConnectGitHubNotFoundResponseBody(body *ConnectGitHubNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateConnectGitHubConflictResponseBody runs the validations defined on
-// connectGitHub_conflict_response_body
-func ValidateConnectGitHubConflictResponseBody(body *ConnectGitHubConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateConnectGitHubUnsupportedMediaResponseBody runs the validations
-// defined on connectGitHub_unsupported_media_response_body
-func ValidateConnectGitHubUnsupportedMediaResponseBody(body *ConnectGitHubUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateConnectGitHubInvalidResponseBody runs the validations defined on
-// connectGitHub_invalid_response_body
-func ValidateConnectGitHubInvalidResponseBody(body *ConnectGitHubInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateConnectGitHubInvariantViolationResponseBody runs the validations
-// defined on connectGitHub_invariant_violation_response_body
-func ValidateConnectGitHubInvariantViolationResponseBody(body *ConnectGitHubInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateConnectGitHubUnexpectedResponseBody runs the validations defined on
-// connectGitHub_unexpected_response_body
-func ValidateConnectGitHubUnexpectedResponseBody(body *ConnectGitHubUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateConnectGitHubGatewayErrorResponseBody runs the validations defined
-// on connectGitHub_gateway_error_response_body
-func ValidateConnectGitHubGatewayErrorResponseBody(body *ConnectGitHubGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDisconnectGitHubUnauthorizedResponseBody runs the validations
-// defined on disconnectGitHub_unauthorized_response_body
-func ValidateDisconnectGitHubUnauthorizedResponseBody(body *DisconnectGitHubUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDisconnectGitHubForbiddenResponseBody runs the validations defined
-// on disconnectGitHub_forbidden_response_body
-func ValidateDisconnectGitHubForbiddenResponseBody(body *DisconnectGitHubForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDisconnectGitHubBadRequestResponseBody runs the validations defined
-// on disconnectGitHub_bad_request_response_body
-func ValidateDisconnectGitHubBadRequestResponseBody(body *DisconnectGitHubBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDisconnectGitHubNotFoundResponseBody runs the validations defined on
-// disconnectGitHub_not_found_response_body
-func ValidateDisconnectGitHubNotFoundResponseBody(body *DisconnectGitHubNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDisconnectGitHubConflictResponseBody runs the validations defined on
-// disconnectGitHub_conflict_response_body
-func ValidateDisconnectGitHubConflictResponseBody(body *DisconnectGitHubConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDisconnectGitHubUnsupportedMediaResponseBody runs the validations
-// defined on disconnectGitHub_unsupported_media_response_body
-func ValidateDisconnectGitHubUnsupportedMediaResponseBody(body *DisconnectGitHubUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDisconnectGitHubInvalidResponseBody runs the validations defined on
-// disconnectGitHub_invalid_response_body
-func ValidateDisconnectGitHubInvalidResponseBody(body *DisconnectGitHubInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDisconnectGitHubInvariantViolationResponseBody runs the validations
-// defined on disconnectGitHub_invariant_violation_response_body
-func ValidateDisconnectGitHubInvariantViolationResponseBody(body *DisconnectGitHubInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDisconnectGitHubUnexpectedResponseBody runs the validations defined
-// on disconnectGitHub_unexpected_response_body
-func ValidateDisconnectGitHubUnexpectedResponseBody(body *DisconnectGitHubUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDisconnectGitHubGatewayErrorResponseBody runs the validations
-// defined on disconnectGitHub_gateway_error_response_body
-func ValidateDisconnectGitHubGatewayErrorResponseBody(body *DisconnectGitHubGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetGitHubConnectionUnauthorizedResponseBody runs the validations
-// defined on getGitHubConnection_unauthorized_response_body
-func ValidateGetGitHubConnectionUnauthorizedResponseBody(body *GetGitHubConnectionUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetGitHubConnectionForbiddenResponseBody runs the validations
-// defined on getGitHubConnection_forbidden_response_body
-func ValidateGetGitHubConnectionForbiddenResponseBody(body *GetGitHubConnectionForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetGitHubConnectionBadRequestResponseBody runs the validations
-// defined on getGitHubConnection_bad_request_response_body
-func ValidateGetGitHubConnectionBadRequestResponseBody(body *GetGitHubConnectionBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetGitHubConnectionNotFoundResponseBody runs the validations defined
-// on getGitHubConnection_not_found_response_body
-func ValidateGetGitHubConnectionNotFoundResponseBody(body *GetGitHubConnectionNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetGitHubConnectionConflictResponseBody runs the validations defined
-// on getGitHubConnection_conflict_response_body
-func ValidateGetGitHubConnectionConflictResponseBody(body *GetGitHubConnectionConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetGitHubConnectionUnsupportedMediaResponseBody runs the validations
-// defined on getGitHubConnection_unsupported_media_response_body
-func ValidateGetGitHubConnectionUnsupportedMediaResponseBody(body *GetGitHubConnectionUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetGitHubConnectionInvalidResponseBody runs the validations defined
-// on getGitHubConnection_invalid_response_body
-func ValidateGetGitHubConnectionInvalidResponseBody(body *GetGitHubConnectionInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetGitHubConnectionInvariantViolationResponseBody runs the
-// validations defined on getGitHubConnection_invariant_violation_response_body
-func ValidateGetGitHubConnectionInvariantViolationResponseBody(body *GetGitHubConnectionInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetGitHubConnectionUnexpectedResponseBody runs the validations
-// defined on getGitHubConnection_unexpected_response_body
-func ValidateGetGitHubConnectionUnexpectedResponseBody(body *GetGitHubConnectionUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetGitHubConnectionGatewayErrorResponseBody runs the validations
-// defined on getGitHubConnection_gateway_error_response_body
-func ValidateGetGitHubConnectionGatewayErrorResponseBody(body *GetGitHubConnectionGatewayErrorResponseBody) (err error) {
+// ValidateGetPublishStatusGatewayErrorResponseBody runs the validations
+// defined on getPublishStatus_gateway_error_response_body
+func ValidateGetPublishStatusGatewayErrorResponseBody(body *GetPublishStatusGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

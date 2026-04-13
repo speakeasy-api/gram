@@ -8,24 +8,23 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { pluginsGetGitHubInstallURL } from "../funcs/pluginsGetGitHubInstallURL.js";
+import { pluginsGetPublishStatus } from "../funcs/pluginsGetPublishStatus.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GitHubInstallURLQueryData =
-  components.GetGitHubInstallURLResponseBody;
+export type PublishStatusQueryData = components.PublishStatusResult;
 
-export function prefetchGitHubInstallURL(
+export function prefetchPublishStatus(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetGitHubInstallURLRequest | undefined,
-  security?: operations.GetGitHubInstallURLSecurity | undefined,
+  request?: operations.GetPublishStatusRequest | undefined,
+  security?: operations.GetPublishStatusSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildGitHubInstallURLQuery(
+    ...buildPublishStatusQuery(
       client$,
       request,
       security,
@@ -34,25 +33,23 @@ export function prefetchGitHubInstallURL(
   });
 }
 
-export function buildGitHubInstallURLQuery(
+export function buildPublishStatusQuery(
   client$: GramCore,
-  request?: operations.GetGitHubInstallURLRequest | undefined,
-  security?: operations.GetGitHubInstallURLSecurity | undefined,
+  request?: operations.GetPublishStatusRequest | undefined,
+  security?: operations.GetPublishStatusSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<GitHubInstallURLQueryData>;
+  queryFn: (context: QueryFunctionContext) => Promise<PublishStatusQueryData>;
 } {
   return {
-    queryKey: queryKeyGitHubInstallURL({
+    queryKey: queryKeyPublishStatus({
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
     }),
-    queryFn: async function gitHubInstallURLQueryFn(
+    queryFn: async function publishStatusQueryFn(
       ctx,
-    ): Promise<GitHubInstallURLQueryData> {
+    ): Promise<PublishStatusQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -64,7 +61,7 @@ export function buildGitHubInstallURLQuery(
         signal: sig,
       };
 
-      return unwrapAsync(pluginsGetGitHubInstallURL(
+      return unwrapAsync(pluginsGetPublishStatus(
         client$,
         request,
         security,
@@ -74,11 +71,11 @@ export function buildGitHubInstallURLQuery(
   };
 }
 
-export function queryKeyGitHubInstallURL(
+export function queryKeyPublishStatus(
   parameters: {
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "plugins", "getGitHubInstallURL", parameters];
+  return ["@gram/client", "plugins", "getPublishStatus", parameters];
 }

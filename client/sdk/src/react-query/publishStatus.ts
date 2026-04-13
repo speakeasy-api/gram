@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildGitHubInstallURLQuery,
-  GitHubInstallURLQueryData,
-  prefetchGitHubInstallURL,
-  queryKeyGitHubInstallURL,
-} from "./gitHubInstallURL.core.js";
+  buildPublishStatusQuery,
+  prefetchPublishStatus,
+  PublishStatusQueryData,
+  queryKeyPublishStatus,
+} from "./publishStatus.core.js";
 export {
-  buildGitHubInstallURLQuery,
-  type GitHubInstallURLQueryData,
-  prefetchGitHubInstallURL,
-  queryKeyGitHubInstallURL,
+  buildPublishStatusQuery,
+  prefetchPublishStatus,
+  type PublishStatusQueryData,
+  queryKeyPublishStatus,
 };
 
-export type GitHubInstallURLQueryError =
+export type PublishStatusQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,22 +53,19 @@ export type GitHubInstallURLQueryError =
   | SDKValidationError;
 
 /**
- * getGitHubInstallURL plugins
+ * getPublishStatus plugins
  *
  * @remarks
- * Get the GitHub App installation URL and whether it is already installed.
+ * Check whether plugins have been published for this project.
  */
-export function useGitHubInstallURL(
-  request?: operations.GetGitHubInstallURLRequest | undefined,
-  security?: operations.GetGitHubInstallURLSecurity | undefined,
-  options?: QueryHookOptions<
-    GitHubInstallURLQueryData,
-    GitHubInstallURLQueryError
-  >,
-): UseQueryResult<GitHubInstallURLQueryData, GitHubInstallURLQueryError> {
+export function usePublishStatus(
+  request?: operations.GetPublishStatusRequest | undefined,
+  security?: operations.GetPublishStatusSecurity | undefined,
+  options?: QueryHookOptions<PublishStatusQueryData, PublishStatusQueryError>,
+): UseQueryResult<PublishStatusQueryData, PublishStatusQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildGitHubInstallURLQuery(
+    ...buildPublishStatusQuery(
       client,
       request,
       security,
@@ -79,25 +76,22 @@ export function useGitHubInstallURL(
 }
 
 /**
- * getGitHubInstallURL plugins
+ * getPublishStatus plugins
  *
  * @remarks
- * Get the GitHub App installation URL and whether it is already installed.
+ * Check whether plugins have been published for this project.
  */
-export function useGitHubInstallURLSuspense(
-  request?: operations.GetGitHubInstallURLRequest | undefined,
-  security?: operations.GetGitHubInstallURLSecurity | undefined,
+export function usePublishStatusSuspense(
+  request?: operations.GetPublishStatusRequest | undefined,
+  security?: operations.GetPublishStatusSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    GitHubInstallURLQueryData,
-    GitHubInstallURLQueryError
+    PublishStatusQueryData,
+    PublishStatusQueryError
   >,
-): UseSuspenseQueryResult<
-  GitHubInstallURLQueryData,
-  GitHubInstallURLQueryError
-> {
+): UseSuspenseQueryResult<PublishStatusQueryData, PublishStatusQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildGitHubInstallURLQuery(
+    ...buildPublishStatusQuery(
       client,
       request,
       security,
@@ -107,7 +101,7 @@ export function useGitHubInstallURLSuspense(
   });
 }
 
-export function setGitHubInstallURLData(
+export function setPublishStatusData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -115,14 +109,14 @@ export function setGitHubInstallURLData(
       gramProject?: string | undefined;
     },
   ],
-  data: GitHubInstallURLQueryData,
-): GitHubInstallURLQueryData | undefined {
-  const key = queryKeyGitHubInstallURL(...queryKeyBase);
+  data: PublishStatusQueryData,
+): PublishStatusQueryData | undefined {
+  const key = queryKeyPublishStatus(...queryKeyBase);
 
-  return client.setQueryData<GitHubInstallURLQueryData>(key, data);
+  return client.setQueryData<PublishStatusQueryData>(key, data);
 }
 
-export function invalidateGitHubInstallURL(
+export function invalidatePublishStatus(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -134,21 +128,16 @@ export function invalidateGitHubInstallURL(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/client",
-      "plugins",
-      "getGitHubInstallURL",
-      ...queryKeyBase,
-    ],
+    queryKey: ["@gram/client", "plugins", "getPublishStatus", ...queryKeyBase],
   });
 }
 
-export function invalidateAllGitHubInstallURL(
+export function invalidateAllPublishStatus(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "plugins", "getGitHubInstallURL"],
+    queryKey: ["@gram/client", "plugins", "getPublishStatus"],
   });
 }
