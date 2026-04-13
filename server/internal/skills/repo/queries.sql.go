@@ -127,6 +127,7 @@ WITH skill_lookup AS (
   FROM skills
   WHERE skills.id = $12
     AND skills.project_id = $13
+    AND skills.deleted IS FALSE
 )
 INSERT INTO skill_versions (
     skill_id
@@ -491,6 +492,7 @@ SET
   , updated_at = clock_timestamp()
 WHERE skills.project_id = $2
   AND skills.id = $3
+  AND skills.deleted IS FALSE
   AND EXISTS (
     SELECT 1
     FROM skill_versions sv
@@ -540,6 +542,7 @@ SET
   , updated_at = clock_timestamp()
 WHERE project_id = $7
   AND id = $8
+  AND deleted IS FALSE
 RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, state, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
 `
 
