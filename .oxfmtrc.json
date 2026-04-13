@@ -12,6 +12,7 @@
     "/client/dashboard/src/lib/constants.ts",
     "/client/sdk/**",
     "/elements/docs/**",
+    "/elements/examples/tanstack-start/src/routeTree.gen.ts",
     "/server/**/fixtures/**",
     "/server/gen/**"
   ],
