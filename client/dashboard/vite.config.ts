@@ -95,6 +95,7 @@ export default defineConfig(({ command }) => {
             "/oauth-external": serverUrl,
             "/.well-known": serverUrl,
             "/v1": serverUrl,
+            "/corpus": serverUrl,
           }
         : undefined,
     },
