@@ -34,6 +34,9 @@ func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker
 }
 
 func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
+	if m == nil {
+		return ctx, nil
+	}
 	if grants, ok := GrantsFromContext(ctx); ok && grants != nil {
 		return ctx, nil
 	}
@@ -66,6 +69,9 @@ func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
 }
 
 func (m *Manager) Require(ctx context.Context, checks ...Check) error {
+	if m == nil {
+		return nil
+	}
 	enforce, err := m.shouldEnforce(ctx)
 	if err != nil {
 		return err
@@ -96,6 +102,9 @@ func (m *Manager) Require(ctx context.Context, checks ...Check) error {
 }
 
 func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
+	if m == nil {
+		return nil
+	}
 	enforce, err := m.shouldEnforce(ctx)
 	if err != nil {
 		return err
