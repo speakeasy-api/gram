@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments/events"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -27,10 +28,12 @@ type ToolExtractor struct {
 	db             *pgxpool.Pool
 	registryClient *RegistryClient
 	repo           *repo.Queries
+	guardianPolicy *guardian.Policy
 }
 
 func NewToolExtractor(
 	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	registryClient *RegistryClient,
 ) *ToolExtractor {
@@ -39,6 +42,7 @@ func NewToolExtractor(
 		db:             db,
 		registryClient: registryClient,
 		repo:           repo.New(db),
+		guardianPolicy: guardianPolicy,
 	}
 }
 
@@ -106,14 +110,14 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 
 	var requiresOAuth bool
 	var oauthDiscovery *OAuthDiscoveryResult
-	mcpClient, err := NewClient(ctx, internalLogger, serverDetails.RemoteURL, serverDetails.TransportType, nil)
+	mcpClient, err := NewClient(ctx, internalLogger, te.guardianPolicy, serverDetails.RemoteURL, serverDetails.TransportType, nil)
 	if authErr := (*AuthRejectedError)(nil); errors.As(err, &authErr) {
 		logger.InfoContext(ctx, fmt.Sprintf("[%s] external MCP server rejected auth, attempting OAuth discovery", task.MCP.Name),
 			attr.SlogURL(serverDetails.RemoteURL),
 			attr.SlogHTTPResponseStatusCode(authErr.StatusCode),
 		)
 
-		oauthDiscovery, err = DiscoverOAuthMetadata(ctx, internalLogger, authErr.WWWAuthenticate, serverDetails.RemoteURL)
+		oauthDiscovery, err = DiscoverOAuthMetadata(ctx, internalLogger, te.guardianPolicy, authErr.WWWAuthenticate, serverDetails.RemoteURL)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "[%s] error discovering OAuth metadata", task.MCP.Name).Log(ctx, logger)
 		}

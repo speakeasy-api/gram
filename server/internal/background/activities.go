@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -61,6 +62,7 @@ func NewActivities(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	encryption *encryption.Client,
 	features feature.Provider,
@@ -93,7 +95,7 @@ func NewActivities(
 		getAllOrganizations:           activities.NewGetAllOrganizations(logger, db),
 		getSlackProjectContext:        activities.NewSlackProjectContextActivity(logger, db, slackClient),
 		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),
-		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, db, features, assetStorage, billingRepo, mcpRegistryClient),
+		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
 		provisionFunctionsAccess:      activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:         activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                   activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 3),

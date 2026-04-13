@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -41,6 +42,7 @@ type toolListEntry struct {
 func handleToolsList(
 	ctx context.Context,
 	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	env toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
@@ -85,7 +87,7 @@ func handleToolsList(
 	case ToolModeStatic:
 		fallthrough
 	default:
-		tools, err = buildToolListEntries(ctx, logger, db, env, payload, toolset)
+		tools, err = buildToolListEntries(ctx, logger, guardianPolicy, db, env, payload, toolset)
 		if err != nil {
 			return nil, err
 		}
@@ -109,6 +111,7 @@ func handleToolsList(
 func buildToolListEntries(
 	ctx context.Context,
 	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	envLoader toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
@@ -134,7 +137,7 @@ func buildToolListEntries(
 
 	var tools []*toolListEntry
 
-	executor := externalmcp.BuildProxyToolExecutor(logger, toolset.Tools)
+	executor := externalmcp.BuildProxyToolExecutor(logger, guardianPolicy, toolset.Tools)
 	if executor.HasEntries() {
 		resolve := func(ctx context.Context, toolURN urn.Tool, projectID uuid.UUID) (*externalmcp.ToolCallPlan, error) {
 			plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, toolURN, projectID)

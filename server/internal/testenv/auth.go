@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 
 	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -28,7 +30,7 @@ import (
 // NewTestManager creates a sessions.Manager backed by a mock IDP httptest.Server.
 // This replaces the old NewUnsafeManager pattern - tests now exercise the real
 // auth code path (Speakeasy IDP HTTP calls) against a local mock.
-func NewTestManager(t *testing.T, logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, billingRepo billing.Repository) *sessions.Manager {
+func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, billingRepo billing.Repository) *sessions.Manager {
 	t.Helper()
 
 	cfg := mockidp.NewConfig()
@@ -42,7 +44,8 @@ func NewTestManager(t *testing.T, logger *slog.Logger, db *pgxpool.Pool, redisCl
 
 	return sessions.NewManager(
 		logger,
-		NewTracerProvider(t),
+		tracerProvider,
+		guardianPolicy,
 		db,
 		redisClient,
 		suffix,

@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -34,6 +35,7 @@ import (
 )
 
 type WorkerOptions struct {
+	GuardianPolicy      *guardian.Policy
 	DB                  *pgxpool.Pool
 	EncryptionClient    *encryption.Client
 	FeatureProvider     feature.Provider
@@ -56,6 +58,7 @@ type WorkerOptions struct {
 }
 
 func ForDeploymentProcessing(
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	f feature.Provider,
 	assetStorage assets.BlobStore,
@@ -65,6 +68,7 @@ func ForDeploymentProcessing(
 ) *WorkerOptions {
 	return &WorkerOptions{
 		DB:                  db,
+		GuardianPolicy:      guardianPolicy,
 		EncryptionClient:    enc,
 		FeatureProvider:     f,
 		AssetStorage:        assetStorage,
@@ -94,6 +98,7 @@ func NewTemporalWorker(
 	options ...*WorkerOptions,
 ) worker.Worker {
 	opts := &WorkerOptions{
+		GuardianPolicy:      nil,
 		DB:                  nil,
 		EncryptionClient:    nil,
 		FeatureProvider:     nil,
@@ -117,6 +122,7 @@ func NewTemporalWorker(
 
 	for _, o := range options {
 		opts = &WorkerOptions{
+			GuardianPolicy:      conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
 			DB:                  conv.Default(o.DB, opts.DB),
 			EncryptionClient:    conv.Default(o.EncryptionClient, opts.EncryptionClient),
 			FeatureProvider:     conv.Default(o.FeatureProvider, opts.FeatureProvider),
@@ -151,6 +157,7 @@ func NewTemporalWorker(
 		logger,
 		tracerProvider,
 		meterProvider,
+		opts.GuardianPolicy,
 		opts.DB,
 		opts.EncryptionClient,
 		opts.FeatureProvider,

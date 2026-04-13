@@ -29,6 +29,7 @@ import (
 	externalmcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -42,6 +43,7 @@ type ProcessDeployment struct {
 	logger         *slog.Logger
 	tracer         trace.Tracer
 	tracerProvider trace.TracerProvider
+	guardianPolicy *guardian.Policy
 	metrics        *metrics
 	db             *pgxpool.Pool
 	features       feature.Provider
@@ -60,6 +62,7 @@ func NewProcessDeployment(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	features feature.Provider,
 	assetStorage assets.BlobStore,
@@ -71,6 +74,7 @@ func NewProcessDeployment(
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities"),
 		tracerProvider: tracerProvider,
 		metrics:        newMetrics(newMeter(meterProvider), logger),
+		guardianPolicy: guardianPolicy,
 		db:             db,
 		features:       features,
 		repo:           repo.New(db),
@@ -429,7 +433,7 @@ func (p *ProcessDeployment) doExternalMCPs(
 
 	for _, mcp := range externalMCPs {
 		pool.Go(func() error {
-			processor := externalmcp.NewToolExtractor(p.logger, p.db, p.registryClient)
+			processor := externalmcp.NewToolExtractor(p.logger, p.guardianPolicy, p.db, p.registryClient)
 
 			return processor.Do(ctx, externalmcp.ToolExtractorTask{
 				OrgSlug:      orgSlug,

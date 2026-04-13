@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -57,6 +58,7 @@ func handleToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
 	metrics *metrics,
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	env toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
@@ -117,7 +119,7 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").Log(ctx, logger)
 	}
 
-	executor := externalmcp.BuildProxyToolExecutor(logger, toolset.Tools)
+	executor := externalmcp.BuildProxyToolExecutor(logger, guardianPolicy, toolset.Tools)
 
 	var plan *gateway.ToolCallPlan
 	var toolURN urn.Tool
