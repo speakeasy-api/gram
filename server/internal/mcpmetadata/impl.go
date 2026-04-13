@@ -760,11 +760,13 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 				return nil
 			}
 			// Fallback if serverURL is nil
+			s.logger.InfoContext(ctx, "serving not found page: serverURL is nil", attr.SlogToolsetMCPSlug(mcpSlug))
 			return s.serveNotFoundPage(w, mcpSlug)
 		}
 
 		// Ought one to check if the user has access to the organization rather than just if the org is active?
 		if !authOk || authCtx.ActiveOrganizationID != toolset.OrganizationID {
+			s.logger.InfoContext(ctx, "serving not found page: wrong org or no auth", attr.SlogToolsetMCPSlug(mcpSlug))
 			return s.serveNotFoundPage(w, mcpSlug)
 		}
 	}
