@@ -68,6 +68,7 @@ type Service struct {
 	logger              *slog.Logger
 	tracer              trace.Tracer
 	metrics             *metrics
+	guardianPolicy      *guardian.Policy
 	db                  *pgxpool.Pool
 	authRepo            *auth_repo.Queries
 	toolsetsRepo        *toolsets_repo.Queries
@@ -84,7 +85,7 @@ type Service struct {
 	billingRepository   billing.Repository
 	toolsetCache        cache.TypedCacheObject[mv.ToolsetBaseContents]
 	features            *productfeatures.Client
-	telemetryService    *tm.Service
+	telemLogger         *tm.Logger
 	vectorToolStore     *rag.ToolsetVectorStore
 	temporal            *temporal.Environment
 	sessions            *sessions.Manager
@@ -131,6 +132,7 @@ func NewService(
 	oauthService OAuthService,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
+	telemLogger *tm.Logger,
 	telemSvc *tm.Service,
 	features *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
@@ -147,6 +149,7 @@ func NewService(
 		logger:          logger,
 		tracer:          tracer,
 		metrics:         newMetrics(meter, logger),
+		guardianPolicy:  guardianPolicy,
 		db:              db,
 		authRepo:        auth_repo.New(db),
 		toolsetsRepo:    toolsets_repo.New(db),
@@ -174,7 +177,7 @@ func NewService(
 		billingTracker:      billingTracker,
 		billingRepository:   billingRepository,
 		toolsetCache:        cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
-		telemetryService:    telemSvc,
+		telemLogger:         telemLogger,
 		features:            features,
 		vectorToolStore:     vectorToolStore,
 		temporal:            temporal,
@@ -850,9 +853,9 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
+		return handleToolsList(ctx, s.logger, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemetryService, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
@@ -860,7 +863,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "resources/list":
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "resources/read":
-		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemetryService)
+		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger)
 	default:
 		return nil, &rpcError{
 			ID:      req.ID,
@@ -1011,6 +1014,7 @@ func (s *Service) HandleToolsList(
 	result, err := handleToolsList(
 		ctx,
 		s.logger,
+		s.guardianPolicy,
 		s.db,
 		s.env,
 		payload,
@@ -1079,6 +1083,7 @@ func (s *Service) HandleToolsCall(
 		ctx,
 		s.logger,
 		s.metrics,
+		s.guardianPolicy,
 		s.db,
 		s.env,
 		payload,
@@ -1087,7 +1092,7 @@ func (s *Service) HandleToolsCall(
 		s.billingTracker,
 		s.billingRepository,
 		&s.toolsetCache,
-		s.telemetryService,
+		s.telemLogger,
 		s.vectorToolStore,
 		s.temporal,
 		s.mcpMetadataRepo,

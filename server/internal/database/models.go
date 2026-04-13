@@ -784,6 +784,32 @@ type PromptTemplate struct {
 	Deleted       bool
 }
 
+type RemoteMcpServer struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	TransportType string
+	Url           string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
+}
+
+type RemoteMcpServerHeader struct {
+	ID                     uuid.UUID
+	RemoteMcpServerID      uuid.UUID
+	Name                   string
+	Description            pgtype.Text
+	IsRequired             bool
+	IsSecret               bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
+
 type SlackApp struct {
 	CreatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
@@ -931,6 +957,24 @@ type ToolsetVersion struct {
 	UpdatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	Deleted       bool
+}
+
+type TriggerInstance struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	DefinitionSlug string
+	Name           string
+	EnvironmentID  uuid.NullUUID
+	TargetKind     string
+	TargetRef      string
+	TargetDisplay  string
+	ConfigJson     []byte
+	Status         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type User struct {

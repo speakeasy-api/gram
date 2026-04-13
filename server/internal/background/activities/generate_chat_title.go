@@ -41,10 +41,11 @@ type GenerateChatTitleArgs struct {
 const (
 	defaultChatTitle       = "New Chat"
 	DefaultClaudeChatTitle = "Claude Code Session"
+	DefaultCursorChatTitle = "Cursor Session"
 )
 
 func isDefaultChatTitle(title string) bool {
-	return title == defaultChatTitle || title == DefaultClaudeChatTitle
+	return title == defaultChatTitle || title == DefaultClaudeChatTitle || title == DefaultCursorChatTitle
 }
 
 func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) error {

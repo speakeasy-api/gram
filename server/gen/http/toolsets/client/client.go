@@ -61,6 +61,10 @@ type Client struct {
 	// addOAuthProxyServer endpoint.
 	AddOAuthProxyServerDoer goahttp.Doer
 
+	// UpdateOAuthProxyServer Doer is the HTTP client used to make requests to the
+	// updateOAuthProxyServer endpoint.
+	UpdateOAuthProxyServerDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -92,6 +96,7 @@ func NewClient(
 		AddExternalOAuthServerDoer:   doer,
 		RemoveOAuthServerDoer:        doer,
 		AddOAuthProxyServerDoer:      doer,
+		UpdateOAuthProxyServerDoer:   doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -359,6 +364,30 @@ func (c *Client) AddOAuthProxyServer() goa.Endpoint {
 		resp, err := c.AddOAuthProxyServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "addOAuthProxyServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateOAuthProxyServer returns an endpoint that makes HTTP requests to the
+// toolsets service updateOAuthProxyServer server.
+func (c *Client) UpdateOAuthProxyServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateOAuthProxyServerRequest(c.encoder)
+		decodeResponse = DecodeUpdateOAuthProxyServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateOAuthProxyServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateOAuthProxyServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "updateOAuthProxyServer", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -195,6 +195,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/triggers/repo/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/triggers/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/tools/queries.sql
     engine: postgresql
     gen:
@@ -377,16 +387,6 @@ sql:
       go:
         package: "repo"
         out: "../internal/rag/repo"
-        sql_package: "pgx/v5"
-        omit_unused_structs: true
-
-  - schema: schema.sql
-    queries: ../internal/agentworkflows/agents/queries.sql
-    engine: postgresql
-    gen:
-      go:
-        package: "repo"
-        out: "../internal/agentworkflows/agents/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

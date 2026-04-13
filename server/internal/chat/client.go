@@ -6,16 +6,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
-func NewBaseChatClient(logger *slog.Logger,
+func NewBaseChatClient(
+	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	openRouter openrouter.Provisioner,
 	temporalEnv *temporal.Environment,
-	telemSvc *telemetry.Service,
+	telemLogger *telemetry.Logger,
 	assetStorage assets.BlobStore,
 	tracking billing.Tracker,
 	fallbackTracker FallbackModelUsageTracker,
@@ -42,11 +45,12 @@ func NewBaseChatClient(logger *slog.Logger,
 	// Create UnifiedClient with strategies (after telemSvc is available)
 	return openrouter.NewUnifiedClient(
 		logger,
+		guardianPolicy,
 		openRouter,
 		messageCaptureStrategy,
 		usageTrackingStrategy,
 		titleGenerator,
 		resolutionAnalyzer,
-		telemSvc,
+		telemLogger,
 	)
 }

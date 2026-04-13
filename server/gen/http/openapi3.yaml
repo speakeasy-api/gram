@@ -5921,7 +5921,7 @@ paths:
             tags:
                 - hooks
             summary: cursor hooks
-            description: Endpoint for Cursor hook events. Handles preToolUse, postToolUse, and postToolUseFailure.
+            description: Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, and postToolUseFailure.
             operationId: hooks#cursor
             parameters:
                 - name: Gram-Key
@@ -14679,6 +14679,120 @@ paths:
             x-speakeasy-name-override: updateBySlug
             x-speakeasy-react-hook:
                 name: UpdateToolset
+    /rpc/toolsets.updateOAuthProxyServer:
+        post:
+            description: Update an existing OAuth proxy server associated with a toolset
+            operationId: updateOAuthProxyServer
+            parameters:
+                - allowEmptyValue: true
+                  description: The slug of the toolset whose OAuth proxy server to update
+                  in: query
+                  name: slug
+                  required: true
+                  schema:
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    maxLength: 40
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateOAuthProxyServerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Toolset'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateOAuthProxyServer toolsets
+            tags:
+                - toolsets
+            x-speakeasy-name-override: updateOAuthProxyServer
+            x-speakeasy-react-hook:
+                name: UpdateOAuthProxyServer
     /rpc/usage.createCheckout:
         post:
             description: Create a checkout link for upgrading to the business plan
@@ -15301,282 +15415,6 @@ paths:
             x-speakeasy-name-override: upsertGlobal
             x-speakeasy-react-hook:
                 name: UpsertGlobalVariation
-    /rpc/workflows.createResponse:
-        post:
-            tags:
-                - agentworkflows
-            summary: createResponse agentworkflows
-            description: Create a new agent response. Executes an agent workflow with the provided input and tools.
-            operationId: createResponse
-            parameters:
-                - name: Gram-Key
-                  in: header
-                  description: API Key header
-                  allowEmptyValue: true
-                  schema:
-                    type: string
-                    description: API Key header
-                - name: Gram-Project
-                  in: header
-                  description: project header
-                  allowEmptyValue: true
-                  schema:
-                    type: string
-                    description: project header
-            requestBody:
-                required: true
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/WorkflowAgentRequest'
-            responses:
-                "200":
-                    description: OK response.
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/WorkflowAgentResponseOutput'
-                "400":
-                    description: 'bad_request: request is invalid'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "401":
-                    description: 'unauthorized: unauthorized access'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "403":
-                    description: 'forbidden: permission denied'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "404":
-                    description: 'not_found: resource not found'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "409":
-                    description: 'conflict: resource already exists'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "415":
-                    description: 'unsupported_media: unsupported media type'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "422":
-                    description: 'invalid: request contains one or more invalidation fields'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "500":
-                    description: 'unexpected: an unexpected error occurred'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "502":
-                    description: 'gateway_error: an unexpected error occurred'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-    /rpc/workflows.deleteResponse:
-        delete:
-            tags:
-                - agentworkflows
-            summary: deleteResponse agentworkflows
-            description: Deletes any response associated with a given agent run.
-            operationId: deleteResponse
-            parameters:
-                - name: response_id
-                  in: query
-                  description: The ID of the response to retrieve
-                  allowEmptyValue: true
-                  required: true
-                  schema:
-                    type: string
-                    description: The ID of the response to retrieve
-                - name: Gram-Key
-                  in: header
-                  description: API Key header
-                  allowEmptyValue: true
-                  schema:
-                    type: string
-                    description: API Key header
-                - name: Gram-Project
-                  in: header
-                  description: project header
-                  allowEmptyValue: true
-                  schema:
-                    type: string
-                    description: project header
-            responses:
-                "200":
-                    description: OK response.
-                "400":
-                    description: 'bad_request: request is invalid'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "401":
-                    description: 'unauthorized: unauthorized access'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "403":
-                    description: 'forbidden: permission denied'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "404":
-                    description: 'not_found: resource not found'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "409":
-                    description: 'conflict: resource already exists'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "415":
-                    description: 'unsupported_media: unsupported media type'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "422":
-                    description: 'invalid: request contains one or more invalidation fields'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "500":
-                    description: 'unexpected: an unexpected error occurred'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "502":
-                    description: 'gateway_error: an unexpected error occurred'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-    /rpc/workflows.getResponse:
-        get:
-            tags:
-                - agentworkflows
-            summary: getResponse agentworkflows
-            description: Get the status of an async agent response by its ID.
-            operationId: getResponse
-            parameters:
-                - name: response_id
-                  in: query
-                  description: The ID of the response to retrieve
-                  allowEmptyValue: true
-                  required: true
-                  schema:
-                    type: string
-                    description: The ID of the response to retrieve
-                - name: Gram-Key
-                  in: header
-                  description: API Key header
-                  allowEmptyValue: true
-                  schema:
-                    type: string
-                    description: API Key header
-                - name: Gram-Project
-                  in: header
-                  description: project header
-                  allowEmptyValue: true
-                  schema:
-                    type: string
-                    description: project header
-            responses:
-                "200":
-                    description: OK response.
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/WorkflowAgentResponseOutput'
-                "400":
-                    description: 'bad_request: request is invalid'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "401":
-                    description: 'unauthorized: unauthorized access'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "403":
-                    description: 'forbidden: permission denied'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "404":
-                    description: 'not_found: resource not found'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "409":
-                    description: 'conflict: resource already exists'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "415":
-                    description: 'unsupported_media: unsupported media type'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "422":
-                    description: 'invalid: request contains one or more invalidation fields'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "500":
-                    description: 'unexpected: an unexpected error occurred'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                "502":
-                    description: 'gateway_error: an unexpected error occurred'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
 components:
     schemas:
         AccessMember:
@@ -16112,6 +15950,10 @@ components:
                 id:
                     type: string
                     description: The ID of the chat
+                last_message_timestamp:
+                    type: string
+                    description: When the last message in the chat was created.
+                    format: date-time
                 messages:
                     type: array
                     items:
@@ -16141,6 +15983,7 @@ components:
                 - num_messages
                 - created_at
                 - updated_at
+                - last_message_timestamp
         ChatMessage:
             type: object
             properties:
@@ -16193,6 +16036,10 @@ components:
                 id:
                     type: string
                     description: The ID of the chat
+                last_message_timestamp:
+                    type: string
+                    description: When the last message in the chat was created.
+                    format: date-time
                 num_messages:
                     type: integer
                     description: The number of messages in the chat
@@ -16216,6 +16063,7 @@ components:
                 - num_messages
                 - created_at
                 - updated_at
+                - last_message_timestamp
         ChatOverviewWithResolutions:
             type: object
             properties:
@@ -16229,6 +16077,10 @@ components:
                 id:
                     type: string
                     description: The ID of the chat
+                last_message_timestamp:
+                    type: string
+                    description: When the last message in the chat was created.
+                    format: date-time
                 num_messages:
                     type: integer
                     description: The number of messages in the chat
@@ -16259,6 +16111,7 @@ components:
                 - num_messages
                 - created_at
                 - updated_at
+                - last_message_timestamp
         ChatResolution:
             type: object
             properties:
@@ -16983,12 +16836,27 @@ components:
                     type: object
                     description: Additional hook-specific data
                     additionalProperties: true
+                cache_read_tokens:
+                    type: integer
+                    description: Tokens read from cache (stop only)
+                    format: int64
+                cache_write_tokens:
+                    type: integer
+                    description: Tokens written to cache (stop only)
+                    format: int64
+                composer_mode:
+                    type: string
+                    description: The composer mode, e.g. agent (beforeSubmitPrompt only)
                 conversation_id:
                     type: string
                     description: The Cursor conversation ID
                 cursor_version:
                     type: string
                     description: The Cursor IDE version
+                duration_ms:
+                    type: integer
+                    description: Duration in milliseconds for the thinking block (afterAgentThought only)
+                    format: int64
                 error:
                     description: The error from the tool (postToolUseFailure only)
                 generation_id:
@@ -16996,16 +16864,37 @@ components:
                     description: The Cursor generation ID
                 hook_event_name:
                     type: string
-                    description: The type of hook event (e.g. preToolUse, postToolUse, postToolUseFailure)
+                    description: The type of hook event (e.g. beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure)
+                input_tokens:
+                    type: integer
+                    description: Total input tokens used (stop only)
+                    format: int64
                 is_interrupt:
                     type: boolean
                     description: Whether the failure was caused by user interruption
+                loop_count:
+                    type: integer
+                    description: Number of agentic loops executed (stop only)
+                    format: int64
                 model:
                     type: string
                     description: The model being used
+                output_tokens:
+                    type: integer
+                    description: Total output tokens used (stop only)
+                    format: int64
+                prompt:
+                    type: string
+                    description: The user's prompt text (beforeSubmitPrompt only)
                 session_id:
                     type: string
                     description: The session ID from Cursor
+                status:
+                    type: string
+                    description: Completion status, e.g. completed (stop only)
+                text:
+                    type: string
+                    description: The assistant's response text (afterAgentResponse) or thinking text (afterAgentThought)
                 tool_input:
                     description: The input to the tool
                 tool_name:
@@ -17016,6 +16905,9 @@ components:
                 tool_use_id:
                     type: string
                     description: The unique ID for this tool use
+                transcript_path:
+                    type: string
+                    description: Path to the conversation transcript JSONL file
                 user_email:
                     type: string
                     description: Email of the authenticated Cursor user, if available
@@ -19734,6 +19626,33 @@ components:
             required:
                 - slug
                 - provider_type
+        OAuthProxyServerUpdateForm:
+            type: object
+            properties:
+                audience:
+                    type: string
+                    description: The audience parameter to send to the upstream OAuth provider
+                authorization_endpoint:
+                    type: string
+                    description: The authorization endpoint URL
+                environment_slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                scopes_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: OAuth scopes to request (omit = no change, empty array = clear)
+                token_endpoint:
+                    type: string
+                    description: The token endpoint URL
+                token_endpoint_auth_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Auth methods (omit = no change, empty array = clear)
         OTELAttribute:
             type: object
             properties:
@@ -20028,12 +19947,21 @@ components:
                 created_at:
                     type: string
                     format: date-time
+                email:
+                    type: string
+                    description: User email address.
                 id:
                     type: string
                     description: Gram relationship row ID.
+                name:
+                    type: string
+                    description: User display name.
                 organization_id:
                     type: string
                     description: Gram organization ID.
+                photo_url:
+                    type: string
+                    description: User photo URL.
                 updated_at:
                     type: string
                     format: date-time
@@ -20047,6 +19975,8 @@ components:
                 - id
                 - organization_id
                 - user_id
+                - name
+                - email
                 - created_at
                 - updated_at
         Package:
@@ -22402,6 +22332,28 @@ components:
             required:
                 - user_id
                 - role_id
+        UpdateOAuthProxyServerForm:
+            type: object
+            properties:
+                oauth_proxy_server:
+                    $ref: '#/components/schemas/OAuthProxyServerUpdateForm'
+                project_slug_input:
+                    type: string
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+            required:
+                - slug
+                - oauth_proxy_server
+        UpdateOAuthProxyServerRequestBody:
+            type: object
+            properties:
+                oauth_proxy_server:
+                    $ref: '#/components/schemas/OAuthProxyServerUpdateForm'
+            required:
+                - oauth_proxy_server
         UpdatePackageForm:
             type: object
             properties:
@@ -23038,159 +22990,6 @@ components:
                 - organization
                 - projects
                 - scopes
-        WorkflowAgentRequest:
-            type: object
-            properties:
-                async:
-                    type: boolean
-                    description: If true, returns immediately with a response ID for polling
-                input:
-                    description: The input to the agent - can be a string or array of messages
-                instructions:
-                    type: string
-                    description: System instructions for the agent
-                model:
-                    type: string
-                    description: The model to use for the agent (e.g., openai/gpt-4o)
-                previous_response_id:
-                    type: string
-                    description: ID of a previous response to continue from
-                store:
-                    type: boolean
-                    description: If true, stores the response defaults to true
-                sub_agents:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/WorkflowSubAgent'
-                    description: Sub-agents available for delegation
-                temperature:
-                    type: number
-                    description: Temperature for model responses
-                    format: double
-                toolsets:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/WorkflowAgentToolset'
-                    description: Toolsets available to the agent
-            description: Request payload for creating an agent response
-            required:
-                - model
-                - input
-        WorkflowAgentResponseOutput:
-            type: object
-            properties:
-                created_at:
-                    type: integer
-                    description: Unix timestamp when the response was created
-                    format: int64
-                error:
-                    type: string
-                    description: Error message if the response failed
-                id:
-                    type: string
-                    description: Unique identifier for this response
-                instructions:
-                    type: string
-                    description: The instructions that were used
-                model:
-                    type: string
-                    description: The model that was used
-                object:
-                    type: string
-                    description: Object type, always 'response'
-                output:
-                    type: array
-                    items: {}
-                    description: Array of output items (messages, tool calls)
-                previous_response_id:
-                    type: string
-                    description: ID of the previous response if continuing
-                result:
-                    type: string
-                    description: The final text result from the agent
-                status:
-                    type: string
-                    description: Status of the response
-                    enum:
-                        - in_progress
-                        - completed
-                        - failed
-                temperature:
-                    type: number
-                    description: Temperature that was used
-                    format: double
-                text:
-                    $ref: '#/components/schemas/WorkflowAgentResponseText'
-            description: Response output from an agent workflow
-            required:
-                - id
-                - object
-                - created_at
-                - status
-                - model
-                - output
-                - temperature
-                - text
-                - result
-        WorkflowAgentResponseText:
-            type: object
-            properties:
-                format:
-                    $ref: '#/components/schemas/WorkflowAgentTextFormat'
-            description: Text format configuration for the response
-            required:
-                - format
-        WorkflowAgentTextFormat:
-            type: object
-            properties:
-                type:
-                    type: string
-                    description: The type of text format (e.g., 'text')
-            description: Text format type
-            required:
-                - type
-        WorkflowAgentToolset:
-            type: object
-            properties:
-                environment_slug:
-                    type: string
-                    description: The slug of the environment for auth
-                toolset_slug:
-                    type: string
-                    description: The slug of the toolset to use
-            description: A toolset reference for agent execution
-            required:
-                - toolset_slug
-                - environment_slug
-        WorkflowSubAgent:
-            type: object
-            properties:
-                description:
-                    type: string
-                    description: Description of what this sub-agent does
-                environment_slug:
-                    type: string
-                    description: The environment slug for auth
-                instructions:
-                    type: string
-                    description: Instructions for this sub-agent
-                name:
-                    type: string
-                    description: The name of this sub-agent
-                tools:
-                    type: array
-                    items:
-                        type: string
-                    description: Tool URNs available to this sub-agent
-                toolsets:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/WorkflowAgentToolset'
-                    description: Toolsets available to this sub-agent
-            description: A sub-agent definition for the agent workflow
-            required:
-                - name
-                - description
     securitySchemes:
         apikey_header_Authorization:
             type: apiKey
@@ -23223,8 +23022,6 @@ components:
 tags:
     - name: access
       description: Manage roles and team member access control.
-    - name: agentworkflows
-      description: OpenAI Responses API compatible endpoint for running agent workflows.
     - name: assets
       description: Manages assets used by Gram projects.
     - name: auditlogs

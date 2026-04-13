@@ -82,6 +82,8 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := noop.NewMeterProvider()
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "mcptest")
 	require.NoError(t, err)
@@ -91,7 +93,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -106,11 +108,10 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	guardianPolicy := guardian.NewDefaultPolicy()
 	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager)
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
-	chatClient := openrouter.NewUnifiedClient(logger, devProvisioner, nil, nil, nil, nil, nil)
+	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, nil, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
@@ -119,6 +120,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
+	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled)
 	telemService := telemetry.NewService(
 		logger,
 		tracerProvider,
@@ -127,7 +129,6 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager,
 		chatSessions,
 		logsEnabled,
-		toolIOLogsEnabled,
 		posthog,
 		access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}),
 	)
@@ -137,7 +138,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalEnv, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, featClient, vectorToolStore, temporalEnv, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
 
 	return ctx, &testInstance{
 		service:        svc,

@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 
-	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
@@ -25,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -35,6 +35,7 @@ import (
 )
 
 type WorkerOptions struct {
+	GuardianPolicy      *guardian.Policy
 	DB                  *pgxpool.Pool
 	EncryptionClient    *encryption.Client
 	FeatureProvider     feature.Provider
@@ -52,12 +53,12 @@ type WorkerOptions struct {
 	FunctionsDeployer   functions.Deployer
 	FunctionsVersion    functions.RunnerVersion
 	RagService          *rag.ToolsetVectorStore
-	AgentsService       *agents.Service
 	MCPRegistryClient   *externalmcp.RegistryClient
-	TelemetryService    *telemetry.Service
+	TelemetryLogger     *telemetry.Logger
 }
 
 func ForDeploymentProcessing(
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	f feature.Provider,
 	assetStorage assets.BlobStore,
@@ -67,6 +68,7 @@ func ForDeploymentProcessing(
 ) *WorkerOptions {
 	return &WorkerOptions{
 		DB:                  db,
+		GuardianPolicy:      guardianPolicy,
 		EncryptionClient:    enc,
 		FeatureProvider:     f,
 		AssetStorage:        assetStorage,
@@ -83,8 +85,7 @@ func ForDeploymentProcessing(
 		RagService:          nil,
 		RedisClient:         nil,
 		PosthogClient:       nil,
-		AgentsService:       nil,
-		TelemetryService:    nil,
+		TelemetryLogger:     nil,
 		CacheAdapter:        nil,
 	}
 }
@@ -97,6 +98,7 @@ func NewTemporalWorker(
 	options ...*WorkerOptions,
 ) worker.Worker {
 	opts := &WorkerOptions{
+		GuardianPolicy:      nil,
 		DB:                  nil,
 		EncryptionClient:    nil,
 		FeatureProvider:     nil,
@@ -113,14 +115,14 @@ func NewTemporalWorker(
 		FunctionsDeployer:   nil,
 		FunctionsVersion:    "",
 		RagService:          nil,
-		AgentsService:       nil,
 		MCPRegistryClient:   nil,
-		TelemetryService:    nil,
+		TelemetryLogger:     nil,
 		CacheAdapter:        nil,
 	}
 
 	for _, o := range options {
 		opts = &WorkerOptions{
+			GuardianPolicy:      conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
 			DB:                  conv.Default(o.DB, opts.DB),
 			EncryptionClient:    conv.Default(o.EncryptionClient, opts.EncryptionClient),
 			FeatureProvider:     conv.Default(o.FeatureProvider, opts.FeatureProvider),
@@ -137,9 +139,8 @@ func NewTemporalWorker(
 			FunctionsDeployer:   conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
 			FunctionsVersion:    conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
 			RagService:          conv.Default(o.RagService, opts.RagService),
-			AgentsService:       conv.Default(o.AgentsService, opts.AgentsService),
 			MCPRegistryClient:   conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
-			TelemetryService:    conv.Default(o.TelemetryService, opts.TelemetryService),
+			TelemetryLogger:     conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
 			CacheAdapter:        conv.Default(o.CacheAdapter, opts.CacheAdapter),
 		}
 	}
@@ -156,6 +157,7 @@ func NewTemporalWorker(
 		logger,
 		tracerProvider,
 		meterProvider,
+		opts.GuardianPolicy,
 		opts.DB,
 		opts.EncryptionClient,
 		opts.FeatureProvider,
@@ -171,10 +173,9 @@ func NewTemporalWorker(
 		opts.FunctionsDeployer,
 		opts.FunctionsVersion,
 		opts.RagService,
-		opts.AgentsService,
 		opts.MCPRegistryClient,
 		env.Client(),
-		opts.TelemetryService,
+		opts.TelemetryLogger,
 		opts.CacheAdapter,
 	)
 
@@ -202,12 +203,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.DeleteChatResolutions)
 	temporalWorker.RegisterActivity(activities.AnalyzeSegment)
 	temporalWorker.RegisterActivity(activities.GetUserFeedbackForChat)
-	// Agent runner related activities
-	temporalWorker.RegisterActivity(activities.PreprocessAgentsInput)
-	temporalWorker.RegisterActivity(activities.ExecuteToolCall)
-	temporalWorker.RegisterActivity(activities.ExecuteModelCall)
-	temporalWorker.RegisterActivity(activities.LoadAgentTools)
-	temporalWorker.RegisterActivity(activities.RecordAgentExecution)
+
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
 	temporalWorker.RegisterWorkflow(SlackEventWorkflow)
@@ -221,9 +217,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
 	temporalWorker.RegisterWorkflow(DelayedChatResolutionAnalysisWorkflow)
-	// Agent runner related workflows
-	temporalWorker.RegisterWorkflow(AgentsResponseWorkflow)
-	temporalWorker.RegisterWorkflow(SubAgentWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {

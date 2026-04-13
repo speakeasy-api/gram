@@ -24,17 +24,11 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
-	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/rag"
-
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
-	"github.com/speakeasy-api/gram/server/internal/agentworkflows"
-	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
-	"github.com/speakeasy-api/gram/server/internal/agentworkflows/mcpclient"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -51,13 +45,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpclient"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -67,7 +61,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/projects"
+	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/templates"
@@ -403,6 +399,11 @@ func newStartCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
+			guardianPolicy, err := newGuardianPolicy(c, tracerProvider)
+			if err != nil {
+				return err
+			}
+
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -455,12 +456,12 @@ func newStartCommand() *cli.Command {
 				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
-			workosClient, workosAvailable, err := newWorkOSClient(c)
+			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
 			if err != nil {
 				return fmt.Errorf("failed to create WorkOS client: %w", err)
 			}
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
@@ -468,6 +469,7 @@ func newStartCommand() *cli.Command {
 			sessionManager := sessions.NewManager(
 				logger,
 				tracerProvider,
+				guardianPolicy,
 				db,
 				redisClient,
 				cache.SuffixNone,
@@ -519,6 +521,8 @@ func newStartCommand() *cli.Command {
 			} else {
 				openRouter = openrouter.New(
 					logger,
+					tracerProvider,
+					guardianPolicy,
 					db,
 					c.String("environment"),
 					c.String("openrouter-provisioning-key"),
@@ -563,44 +567,29 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to parse site url: %w", err)
 			}
 
-			// In local development, allow loopback addresses for internal tool-to-tool communication
-			var guardianPolicy *guardian.Policy
-			if c.String("environment") == "local" {
-				guardianPolicy, err = guardian.NewUnsafePolicy([]string{}) // Allow all traffic for local development
-				if err != nil {
-					return fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
-				}
-			} else {
-				guardianPolicy = guardian.NewDefaultPolicy()
-			}
-			blockedCIDRs := c.StringSlice("disallowed-cidr-blocks")
-			if blockedCIDRs != nil {
-				guardianPolicy, err = guardian.NewUnsafePolicy(blockedCIDRs)
-				if err != nil {
-					return fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
-				}
-			}
-
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
 			if err != nil {
 				return fmt.Errorf("failed to create tigris asset store: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, db, assetStorage, tigrisStore, encryptionClient)
+			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, guardianPolicy, db, assetStorage, tigrisStore, encryptionClient)
 			if err != nil {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
-			slackClient := slack_client.NewSlackClient("", "", db, encryptionClient)
+			slackClient := slack_client.NewSlackClient(guardianPolicy, "", "", db, encryptionClient)
 
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 			accessManager := access.NewManager(logger, db, productFeatures)
 
-			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient, accessManager)
+			telemLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, posthogClient, accessManager)
 
 			// Wrap cache for hooks service in local development
 			var hooksCache cache.Cache = cache.NewRedisCacheAdapter(redisClient)
@@ -610,16 +599,17 @@ func newStartCommand() *cli.Command {
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
+				guardianPolicy,
 				openRouter,
 				chat.NewChatMessageCaptureStrategy(logger, db, assetStorage),
 				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
-				telemSvc,
+				telemLogger,
 			)
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
-			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, mcpRegistryClientOptions{
+			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, guardianPolicy, mcpRegistryClientOptions{
 				pulseTenantID: c.String("pulse-registry-tenant"),
 				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
 				cacheImpl:     cache.NewRedisCacheAdapter(redisClient),
@@ -630,7 +620,7 @@ func newStartCommand() *cli.Command {
 
 			authorizer := auth.New(logger, db, sessionManager, accessManager)
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
-			externalOAuthService := oauth.NewExternalOAuthService(logger, db, cache.NewRedisCacheAdapter(redisClient), authorizer, encryptionClient, externalMcpOAuthConfig)
+			externalOAuthService := oauth.NewExternalOAuthService(logger, guardianPolicy, db, cache.NewRedisCacheAdapter(redisClient), authorizer, encryptionClient, externalMcpOAuthConfig)
 
 			platformSvc := platformtoolsruntime.NewService(logger, db, telemSvc)
 
@@ -651,6 +641,7 @@ func newStartCommand() *cli.Command {
 				oauthService,
 				billingTracker,
 				billingRepo,
+				telemLogger,
 				telemSvc,
 				productFeatures,
 				ragService,
@@ -669,7 +660,7 @@ func newStartCommand() *cli.Command {
 
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), accessManager)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), accessManager)
-			roleClient, err := newAccessRoleProvider(ctx, logger, c)
+			roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
 			if err != nil {
 				return fmt.Errorf("failed to create access role provider: %w", err)
 			}
@@ -695,11 +686,11 @@ func newStartCommand() *cli.Command {
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
+			mux.Use(middleware.RBACOverrideMiddleware(c.String("environment")))
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient, accessManager))
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, hooksCache, chatClient, temporalEnv, accessManager, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}))
-			agentworkflows.Attach(mux, agentworkflows.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, openRouter, chatClient, authorizer, temporalEnv))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, accessManager, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}))
 			// access depends on audit for log writers, so inject the org-read check
 			// here instead of importing access from the audit package.
 			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager, accessManager, func(ctx context.Context, organizationID string) error {
@@ -732,7 +723,7 @@ func newStartCommand() *cli.Command {
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, accessManager))
-			assets.Attach(mux, assets.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, assetStorage, c.String("jwt-signing-key"), accessManager))
+			assets.Attach(mux, assets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, chatSessionsManager, assetStorage, c.String("jwt-signing-key"), accessManager))
 			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, accessManager))
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), accessManager))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, accessManager))
@@ -741,9 +732,11 @@ func newStartCommand() *cli.Command {
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			oauth.AttachExternalOAuth(mux, externalOAuthService)
 			oauth.Attach(mux, oauthService)
-			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemSvc, productFeatures, serverURL, accessManager))
+			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, accessManager))
 			mcpmetadata.Attach(mux, mcpMetadataService)
-			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, accessManager))
+			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, accessManager, func(ctx context.Context, resourceID string) error {
+				return accessManager.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: resourceID})
+			}))
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, posthogClient, telemSvc, assetStorage, accessManager))
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, accessManager))
@@ -773,9 +766,6 @@ func newStartCommand() *cli.Command {
 			group := pool.New()
 
 			if temporalEnv != nil && c.Bool("dev-single-process") {
-				// Create agents service for the worker
-				agentsWorkerSvc := agents.NewService(logger, tracerProvider, meterProvider, db, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, openRouter, chatClient)
-
 				workerInterruptCh := make(chan any)
 				group.Go(func() {
 					<-sigctx.Done()
@@ -783,6 +773,7 @@ func newStartCommand() *cli.Command {
 				})
 				group.Go(func() {
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
+						GuardianPolicy:      guardianPolicy,
 						DB:                  db,
 						EncryptionClient:    encryptionClient,
 						FeatureProvider:     featureFlags,
@@ -799,9 +790,8 @@ func newStartCommand() *cli.Command {
 						FunctionsDeployer:   functionsOrchestrator,
 						FunctionsVersion:    runnerVersion,
 						RagService:          ragService,
-						AgentsService:       agentsWorkerSvc,
 						MCPRegistryClient:   mcpRegistryClient,
-						TelemetryService:    telemSvc,
+						TelemetryLogger:     telemLogger,
 						CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {

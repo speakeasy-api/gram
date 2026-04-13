@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
 // AuthRejectedError is returned when an MCP server rejects authentication (401 or 403).
@@ -37,15 +37,16 @@ type ClientOptions struct {
 
 // Client represents an active connection to an external MCP server.
 type Client struct {
-	logger    *slog.Logger
-	remoteURL string
-	session   *mcp.ClientSession
-	authRT    *authRoundTripper
+	logger         *slog.Logger
+	guardianPolicy *guardian.Policy
+	remoteURL      string
+	session        *mcp.ClientSession
+	authRT         *authRoundTripper
 }
 
 // NewClient creates a new client connection to an external MCP server.
 // This performs the MCP protocol initialization internally.
-func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, transportType types.TransportType, opts *ClientOptions) (*Client, error) {
+func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, remoteURL string, transportType types.TransportType, opts *ClientOptions) (*Client, error) {
 	if opts == nil {
 		opts = &ClientOptions{
 			Authorization: "",
@@ -55,19 +56,17 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, trans
 
 	logger.InfoContext(ctx, "connecting to external MCP server", attr.SlogURL(remoteURL))
 
+	httpClient := guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
+	trasnport := httpClient.Transport
 	authRT := &authRoundTripper{
-		base:            http.DefaultTransport,
+		base:            trasnport,
 		authorization:   opts.Authorization,
 		headers:         opts.Headers,
 		authRejected:    false,
 		statusCode:      0,
 		wwwAuthenticate: "",
 	}
-
-	retryClient := retryablehttp.NewClient()
-	retryClient.HTTPClient.Transport = authRT
-
-	httpClient := retryClient.StandardClient()
+	httpClient.Transport = authRT
 
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:       "gram-server",
@@ -111,10 +110,11 @@ func NewClient(ctx context.Context, logger *slog.Logger, remoteURL string, trans
 	logger.InfoContext(ctx, "connected to external MCP server")
 
 	return &Client{
-		logger:    logger,
-		remoteURL: remoteURL,
-		session:   session,
-		authRT:    authRT,
+		logger:         logger,
+		guardianPolicy: guardianPolicy,
+		remoteURL:      remoteURL,
+		session:        session,
+		authRT:         authRT,
 	}, nil
 }
 

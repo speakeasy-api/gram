@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
@@ -24,6 +25,7 @@ import (
 func processSecurity(
 	ctx context.Context,
 	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
 	req *http.Request,
 	w http.ResponseWriter,
 	responseStatusCodeCapture *int,
@@ -145,7 +147,7 @@ func processSecurity(
 						}
 					}
 				case "client_credentials":
-					token, err := processClientCredentials(ctx, logger, req, cacheImpl, tool, plan.SecurityScopes, security, mergedEnv, serverURL)
+					token, err := processClientCredentials(ctx, logger, guardianPolicy, req, cacheImpl, tool, plan.SecurityScopes, security, mergedEnv, serverURL)
 					if err != nil {
 						logger.ErrorContext(ctx, "could not process client credentials", attr.SlogError(err))
 						if strings.Contains(err.Error(), "failed to make client credentials token request") {
@@ -245,7 +247,7 @@ type clientCredentialsTokenResponseCamelCase struct {
 	ExpiresIn   int    `json:"expiresIn"`
 }
 
-func processClientCredentials(ctx context.Context, logger *slog.Logger, req *http.Request, cacheImpl cache.Cache, tool *ToolDescriptor, planScopes map[string][]string, security *HTTPToolSecurity, mergedEnv *toolconfig.CaseInsensitiveEnv, serverURL string) (string, error) {
+func processClientCredentials(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, req *http.Request, cacheImpl cache.Cache, tool *ToolDescriptor, planScopes map[string][]string, security *HTTPToolSecurity, mergedEnv *toolconfig.CaseInsensitiveEnv, serverURL string) (string, error) {
 	// To discuss, currently we are taking the approach of exact scope match for reused tokens
 	// We could look into enabling a prefix match feature for caches where we return multiple entries matching the projectID, clientID, tokenURL and then check scopes against all returned values
 	// We would want to make sure any underlying cache implementation supports this feature
@@ -327,13 +329,8 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	// Make the token request
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: otelhttp.NewTransport(
-			http.DefaultTransport,
-			otelhttp.WithPropagators(propagation.TraceContext{}),
-		),
-	}
+	client := guardianPolicy.Client(guardian.WithOTelHTTPOptions(otelhttp.WithPropagators(propagation.TraceContext{})))
+	client.Timeout = 10 * time.Second
 	resp, err := client.Do(tokenReq)
 	if err != nil {
 		return "", fmt.Errorf("failed to make client credentials token request: %w", err)
@@ -429,7 +426,7 @@ func parseClientCredentialsTokenResponse(body []byte) (string, int, error) {
 	return accessToken, expiresIn, nil
 }
 
-func retryTokenRequestWithBasicAuth(ctx context.Context, client *http.Client, tokenURL, clientID, clientSecret string, requestedScopes []string) (*http.Response, error) {
+func retryTokenRequestWithBasicAuth(ctx context.Context, client *guardian.HTTPClient, tokenURL, clientID, clientSecret string, requestedScopes []string) (*http.Response, error) {
 	values := url.Values{}
 	values.Set("grant_type", "client_credentials")
 	if len(requestedScopes) > 0 {

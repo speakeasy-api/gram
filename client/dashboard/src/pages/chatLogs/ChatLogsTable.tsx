@@ -45,8 +45,10 @@ function getAverageScore(
 }
 
 function formatDuration(chat: ChatOverviewWithResolutions): string {
+  // Use lastMessageTimestamp if available, otherwise fall back to updatedAt
+  const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const seconds = Math.round(
-    (chat.updatedAt.getTime() - chat.createdAt.getTime()) / 1000,
+    (endTime.getTime() - chat.createdAt.getTime()) / 1000,
   );
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);

@@ -73,7 +73,7 @@ func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, h
 	{
 		err = json.Unmarshal([]byte(hooksCursorBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"error\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"abc123\",\n      \"is_interrupt\": false,\n      \"model\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cache_read_tokens\": 1,\n      \"cache_write_tokens\": 1,\n      \"composer_mode\": \"abc123\",\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"duration_ms\": 1,\n      \"error\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"abc123\",\n      \"input_tokens\": 1,\n      \"is_interrupt\": false,\n      \"loop_count\": 1,\n      \"model\": \"abc123\",\n      \"output_tokens\": 1,\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"status\": \"abc123\",\n      \"text\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -89,19 +89,30 @@ func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, h
 		}
 	}
 	v := &hooks.CursorPayload{
-		HookEventName:  body.HookEventName,
-		ConversationID: body.ConversationID,
-		GenerationID:   body.GenerationID,
-		Model:          body.Model,
-		CursorVersion:  body.CursorVersion,
-		UserEmail:      body.UserEmail,
-		SessionID:      body.SessionID,
-		ToolName:       body.ToolName,
-		ToolUseID:      body.ToolUseID,
-		ToolInput:      body.ToolInput,
-		ToolResponse:   body.ToolResponse,
-		Error:          body.Error,
-		IsInterrupt:    body.IsInterrupt,
+		HookEventName:    body.HookEventName,
+		ConversationID:   body.ConversationID,
+		GenerationID:     body.GenerationID,
+		Model:            body.Model,
+		CursorVersion:    body.CursorVersion,
+		UserEmail:        body.UserEmail,
+		SessionID:        body.SessionID,
+		ToolName:         body.ToolName,
+		ToolUseID:        body.ToolUseID,
+		ToolInput:        body.ToolInput,
+		ToolResponse:     body.ToolResponse,
+		Error:            body.Error,
+		IsInterrupt:      body.IsInterrupt,
+		Prompt:           body.Prompt,
+		ComposerMode:     body.ComposerMode,
+		TranscriptPath:   body.TranscriptPath,
+		Status:           body.Status,
+		LoopCount:        body.LoopCount,
+		InputTokens:      body.InputTokens,
+		OutputTokens:     body.OutputTokens,
+		CacheReadTokens:  body.CacheReadTokens,
+		CacheWriteTokens: body.CacheWriteTokens,
+		Text:             body.Text,
+		DurationMs:       body.DurationMs,
 	}
 	if body.AdditionalData != nil {
 		v.AdditionalData = make(map[string]any, len(body.AdditionalData))

@@ -76,7 +76,7 @@ func TestService_UpdateMemberRole_MemberNotFound(t *testing.T) {
 
 	_, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "user_missing", RoleID: "role_builder"})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "member is not connected locally")
+	require.Contains(t, err.Error(), "member has not joined this organization")
 }
 
 func TestService_UpdateMemberRole_WorkOSMembershipNotFound(t *testing.T) {

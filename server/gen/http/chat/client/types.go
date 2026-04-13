@@ -59,6 +59,8 @@ type LoadChatResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the chat was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// When the last message in the chat was created.
+	LastMessageTimestamp *string `form:"last_message_timestamp,omitempty" json:"last_message_timestamp,omitempty" xml:"last_message_timestamp,omitempty"`
 }
 
 // GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
@@ -1207,6 +1209,8 @@ type ChatOverviewResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the chat was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// When the last message in the chat was created.
+	LastMessageTimestamp *string `form:"last_message_timestamp,omitempty" json:"last_message_timestamp,omitempty" xml:"last_message_timestamp,omitempty"`
 }
 
 // ChatMessageResponseBody is used to define fields on response body types.
@@ -1255,6 +1259,8 @@ type ChatOverviewWithResolutionsResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the chat was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// When the last message in the chat was created.
+	LastMessageTimestamp *string `form:"last_message_timestamp,omitempty" json:"last_message_timestamp,omitempty" xml:"last_message_timestamp,omitempty"`
 }
 
 // ChatResolutionResponseBody is used to define fields on response body types.
@@ -1462,14 +1468,15 @@ func NewListChatsGatewayError(body *ListChatsGatewayErrorResponseBody) *goa.Serv
 // HTTP "OK" response.
 func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 	v := &chat.Chat{
-		ID:             *body.ID,
-		Title:          *body.Title,
-		UserID:         body.UserID,
-		ExternalUserID: body.ExternalUserID,
-		NumMessages:    *body.NumMessages,
-		Source:         body.Source,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		ID:                   *body.ID,
+		Title:                *body.Title,
+		UserID:               body.UserID,
+		ExternalUserID:       body.ExternalUserID,
+		NumMessages:          *body.NumMessages,
+		Source:               body.Source,
+		CreatedAt:            *body.CreatedAt,
+		UpdatedAt:            *body.UpdatedAt,
+		LastMessageTimestamp: *body.LastMessageTimestamp,
 	}
 	v.Messages = make([]*chat.ChatMessage, len(body.Messages))
 	for i, val := range body.Messages {
@@ -2315,6 +2322,9 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
+	if body.LastMessageTimestamp == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_message_timestamp", "body"))
+	}
 	for _, e := range body.Messages {
 		if e != nil {
 			if err2 := ValidateChatMessageResponseBody(e); err2 != nil {
@@ -2327,6 +2337,9 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.LastMessageTimestamp != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_message_timestamp", *body.LastMessageTimestamp, goa.FormatDateTime))
 	}
 	return
 }
@@ -3840,11 +3853,17 @@ func ValidateChatOverviewResponseBody(body *ChatOverviewResponseBody) (err error
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
+	if body.LastMessageTimestamp == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_message_timestamp", "body"))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.LastMessageTimestamp != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_message_timestamp", *body.LastMessageTimestamp, goa.FormatDateTime))
 	}
 	return
 }
@@ -3891,6 +3910,9 @@ func ValidateChatOverviewWithResolutionsResponseBody(body *ChatOverviewWithResol
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
+	if body.LastMessageTimestamp == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_message_timestamp", "body"))
+	}
 	for _, e := range body.Resolutions {
 		if e != nil {
 			if err2 := ValidateChatResolutionResponseBody(e); err2 != nil {
@@ -3903,6 +3925,9 @@ func ValidateChatOverviewWithResolutionsResponseBody(body *ChatOverviewWithResol
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.LastMessageTimestamp != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_message_timestamp", *body.LastMessageTimestamp, goa.FormatDateTime))
 	}
 	return
 }

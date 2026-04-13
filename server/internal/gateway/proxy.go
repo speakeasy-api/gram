@@ -703,7 +703,7 @@ func (tp *ToolProxy) doHTTP(
 		}
 	}
 
-	shouldContinue := processSecurity(ctx, logger, req, w, &responseStatusCode, descriptor, plan, tp.cache, env, serverURL, attrRecorder)
+	shouldContinue := processSecurity(ctx, logger, tp.policy, req, w, &responseStatusCode, descriptor, plan, tp.cache, env, serverURL, attrRecorder)
 	if !shouldContinue {
 		return nil
 	}
@@ -790,7 +790,7 @@ func (tp *ToolProxy) doExternalMCP(
 	}
 
 	// Connect to the external MCP server
-	client, err := externalmcp.NewClient(ctx, logger, plan.RemoteURL, plan.TransportType, opts)
+	client, err := externalmcp.NewClient(ctx, logger, tp.policy, plan.RemoteURL, plan.TransportType, opts)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").Log(ctx, logger)
 	}

@@ -55,7 +55,7 @@ var ClaudeHookResult = Type("ClaudeHookResult", func() {
 var CursorHookPayload = Type("CursorHookPayload", func() {
 	Description("Payload for Cursor hook events")
 	Required("hook_event_name")
-	Attribute("hook_event_name", String, "The type of hook event (e.g. preToolUse, postToolUse, postToolUseFailure)")
+	Attribute("hook_event_name", String, "The type of hook event (e.g. beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure)")
 	Attribute("conversation_id", String, "The Cursor conversation ID")
 	Attribute("generation_id", String, "The Cursor generation ID")
 	Attribute("model", String, "The model being used")
@@ -69,6 +69,20 @@ var CursorHookPayload = Type("CursorHookPayload", func() {
 	Attribute("error", Any, "The error from the tool (postToolUseFailure only)")
 	Attribute("is_interrupt", Boolean, "Whether the failure was caused by user interruption")
 	Attribute("additional_data", MapOf(String, Any), "Additional hook-specific data")
+	// beforeSubmitPrompt fields
+	Attribute("prompt", String, "The user's prompt text (beforeSubmitPrompt only)")
+	Attribute("composer_mode", String, "The composer mode, e.g. agent (beforeSubmitPrompt only)")
+	Attribute("transcript_path", String, "Path to the conversation transcript JSONL file")
+	// stop fields
+	Attribute("status", String, "Completion status, e.g. completed (stop only)")
+	Attribute("loop_count", Int, "Number of agentic loops executed (stop only)")
+	Attribute("input_tokens", Int, "Total input tokens used (stop only)")
+	Attribute("output_tokens", Int, "Total output tokens used (stop only)")
+	Attribute("cache_read_tokens", Int, "Tokens read from cache (stop only)")
+	Attribute("cache_write_tokens", Int, "Tokens written to cache (stop only)")
+	// afterAgentResponse / afterAgentThought fields
+	Attribute("text", String, "The assistant's response text (afterAgentResponse) or thinking text (afterAgentThought)")
+	Attribute("duration_ms", Int, "Duration in milliseconds for the thinking block (afterAgentThought only)")
 })
 
 // Cursor hook result
@@ -104,7 +118,7 @@ var _ = Service("hooks", func() {
 	})
 
 	Method("cursor", func() {
-		Description("Endpoint for Cursor hook events. Handles preToolUse, postToolUse, and postToolUseFailure.")
+		Description("Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, and postToolUseFailure.")
 
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("hooks")

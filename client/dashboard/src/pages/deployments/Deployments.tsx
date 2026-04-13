@@ -120,6 +120,7 @@ function DeploymentActionsDropdown({
 export function DeploymentsTable({
   showHeader = true,
 }: { showHeader?: boolean } = {}) {
+  const routes = useRoutes();
   const { data: res } = useListDeploymentsSuspense();
   const deployments = res.items ?? [];
 
@@ -218,16 +219,29 @@ export function DeploymentsTable({
     <>
       {showHeader && (
         <>
-          <Heading variant="h2">Recent Deployments</Heading>
+          <div className="flex items-center justify-between mb-2">
+            <Heading variant="h2">Recent Deployments</Heading>
+            {activeDeployment && (
+              <routes.deployments.deployment.Link
+                params={[activeDeployment.id]}
+              >
+                <Button variant="secondary" size="sm">
+                  <Button.LeftIcon>
+                    <Icon name="radio" className="size-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>View Active Deployment</Button.Text>
+                </Button>
+              </routes.deployments.deployment.Link>
+            )}
+          </div>
 
           <div className="bg-secondary p-6 rounded-lg mb-6 space-y-2">
             <p className="text-sm text-muted-foreground">
               Each time you add a new source or update an existing source a new
-              deployment is created in Gram. These are collectively called
-              assets.
+              deployment is created.
             </p>
             <p className="text-sm text-muted-foreground">
-              For each deployment, Gram analyzes all sources in the project to
+              For each deployment all sources are analyzed in the project to
               generate or update the corresponding tool definitions.
             </p>
           </div>

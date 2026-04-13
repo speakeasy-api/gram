@@ -1,5 +1,33 @@
 # dashboard
 
+## 0.39.0
+
+### Minor Changes
+
+- 61cc193: Add team invite flow with accept page, configurable expiry, and security hardening
+
+### Patch Changes
+
+- 734c03d: Fix playground credential saving failing with "length of slug must be lesser or equal than 40" error. The environment slug format was shortened to stay within the server's 40-character limit.
+
+## 0.38.0
+
+### Minor Changes
+
+- b328938: Add static platform tools to tool discovery and the built-in MCP logs server.
+
+### Patch Changes
+
+- 3a3acd3: Add editable OAuth proxy server configuration.
+
+  Admins can now edit an existing OAuth proxy server's audience, authorization endpoint, token endpoint, scopes, token endpoint auth methods, and environment slug without having to unlink and recreate the configuration. The new `POST /rpc/toolsets.updateOAuthProxyServer` endpoint accepts partial updates with PATCH semantics (omit fields to leave them unchanged; pass an empty array to clear array fields). The dashboard's OAuth proxy details modal now exposes an Edit button that opens the existing OAuth modal in edit mode with the current values pre-filled.
+
+  Slug and provider type remain immutable after creation. Gram-managed OAuth proxy servers stay view-only.
+
+- Updated dependencies [3a3acd3]
+- Updated dependencies [b328938]
+  - @gram/client@0.33.0
+
 ## 0.37.2
 
 ### Patch Changes

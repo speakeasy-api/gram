@@ -21,7 +21,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	goahttp "goa.design/goa/v3/http"
@@ -36,6 +35,7 @@ import (
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
@@ -118,7 +118,7 @@ type ExternalOAuthService struct {
 	allowedRedirectHosts []string
 	auth                 *auth.Auth
 	enc                  *encryption.Client
-	httpClient           *http.Client
+	httpClient           *guardian.HTTPClient
 	successPageTmpl      *template.Template
 	successScriptHash    string
 	successScriptData    []byte
@@ -139,6 +139,7 @@ func (s *ExternalOAuthService) isAllowedRedirectHost(host string) bool {
 // NewExternalOAuthService creates a new ExternalOAuthService
 func NewExternalOAuthService(
 	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	cacheImpl cache.Cache,
 	auth *auth.Auth,
@@ -171,7 +172,7 @@ func NewExternalOAuthService(
 		allowedRedirectHosts: cfg.AllowedRedirectHosts,
 		auth:                 auth,
 		enc:                  enc,
-		httpClient:           retryablehttp.NewClient().StandardClient(),
+		httpClient:           guardianPolicy.Client(guardian.WithDefaultRetryConfig()),
 		successPageTmpl:      successPageTmpl,
 		successScriptHash:    scriptHashStr,
 		successScriptData:    externalOAuthSuccessScriptData,

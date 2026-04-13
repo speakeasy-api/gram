@@ -100,6 +100,7 @@ func (s *Service) insertMessageWithFallbackUpsert(
 	chatID uuid.UUID,
 	projectID uuid.UUID,
 	msgParams chatRepo.CreateChatMessageParams,
+	defaultTitle string,
 ) error {
 	if s.productFeatures == nil {
 		return nil
@@ -128,7 +129,7 @@ func (s *Service) insertMessageWithFallbackUpsert(
 				OrganizationID: metadata.GramOrgID,
 				UserID:         conv.ToPGTextEmpty(""),
 				ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
-				Title:          conv.ToPGText(activities.DefaultClaudeChatTitle),
+				Title:          conv.ToPGText(defaultTitle),
 			})
 			if upsertErr != nil {
 				return fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
@@ -200,7 +201,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		IpAddress:        conv.ToPGTextEmpty(""),
 	}
 
-	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams); err != nil {
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle); err != nil {
 		return err
 	}
 
@@ -267,7 +268,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		IpAddress:        conv.ToPGTextEmpty(""),
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle)
 }
 
 // writeToolCallResultToPG writes a tool result message to PostgreSQL.
@@ -319,7 +320,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 	// If this was an error, we could optionally set tool_outcome based on isError
 	_ = isError
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle)
 }
 
 // marshalToJSON converts any value to a JSON string.

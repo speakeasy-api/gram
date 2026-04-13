@@ -11,11 +11,11 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -55,7 +55,7 @@ func wrapSDKError(err error, context string) error {
 type Client struct {
 	apiKey     string
 	endpoint   string // base URL for raw HTTP calls; defaults to workosBaseURL
-	httpClient *http.Client
+	httpClient *guardian.HTTPClient
 	orgs       *organizations.Client
 	um         *usermanagement.Client
 }
@@ -66,10 +66,10 @@ type ClientOpts struct {
 	// Endpoint overrides the WorkOS base URL for both raw HTTP and SDK calls.
 	Endpoint string
 	// HTTPClient overrides the default retryable HTTP client.
-	HTTPClient *http.Client
+	HTTPClient *guardian.HTTPClient
 }
 
-func NewClient(apiKey string, opts ...ClientOpts) *Client {
+func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpts) *Client {
 	var opt ClientOpts
 	if len(opts) > 0 {
 		opt = opts[0]
@@ -82,9 +82,9 @@ func NewClient(apiKey string, opts ...ClientOpts) *Client {
 
 	httpClient := opt.HTTPClient
 	if httpClient == nil {
-		rc := retryablehttp.NewClient()
-		rc.HTTPClient.Timeout = 10 * time.Second
-		httpClient = rc.StandardClient()
+		retryCfg := guardian.DefaultRetryConfig()
+		retryCfg.WaitMax = 10 * time.Second
+		httpClient = guardianPolicy.PooledClient(guardian.WithRetryConfig(retryCfg))
 	}
 
 	um := usermanagement.NewClient(apiKey)
