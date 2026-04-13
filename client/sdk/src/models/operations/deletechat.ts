@@ -5,18 +5,9 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type DeleteChatSecurityOption1 = {
-  projectSlugHeaderGramProject: string;
-  sessionHeaderGramSession: string;
-};
-
-export type DeleteChatSecurityOption2 = {
-  chatSessionsTokenHeaderGramChatSession: string;
-};
-
 export type DeleteChatSecurity = {
-  option1?: DeleteChatSecurityOption1 | undefined;
-  option2?: DeleteChatSecurityOption2 | undefined;
+  projectSlugHeaderGramProject?: string | undefined;
+  sessionHeaderGramSession?: string | undefined;
 };
 
 export type DeleteChatRequest = {
@@ -32,76 +23,12 @@ export type DeleteChatRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  /**
-   * Chat Sessions token header
-   */
-  gramChatSession?: string | undefined;
 };
-
-/** @internal */
-export type DeleteChatSecurityOption1$Outbound = {
-  "project_slug_header_Gram-Project": string;
-  "session_header_Gram-Session": string;
-};
-
-/** @internal */
-export const DeleteChatSecurityOption1$outboundSchema: z.ZodMiniType<
-  DeleteChatSecurityOption1$Outbound,
-  DeleteChatSecurityOption1
-> = z.pipe(
-  z.object({
-    projectSlugHeaderGramProject: z.string(),
-    sessionHeaderGramSession: z.string(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-      sessionHeaderGramSession: "session_header_Gram-Session",
-    });
-  }),
-);
-
-export function deleteChatSecurityOption1ToJSON(
-  deleteChatSecurityOption1: DeleteChatSecurityOption1,
-): string {
-  return JSON.stringify(
-    DeleteChatSecurityOption1$outboundSchema.parse(deleteChatSecurityOption1),
-  );
-}
-
-/** @internal */
-export type DeleteChatSecurityOption2$Outbound = {
-  "chat_sessions_token_header_Gram-Chat-Session": string;
-};
-
-/** @internal */
-export const DeleteChatSecurityOption2$outboundSchema: z.ZodMiniType<
-  DeleteChatSecurityOption2$Outbound,
-  DeleteChatSecurityOption2
-> = z.pipe(
-  z.object({
-    chatSessionsTokenHeaderGramChatSession: z.string(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      chatSessionsTokenHeaderGramChatSession:
-        "chat_sessions_token_header_Gram-Chat-Session",
-    });
-  }),
-);
-
-export function deleteChatSecurityOption2ToJSON(
-  deleteChatSecurityOption2: DeleteChatSecurityOption2,
-): string {
-  return JSON.stringify(
-    DeleteChatSecurityOption2$outboundSchema.parse(deleteChatSecurityOption2),
-  );
-}
 
 /** @internal */
 export type DeleteChatSecurity$Outbound = {
-  Option1?: DeleteChatSecurityOption1$Outbound | undefined;
-  Option2?: DeleteChatSecurityOption2$Outbound | undefined;
+  "project_slug_header_Gram-Project"?: string | undefined;
+  "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -110,13 +37,13 @@ export const DeleteChatSecurity$outboundSchema: z.ZodMiniType<
   DeleteChatSecurity
 > = z.pipe(
   z.object({
-    option1: z.optional(z.lazy(() => DeleteChatSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => DeleteChatSecurityOption2$outboundSchema)),
+    projectSlugHeaderGramProject: z.optional(z.string()),
+    sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      option1: "Option1",
-      option2: "Option2",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
 );
@@ -134,7 +61,6 @@ export type DeleteChatRequest$Outbound = {
   id: string;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  "Gram-Chat-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -146,13 +72,11 @@ export const DeleteChatRequest$outboundSchema: z.ZodMiniType<
     id: z.string(),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    gramChatSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
-      gramChatSession: "Gram-Chat-Session",
     });
   }),
 );

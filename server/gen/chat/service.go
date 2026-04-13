@@ -186,9 +186,8 @@ type CreditUsageResult struct {
 
 // DeleteChatPayload is the payload type of the chat service deleteChat method.
 type DeleteChatPayload struct {
-	SessionToken      *string
-	ProjectSlugInput  *string
-	ChatSessionsToken *string
+	SessionToken     *string
+	ProjectSlugInput *string
 	// The ID of the chat to delete
 	ID string
 }

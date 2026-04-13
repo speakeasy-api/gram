@@ -3023,13 +3023,6 @@ paths:
                   schema:
                     description: project header
                     type: string
-                - allowEmptyValue: true
-                  description: Chat Sessions token header
-                  in: header
-                  name: Gram-Chat-Session
-                  schema:
-                    description: Chat Sessions token header
-                    type: string
             responses:
                 "204":
                     description: No Content response.
@@ -3090,7 +3083,6 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-                - chat_sessions_token_header_Gram-Chat-Session: []
             summary: deleteChat chat
             tags:
                 - chat

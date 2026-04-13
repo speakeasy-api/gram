@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: d3de93582e2339bcf7a2a607e5800a57
+  docChecksum: 6285d29b0b37b9627128c3b93792a720
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.46
-  configChecksum: 3cd2cb8d117d1f3936d1cd0790393e4a
+  releaseVersion: 0.32.47
+  configChecksum: 4cb26c212b6c0fff7a1da104fa071172
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -810,13 +810,9 @@ trackedFiles:
   docs/models/operations/creditusagesecurity.md:
     last_write_checksum: sha1:33a0215e6ac9b82eec6ae3968984d4b32fa9658e
   docs/models/operations/deletechatrequest.md:
-    last_write_checksum: sha1:7208d15c672ddd986bb430c1dc994f9a9b4bd75f
+    last_write_checksum: sha1:1ec2fa5d93dd0c6fb74384433b7257eb93e13b88
   docs/models/operations/deletechatsecurity.md:
-    last_write_checksum: sha1:ca8dab2ae2c6146bf24d29ecf20880b48cf6d6c2
-  docs/models/operations/deletechatsecurityoption1.md:
-    last_write_checksum: sha1:49056f65fc131ddba0d607a5dd46228393ba8647
-  docs/models/operations/deletechatsecurityoption2.md:
-    last_write_checksum: sha1:a1ccf3db5bbedf3a473f58c89db999fc0c747dc4
+    last_write_checksum: sha1:e00ff76f83492aa61be697a0ec051b7413628b76
   docs/models/operations/deletedomainrequest.md:
     last_write_checksum: sha1:d4b74175139eb90fa5a274d8bbc6803139d3622c
   docs/models/operations/deletedomainsecurity.md:
@@ -1655,11 +1651,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:07d34983d5c1c5fac218f61ccbdc6057eb321bb8
+    last_write_checksum: sha1:3410cdaaa01eed26a57b32285bc5c49980195e4e
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:79ccc04b0822d10b1056a1567e139646eaf36403
+    last_write_checksum: sha1:7ea8c79e9847065ca9fe9053faa3837ae2abce62
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1764,7 +1760,7 @@ trackedFiles:
     last_write_checksum: sha1:e88ed6c9bd3e03d53194e1374f8f94a2e061e21e
     pristine_git_object: f629d618a17d2de626ec5cc8819675b1acd0dec1
   src/funcs/chatDelete.ts:
-    last_write_checksum: sha1:96cd0c8cde030162793146f2cc89107ea37c0f9a
+    last_write_checksum: sha1:1b27c84d09d7af61f6f19c01a04dc7f38724eb3c
   src/funcs/chatGenerateTitle.ts:
     id: 3d9ecd60bd94
     last_write_checksum: sha1:a5c2fb0ee636e1060daf3a106602d629c1d7c5c4
@@ -2173,7 +2169,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:c1ca0fd3fd6d20ea8b4c9333d8d3c8f70e740f31
+    last_write_checksum: sha1:32d5c882049a324e623d4b4e8a4644e4b628a803
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -3168,7 +3164,7 @@ trackedFiles:
     last_write_checksum: sha1:17e374e04f0720acafb5de880f0b4ec96d5cac43
     pristine_git_object: 1f53b334fc0e5e0231ecf7fd7e0c4027b64250fd
   src/models/operations/deletechat.ts:
-    last_write_checksum: sha1:e57067fffd078f5bbe76994af3c87fa8727c57b7
+    last_write_checksum: sha1:1ab4fb65e7ba7b6280a9820f6b4548ed181ce68e
   src/models/operations/deletedomain.ts:
     id: c537d03b82f2
     last_write_checksum: sha1:e89139993fecc5c6340559fbe7ffceb08a9db061

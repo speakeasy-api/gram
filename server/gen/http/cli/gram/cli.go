@@ -305,11 +305,10 @@ func ParseEndpoint(
 		chatListChatsWithResolutionsProjectSlugInputFlag  = chatListChatsWithResolutionsFlags.String("project-slug-input", "", "")
 		chatListChatsWithResolutionsChatSessionsTokenFlag = chatListChatsWithResolutionsFlags.String("chat-sessions-token", "", "")
 
-		chatDeleteChatFlags                 = flag.NewFlagSet("delete-chat", flag.ExitOnError)
-		chatDeleteChatIDFlag                = chatDeleteChatFlags.String("id", "REQUIRED", "")
-		chatDeleteChatSessionTokenFlag      = chatDeleteChatFlags.String("session-token", "", "")
-		chatDeleteChatProjectSlugInputFlag  = chatDeleteChatFlags.String("project-slug-input", "", "")
-		chatDeleteChatChatSessionsTokenFlag = chatDeleteChatFlags.String("chat-sessions-token", "", "")
+		chatDeleteChatFlags                = flag.NewFlagSet("delete-chat", flag.ExitOnError)
+		chatDeleteChatIDFlag               = chatDeleteChatFlags.String("id", "REQUIRED", "")
+		chatDeleteChatSessionTokenFlag     = chatDeleteChatFlags.String("session-token", "", "")
+		chatDeleteChatProjectSlugInputFlag = chatDeleteChatFlags.String("project-slug-input", "", "")
 
 		chatSubmitFeedbackFlags                 = flag.NewFlagSet("submit-feedback", flag.ExitOnError)
 		chatSubmitFeedbackBodyFlag              = chatSubmitFeedbackFlags.String("body", "REQUIRED", "")
@@ -1980,7 +1979,7 @@ func ParseEndpoint(
 				data, err = chatc.BuildListChatsWithResolutionsPayload(*chatListChatsWithResolutionsSearchFlag, *chatListChatsWithResolutionsExternalUserIDFlag, *chatListChatsWithResolutionsResolutionStatusFlag, *chatListChatsWithResolutionsFromFlag, *chatListChatsWithResolutionsToFlag, *chatListChatsWithResolutionsLimitFlag, *chatListChatsWithResolutionsOffsetFlag, *chatListChatsWithResolutionsSortByFlag, *chatListChatsWithResolutionsSortOrderFlag, *chatListChatsWithResolutionsSessionTokenFlag, *chatListChatsWithResolutionsProjectSlugInputFlag, *chatListChatsWithResolutionsChatSessionsTokenFlag)
 			case "delete-chat":
 				endpoint = c.DeleteChat()
-				data, err = chatc.BuildDeleteChatPayload(*chatDeleteChatIDFlag, *chatDeleteChatSessionTokenFlag, *chatDeleteChatProjectSlugInputFlag, *chatDeleteChatChatSessionsTokenFlag)
+				data, err = chatc.BuildDeleteChatPayload(*chatDeleteChatIDFlag, *chatDeleteChatSessionTokenFlag, *chatDeleteChatProjectSlugInputFlag)
 			case "submit-feedback":
 				endpoint = c.SubmitFeedback()
 				data, err = chatc.BuildSubmitFeedbackPayload(*chatSubmitFeedbackBodyFlag, *chatSubmitFeedbackSessionTokenFlag, *chatSubmitFeedbackProjectSlugInputFlag, *chatSubmitFeedbackChatSessionsTokenFlag)
@@ -3316,7 +3315,6 @@ func chatDeleteChatUsage() {
 	fmt.Fprint(os.Stderr, " -id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -3327,11 +3325,10 @@ func chatDeleteChatUsage() {
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat delete-chat --id \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat delete-chat --id \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func chatSubmitFeedbackUsage() {

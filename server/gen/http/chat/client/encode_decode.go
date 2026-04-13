@@ -1261,10 +1261,6 @@ func EncodeDeleteChatRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		if p.ChatSessionsToken != nil {
-			head := *p.ChatSessionsToken
-			req.Header.Set("Gram-Chat-Session", head)
-		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
 		req.URL.RawQuery = values.Encode()

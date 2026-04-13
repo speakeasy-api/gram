@@ -1214,11 +1214,10 @@ func DecodeDeleteChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 	return func(r *http.Request) (*chat.DeleteChatPayload, error) {
 		var payload *chat.DeleteChatPayload
 		var (
-			id                string
-			sessionToken      *string
-			projectSlugInput  *string
-			chatSessionsToken *string
-			err               error
+			id               string
+			sessionToken     *string
+			projectSlugInput *string
+			err              error
 		)
 		id = r.URL.Query().Get("id")
 		if id == "" {
@@ -1232,14 +1231,10 @@ func DecodeDeleteChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		chatSessionsTokenRaw := r.Header.Get("Gram-Chat-Session")
-		if chatSessionsTokenRaw != "" {
-			chatSessionsToken = &chatSessionsTokenRaw
-		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewDeleteChatPayload(id, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewDeleteChatPayload(id, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1252,13 +1247,6 @@ func DecodeDeleteChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
-			}
-		}
-		if payload.ChatSessionsToken != nil {
-			if strings.Contains(*payload.ChatSessionsToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ChatSessionsToken, " ", 2)[1]
-				payload.ChatSessionsToken = &cred
 			}
 		}
 

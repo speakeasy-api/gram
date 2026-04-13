@@ -2610,12 +2610,11 @@ func NewListChatsWithResolutionsPayload(search *string, externalUserID *string, 
 }
 
 // NewDeleteChatPayload builds a chat service deleteChat endpoint payload.
-func NewDeleteChatPayload(id string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.DeleteChatPayload {
+func NewDeleteChatPayload(id string, sessionToken *string, projectSlugInput *string) *chat.DeleteChatPayload {
 	v := &chat.DeleteChatPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
-	v.ChatSessionsToken = chatSessionsToken
 
 	return v
 }

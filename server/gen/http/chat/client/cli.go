@@ -273,7 +273,7 @@ func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch str
 
 // BuildDeleteChatPayload builds the payload for the chat deleteChat endpoint
 // from CLI flags.
-func BuildDeleteChatPayload(chatDeleteChatID string, chatDeleteChatSessionToken string, chatDeleteChatProjectSlugInput string, chatDeleteChatChatSessionsToken string) (*chat.DeleteChatPayload, error) {
+func BuildDeleteChatPayload(chatDeleteChatID string, chatDeleteChatSessionToken string, chatDeleteChatProjectSlugInput string) (*chat.DeleteChatPayload, error) {
 	var id string
 	{
 		id = chatDeleteChatID
@@ -290,17 +290,10 @@ func BuildDeleteChatPayload(chatDeleteChatID string, chatDeleteChatSessionToken 
 			projectSlugInput = &chatDeleteChatProjectSlugInput
 		}
 	}
-	var chatSessionsToken *string
-	{
-		if chatDeleteChatChatSessionsToken != "" {
-			chatSessionsToken = &chatDeleteChatChatSessionsToken
-		}
-	}
 	v := &chat.DeleteChatPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
-	v.ChatSessionsToken = chatSessionsToken
 
 	return v, nil
 }
