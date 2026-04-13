@@ -357,7 +357,7 @@ SELECT
         '[]'::json
     ) as resolutions
 FROM chats c
-WHERE c.id = @id;
+WHERE c.id = @id AND c.deleted IS FALSE;
 
 -- name: ListUserFeedbackForChat :many
 SELECT *

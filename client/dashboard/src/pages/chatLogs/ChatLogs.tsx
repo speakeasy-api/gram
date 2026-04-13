@@ -152,7 +152,9 @@ export default function ChatLogs() {
         { request: { id: chatId } },
         {
           onSuccess: () => {
-            setSelectedChat(null);
+            setSelectedChat((current) =>
+              current?.id === chatId ? null : current,
+            );
             invalidateAllListChatsWithResolutions(queryClient);
           },
         },

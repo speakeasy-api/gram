@@ -202,7 +202,7 @@ SELECT
         '[]'::json
     ) as resolutions
 FROM chats c
-WHERE c.id = $1
+WHERE c.id = $1 AND c.deleted IS FALSE
 `
 
 type GetChatWithResolutionsRow struct {
