@@ -206,6 +206,75 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 	return i, err
 }
 
+const deleteProjectCapturePolicyOverride = `-- name: DeleteProjectCapturePolicyOverride :one
+UPDATE skills_capture_policies
+SET
+    deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, mode, created_at, updated_at, deleted_at, deleted
+`
+
+type DeleteProjectCapturePolicyOverrideParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+func (q *Queries) DeleteProjectCapturePolicyOverride(ctx context.Context, arg DeleteProjectCapturePolicyOverrideParams) (SkillsCapturePolicy, error) {
+	row := q.db.QueryRow(ctx, deleteProjectCapturePolicyOverride, arg.OrganizationID, arg.ProjectID)
+	var i SkillsCapturePolicy
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Mode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getEffectiveCaptureMode = `-- name: GetEffectiveCaptureMode :one
+WITH project_override AS (
+  SELECT scp.mode
+  FROM skills_capture_policies scp
+  WHERE scp.organization_id = $1
+    AND scp.project_id = $2
+    AND scp.deleted IS FALSE
+  LIMIT 1
+),
+org_default AS (
+  SELECT scp.mode
+  FROM skills_capture_policies scp
+  WHERE scp.organization_id = $1
+    AND scp.project_id IS NULL
+    AND scp.deleted IS FALSE
+  LIMIT 1
+)
+SELECT
+  coalesce(
+    (SELECT mode FROM project_override),
+    (SELECT mode FROM org_default),
+    'disabled'
+  )::text AS mode
+`
+
+type GetEffectiveCaptureModeParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+func (q *Queries) GetEffectiveCaptureMode(ctx context.Context, arg GetEffectiveCaptureModeParams) (string, error) {
+	row := q.db.QueryRow(ctx, getEffectiveCaptureMode, arg.OrganizationID, arg.ProjectID)
+	var mode string
+	err := row.Scan(&mode)
+	return mode, err
+}
+
 const getSkill = `-- name: GetSkill :one
 SELECT id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
 FROM skills
@@ -609,6 +678,89 @@ func (q *Queries) UpdateSkillVersionState(ctx context.Context, arg UpdateSkillVe
 		&i.FirstSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertOrganizationCapturePolicy = `-- name: UpsertOrganizationCapturePolicy :one
+INSERT INTO skills_capture_policies (
+    organization_id
+  , project_id
+  , mode
+)
+VALUES (
+    $1
+  , NULL
+  , $2
+)
+ON CONFLICT (organization_id)
+WHERE project_id IS NULL AND deleted IS FALSE
+DO UPDATE
+SET
+    mode = EXCLUDED.mode
+  , updated_at = clock_timestamp()
+RETURNING id, organization_id, project_id, mode, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertOrganizationCapturePolicyParams struct {
+	OrganizationID string
+	Mode           string
+}
+
+func (q *Queries) UpsertOrganizationCapturePolicy(ctx context.Context, arg UpsertOrganizationCapturePolicyParams) (SkillsCapturePolicy, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationCapturePolicy, arg.OrganizationID, arg.Mode)
+	var i SkillsCapturePolicy
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Mode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertProjectCapturePolicyOverride = `-- name: UpsertProjectCapturePolicyOverride :one
+INSERT INTO skills_capture_policies (
+    organization_id
+  , project_id
+  , mode
+)
+VALUES (
+    $1
+  , $2
+  , $3
+)
+ON CONFLICT (organization_id, project_id)
+WHERE project_id IS NOT NULL AND deleted IS FALSE
+DO UPDATE
+SET
+    mode = EXCLUDED.mode
+  , updated_at = clock_timestamp()
+RETURNING id, organization_id, project_id, mode, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertProjectCapturePolicyOverrideParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Mode           string
+}
+
+func (q *Queries) UpsertProjectCapturePolicyOverride(ctx context.Context, arg UpsertProjectCapturePolicyOverrideParams) (SkillsCapturePolicy, error) {
+	row := q.db.QueryRow(ctx, upsertProjectCapturePolicyOverride, arg.OrganizationID, arg.ProjectID, arg.Mode)
+	var i SkillsCapturePolicy
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Mode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }

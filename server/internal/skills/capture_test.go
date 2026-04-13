@@ -15,6 +15,7 @@ import (
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
 func TestService_Capture_Success(t *testing.T) {
@@ -242,4 +243,113 @@ func TestService_Capture_MissingProjectIDInAuthContext(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+}
+
+func TestService_Capture_PolicyDisabledByDefault(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestSkillsServiceWithCaptureMode(t, nil)
+
+	content := []byte("PK\x03\x04skill-zip-content-policy-default")
+	sha := sha256.Sum256(content)
+	expectedSHA := hex.EncodeToString(sha[:])
+
+	_, err := ti.service.Capture(
+		ctx,
+		newCapturePayload("application/zip", int64(len(content)), expectedSHA),
+		io.NopCloser(bytes.NewReader(content)),
+	)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "skill capture is disabled")
+}
+
+func TestService_Capture_ProjectOnlyPolicyAllowsProjectScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestSkillsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	_, err := ti.skillsRepo.UpsertOrganizationCapturePolicy(ctx, skillsrepo.UpsertOrganizationCapturePolicyParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Mode:           "project_only",
+	})
+	require.NoError(t, err)
+
+	content := []byte("PK\x03\x04skill-zip-content-policy-project")
+	sha := sha256.Sum256(content)
+	expectedSHA := hex.EncodeToString(sha[:])
+
+	result, err := ti.service.Capture(
+		ctx,
+		newCapturePayload("application/zip", int64(len(content)), expectedSHA),
+		io.NopCloser(bytes.NewReader(content)),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Asset)
+}
+
+func TestService_Capture_ProjectOnlyPolicyRejectsUserScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestSkillsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := ti.skillsRepo.UpsertOrganizationCapturePolicy(ctx, skillsrepo.UpsertOrganizationCapturePolicyParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Mode:           "project_only",
+	})
+	require.NoError(t, err)
+
+	content := []byte("PK\x03\x04skill-zip-content-policy-user-scope")
+	sha := sha256.Sum256(content)
+	expectedSHA := hex.EncodeToString(sha[:])
+	payload := newCapturePayload("application/zip", int64(len(content)), expectedSHA)
+	payload.Scope = "user"
+
+	_, err = ti.service.Capture(ctx, payload, io.NopCloser(bytes.NewReader(content)))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestService_Capture_ProjectOverrideTakesPrecedence(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestSkillsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	_, err := ti.skillsRepo.UpsertOrganizationCapturePolicy(ctx, skillsrepo.UpsertOrganizationCapturePolicyParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Mode:           "disabled",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.skillsRepo.UpsertProjectCapturePolicyOverride(ctx, skillsrepo.UpsertProjectCapturePolicyOverrideParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Mode:           "project_and_user",
+	})
+	require.NoError(t, err)
+
+	content := []byte("PK\x03\x04skill-zip-content-policy-override")
+	sha := sha256.Sum256(content)
+	expectedSHA := hex.EncodeToString(sha[:])
+
+	result, err := ti.service.Capture(
+		ctx,
+		newCapturePayload("application/zip", int64(len(content)), expectedSHA),
+		io.NopCloser(bytes.NewReader(content)),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Asset)
 }

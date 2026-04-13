@@ -18,7 +18,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/skills"
+	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -32,6 +34,7 @@ type testInstance struct {
 	storage        assets.BlobStore
 	sessionManager *sessions.Manager
 	repo           *assetsrepo.Queries
+	skillsRepo     *skillsrepo.Queries
 }
 
 func TestMain(m *testing.M) {
@@ -56,6 +59,13 @@ func TestMain(m *testing.M) {
 func newTestSkillsService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
+	defaultMode := "project_and_user"
+	return newTestSkillsServiceWithCaptureMode(t, &defaultMode)
+}
+
+func newTestSkillsServiceWithCaptureMode(t *testing.T, mode *string) (context.Context, *testInstance) {
+	t.Helper()
+
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
@@ -74,13 +84,27 @@ func newTestSkillsService(t *testing.T) (context.Context, *testInstance) {
 	storage := assetstest.NewTestBlobStore(t)
 	svc := skills.NewService(logger, tracerProvider, conn, sessionManager, storage, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
 
-	return ctx, &testInstance{
+	ti := &testInstance{
 		service:        svc,
 		conn:           conn,
 		storage:        storage,
 		sessionManager: sessionManager,
 		repo:           assetsrepo.New(conn),
+		skillsRepo:     skillsrepo.New(conn),
 	}
+
+	if mode != nil {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+
+		_, err = ti.skillsRepo.UpsertOrganizationCapturePolicy(ctx, skillsrepo.UpsertOrganizationCapturePolicyParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Mode:           *mode,
+		})
+		require.NoError(t, err)
+	}
+
+	return ctx, ti
 }
 
 func newCapturePayload(contentType string, contentLength int64, contentSHA256 string) *gen.CaptureSkillForm {

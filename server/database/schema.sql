@@ -279,6 +279,35 @@ FOREIGN KEY (active_version_id)
 REFERENCES skill_versions (id)
 ON DELETE SET NULL;
 
+CREATE TABLE IF NOT EXISTS skills_capture_policies (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  project_id uuid,
+  mode TEXT NOT NULL CHECK (mode IN ('disabled', 'project_only', 'user_only', 'project_and_user')),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT skills_capture_policies_pkey PRIMARY KEY (id),
+  CONSTRAINT skills_capture_policies_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skills_capture_policies_scope_check CHECK (
+    (project_id IS NULL AND organization_id <> '')
+    OR
+    (project_id IS NOT NULL AND organization_id <> '')
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skills_capture_policies_org_default_key
+ON skills_capture_policies (organization_id)
+WHERE project_id IS NULL AND deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS skills_capture_policies_project_override_key
+ON skills_capture_policies (organization_id, project_id)
+WHERE project_id IS NOT NULL AND deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS api_keys (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
