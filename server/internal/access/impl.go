@@ -878,11 +878,20 @@ func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organ
 		Name:        role.Name,
 		Description: role.Description,
 		IsSystem:    isSystemRole(role.Slug),
-		Grants:      grants,
+		Grants:      roleGrantsFromListRoleGrants(grants),
 		MemberCount: memberCount,
 		CreatedAt:   conv.Default(role.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 		UpdatedAt:   conv.Default(role.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 	}, nil
+}
+
+// roleGrantsFromListRoleGrants converts the ListRoleGrant type to the RoleGrant type.
+func roleGrantsFromListRoleGrants(grants []*gen.ListRoleGrant) []*gen.RoleGrant {
+	out := make([]*gen.RoleGrant, 0, len(grants))
+	for _, grant := range grants {
+		out = append(out, &gen.RoleGrant{Scope: grant.Scope, Resources: grant.Resources})
+	}
+	return out
 }
 
 func connectedUser(ctx context.Context, db *pgxpool.Pool, organizationID string, userID string) (usersrepo.User, error) {

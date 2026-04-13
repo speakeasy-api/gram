@@ -132,7 +132,7 @@ type ListMembersResponseBody struct {
 // endpoint HTTP response body.
 type ListGrantsResponseBody struct {
 	// The user's effective grants in this organization.
-	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
+	Grants []*ListRoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
 }
 
 // UpdateMemberRoleResponseBody is the type of the "access" service
@@ -1828,6 +1828,17 @@ type AccessMemberResponseBody struct {
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
 }
 
+// ListRoleGrantResponseBody is used to define fields on response body types.
+type ListRoleGrantResponseBody struct {
+	// The scope slug this grant applies to.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// The inherited scopes the primary scope grants.
+	SubScopes []string `form:"sub_scopes" json:"sub_scopes" xml:"sub_scopes"`
+	// Resource allowlist. Null means unrestricted access. An array means only the
+	// listed resource IDs.
+	Resources []string `form:"resources" json:"resources" xml:"resources"`
+}
+
 // RoleGrantRequestBody is used to define fields on request body types.
 type RoleGrantRequestBody struct {
 	// The scope slug this grant applies to.
@@ -1980,16 +1991,16 @@ func NewListMembersResponseBody(res *access.ListMembersResult) *ListMembersRespo
 func NewListGrantsResponseBody(res *access.ListUserGrantsResult) *ListGrantsResponseBody {
 	body := &ListGrantsResponseBody{}
 	if res.Grants != nil {
-		body.Grants = make([]*RoleGrantResponseBody, len(res.Grants))
+		body.Grants = make([]*ListRoleGrantResponseBody, len(res.Grants))
 		for i, val := range res.Grants {
 			if val == nil {
 				body.Grants[i] = nil
 				continue
 			}
-			body.Grants[i] = marshalAccessRoleGrantToRoleGrantResponseBody(val)
+			body.Grants[i] = marshalAccessListRoleGrantToListRoleGrantResponseBody(val)
 		}
 	} else {
-		body.Grants = []*RoleGrantResponseBody{}
+		body.Grants = []*ListRoleGrantResponseBody{}
 	}
 	return body
 }

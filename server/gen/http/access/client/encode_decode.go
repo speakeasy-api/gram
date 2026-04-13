@@ -2228,3 +2228,21 @@ func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberRespon
 
 	return res
 }
+
+// unmarshalListRoleGrantResponseBodyToAccessListRoleGrant builds a value of
+// type *access.ListRoleGrant from a value of type *ListRoleGrantResponseBody.
+func unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(v *ListRoleGrantResponseBody) *access.ListRoleGrant {
+	res := &access.ListRoleGrant{
+		Scope: *v.Scope,
+	}
+	res.SubScopes = make([]string, len(v.SubScopes))
+	for i, val := range v.SubScopes {
+		res.SubScopes[i] = val
+	}
+	res.Resources = make([]string, len(v.Resources))
+	for i, val := range v.Resources {
+		res.Resources[i] = val
+	}
+
+	return res
+}

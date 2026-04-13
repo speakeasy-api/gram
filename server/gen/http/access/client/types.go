@@ -132,7 +132,7 @@ type ListMembersResponseBody struct {
 // endpoint HTTP response body.
 type ListGrantsResponseBody struct {
 	// The user's effective grants in this organization.
-	Grants []*RoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
+	Grants []*ListRoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 }
 
 // UpdateMemberRoleResponseBody is the type of the "access" service
@@ -1837,6 +1837,17 @@ type AccessMemberResponseBody struct {
 	JoinedAt *string `form:"joined_at,omitempty" json:"joined_at,omitempty" xml:"joined_at,omitempty"`
 }
 
+// ListRoleGrantResponseBody is used to define fields on response body types.
+type ListRoleGrantResponseBody struct {
+	// The scope slug this grant applies to.
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// The inherited scopes the primary scope grants.
+	SubScopes []string `form:"sub_scopes,omitempty" json:"sub_scopes,omitempty" xml:"sub_scopes,omitempty"`
+	// Resource allowlist. Null means unrestricted access. An array means only the
+	// listed resource IDs.
+	Resources []string `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
+}
+
 // NewCreateRoleRequestBody builds the HTTP request body from the payload of
 // the "createRole" endpoint of the "access" service.
 func NewCreateRoleRequestBody(p *access.CreateRolePayload) *CreateRoleRequestBody {
@@ -3071,13 +3082,13 @@ func NewListMembersGatewayError(body *ListMembersGatewayErrorResponseBody) *goa.
 // endpoint result from a HTTP "OK" response.
 func NewListGrantsListUserGrantsResultOK(body *ListGrantsResponseBody) *access.ListUserGrantsResult {
 	v := &access.ListUserGrantsResult{}
-	v.Grants = make([]*access.RoleGrant, len(body.Grants))
+	v.Grants = make([]*access.ListRoleGrant, len(body.Grants))
 	for i, val := range body.Grants {
 		if val == nil {
 			v.Grants[i] = nil
 			continue
 		}
-		v.Grants[i] = unmarshalRoleGrantResponseBodyToAccessRoleGrant(val)
+		v.Grants[i] = unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(val)
 	}
 
 	return v
@@ -3583,7 +3594,7 @@ func ValidateListGrantsResponseBody(body *ListGrantsResponseBody) (err error) {
 	}
 	for _, e := range body.Grants {
 		if e != nil {
-			if err2 := ValidateRoleGrantResponseBody(e); err2 != nil {
+			if err2 := ValidateListRoleGrantResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -5885,6 +5896,26 @@ func ValidateAccessMemberResponseBody(body *AccessMemberResponseBody) (err error
 	}
 	if body.JoinedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.joined_at", *body.JoinedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListRoleGrantResponseBody runs the validations defined on
+// ListRoleGrantResponseBody
+func ValidateListRoleGrantResponseBody(body *ListRoleGrantResponseBody) (err error) {
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.SubScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sub_scopes", "body"))
+	}
+	if body.Resources == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resources", "body"))
+	}
+	for _, e := range body.SubScopes {
+		if !(e == "org:read" || e == "org:admin" || e == "build:read" || e == "build:write" || e == "mcp:read" || e == "mcp:write" || e == "mcp:connect") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect"}))
+		}
 	}
 	return
 }
