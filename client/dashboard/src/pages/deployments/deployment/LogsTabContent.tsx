@@ -1,7 +1,18 @@
 import { Heading } from "@/components/ui/heading";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Type } from "@/components/ui/type";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { useDeploymentLogsSuspense } from "@gram/client/react-query";
+import {
+  useDeploymentLogsSuspense,
+  useDeploymentSuspense,
+} from "@gram/client/react-query";
 import { Icon, Input } from "@speakeasy-api/moonshine";
 import React, {
   useCallback,
@@ -45,6 +56,19 @@ const levelColors = {
 
 function getLevelColors(level: LogLevel) {
   return levelColors[level] ?? levelColors.INFO;
+}
+
+function formatSourceLabel(attachmentType: string): string {
+  switch (attachmentType) {
+    case "openapi":
+      return "OpenAPI";
+    case "functions":
+      return "Functions";
+    case "external_mcp":
+      return "External MCP";
+    default:
+      return attachmentType.replace(/_/g, " ");
+  }
 }
 
 type LogFocus = "all" | "warns" | "errors" | "skipped";
@@ -161,7 +185,18 @@ export const LogsTabContent = ({
     },
   );
 
+  const { data: deployment } = useDeploymentSuspense(
+    { id: deploymentId },
+    undefined,
+    {
+      staleTime: Infinity,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  );
+
   const [focus, setFocus] = useState<LogFocus>("all");
+  const [selectedSource, setSelectedSource] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentLogIndex, setCurrentLogIndex] = useState<number | null>(null);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
@@ -193,13 +228,57 @@ export const LogsTabContent = ({
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const logRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
+  // Build a map of attachmentId → asset name from the deployment data.
+  // Log events store the deployment asset ID (not the uploaded assetId).
+  const assetNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const asset of deployment.openapiv3Assets ?? []) {
+      map.set(asset.id, asset.name);
+    }
+    for (const asset of deployment.functionsAssets ?? []) {
+      map.set(asset.id, asset.name);
+    }
+    for (const mcp of deployment.externalMcps ?? []) {
+      if ("id" in mcp && "name" in mcp) {
+        map.set(String(mcp.id), String(mcp.name));
+      }
+    }
+    return map;
+  }, [deployment]);
+
+  // Build source filter options from individual assets in the log events
+  const sourceOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const event of deploymentLogs.events) {
+      if (event.attachmentId) {
+        counts.set(
+          event.attachmentId,
+          (counts.get(event.attachmentId) ?? 0) + 1,
+        );
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => {
+        const nameA = assetNameMap.get(a[0]) ?? a[0];
+        const nameB = assetNameMap.get(b[0]) ?? b[0];
+        return nameA.localeCompare(nameB);
+      })
+      .map(([id, count]) => ({
+        value: id,
+        label: assetNameMap.get(id) ?? id.slice(0, 8),
+        count,
+      }));
+  }, [deploymentLogs.events, assetNameMap]);
+
+  const activeSourceFilter =
+    attachmentType ?? (selectedSource !== "all" ? selectedSource : undefined);
+
   const visibleEvents = useMemo(() => {
-    if (!attachmentType) return deploymentLogs.events;
+    if (!activeSourceFilter) return deploymentLogs.events;
     return deploymentLogs.events.filter(
-      (event) =>
-        !event.attachmentType || event.attachmentType === attachmentType,
+      (event) => event.attachmentId === activeSourceFilter,
     );
-  }, [deploymentLogs.events, attachmentType]);
+  }, [deploymentLogs.events, activeSourceFilter]);
 
   const parsedLogs = useMemo(
     () =>
@@ -517,9 +596,37 @@ export const LogsTabContent = ({
 
   return (
     <>
-      <Heading variant="h2" className="mb-6">
+      <Heading variant="h2" className="mb-4">
         Logs
       </Heading>
+
+      {/* Filters row */}
+      {!embeddedMode && sourceOptions.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Type small muted>
+              Source
+            </Type>
+            <Select value={selectedSource} onValueChange={setSelectedSource}>
+              <SelectTrigger size="sm" className="min-w-[180px] bg-background">
+                <SelectValue placeholder="All sources" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All sources</SelectItem>
+                {sourceOptions.map((opt) => (
+                  <SelectItem
+                    key={opt.value}
+                    value={opt.value}
+                    description={`${opt.count} log${opt.count === 1 ? "" : "s"}`}
+                  >
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
 
       {/* Logs container */}
       <div className="relative bg-surface rounded-lg border border-border overflow-hidden">
@@ -529,160 +636,54 @@ export const LogsTabContent = ({
             isScrolled && "border-b border-border",
           )}
         >
-          <button
-            onClick={() => handleFocusChange("all")}
-            className={cn(
-              "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-              focus === "all" ? "bg-btn-secondary" : "hover:bg-muted/50",
+          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+            {searchQuery ? (
+              <>
+                <span className="flex items-center gap-1">
+                  <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                    N
+                  </kbd>
+                  <span>/</span>
+                  <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                    ⇧N
+                  </kbd>
+                  <span className="ml-0.5">results</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                    ESC
+                  </kbd>
+                  <span>clear</span>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="flex items-center gap-1">
+                  <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                    J
+                  </kbd>
+                  <span>/</span>
+                  <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                    K
+                  </kbd>
+                  <span className="ml-0.5">navigate</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                    G
+                  </kbd>
+                  <span>first</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                    ⇧G
+                  </kbd>
+                  <span>last</span>
+                </span>
+              </>
             )}
-          >
-            <Icon
-              name="list"
-              className={cn(
-                "size-3",
-                focus === "all" ? "" : "text-muted-foreground",
-              )}
-            />
-            <span>All logs</span>
-            <span className="text-muted-foreground opacity-60">
-              {parsedLogs.length}
-            </span>
-          </button>
-
-          {logStats.warns > 0 && (
-            <button
-              onClick={() => handleFocusChange("warns")}
-              className={cn(
-                "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-                focus === "warns" ? "bg-btn-secondary" : "hover:bg-muted/50",
-              )}
-            >
-              <Icon
-                name="triangle-alert"
-                className={cn(
-                  "size-3",
-                  focus === "warns" ? "text-warning" : "text-muted-foreground",
-                )}
-              />
-              <span>Warns</span>
-              <span className="text-muted-foreground opacity-60">
-                {logStats.warns}
-              </span>
-            </button>
-          )}
-
-          {logStats.errors > 0 && (
-            <button
-              onClick={() => handleFocusChange("errors")}
-              className={cn(
-                "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-                focus === "errors" ? "bg-btn-secondary" : "hover:bg-muted/50",
-              )}
-            >
-              <Icon
-                name="circle-x"
-                className={cn(
-                  "size-3",
-                  focus === "errors"
-                    ? "text-destructive"
-                    : "text-muted-foreground",
-                )}
-              />
-              <span>Errors</span>
-              <span className="text-muted-foreground opacity-60">
-                {logStats.errors}
-              </span>
-            </button>
-          )}
-
-          {logStats.skipped > 0 && (
-            <button
-              onClick={() => handleFocusChange("skipped")}
-              className={cn(
-                "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-                focus === "skipped" ? "bg-btn-secondary" : "hover:bg-muted/50",
-              )}
-            >
-              <Icon
-                name="skip-forward"
-                className={cn(
-                  "size-3",
-                  focus === "skipped" ? "" : "text-muted-foreground",
-                )}
-              />
-              <span>Skipped</span>
-              <span className="text-muted-foreground opacity-60">
-                {logStats.skipped}
-              </span>
-            </button>
-          )}
-
-          <div className="ml-auto flex items-center gap-2">
-            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-              {searchQuery ? (
-                <>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
-                      N
-                    </kbd>
-                    <span>/</span>
-                    <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
-                      ⇧N
-                    </kbd>
-                    <span className="ml-0.5">results</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
-                      ESC
-                    </kbd>
-                    <span>clear</span>
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
-                      J
-                    </kbd>
-                    <span>/</span>
-                    <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
-                      K
-                    </kbd>
-                    <span className="ml-0.5">navigate</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
-                      G
-                    </kbd>
-                    <span>first</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
-                      ⇧G
-                    </kbd>
-                    <span>last</span>
-                  </span>
-                </>
-              )}
-            </div>
-
-            <button
-              onClick={() => setGroupBySource(!groupBySource)}
-              className={cn(
-                "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-                groupBySource ? "bg-btn-secondary" : "hover:bg-muted/50",
-              )}
-            >
-              <Icon
-                name="layers"
-                className={cn(
-                  "size-3",
-                  groupBySource ? "" : "text-muted-foreground",
-                )}
-              />
-              <span>{groupBySource ? "Grouped" : "Group"}</span>
-            </button>
-
+          </div>
+          <div className="ml-auto">
             <div className="relative">
               <Icon
                 name="search"
