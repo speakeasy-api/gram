@@ -721,11 +721,11 @@ function HooksInnerContent({
 
   return (
     <>
-      <div className="flex flex-col flex-1 min-h-0 w-full">
-        <div className="px-8 pt-8 pb-4 flex flex-col gap-6 flex-1 min-h-0">
+      <div className="flex min-h-0 w-full flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 pb-4">
           {/* Header section */}
-          <div className="flex items-start justify-between gap-4 shrink-0">
-            <div className="flex flex-col gap-1 min-w-0">
+          <div className="flex shrink-0 items-start justify-between gap-4">
+            <div className="flex min-w-0 flex-col gap-1">
               <h1 className="text-xl font-semibold">Hooks</h1>
               <p className="text-muted-foreground text-sm">
                 Monitor hook events and tool executions across all servers
@@ -743,7 +743,7 @@ function HooksInnerContent({
           </div>
 
           {/* Filter and Search Row */}
-          <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <MultiSearch
               value={serverInput}
               onChange={setServerInput}
@@ -792,10 +792,10 @@ function HooksInnerContent({
             </Button>
           </div>
 
-          <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
+          <div className="flex min-h-0 flex-1 gap-4 overflow-hidden">
             {/* Content Column */}
 
-            <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto">
               {error ? (
                 <ErrorAlert
                   error={error}
@@ -803,8 +803,8 @@ function HooksInnerContent({
                   className="mx-auto w-full"
                 />
               ) : isLoading ? (
-                <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-                  <Spinner className="size-5 mr-0" />
+                <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
+                  <Spinner className="mr-0 size-5" />
                   <span>Loading hook events...</span>
                 </div>
               ) : groupedTraces.length === 0 && activeFilters.length === 0 ? (
@@ -812,16 +812,16 @@ function HooksInnerContent({
               ) : groupedTraces.length === 0 ? (
                 <div className="py-12 text-center">
                   <div className="flex flex-col items-center gap-3">
-                    <div className="size-12 rounded-full bg-muted flex items-center justify-center">
+                    <div className="bg-muted flex size-12 items-center justify-center rounded-full">
                       <Icon
                         name="inbox"
-                        className="size-6 text-muted-foreground"
+                        className="text-muted-foreground size-6"
                       />
                     </div>
-                    <span className="font-medium text-foreground">
+                    <span className="text-foreground font-medium">
                       No matching hook events
                     </span>
-                    <span className="text-sm text-muted-foreground max-w-sm">
+                    <span className="text-muted-foreground max-w-sm text-sm">
                       Try adjusting your search query or time range
                     </span>
                   </div>
@@ -841,8 +841,8 @@ function HooksInnerContent({
 
             {/* Logs Column */}
             {isLogsVisible && (
-              <div className="flex-1 min-h-0 overflow-y-auto border">
-                <div className="h-full flex flex-col bg-background">
+              <div className="min-h-0 flex-1 overflow-y-auto border">
+                <div className="bg-background flex h-full flex-col">
                   {isFetching && groupedTraces.length > 0 && (
                     <div className="bg-primary/20 absolute top-0 right-0 left-0 z-20 h-1">
                       <div className="bg-primary h-full animate-pulse" />
@@ -1012,8 +1012,8 @@ function HooksTraceContent({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-        <Spinner className="size-5 mr-0" />
+      <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
+        <Spinner className="mr-0 size-5" />
         <span>Loading hook events...</span>
       </div>
     );
@@ -2142,7 +2142,7 @@ function HooksAnalytics({
             compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
           )}
         >
-          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
             <h3 className="text font-semibold">Server Usage</h3>
             <ServerUsageTimeSeries
               traces={groupedTraces}
