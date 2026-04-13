@@ -220,7 +220,7 @@ export function ServerCard({
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="text-base font-light">Server Enabled</h4>
+                      <h4 className="text-base font-normal">Server Enabled</h4>
                       <p className="text-xs text-muted-foreground">
                         {toolset.mcpEnabled
                           ? "Server is active, can receive requests"
@@ -245,7 +245,7 @@ export function ServerCard({
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h4 className="text-base font-light">
+                          <h4 className="text-base font-normal">
                             Server Privacy
                           </h4>
                           <p className="text-xs text-muted-foreground">

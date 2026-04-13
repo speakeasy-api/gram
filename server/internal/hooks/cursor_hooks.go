@@ -143,8 +143,8 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 		FunctionID:     nil,
 	}
 
-	if s.telemetryService != nil {
-		s.telemetryService.CreateLog(telemetry.LogParams{
+	if s.telemetryLogger != nil {
+		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
 			Attributes: attrs,

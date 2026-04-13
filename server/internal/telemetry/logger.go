@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"maps"
 	"strings"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -37,28 +39,63 @@ type LogParams struct {
 	Attributes map[attr.Key]any
 }
 
-func (s *Service) CreateLog(params LogParams) {
-	ctx := context.Background()
+type Logger struct {
+	shutdownCtx       func() context.Context
+	logger            *slog.Logger
+	chConn            clickhouse.Conn
+	logsEnabled       FeatureChecker
+	toolIOLogsEnabled FeatureChecker
+}
 
-	enabled, err := s.logsEnabled(ctx, params.ToolInfo.OrganizationID)
+func NewLogger(
+	shutdownCtx context.Context,
+	logger *slog.Logger,
+	chConn clickhouse.Conn,
+	logsEnabled FeatureChecker,
+	toolIOLogsEnabled FeatureChecker,
+) *Logger {
+	return &Logger{
+		shutdownCtx:       func() context.Context { return shutdownCtx },
+		logger:            logger.With(attr.SlogComponent("telemetry_logger")),
+		chConn:            chConn,
+		logsEnabled:       logsEnabled,
+		toolIOLogsEnabled: toolIOLogsEnabled,
+	}
+}
+
+func (l *Logger) checkToolIOLogsEnabled(ctx context.Context, organizationID string) bool {
+	if l.toolIOLogsEnabled == nil {
+		return false
+	}
+	enabled, err := l.toolIOLogsEnabled(ctx, organizationID)
+	if err != nil {
+		return false
+	}
+	return enabled
+}
+
+func (l *Logger) Log(ctx context.Context, params LogParams) {
+	chRepo := repo.New(l.chConn)
+
+	enabled, err := l.logsEnabled(ctx, params.ToolInfo.OrganizationID)
 	if err != nil || !enabled {
 		return
 	}
 
 	// Scrub tool IO content if the feature is disabled for this organization.
-	if !s.CheckToolIOLogsEnabled(ctx, params.ToolInfo.OrganizationID) {
+	if !l.checkToolIOLogsEnabled(ctx, params.ToolInfo.OrganizationID) {
 		delete(params.Attributes, attr.GenAIToolCallArgumentsKey)
 		delete(params.Attributes, attr.GenAIToolCallResultKey)
 	}
 
 	logParams, err := buildTelemetryLogParams(params)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to build telemetry log params", attr.SlogError(err))
+		l.logger.ErrorContext(ctx, "failed to build telemetry log params", attr.SlogError(err))
 		return
 	}
 
-	if err := s.chRepo.InsertTelemetryLog(ctx, *logParams); err != nil {
-		s.logger.ErrorContext(ctx, "failed to insert telemetry log", attr.SlogError(err))
+	if err := chRepo.InsertTelemetryLog(l.shutdownCtx(), *logParams); err != nil {
+		l.logger.ErrorContext(ctx, "failed to insert telemetry log", attr.SlogError(err))
 	}
 }
 

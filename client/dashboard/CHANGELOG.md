@@ -1,5 +1,15 @@
 # dashboard
 
+## 0.39.0
+
+### Minor Changes
+
+- 61cc193: Add team invite flow with accept page, configurable expiry, and security hardening
+
+### Patch Changes
+
+- 734c03d: Fix playground credential saving failing with "length of slug must be lesser or equal than 40" error. The environment slug format was shortened to stay within the server's 40-character limit.
+
 ## 0.38.0
 
 ### Minor Changes

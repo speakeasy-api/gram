@@ -58,6 +58,9 @@ var configSnippetTmplData string
 //go:embed hosted_page.html.tmpl
 var hostedPageTmplData string
 
+//go:embed not_found_page.html.tmpl
+var notFoundPageTmplData string
+
 //go:embed hosted_page.js
 var hostedPageScriptData []byte
 
@@ -737,7 +740,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	toolset, err := s.loadToolsetFromContextAndSlug(ctx, mcpSlug)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+		return s.serveNotFoundPage(w, mcpSlug)
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load mcp server").Log(ctx, s.logger, attr.SlogToolsetMCPSlug(mcpSlug))
 	}
@@ -757,12 +760,14 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 				return nil
 			}
 			// Fallback if serverURL is nil
-			return oops.E(oops.CodeNotFound, nil, "mcp server not found").Log(ctx, s.logger)
+			s.logger.InfoContext(ctx, "serving not found page: serverURL is nil", attr.SlogToolsetMCPSlug(mcpSlug))
+			return s.serveNotFoundPage(w, mcpSlug)
 		}
 
 		// Ought one to check if the user has access to the organization rather than just if the org is active?
 		if !authOk || authCtx.ActiveOrganizationID != toolset.OrganizationID {
-			return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+			s.logger.InfoContext(ctx, "serving not found page: wrong org or no auth", attr.SlogToolsetMCPSlug(mcpSlug))
+			return s.serveNotFoundPage(w, mcpSlug)
 		}
 	}
 
@@ -943,6 +948,14 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
+func (s *Service) serveNotFoundPage(w http.ResponseWriter, _ string) error {
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = w.Write([]byte(notFoundPageTmplData))
+
+	return nil
+}
+
 // InstallPageScriptHash returns the cache-busting hash for the install page script.
 func (s *Service) InstallPageScriptHash() string {
 	return s.installPageScriptHash
@@ -1059,10 +1072,7 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 			McpSlug:        conv.ToPGText(mcpSlug),
 			CustomDomainID: uuid.NullUUID{UUID: *domainID, Valid: true},
 		})
-	}
-
-	// Fallback to just looking up by slug if no domain in context or if lookup by domain failed
-	if domainID == nil || toolsetErr != nil {
+	} else {
 		toolset, toolsetErr = s.toolsetRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	}
 

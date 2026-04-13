@@ -523,14 +523,48 @@ func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.
 	return p.extractCustomerTier(ctx, customerState)
 }
 
-func (p *Client) extractCustomerTier(ctx context.Context, customerState *polarComponents.CustomerState) (*billing.Tier, bool, error) {
-	if customerState != nil {
-		// Active enterprise subscriptions return earlier with the enterprise flag in the DB
-		if len(customerState.ActiveSubscriptions) >= 1 {
-			if len(customerState.ActiveSubscriptions) > 1 {
-				p.logger.ErrorContext(ctx, "multiple active subscriptions found", attr.SlogOrganizationID(customerState.OrganizationID))
+// customerStateFields holds the common fields extracted from the CustomerState union type.
+type customerStateFields struct {
+	ActiveSubscriptions []polarComponents.CustomerStateSubscription
+	ActiveMeters        []polarComponents.CustomerStateMeter
+	OrganizationID      string
+}
+
+// unwrapCustomerState extracts common fields from the CustomerState union (individual or team).
+func unwrapCustomerState(cs *polarComponents.CustomerState) *customerStateFields {
+	if cs == nil {
+		return nil
+	}
+	switch cs.Type {
+	case polarComponents.CustomerStateTypeIndividual:
+		if cs.CustomerStateIndividual != nil {
+			return &customerStateFields{
+				ActiveSubscriptions: cs.CustomerStateIndividual.ActiveSubscriptions,
+				ActiveMeters:        cs.CustomerStateIndividual.ActiveMeters,
+				OrganizationID:      cs.CustomerStateIndividual.OrganizationID,
 			}
-			activeSubscription := customerState.ActiveSubscriptions[0]
+		}
+	case polarComponents.CustomerStateTypeTeam:
+		if cs.CustomerStateTeam != nil {
+			return &customerStateFields{
+				ActiveSubscriptions: cs.CustomerStateTeam.ActiveSubscriptions,
+				ActiveMeters:        cs.CustomerStateTeam.ActiveMeters,
+				OrganizationID:      cs.CustomerStateTeam.OrganizationID,
+			}
+		}
+	}
+	return nil
+}
+
+func (p *Client) extractCustomerTier(ctx context.Context, customerState *polarComponents.CustomerState) (*billing.Tier, bool, error) {
+	fields := unwrapCustomerState(customerState)
+	if fields != nil {
+		// Active enterprise subscriptions return earlier with the enterprise flag in the DB
+		if len(fields.ActiveSubscriptions) >= 1 {
+			if len(fields.ActiveSubscriptions) > 1 {
+				p.logger.ErrorContext(ctx, "multiple active subscriptions found", attr.SlogOrganizationID(fields.OrganizationID))
+			}
+			activeSubscription := fields.ActiveSubscriptions[0]
 			if activeSubscription.ProductID == p.catalog.ProductIDBase {
 				return new(billing.TierBase), true, nil
 			}
@@ -587,7 +621,8 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 		ActualEnabledServerCount: 0, // Not related to polar, populated elsewhere
 	}
 
-	if customer != nil {
+	fields := unwrapCustomerState(customer)
+	if fields != nil {
 		var toolCallMeter, serverMeter, creditMeter *polarComponents.CustomerStateMeter
 
 		// Use extractCustomerTier for subscription check so auth and usage
@@ -598,7 +633,7 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 		}
 		usage.HasActiveSubscription = hasActiveSub
 
-		for _, meter := range customer.ActiveMeters {
+		for _, meter := range fields.ActiveMeters {
 			if meter.MeterID == p.catalog.MeterIDToolCalls {
 				toolCallMeter = &meter
 			}

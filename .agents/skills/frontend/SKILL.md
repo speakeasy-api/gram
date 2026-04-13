@@ -49,6 +49,60 @@ Never use immediately-invoked function expressions inside JSX (`{(() => { ... })
 
 A component that has grown past ~150 lines of JSX is doing too much. Break it up. If a page has multiple tabs, each tab's content is its own component.
 
+### React Performance Patterns
+
+These patterns were established in the audit log (#2140) and deployment log (#2167) redesigns. Apply them whenever building search, filtering, or keyboard navigation.
+
+#### Hoist RegExp creation
+
+Never create `new RegExp()` inside a render callback (e.g., `highlightMatch`). Extract it to a `useMemo` keyed on the search query:
+
+```typescript
+const searchRegex = useMemo(() => {
+  if (!searchQuery) return null;
+  const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(${escaped})`, "gi");
+}, [searchQuery]);
+```
+
+Then use `searchRegex` inside `useCallback`-wrapped functions.
+
+#### Defer expensive search computations
+
+Wrap search queries with `useDeferredValue` before passing them to expensive `useMemo` computations (e.g., filtering all logs). This keeps the input responsive while React defers the downstream recomputation:
+
+```typescript
+const deferredSearchQuery = useDeferredValue(searchQuery);
+const filteredIndices = useMemo(() => { /* expensive filter */ }, [deferredSearchQuery, ...]);
+```
+
+#### Derive state during render, not via useEffect
+
+If a value can be computed from current state, derive it inline — don't sync it via `useEffect`. This prevents a flash of stale values between renders:
+
+```typescript
+// DO: derive during render
+const effectiveSearchIndex =
+  searchMatchIndices.length > 0
+    ? Math.min(currentSearchIndex, searchMatchIndices.length - 1)
+    : 0;
+
+// DON'T: clamp via useEffect (causes stale render flash)
+useEffect(() => {
+  if (currentSearchIndex >= searchMatchIndices.length) setCurrentSearchIndex(0);
+}, [searchMatchIndices.length]);
+```
+
+#### Reset navigation state on data changes
+
+When a component has keyboard navigation (j/k/g/G) with a `currentIndex` state, reset it when the underlying data changes (filters, pagination, data refresh):
+
+```typescript
+useEffect(() => {
+  setCurrentLogIndex(null);
+}, [logs]); // or parsedLogs, depending on the component
+```
+
 ### Styling and Design System
 
 - **ALWAYS use Moonshine design system utilities** from `@speakeasy-api/moonshine` instead of hardcoded Tailwind color values

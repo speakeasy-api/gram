@@ -1240,17 +1240,18 @@ type ListAttributeKeysParams struct {
 	TimeEnd       int64
 }
 
-// ListAttributeKeys retrieves distinct attribute paths from telemetry logs for a project and time range.
+// ListAttributeKeys retrieves distinct attribute paths from the attribute_keys materialized view for a project and time range.
 // Raw paths are returned as-is; the caller is responsible for any display transformation.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListAttributeKeys(ctx context.Context, arg ListAttributeKeysParams) ([]string, error) {
-	sb := sq.Select("DISTINCT arrayJoin(JSONAllPaths(attributes)) AS path").
-		From("telemetry_logs").
+	sb := sq.Select("attribute_key").
+		From("attribute_keys").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		OrderBy("path")
+		GroupBy("attribute_key").
+		Having("max(last_seen_unix_nano) >= ?", arg.TimeStart).
+		Having("min(first_seen_unix_nano) <= ?", arg.TimeEnd).
+		OrderBy("attribute_key")
 
 	query, args, err := sb.ToSql()
 	if err != nil {

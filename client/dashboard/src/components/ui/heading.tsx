@@ -28,7 +28,7 @@ export function Heading({
 
   let base = null;
 
-  const baseClasses = cn("font-light capitalize", className);
+  const baseClasses = cn("font-normal capitalize", className);
 
   switch (variant) {
     case "h1":

@@ -52,7 +52,7 @@ type WorkerOptions struct {
 	FunctionsVersion    functions.RunnerVersion
 	RagService          *rag.ToolsetVectorStore
 	MCPRegistryClient   *externalmcp.RegistryClient
-	TelemetryService    *telemetry.Service
+	TelemetryLogger     *telemetry.Logger
 }
 
 func ForDeploymentProcessing(
@@ -81,7 +81,7 @@ func ForDeploymentProcessing(
 		RagService:          nil,
 		RedisClient:         nil,
 		PosthogClient:       nil,
-		TelemetryService:    nil,
+		TelemetryLogger:     nil,
 		CacheAdapter:        nil,
 	}
 }
@@ -111,7 +111,7 @@ func NewTemporalWorker(
 		FunctionsVersion:    "",
 		RagService:          nil,
 		MCPRegistryClient:   nil,
-		TelemetryService:    nil,
+		TelemetryLogger:     nil,
 		CacheAdapter:        nil,
 	}
 
@@ -134,7 +134,7 @@ func NewTemporalWorker(
 			FunctionsVersion:    conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
 			RagService:          conv.Default(o.RagService, opts.RagService),
 			MCPRegistryClient:   conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
-			TelemetryService:    conv.Default(o.TelemetryService, opts.TelemetryService),
+			TelemetryLogger:     conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
 			CacheAdapter:        conv.Default(o.CacheAdapter, opts.CacheAdapter),
 		}
 	}
@@ -168,7 +168,7 @@ func NewTemporalWorker(
 		opts.RagService,
 		opts.MCPRegistryClient,
 		env.Client(),
-		opts.TelemetryService,
+		opts.TelemetryLogger,
 		opts.CacheAdapter,
 	)
 

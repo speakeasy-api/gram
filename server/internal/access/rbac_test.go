@@ -107,7 +107,10 @@ func TestService_ListMembers_AllowsOrgReadGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgRead, Resource: testAccessAuthContext(t, ctx).ActiveOrganizationID})
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgRead, Resource: authCtx.ActiveOrganizationID})
+
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 
 	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
 		mockSystemRole("role_admin", "Admin", "admin"),

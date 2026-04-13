@@ -605,3 +605,21 @@ func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat pro
 		return isEnabled, nil
 	}
 }
+
+func newTelemetryLogger(
+	ctx context.Context,
+	logger *slog.Logger,
+	chDB clickhouse.Conn,
+	logsEnabled telemetry.FeatureChecker,
+	toolIOLogsEnabled telemetry.FeatureChecker,
+) (*telemetry.Logger, func(context.Context) error) {
+	// #nosec G118 -- this context must be tied to the lifetime of the
+	// application and not cancelled coming out of this function.
+	shutdownCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	shutdown := func(context.Context) error {
+		cancel()
+		return nil
+	}
+
+	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled), shutdown
+}
