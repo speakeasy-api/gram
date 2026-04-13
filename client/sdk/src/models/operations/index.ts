@@ -25,6 +25,7 @@ export * from "./createslackapp.js";
 export * from "./createtemplate.js";
 export * from "./createtoolset.js";
 export * from "./creditusage.js";
+export * from "./deletechat.js";
 export * from "./deletedomain.js";
 export * from "./deleteenvironment.js";
 export * from "./deleteglobalvariation.js";

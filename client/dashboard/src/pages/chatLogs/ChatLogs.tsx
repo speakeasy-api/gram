@@ -11,8 +11,13 @@ import {
   SortBy,
   SortOrder as ApiSortOrder,
 } from "@gram/client/models/operations/listchatswithresolutions";
-import { useListChatsWithResolutions } from "@gram/client/react-query";
+import {
+  useListChatsWithResolutions,
+  useChatDeleteMutation,
+  invalidateAllListChatsWithResolutions,
+} from "@gram/client/react-query";
 import { Button, Icon } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router";
 import { ChatDetailPanel } from "./ChatDetailPanel";
@@ -137,6 +142,24 @@ export default function ChatLogs() {
       "gram_list_chats",
     ],
   });
+
+  const queryClient = useQueryClient();
+  const deleteChatMutation = useChatDeleteMutation();
+
+  const handleDeleteChat = useCallback(
+    (chatId: string) => {
+      deleteChatMutation.mutate(
+        { request: { id: chatId } },
+        {
+          onSuccess: () => {
+            setSelectedChat(null);
+            invalidateAllListChatsWithResolutions(queryClient);
+          },
+        },
+      );
+    },
+    [deleteChatMutation, queryClient],
+  );
 
   // Parse URL params
   const urlRange = searchParams.get("range");
@@ -355,6 +378,7 @@ export default function ChatLogs() {
         setOffset={setOffset}
         limit={limit}
         total={total}
+        onDeleteChat={handleDeleteChat}
       />
     </InsightsSidebar>
   );
@@ -387,6 +411,7 @@ function ChatLogsContent({
   setOffset,
   limit,
   total,
+  onDeleteChat,
 }: {
   dateRange: DateRangePreset;
   setDateRangeParam: (preset: DateRangePreset) => void;
@@ -413,6 +438,7 @@ function ChatLogsContent({
   setOffset: (offset: number) => void;
   limit: number;
   total: number;
+  onDeleteChat: (chatId: string) => void;
 }) {
   if (isLogsDisabled) {
     return (
@@ -545,6 +571,7 @@ function ChatLogsContent({
                       chats={chats}
                       selectedChatId={selectedChat?.id}
                       onSelectChat={setSelectedChat}
+                      onDeleteChat={onDeleteChat}
                       isLoading={isLoading}
                       error={error}
                     />
@@ -590,6 +617,7 @@ function ChatLogsContent({
               chatId={selectedChat.id}
               resolutions={selectedChat.resolutions}
               onClose={() => setSelectedChat(null)}
+              onDelete={onDeleteChat}
             />
           )}
         </DrawerContent>

@@ -21,6 +21,7 @@ type Endpoints struct {
 	GenerateTitle            goa.Endpoint
 	CreditUsage              goa.Endpoint
 	ListChatsWithResolutions goa.Endpoint
+	DeleteChat               goa.Endpoint
 	SubmitFeedback           goa.Endpoint
 }
 
@@ -34,6 +35,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GenerateTitle:            NewGenerateTitleEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 		CreditUsage:              NewCreditUsageEndpoint(s, a.APIKeyAuth),
 		ListChatsWithResolutions: NewListChatsWithResolutionsEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		DeleteChat:               NewDeleteChatEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 		SubmitFeedback:           NewSubmitFeedbackEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 	}
 }
@@ -45,6 +47,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GenerateTitle = m(e.GenerateTitle)
 	e.CreditUsage = m(e.CreditUsage)
 	e.ListChatsWithResolutions = m(e.ListChatsWithResolutions)
+	e.DeleteChat = m(e.DeleteChat)
 	e.SubmitFeedback = m(e.SubmitFeedback)
 }
 
@@ -256,6 +259,53 @@ func NewListChatsWithResolutionsEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.ListChatsWithResolutions(ctx, p)
+	}
+}
+
+// NewDeleteChatEndpoint returns an endpoint function that calls the method
+// "deleteChat" of service "chat".
+func NewDeleteChatEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteChatPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.JWTScheme{
+				Name:           "chat_sessions_token",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var token string
+			if p.ChatSessionsToken != nil {
+				token = *p.ChatSessionsToken
+			}
+			ctx, err = authJWTFn(ctx, token, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteChat(ctx, p)
 	}
 }
 
