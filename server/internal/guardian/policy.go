@@ -30,6 +30,7 @@ import (
 
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/hashicorp/go-retryablehttp"
+	"github.com/speakeasy-api/gram/server/internal/dns"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -114,6 +115,7 @@ func DefaultRetryConfig() *RetryConfig {
 type htttpClientOptions struct {
 	otelHTTPOptions []otelhttp.Option
 	retryConfig     *RetryConfig
+	resolver        *net.Resolver
 }
 
 // WithOTelHTTPOptions appends additional [otelhttp.Option] values to the
@@ -137,6 +139,12 @@ func WithDefaultRetryConfig() func(*htttpClientOptions) {
 func WithRetryConfig(config *RetryConfig) func(*htttpClientOptions) {
 	return func(o *htttpClientOptions) {
 		o.retryConfig = config
+	}
+}
+
+func WithResolver(resolver *net.Resolver) func(*htttpClientOptions) {
+	return func(o *htttpClientOptions) {
+		o.resolver = resolver
 	}
 }
 
@@ -197,7 +205,11 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 		option(&opts)
 	}
 
-	transport.DialContext = p.Dialer().DialContext
+	dialOpts := []func(*dialerOptions){}
+	if opts.resolver != nil {
+		dialOpts = append(dialOpts, WithDialerResolver(opts.resolver))
+	}
+	transport.DialContext = p.Dialer(dialOpts...).DialContext
 
 	otelOpts := []otelhttp.Option{otelhttp.WithTracerProvider(p.tracerProvider)}
 	otelOpts = append(otelOpts, opts.otelHTTPOptions...)
@@ -223,6 +235,16 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	return retryClient.StandardClient()
 }
 
+type dialerOptions struct {
+	resolver *net.Resolver
+}
+
+func WithDialerResolver(resolver *net.Resolver) func(*dialerOptions) {
+	return func(o *dialerOptions) {
+		o.resolver = resolver
+	}
+}
+
 // Dialer returns a [net.Dialer] that enforces the policy's CIDR blocklist via
 // [net.Dialer.ControlContext]. The check runs after DNS resolution on the
 // raw IP address, so it cannot be bypassed by hostnames that resolve to
@@ -231,11 +253,22 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 //
 // Client and PooledClient use this dialer internally. Use Dialer directly only
 // when you need to build a custom [http.Transport].
-func (p *Policy) Dialer() *net.Dialer {
+func (p *Policy) Dialer(options ...func(*dialerOptions)) *net.Dialer {
+	var opts dialerOptions
+	for _, option := range options {
+		option(&opts)
+	}
+
+	resolver := opts.resolver
+	if resolver == nil {
+		resolver = dns.NewNetResolver().Resolver()
+	}
+
 	return &net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
 		DualStack: true,
+		Resolver:  resolver,
 		ControlContext: func(ctx context.Context, network string, address string, conn syscall.RawConn) error {
 			host, _, err := net.SplitHostPort(address)
 			if err != nil {
