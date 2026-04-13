@@ -520,6 +520,24 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "list org users from workos").Log(ctx, s.logger)
 	}
 
+	// Batch-resolve WorkOS user IDs to local Gram users so the member list
+	// returns Gram user IDs (the stable identity used by UpdateMemberRole
+	// and the organization_user_relationships table).
+	workosIDs := make([]string, 0, len(users))
+	for workosUID := range users {
+		workosIDs = append(workosIDs, workosUID)
+	}
+	localUserRows, err := usersrepo.New(s.db).GetUsersByWorkosIDs(ctx, workosIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve local users by workos ids").Log(ctx, s.logger)
+	}
+	localUsers := make(map[string]usersrepo.User, len(localUserRows))
+	for _, u := range localUserRows {
+		if u.WorkosID.Valid {
+			localUsers[u.WorkosID.String] = u
+		}
+	}
+
 	result := make([]*gen.AccessMember, 0, len(members))
 	for _, member := range members {
 		user, ok := users[member.UserID]
@@ -527,11 +545,16 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 			continue
 		}
 
+		local, ok := localUsers[member.UserID]
+		if !ok {
+			continue // user exists in WorkOS but hasn't logged into Gram yet
+		}
+
 		result = append(result, &gen.AccessMember{
-			ID:       user.ID,
+			ID:       local.ID,
 			Name:     formatUserName(user),
 			Email:    user.Email,
-			PhotoURL: nil,
+			PhotoURL: conv.FromPGText[string](local.PhotoUrl),
 			RoleID:   roleIDBySlug[member.RoleSlug],
 			JoinedAt: conv.Default(member.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 		})
@@ -567,7 +590,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, ac.UserID)
 	switch {
 	case errors.Is(err, errConnectedUserNotFound):
-		return nil, oops.E(oops.CodeNotFound, nil, "current user is not connected locally").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "current user has not joined this organization").Log(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load connected user").Log(ctx, logger)
 	}
@@ -641,7 +664,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
 	switch {
 	case errors.Is(err, errConnectedUserNotFound):
-		return nil, oops.E(oops.CodeNotFound, nil, "member is not connected locally").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").Log(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load connected user").Log(ctx, logger)
 	}
