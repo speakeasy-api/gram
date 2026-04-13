@@ -393,3 +393,88 @@ func TestBuildTelemetryAttributesWithMetadata_InvalidSkillsMetadataIgnored(t *te
 	require.False(t, hasSkillScope)
 	require.False(t, hasSkillResolutionStatus)
 }
+
+func TestBuildTelemetryAttributesWithMetadata_EmptySkillsSliceIgnored(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	metadata := &SessionMetadata{
+		UserEmail:   "dev@example.com",
+		ProjectID:   uuid.NewString(),
+		GramOrgID:   uuid.NewString(),
+		ServiceName: "claude",
+	}
+
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudeHookPayload{
+		HookEventName: "PreToolUse",
+		AdditionalData: map[string]any{
+			"skills": []any{},
+		},
+	}, metadata)
+
+	_, hasSkillName := attrs[attr.SkillNameKey]
+	require.False(t, hasSkillName)
+}
+
+func TestBuildTelemetryAttributesWithMetadata_SkillsMixedInvalidAndValid(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	metadata := &SessionMetadata{
+		UserEmail:   "dev@example.com",
+		ProjectID:   uuid.NewString(),
+		GramOrgID:   uuid.NewString(),
+		ServiceName: "claude",
+	}
+
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudeHookPayload{
+		HookEventName: "PreToolUse",
+		AdditionalData: map[string]any{
+			"skills": []any{
+				"notamap",
+				map[string]any{
+					"name": "golang",
+				},
+			},
+		},
+	}, metadata)
+
+	require.Equal(t, "golang", attrs[attr.SkillNameKey])
+}
+
+func TestBuildTelemetryAttributesWithMetadata_SkillsPartialFields(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	metadata := &SessionMetadata{
+		UserEmail:   "dev@example.com",
+		ProjectID:   uuid.NewString(),
+		GramOrgID:   uuid.NewString(),
+		ServiceName: "claude",
+	}
+
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudeHookPayload{
+		HookEventName: "PreToolUse",
+		AdditionalData: map[string]any{
+			"skills": []any{
+				map[string]any{
+					"name": "golang",
+				},
+			},
+		},
+	}, metadata)
+
+	require.Equal(t, "golang", attrs[attr.SkillNameKey])
+	_, hasScope := attrs[attr.SkillScopeKey]
+	_, hasDiscoveryRoot := attrs[attr.SkillDiscoveryRootKey]
+	_, hasSourceType := attrs[attr.SkillSourceTypeKey]
+	_, hasSkillID := attrs[attr.SkillIDKey]
+	_, hasSkillVersionID := attrs[attr.SkillVersionIDKey]
+	_, hasResolutionStatus := attrs[attr.SkillResolutionStatusKey]
+	require.False(t, hasScope)
+	require.False(t, hasDiscoveryRoot)
+	require.False(t, hasSourceType)
+	require.False(t, hasSkillID)
+	require.False(t, hasSkillVersionID)
+	require.False(t, hasResolutionStatus)
+}

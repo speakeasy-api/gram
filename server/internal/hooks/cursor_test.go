@@ -401,3 +401,76 @@ func TestBuildCursorTelemetryAttributes_InvalidSkillsMetadataIgnored(t *testing.
 	require.False(t, hasSkillScope)
 	require.False(t, hasSkillResolutionStatus)
 }
+
+func TestBuildCursorTelemetryAttributes_EmptySkillsSliceIgnored(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "preToolUse",
+		AdditionalData: map[string]any{
+			"skills": []any{},
+		},
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	_, hasSkillName := attrs[attr.SkillNameKey]
+	require.False(t, hasSkillName)
+}
+
+func TestBuildCursorTelemetryAttributes_SkillsMixedInvalidAndValid(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "preToolUse",
+		AdditionalData: map[string]any{
+			"skills": []any{
+				"notamap",
+				map[string]any{
+					"name": "golang",
+				},
+			},
+		},
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	require.Equal(t, "golang", attrs[attr.SkillNameKey])
+}
+
+func TestBuildCursorTelemetryAttributes_SkillsPartialFields(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "preToolUse",
+		AdditionalData: map[string]any{
+			"skills": []any{
+				map[string]any{
+					"name": "golang",
+				},
+			},
+		},
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	require.Equal(t, "golang", attrs[attr.SkillNameKey])
+	_, hasScope := attrs[attr.SkillScopeKey]
+	_, hasDiscoveryRoot := attrs[attr.SkillDiscoveryRootKey]
+	_, hasSourceType := attrs[attr.SkillSourceTypeKey]
+	_, hasSkillID := attrs[attr.SkillIDKey]
+	_, hasSkillVersionID := attrs[attr.SkillVersionIDKey]
+	_, hasResolutionStatus := attrs[attr.SkillResolutionStatusKey]
+	require.False(t, hasScope)
+	require.False(t, hasDiscoveryRoot)
+	require.False(t, hasSourceType)
+	require.False(t, hasSkillID)
+	require.False(t, hasSkillVersionID)
+	require.False(t, hasResolutionStatus)
+}
