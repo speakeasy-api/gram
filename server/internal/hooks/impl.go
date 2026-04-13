@@ -32,7 +32,7 @@ type Service struct {
 	tracer             trace.Tracer
 	logger             *slog.Logger
 	db                 *pgxpool.Pool
-	telemetryService   *telemetry.Service
+	telemetryLogger    *telemetry.Logger
 	auth               *auth.Auth
 	access             *access.Manager
 	cache              cache.Cache
@@ -77,7 +77,7 @@ func NewService(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	tracerProvider trace.TracerProvider,
-	telemetryService *telemetry.Service,
+	telemetryLogger *telemetry.Logger,
 	sessionsMgr *sessions.Manager,
 	cacheAdapter cache.Cache,
 	completionsClient openrouter.CompletionClient,
@@ -90,7 +90,7 @@ func NewService(
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		logger:             logger.With(attr.SlogComponent("hooks")),
 		db:                 db,
-		telemetryService:   telemetryService,
+		telemetryLogger:    telemetryLogger,
 		auth:               auth.New(logger, db, sessionsMgr, accessManager),
 		access:             accessManager,
 		cache:              cacheAdapter,

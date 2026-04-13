@@ -60,7 +60,8 @@ func handleResourcesRead(
 	env toolconfig.EnvironmentLoader,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
-	telemSvc *tm.Service) (json.RawMessage, error) {
+	telemLogger *tm.Logger,
+) (json.RawMessage, error) {
 	var params resourceReadParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse get resource request").Log(ctx, logger)
@@ -200,7 +201,7 @@ func handleResourcesRead(
 			},
 			Attributes: logAttrs,
 		}
-		telemSvc.CreateLog(params)
+		telemLogger.Log(ctx, params)
 	}()
 
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{

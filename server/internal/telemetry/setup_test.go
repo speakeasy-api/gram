@@ -51,6 +51,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
+	telemLogger        *telemetry.Logger
 	service            *telemetry.Service
 	logger             *slog.Logger
 	conn               *pgxpool.Pool
@@ -110,10 +111,12 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled)
+	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, posthogClient, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
 
 	return ctx, &testInstance{
 		service:            svc,
+		telemLogger:        telemLogger,
 		logger:             logger,
 		conn:               conn,
 		chClient:           chClient,

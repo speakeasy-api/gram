@@ -139,13 +139,13 @@ func (m *mockChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx context.
 	return m.err
 }
 
-type mockTelemetryService struct {
+type mockTelemetryLogger struct {
 	mu     sync.Mutex
 	called bool
 	logs   []telemetry.LogParams
 }
 
-func (m *mockTelemetryService) CreateLog(params telemetry.LogParams) {
+func (m *mockTelemetryLogger) Log(ctx context.Context, params telemetry.LogParams) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.called = true
@@ -198,7 +198,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	trackingStrategy := &mockUsageTrackingStrategy{}
 	titleGenerator := &mockChatTitleGenerator{}
 	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
-	telemetryService := &mockTelemetryService{}
+	telemetryLogger := &mockTelemetryLogger{}
 
 	// Create client
 	client := NewUnifiedClient(
@@ -208,7 +208,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 		trackingStrategy,
 		titleGenerator,
 		resolutionAnalyzer,
-		telemetryService,
+		telemetryLogger,
 	)
 
 	// Override the HTTP client to use the test server
@@ -252,7 +252,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	assert.True(t, trackingStrategy.trackUsageCalled, "TrackUsage should be called")
 	assert.True(t, titleGenerator.called, "ScheduleChatTitleGeneration should be called")
 	assert.True(t, resolutionAnalyzer.called, "ScheduleChatResolutionAnalysis should be called")
-	assert.True(t, telemetryService.called, "CreateLog should be called")
+	assert.True(t, telemetryLogger.called, "CreateLog should be called")
 
 	// Verify captured data
 	assert.Equal(t, "msg_123", captureStrategy.capturedResponse.MessageID)
@@ -317,7 +317,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	trackingStrategy := &mockUsageTrackingStrategy{}
 	titleGenerator := &mockChatTitleGenerator{}
 	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
-	telemetryService := &mockTelemetryService{}
+	telemetryLogger := &mockTelemetryLogger{}
 
 	// Create client
 	client := NewUnifiedClient(
@@ -327,7 +327,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 		trackingStrategy,
 		titleGenerator,
 		resolutionAnalyzer,
-		telemetryService,
+		telemetryLogger,
 	)
 
 	// Override the HTTP client to use the test server
@@ -377,7 +377,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	assert.True(t, trackingStrategy.trackUsageCalled, "TrackUsage should be called")
 	assert.True(t, titleGenerator.called, "ScheduleChatTitleGeneration should be called")
 	assert.True(t, resolutionAnalyzer.called, "ScheduleChatResolutionAnalysis should be called")
-	assert.True(t, telemetryService.called, "CreateLog should be called")
+	assert.True(t, telemetryLogger.called, "CreateLog should be called")
 
 	// Verify captured data
 	assert.Equal(t, "msg_456", captureStrategy.capturedResponse.MessageID)
@@ -428,7 +428,7 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 	trackingStrategy := &mockUsageTrackingStrategy{}
 	titleGenerator := &mockChatTitleGenerator{}
 	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
-	telemetryService := &mockTelemetryService{}
+	telemetryService := &mockTelemetryLogger{}
 
 	// Create client
 	client := NewUnifiedClient(
@@ -526,7 +526,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 			trackingStrategy := &mockUsageTrackingStrategy{}
 			titleGenerator := &mockChatTitleGenerator{}
 			resolutionAnalyzer := &mockChatResolutionAnalyzer{}
-			telemetryService := &mockTelemetryService{}
+			telemetryService := &mockTelemetryLogger{}
 
 			// Create client
 			client := NewUnifiedClient(
@@ -593,7 +593,7 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 	trackingStrategy := &mockUsageTrackingStrategy{}
 	titleGenerator := &mockChatTitleGenerator{}
 	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
-	telemetryService := &mockTelemetryService{}
+	telemetryService := &mockTelemetryLogger{}
 
 	// Create client
 	client := NewUnifiedClient(
@@ -766,7 +766,7 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 		&mockUsageTrackingStrategy{},
 		titleGenerator,
 		&mockChatResolutionAnalyzer{},
-		&mockTelemetryService{},
+		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
 
@@ -808,7 +808,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 		&mockUsageTrackingStrategy{},
 		titleGenerator,
 		&mockChatResolutionAnalyzer{},
-		&mockTelemetryService{},
+		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
 
@@ -869,7 +869,7 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},
 		&mockChatResolutionAnalyzer{},
-		&mockTelemetryService{},
+		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
 
@@ -984,7 +984,7 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 	trackingStrategy := &mockUsageTrackingStrategy{}
 	titleGenerator := &mockChatTitleGenerator{}
 	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
-	telemetryService := &mockTelemetryService{}
+	telemetryService := &mockTelemetryLogger{}
 
 	// Create client
 	client := NewUnifiedClient(
@@ -1094,7 +1094,7 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 	trackingStrategy := &mockUsageTrackingStrategy{}
 	titleGenerator := &mockChatTitleGenerator{}
 	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
-	telemetryService := &mockTelemetryService{}
+	telemetryService := &mockTelemetryLogger{}
 
 	// Create client
 	client := NewUnifiedClient(
