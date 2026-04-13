@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getServerURL } from "@/lib/utils";
+import { rpc } from "@/lib/rpc";
 
 /**
  * Shape of the auto-publish configuration returned by the server.
@@ -15,30 +15,21 @@ export interface AutoPublishConfig {
 
 const QUERY_KEY = "autoPublishConfig";
 
-function configUrl(projectId: string): string {
-  return `${getServerURL()}/v1/projects/${projectId}/corpus/autopublish`;
-}
-
-async function fetchConfig(projectId: string): Promise<AutoPublishConfig> {
-  const res = await fetch(configUrl(projectId), { credentials: "include" });
-  if (!res.ok)
-    throw new Error(`Failed to fetch auto-publish config: ${res.status}`);
-  return res.json();
+async function fetchConfig(): Promise<AutoPublishConfig> {
+  return rpc<AutoPublishConfig>("corpus.getAutoPublishConfig", {});
 }
 
 async function updateConfig(
-  projectId: string,
   config: AutoPublishConfig,
 ): Promise<AutoPublishConfig> {
-  const res = await fetch(configUrl(projectId), {
-    method: "PUT",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
+  return rpc<AutoPublishConfig>("corpus.setAutoPublishConfig", {
+    enabled: config.enabled,
+    interval_minutes: config.intervalMinutes,
+    min_upvotes: config.minUpvotes,
+    author_type_filter: config.authorTypeFilter,
+    label_filter: config.labelFilter,
+    min_age_hours: config.minAgeHours,
   });
-  if (!res.ok)
-    throw new Error(`Failed to update auto-publish config: ${res.status}`);
-  return res.json();
 }
 
 /**
@@ -49,11 +40,11 @@ export function useAutoPublish(projectId: string) {
 
   const query = useQuery<AutoPublishConfig>({
     queryKey: [QUERY_KEY, projectId],
-    queryFn: () => fetchConfig(projectId),
+    queryFn: () => fetchConfig(),
   });
 
   const mutation = useMutation<AutoPublishConfig, Error, AutoPublishConfig>({
-    mutationFn: (config) => updateConfig(projectId, config),
+    mutationFn: updateConfig,
     onSuccess: (data) => {
       queryClient.setQueryData([QUERY_KEY, projectId], data);
     },
