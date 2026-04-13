@@ -31,18 +31,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
-	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 )
 
 var slugPattern = regexp.MustCompile(`[^a-z0-9-]+`)
-
-// GitHubConfig holds credentials for the Gram-owned GitHub org where plugin
-// repos are created. Nil means GitHub publishing is disabled.
-type GitHubConfig struct {
-	Client         *ghclient.Client
-	Org            string // GitHub org that owns plugin repos (e.g. "gram-plugins")
-	InstallationID int64  // GitHub App installation ID on that org
-}
 
 type Service struct {
 	tracer    trace.Tracer
@@ -51,7 +42,6 @@ type Service struct {
 	repo      *repo.Queries
 	auth      *auth.Auth
 	access    *access.Manager
-	github    *GitHubConfig // nil if not configured
 	serverURL string
 }
 
@@ -64,7 +54,6 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	accessManager *access.Manager,
-	github *GitHubConfig,
 	serverURL string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
@@ -76,7 +65,6 @@ func NewService(
 		repo:      repo.New(db),
 		auth:      auth.New(logger, db, sessions, accessManager),
 		access:    accessManager,
-		github:    github,
 		serverURL: serverURL,
 	}
 }
@@ -443,105 +431,6 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	return &gen.SetPluginAssignmentsResult{Assignments: assignments}, nil
 }
 
-// --- Publish & Distribution ---
-
-func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishStatusPayload) (*gen.PublishStatusResult, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
-		return nil, err
-	}
-
-	result := &gen.PublishStatusResult{
-		Available: s.github != nil,
-		Published: false,
-		RepoURL:   nil,
-	}
-
-	conn, err := s.repo.GetGitHubConnection(ctx, *ac.ProjectID)
-	if err == nil {
-		result.Published = true
-		repoURL := fmt.Sprintf("https://github.com/%s/%s", conn.RepoOwner, conn.RepoName)
-		result.RepoURL = &repoURL
-	}
-
-	return result, nil
-}
-
-func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPluginsPayload) (*gen.PublishPluginsResult, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
-		return nil, err
-	}
-
-	if s.github == nil {
-		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("github publishing not configured"), "GitHub publishing is not configured on this server").Log(ctx, s.logger)
-	}
-
-	repoName := ac.OrganizationSlug + "-plugins"
-
-	// Create repo in Gram's org (idempotent).
-	if err := s.github.Client.CreateRepo(ctx, s.github.InstallationID, s.github.Org, repoName, false, "Organization"); err != nil {
-		s.logger.WarnContext(ctx, "repo creation returned error (may already exist)",
-			attr.SlogOrganizationID(ac.ActiveOrganizationID),
-			attr.SlogError(err),
-		)
-	}
-
-	files, err := s.generateAllPlugins(ctx, *ac.ProjectID, ac.ActiveOrganizationID, ac.OrganizationSlug)
-	if err != nil {
-		return nil, err
-	}
-
-	commitSHA, err := s.github.Client.PushFiles(
-		ctx,
-		s.github.InstallationID,
-		s.github.Org,
-		repoName,
-		"main",
-		fmt.Sprintf("Update plugin packages (%s)", time.Now().UTC().Format(time.RFC3339)),
-		files,
-	)
-	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "push to github").Log(ctx, s.logger)
-	}
-
-	repoURL := fmt.Sprintf("https://github.com/%s/%s", s.github.Org, repoName)
-
-	// Record the publish so getPublishStatus can return the URL.
-	if _, err := s.repo.UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
-		InstallationID: s.github.InstallationID,
-		RepoOwner:      s.github.Org,
-		RepoName:       repoName,
-	}); err != nil {
-		s.logger.WarnContext(ctx, "failed to record publish status",
-			attr.SlogOrganizationID(ac.ActiveOrganizationID),
-			attr.SlogError(err),
-		)
-	}
-
-	s.logger.InfoContext(ctx, "published plugins to github",
-		attr.SlogOrganizationID(ac.ActiveOrganizationID),
-		attr.SlogDataDogGitCommitSHA(commitSHA),
-		attr.SlogDataDogGitRepoURL(repoURL),
-	)
-
-	return &gen.PublishPluginsResult{
-		Published: true,
-		RepoURL:   repoURL,
-		CommitSha: &commitSHA,
-	}, nil
-}
-
 func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.DownloadPluginPackagePayload) (*gen.DownloadPluginPackageResult, io.ReadCloser, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -622,15 +511,6 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 }
 
 // --- Internal helpers ---
-
-func (s *Service) generateAllPlugins(ctx context.Context, projectID uuid.UUID, orgID, orgSlug string) (map[string][]byte, error) {
-	pluginInfos, err := s.resolvePluginInfos(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-
-	return GeneratePluginPackages(pluginInfos, s.generateConfig(ctx, orgID, orgSlug))
-}
 
 func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) ([]PluginInfo, error) {
 	rows, err := s.repo.ListPluginsWithServersForProject(ctx, projectID)

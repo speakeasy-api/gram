@@ -184,8 +184,6 @@ export * from "./prompttemplate.js";
 export * from "./prompttemplateentry.js";
 export * from "./publishpackageform.js";
 export * from "./publishpackageresult.js";
-export * from "./publishpluginsresult.js";
-export * from "./publishstatusresult.js";
 export * from "./redeployrequestbody.js";
 export * from "./redeployresult.js";
 export * from "./registerrequestbody.js";

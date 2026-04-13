@@ -52,16 +52,6 @@ func SetPluginAssignmentsPluginsPath() string {
 	return "/rpc/plugins.setPluginAssignments"
 }
 
-// GetPublishStatusPluginsPath returns the URL path to the plugins service getPublishStatus HTTP endpoint.
-func GetPublishStatusPluginsPath() string {
-	return "/rpc/plugins.getPublishStatus"
-}
-
-// PublishPluginsPluginsPath returns the URL path to the plugins service publishPlugins HTTP endpoint.
-func PublishPluginsPluginsPath() string {
-	return "/rpc/plugins.publishPlugins"
-}
-
 // DownloadPluginPackagePluginsPath returns the URL path to the plugins service downloadPluginPackage HTTP endpoint.
 func DownloadPluginPackagePluginsPath() string {
 	return "/rpc/plugins.downloadPluginPackage"

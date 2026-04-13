@@ -11,11 +11,6 @@ import { invalidateAllPlugins } from "@gram/client/react-query/plugins";
 import { useUpdatePluginMutation } from "@gram/client/react-query/updatePlugin";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
-import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
-import {
-  invalidateAllPublishStatus,
-  usePublishStatus,
-} from "@gram/client/react-query/publishStatus";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg";
 import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -34,18 +29,12 @@ export default function PluginDetail() {
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
 
-  const { data: publishStatus } = usePublishStatus(undefined, undefined, {
-    retry: false,
-    throwOnError: false,
-  });
-
   const { data: toolsetsData } = useListToolsetsForOrg();
   const toolsets = toolsetsData?.toolsets ?? [];
 
   const invalidateAll = async () => {
     await invalidateAllPlugin(queryClient);
     await invalidateAllPlugins(queryClient);
-    await invalidateAllPublishStatus(queryClient);
   };
 
   const updateMutation = useUpdatePluginMutation({
@@ -63,10 +52,6 @@ export default function PluginDetail() {
   });
 
   const removeServerMutation = useRemovePluginServerMutation({
-    onSuccess: () => invalidateAll(),
-  });
-
-  const publishMutation = usePublishPluginsMutation({
     onSuccess: () => invalidateAll(),
   });
 
@@ -125,12 +110,6 @@ export default function PluginDetail() {
     removeServerMutation.mutate({
       security: { sessionHeaderGramSession: "" },
       request: { id: server.id, pluginId: pluginId! },
-    });
-  };
-
-  const handlePublish = () => {
-    publishMutation.mutate({
-      security: { sessionHeaderGramSession: "" },
     });
   };
 
@@ -195,8 +174,6 @@ export default function PluginDetail() {
   ];
 
   if (!plugin) return null;
-
-  const repoURL = publishStatus?.repoUrl ?? publishMutation.data?.repoUrl;
 
   return (
     <Page>
@@ -268,69 +245,10 @@ export default function PluginDetail() {
           className="mb-8"
         />
 
-        {/* Distribution section */}
+        {/* Download section */}
         <Heading variant="h5" className="mb-3">
-          Distribution
+          Download
         </Heading>
-
-        <div className="border rounded-lg p-4 mb-6">
-          {repoURL ? (
-            <Stack gap={3}>
-              <Stack
-                direction="horizontal"
-                justify="space-between"
-                align="center"
-              >
-                <div>
-                  <Type variant="body">Published</Type>
-                  <Type muted small className="mt-1">
-                    Plugin packages are available at{" "}
-                    <a
-                      href={repoURL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                    >
-                      {repoURL.replace("https://github.com/", "")}
-                    </a>
-                  </Type>
-                </div>
-                <Button
-                  onClick={handlePublish}
-                  disabled={publishMutation.isPending}
-                >
-                  {publishMutation.isPending ? "Publishing..." : "Republish"}
-                </Button>
-              </Stack>
-              <Type muted small>
-                Add this repository URL to your Claude Code or Cursor
-                marketplace settings to distribute plugins to your team.
-              </Type>
-            </Stack>
-          ) : publishStatus?.available ? (
-            <Stack gap={3} align="center" className="py-4">
-              <Type variant="body">Ready to publish</Type>
-              <Type muted small className="text-center max-w-sm">
-                Publish generates Claude Code and Cursor plugin packages and
-                pushes them to a GitHub repository. You&apos;ll get a URL to add
-                to your platform marketplace settings.
-              </Type>
-              <Button
-                onClick={handlePublish}
-                disabled={publishMutation.isPending}
-              >
-                {publishMutation.isPending ? "Publishing..." : "Publish"}
-              </Button>
-            </Stack>
-          ) : (
-            <Stack gap={2} align="center" className="py-4">
-              <Type muted small className="text-center">
-                GitHub publishing is not configured on this server. Use the ZIP
-                downloads below instead.
-              </Type>
-            </Stack>
-          )}
-        </div>
 
         <Stack direction="horizontal" className="gap-3">
           <Button

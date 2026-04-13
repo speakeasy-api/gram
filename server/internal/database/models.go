@@ -701,17 +701,6 @@ type PluginAssignment struct {
 	CreatedAt      pgtype.Timestamptz
 }
 
-type PluginGithubConnection struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	InstallationID int64
-	RepoOwner      string
-	RepoName       string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-}
-
 type PluginServer struct {
 	ID                      uuid.UUID
 	PluginID                uuid.UUID

@@ -35,10 +35,6 @@ type Service interface {
 	RemovePluginServer(context.Context, *RemovePluginServerPayload) (err error)
 	// Replace all assignments for a plugin with the given list of principal URNs.
 	SetPluginAssignments(context.Context, *SetPluginAssignmentsPayload) (res *SetPluginAssignmentsResult, err error)
-	// Check whether plugins have been published for this project.
-	GetPublishStatus(context.Context, *GetPublishStatusPayload) (res *PublishStatusResult, err error)
-	// Generate plugin packages and push them to a Gram-managed GitHub repository.
-	PublishPlugins(context.Context, *PublishPluginsPayload) (res *PublishPluginsResult, err error)
 	// Download a ZIP of a single plugin package for direct installation.
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
@@ -67,7 +63,7 @@ const ServiceName = "plugins"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "getPublishStatus", "publishPlugins", "downloadPluginPackage"}
+var MethodNames = [10]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "downloadPluginPackage"}
 
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
@@ -125,13 +121,6 @@ type DownloadPluginPackageResult struct {
 // GetPluginPayload is the payload type of the plugins service getPlugin method.
 type GetPluginPayload struct {
 	ID               string
-	SessionToken     *string
-	ProjectSlugInput *string
-}
-
-// GetPublishStatusPayload is the payload type of the plugins service
-// getPublishStatus method.
-type GetPublishStatusPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -200,35 +189,6 @@ type PluginServer struct {
 	// Ordering within the plugin.
 	SortOrder int32
 	CreatedAt string
-}
-
-// PublishPluginsPayload is the payload type of the plugins service
-// publishPlugins method.
-type PublishPluginsPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
-}
-
-// PublishPluginsResult is the result type of the plugins service
-// publishPlugins method.
-type PublishPluginsResult struct {
-	// Whether the publish succeeded.
-	Published bool
-	// GitHub repository URL where plugins were published.
-	RepoURL string
-	// Git commit SHA of the push.
-	CommitSha *string
-}
-
-// PublishStatusResult is the result type of the plugins service
-// getPublishStatus method.
-type PublishStatusResult struct {
-	// Whether GitHub publishing is configured on this server.
-	Available bool
-	// Whether plugins have been published for this project.
-	Published bool
-	// GitHub repository URL, if published.
-	RepoURL *string
 }
 
 // RemovePluginServerPayload is the payload type of the plugins service

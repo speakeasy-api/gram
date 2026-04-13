@@ -152,20 +152,6 @@ var ListPluginsResult = Type("ListPluginsResult", func() {
 	Attribute("plugins", ArrayOf(PluginModel), "The plugins in the organization.")
 })
 
-var PublishPluginsResult = Type("PublishPluginsResult", func() {
-	Required("published", "repo_url")
-	Attribute("published", Boolean, "Whether the publish succeeded.")
-	Attribute("repo_url", String, "GitHub repository URL where plugins were published.")
-	Attribute("commit_sha", String, "Git commit SHA of the push.")
-})
-
-var PublishStatusResult = Type("PublishStatusResult", func() {
-	Required("available", "published")
-	Attribute("available", Boolean, "Whether GitHub publishing is configured on this server.")
-	Attribute("published", Boolean, "Whether plugins have been published for this project.")
-	Attribute("repo_url", String, "GitHub repository URL, if published.")
-})
-
 // --- Service ---
 
 var _ = Service("plugins", func() {
@@ -393,50 +379,6 @@ var _ = Service("plugins", func() {
 		Meta("openapi:operationId", "setPluginAssignments")
 		Meta("openapi:extension:x-speakeasy-name-override", "setPluginAssignments")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetPluginAssignments"}`)
-	})
-
-	Method("getPublishStatus", func() {
-		Description("Check whether plugins have been published for this project.")
-
-		Payload(func() {
-			security.SessionPayload()
-			security.ProjectPayload()
-		})
-
-		Result(PublishStatusResult)
-
-		HTTP(func() {
-			GET("/rpc/plugins.getPublishStatus")
-			security.SessionHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "getPublishStatus")
-		Meta("openapi:extension:x-speakeasy-name-override", "getPublishStatus")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PublishStatus"}`)
-	})
-
-	Method("publishPlugins", func() {
-		Description("Generate plugin packages and push them to a Gram-managed GitHub repository.")
-
-		Payload(func() {
-			security.SessionPayload()
-			security.ProjectPayload()
-		})
-
-		Result(PublishPluginsResult)
-
-		HTTP(func() {
-			POST("/rpc/plugins.publishPlugins")
-			security.SessionHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "publishPlugins")
-		Meta("openapi:extension:x-speakeasy-name-override", "publishPlugins")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PublishPlugins"}`)
 	})
 
 	Method("downloadPluginPackage", func() {

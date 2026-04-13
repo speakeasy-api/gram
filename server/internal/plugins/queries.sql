@@ -105,25 +105,6 @@ WHERE id = @id
 DELETE FROM plugin_assignments
 WHERE plugin_id = @plugin_id;
 
--- name: GetGitHubConnection :one
-SELECT *
-FROM plugin_github_connections
-WHERE project_id = @project_id;
-
--- name: UpsertGitHubConnection :one
-INSERT INTO plugin_github_connections (organization_id, project_id, installation_id, repo_owner, repo_name)
-VALUES (@organization_id, @project_id, @installation_id, @repo_owner, @repo_name)
-ON CONFLICT (project_id) DO UPDATE SET
-  installation_id = EXCLUDED.installation_id,
-  repo_owner = EXCLUDED.repo_owner,
-  repo_name = EXCLUDED.repo_name,
-  updated_at = clock_timestamp()
-RETURNING *;
-
--- name: DeleteGitHubConnection :exec
-DELETE FROM plugin_github_connections
-WHERE project_id = @project_id;
-
 -- name: ListPluginsWithServersForProject :many
 -- Used during plugin generation: returns all active plugin servers joined with
 -- their parent plugin and optional toolset mcp_slug for URL construction.
@@ -147,15 +128,6 @@ LEFT JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
 WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC;
-
--- name: ListPluginAssignmentsForProject :many
--- Used during plugin generation: returns all assignments for a project's plugins.
-SELECT
-  pa.plugin_id,
-  pa.principal_urn
-FROM plugin_assignments pa
-JOIN plugins p ON p.id = pa.plugin_id AND p.deleted IS FALSE
-WHERE p.project_id = @project_id;
 
 -- name: GetOrganizationName :one
 SELECT name FROM organization_metadata WHERE id = @id;

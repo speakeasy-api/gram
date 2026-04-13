@@ -1,4 +1,4 @@
-h1:mx/ZnmtaE4H5RbmXzA+ug0hFwaNA3swcL1vdjoB7A/0=
+h1:xHREgj9kHrW3BVi9OreTRhvFMZ24c+jYETkvf3Lhzgo=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -121,4 +121,4 @@ h1:mx/ZnmtaE4H5RbmXzA+ug0hFwaNA3swcL1vdjoB7A/0=
 20260326195347_org_whitelist.sql h1:s2i7TnWXO1Y7i8mV/0Oi1YNDps2S3ap8hUGYVgwUFnM=
 20260403010404_registry-model-update.sql h1:7p0ahTizu0XoulnJggdhl3k4ujV2rQRRywvnJHxtPOo=
 20260406170119_registry-unique-constraints.sql h1:RWwKjKSvDxwBxNEV4vps2XAgoru+COnFNSRcievRetk=
-20260410175053_plugins.sql h1:PenQT+qPt2lDZ4GEwXEsbmKz+zmgvQ4gE+j+jIO1ktg=
+20260413182526_plugins.sql h1:Tf+rQUU8j/YytHEIUWBWf6T2Jv8hgUd3HNX9zQYbwbE=

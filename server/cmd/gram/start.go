@@ -71,7 +71,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/templates"
-	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -362,30 +361,6 @@ func newStartCommand() *cli.Command {
 			Name:     "workos-api-key",
 			Usage:    "WorkOS API key for user identity lookups",
 			EnvVars:  []string{"WORKOS_API_KEY"},
-			Required: false,
-		},
-		&cli.Int64Flag{
-			Name:     "github-app-id",
-			Usage:    "GitHub App ID for plugin distribution",
-			EnvVars:  []string{"GRAM_GITHUB_APP_ID"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "github-app-private-key",
-			Usage:    "PEM-encoded private key for the GitHub App",
-			EnvVars:  []string{"GRAM_GITHUB_APP_PRIVATE_KEY"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "github-org",
-			Usage:    "GitHub organization that owns plugin repos (e.g. 'gram-plugins')",
-			EnvVars:  []string{"GRAM_GITHUB_ORG"},
-			Required: false,
-		},
-		&cli.Int64Flag{
-			Name:     "github-installation-id",
-			Usage:    "GitHub App installation ID on the plugin org",
-			EnvVars:  []string{"GRAM_GITHUB_INSTALLATION_ID"},
 			Required: false,
 		},
 	}
@@ -746,23 +721,7 @@ func newStartCommand() *cli.Command {
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 
-			var githubConfig *plugins.GitHubConfig
-			if appID := c.Int64("github-app-id"); appID != 0 && c.String("github-org") != "" && c.Int64("github-installation-id") != 0 {
-				pk := c.String("github-app-private-key")
-				if pk != "" {
-					ghClient, err := ghclient.NewClient(appID, []byte(pk))
-					if err != nil {
-						logger.WarnContext(c.Context, "GitHub App client initialization failed, plugin publishing will be unavailable", attr.SlogError(err))
-					} else {
-						githubConfig = &plugins.GitHubConfig{
-							Client:         ghClient,
-							Org:            c.String("github-org"),
-							InstallationID: c.Int64("github-installation-id"),
-						}
-					}
-				}
-			}
-			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, accessManager, githubConfig, c.String("server-url")))
+			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, accessManager, c.String("server-url")))
 			// access depends on productfeatures for the RBAC feature gate, so inject
 			// the concrete checks here instead of importing access in that package.
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, accessManager, func(ctx context.Context, organizationID string) error {

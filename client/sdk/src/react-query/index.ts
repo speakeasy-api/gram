@@ -112,8 +112,6 @@ export * from "./pluginsDownloadPluginPackage.js";
 export * from "./project.js";
 export * from "./projectsSetOrganizationWhitelist.js";
 export * from "./publishPackage.js";
-export * from "./publishPlugins.js";
-export * from "./publishStatus.js";
 export * from "./redeployDeployment.js";
 export * from "./register.js";
 export * from "./registerDomain.js";
