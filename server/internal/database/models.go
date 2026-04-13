@@ -748,6 +748,7 @@ type PromptTemplate struct {
 	Deleted       bool
 }
 
+<<<<<<< HEAD
 type RemoteMcpServer struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
@@ -772,6 +773,41 @@ type RemoteMcpServerHeader struct {
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
 	Deleted                bool
+=======
+type Skill struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	Name            string
+	Slug            string
+	Description     pgtype.Text
+	SkillUuid       pgtype.Text
+	State           string
+	ActiveVersionID uuid.NullUUID
+	CreatedByUserID string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type SkillVersion struct {
+	ID                 uuid.UUID
+	SkillID            uuid.UUID
+	AssetID            uuid.UUID
+	ContentSha256      string
+	AssetFormat        string
+	SizeBytes          int64
+	SkillBytes         pgtype.Int8
+	State              string
+	CapturedByUserID   string
+	AuthorName         pgtype.Text
+	FirstSeenTraceID   pgtype.Text
+	FirstSeenSessionID pgtype.Text
+	FirstSeenAt        pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+>>>>>>> 18a4d7636 (add skills registry schema and sqlc scaffolding)
 }
 
 type SlackApp struct {
