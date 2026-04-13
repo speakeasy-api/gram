@@ -456,7 +456,10 @@ func newWorkerCommand() *cli.Command {
 
 			accessManager := access.NewManager(logger, db, productFeatures)
 
-			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, toolIOLogsEnabled, posthogClient, accessManager)
+			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, posthogClient, accessManager)
 
 			/**
 			 * BEGIN -- MCP service setup for agent client
@@ -469,7 +472,7 @@ func newWorkerCommand() *cli.Command {
 				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
-				telemetryService,
+				telemetryLogger,
 			)
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
@@ -515,6 +518,7 @@ func newWorkerCommand() *cli.Command {
 				oauthService,
 				billingTracker,
 				billingRepo,
+				telemetryLogger,
 				telemetryService,
 				productFeatures,
 				ragService,
@@ -553,7 +557,7 @@ func newWorkerCommand() *cli.Command {
 				FunctionsVersion:    runnerVersion,
 				RagService:          ragService,
 				MCPRegistryClient:   mcpRegistryClient,
-				TelemetryService:    telemetryService,
+				TelemetryLogger:     telemetryLogger,
 				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
 			})
 

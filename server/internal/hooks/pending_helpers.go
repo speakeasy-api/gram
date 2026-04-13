@@ -54,8 +54,8 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeH
 		FunctionID:     nil,
 	}
 
-	if s.telemetryService != nil {
-		s.telemetryService.CreateLog(telemetry.LogParams{
+	if s.telemetryLogger != nil {
+		s.telemetryLogger.CreateLog(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
 			Attributes: attrs,

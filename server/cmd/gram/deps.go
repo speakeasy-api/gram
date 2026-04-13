@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -604,4 +605,20 @@ func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat pro
 		}
 		return isEnabled, nil
 	}
+}
+
+func newTelemetryLogger(
+	ctx context.Context,
+	logger *slog.Logger,
+	chDB clickhouse.Conn,
+	logsEnabled telemetry.FeatureChecker,
+	toolIOLogsEnabled telemetry.FeatureChecker,
+) (*tm.Logger, func(context.Context) error) {
+	shutdownCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	shutdown := func(context.Context) error {
+		cancel()
+		return nil
+	}
+
+	return tm.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled), shutdown
 }

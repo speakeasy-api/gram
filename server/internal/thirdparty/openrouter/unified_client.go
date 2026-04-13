@@ -33,9 +33,9 @@ type ChatResolutionAnalyzer interface {
 	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
 }
 
-// TelemetryService emits telemetry events for observability.
-type TelemetryService interface {
-	CreateLog(params telemetry.LogParams)
+// TelemetryLogger emits telemetry events for observability.
+type TelemetryLogger interface {
+	CreateLog(ctx context.Context, params telemetry.LogParams)
 }
 
 const (
@@ -52,7 +52,7 @@ type ChatClient struct {
 	usageTrackingStrategy  UsageTrackingStrategy
 	chatTitleGenerator     ChatTitleGenerator
 	chatResolutionAnalyzer ChatResolutionAnalyzer
-	telemetryService       TelemetryService
+	telemetryLogger        TelemetryLogger
 }
 
 // NewUnifiedClient creates a new UnifiedClient with the given strategies.
@@ -63,7 +63,7 @@ func NewUnifiedClient(
 	trackingStrategy UsageTrackingStrategy,
 	chatTitleGenerator ChatTitleGenerator,
 	chatResolutionAnalyzer ChatResolutionAnalyzer,
-	telemetryService TelemetryService,
+	telemetryLogger TelemetryLogger,
 ) *ChatClient {
 	return &ChatClient{
 		logger:                 logger.With(attr.SlogComponent("openrouter_completions")),
@@ -73,7 +73,7 @@ func NewUnifiedClient(
 		usageTrackingStrategy:  trackingStrategy,
 		chatTitleGenerator:     chatTitleGenerator,
 		chatResolutionAnalyzer: chatResolutionAnalyzer,
-		telemetryService:       telemetryService,
+		telemetryLogger:        telemetryLogger,
 	}
 }
 
@@ -369,7 +369,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		request:              req,
 		logger:               c.logger,
 		client:               c,
-		telemetryService:     c.telemetryService,
+		telemetryService:     c.telemetryLogger,
 		lineBuf:              &strings.Builder{},
 		messageContent:       &strings.Builder{},
 		accumulatedToolCalls: make(map[int]ToolCall),
@@ -431,7 +431,7 @@ type streamingResponseReader struct {
 	request          CompletionRequest
 	logger           *slog.Logger
 	client           *ChatClient
-	telemetryService TelemetryService
+	telemetryService TelemetryLogger
 
 	// SSE parsing state
 	lineBuf              *strings.Builder
@@ -598,7 +598,7 @@ func (c *ChatClient) emitGenAITelemetry(
 	result CompletionResponse,
 ) {
 	// Skip telemetry if no telemetry service configured
-	if c.telemetryService == nil {
+	if c.telemetryLogger == nil {
 		return
 	}
 
@@ -664,7 +664,7 @@ func (c *ChatClient) emitGenAITelemetry(
 		OrganizationID: orgID,
 	}
 
-	c.telemetryService.CreateLog(telemetry.LogParams{
+	c.telemetryLogger.CreateLog(ctx, telemetry.LogParams{
 		Timestamp:  time.Now(),
 		ToolInfo:   toolInfo,
 		Attributes: attrs,

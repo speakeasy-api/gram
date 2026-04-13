@@ -119,6 +119,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
+	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled)
 	telemService := telemetry.NewService(
 		logger,
 		tracerProvider,
@@ -127,7 +128,6 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager,
 		chatSessions,
 		logsEnabled,
-		toolIOLogsEnabled,
 		posthog,
 		access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}),
 	)
@@ -137,7 +137,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalEnv, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, featClient, vectorToolStore, temporalEnv, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
 
 	return ctx, &testInstance{
 		service:        svc,

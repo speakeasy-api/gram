@@ -66,7 +66,7 @@ type Service struct {
 	tracking          billing.Tracker
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 	featuresClient    *productfeatures.Client
-	telemService      *tm.Service
+	telemLogger       *tm.Logger
 	customDomainsRepo *customdomainsRepo.Queries
 	serverURL         *url.URL
 }
@@ -88,7 +88,7 @@ func NewService(
 	funcCaller functions.ToolCaller,
 	platformTools gateway.PlatformExecutor,
 	tracking billing.Tracker,
-	telemService *tm.Service,
+	telemLogger *tm.Logger,
 	featClient *productfeatures.Client,
 	serverURL *url.URL,
 	accessLoader auth.AccessLoader,
@@ -119,7 +119,7 @@ func NewService(
 			platformTools,
 		),
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
-		telemService:      telemService,
+		telemLogger:       telemLogger,
 		featuresClient:    featClient,
 		customDomainsRepo: customdomainsRepo.New(db),
 		serverURL:         serverURL,
@@ -457,7 +457,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			},
 			Attributes: attrRecorder,
 		}
-		s.telemService.CreateLog(logParams)
+		s.telemLogger.CreateLog(ctx, logParams)
 	}()
 
 	return nil

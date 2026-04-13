@@ -32,17 +32,16 @@ import (
 const logsDisabledMsg = "logs are not enabled for this organization"
 
 type Service struct {
-	auth              *auth.Auth
-	db                *pgxpool.Pool
-	chConn            clickhouse.Conn
-	chRepo            *repo.Queries
-	logger            *slog.Logger
-	tracer            trace.Tracer
-	posthog           PosthogClient
-	chatSessions      *chatsessions.Manager
-	logsEnabled       FeatureChecker
-	toolIOLogsEnabled FeatureChecker
-	access            *access.Manager
+	auth         *auth.Auth
+	db           *pgxpool.Pool
+	chConn       clickhouse.Conn
+	chRepo       *repo.Queries
+	logger       *slog.Logger
+	tracer       trace.Tracer
+	posthog      PosthogClient
+	chatSessions *chatsessions.Manager
+	logsEnabled  FeatureChecker
+	access       *access.Manager
 }
 
 var _ telem_gen.Service = (*Service)(nil)
@@ -57,8 +56,9 @@ func NewService(
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
 	logsEnabled FeatureChecker,
-	toolIOLogsEnabled FeatureChecker,
-	posthogClient PosthogClient, accessManager *access.Manager) *Service {
+	posthogClient PosthogClient,
+	accessManager *access.Manager,
+) *Service {
 	logger = logger.With(attr.SlogComponent("telemetry"))
 	chRepo := repo.New(chConn)
 
@@ -71,17 +71,16 @@ func NewService(
 	}
 
 	return &Service{
-		auth:              a,
-		db:                db,
-		chConn:            chConn,
-		chRepo:            chRepo,
-		logger:            logger,
-		logsEnabled:       logsEnabled,
-		toolIOLogsEnabled: toolIOLogsEnabled,
-		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
-		posthog:           posthogClient,
-		chatSessions:      chatSessions,
-		access:            accessManager,
+		auth:         a,
+		db:           db,
+		chConn:       chConn,
+		chRepo:       chRepo,
+		logger:       logger,
+		logsEnabled:  logsEnabled,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
+		posthog:      posthogClient,
+		chatSessions: chatSessions,
+		access:       accessManager,
 	}
 }
 
@@ -213,18 +212,6 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		Logs:       telemetryLogs,
 		NextCursor: nextCursor,
 	}, nil
-}
-
-// CheckToolIOLogsEnabled returns whether tool I/O logs are enabled for the given organization.
-func (s *Service) CheckToolIOLogsEnabled(ctx context.Context, organizationID string) bool {
-	if s.toolIOLogsEnabled == nil {
-		return false
-	}
-	enabled, err := s.toolIOLogsEnabled(ctx, organizationID)
-	if err != nil {
-		return false
-	}
-	return enabled
 }
 
 // SearchToolCalls retrieves tool call summaries with pagination.

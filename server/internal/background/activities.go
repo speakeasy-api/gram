@@ -78,7 +78,7 @@ func NewActivities(
 	ragService *rag.ToolsetVectorStore,
 	mcpRegistryClient *externalmcp.RegistryClient,
 	temporalClient client.Client,
-	telemetryService *telemetry.Service,
+	telemetryLogger *telemetry.Logger,
 	cacheAdapter cache.Cache,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
@@ -106,7 +106,7 @@ func NewActivities(
 		generateToolsetEmbeddings:     activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
 		segmentChat:                   resolution_activities.NewSegmentChat(logger, db, chatClient),
 		deleteChatResolutions:         resolution_activities.NewDeleteChatResolutions(db),
-		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryService),
+		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
 	}
 }

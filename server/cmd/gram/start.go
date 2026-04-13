@@ -596,7 +596,10 @@ func newStartCommand() *cli.Command {
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 			accessManager := access.NewManager(logger, db, productFeatures)
 
-			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, toolIOLogsEnabled, posthogClient, accessManager)
+			telemLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, posthogClient, accessManager)
 
 			// Wrap cache for hooks service in local development
 			var hooksCache cache.Cache = cache.NewRedisCacheAdapter(redisClient)
@@ -611,7 +614,7 @@ func newStartCommand() *cli.Command {
 				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
-				telemSvc,
+				telemLogger,
 			)
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
@@ -647,6 +650,7 @@ func newStartCommand() *cli.Command {
 				oauthService,
 				billingTracker,
 				billingRepo,
+				telemLogger,
 				telemSvc,
 				productFeatures,
 				ragService,
@@ -695,7 +699,7 @@ func newStartCommand() *cli.Command {
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient, accessManager))
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemSvc, sessionManager, hooksCache, chatClient, temporalEnv, accessManager, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, accessManager, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}))
 			// access depends on audit for log writers, so inject the org-read check
 			// here instead of importing access from the audit package.
 			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager, accessManager, func(ctx context.Context, organizationID string) error {
@@ -735,7 +739,7 @@ func newStartCommand() *cli.Command {
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			oauth.AttachExternalOAuth(mux, externalOAuthService)
 			oauth.Attach(mux, oauthService)
-			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemSvc, productFeatures, serverURL, accessManager))
+			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, accessManager))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, accessManager, func(ctx context.Context, resourceID string) error {
 				return accessManager.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: resourceID})
@@ -793,7 +797,7 @@ func newStartCommand() *cli.Command {
 						FunctionsVersion:    runnerVersion,
 						RagService:          ragService,
 						MCPRegistryClient:   mcpRegistryClient,
-						TelemetryService:    telemSvc,
+						TelemetryLogger:     telemLogger,
 						CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {

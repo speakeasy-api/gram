@@ -65,7 +65,7 @@ func handleToolsCall(
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
-	telemSvc *tm.Service,
+	telemLogger *tm.Logger,
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporalEnv *temporal.Environment,
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
@@ -305,7 +305,7 @@ func handleToolsCall(
 			},
 			Attributes: logAttrs,
 		}
-		telemSvc.CreateLog(params)
+		telemLogger.CreateLog(ctx, params)
 	}()
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolCallEnv, plan, logAttrs)
