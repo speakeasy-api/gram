@@ -80,16 +80,16 @@ export function OpenApiSourceInput({
         className={`grid w-full ${documentSlug ? "grid-cols-3" : "grid-cols-2"}`}
       >
         <TabsTrigger value="upload">
-          <UploadIcon className="size-4 mr-1.5" />
+          <UploadIcon className="mr-1.5 size-4" />
           Upload
         </TabsTrigger>
         <TabsTrigger value="url">
-          <LinkIcon className="size-4 mr-1.5" />
+          <LinkIcon className="mr-1.5 size-4" />
           From URL
         </TabsTrigger>
         {documentSlug && (
           <TabsTrigger value="cli">
-            <TerminalIcon className="size-4 mr-1.5" />
+            <TerminalIcon className="mr-1.5 size-4" />
             CLI
           </TabsTrigger>
         )}
@@ -108,7 +108,7 @@ export function OpenApiSourceInput({
             e.preventDefault();
             handleSubmit();
           }}
-          className="h-full flex flex-col justify-center"
+          className="flex h-full flex-col justify-center"
         >
           <Stack gap={3}>
             <input
@@ -116,7 +116,7 @@ export function OpenApiSourceInput({
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://example.com/openapi.yaml"
-              className="w-full px-3 py-2 border rounded-md border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="border-input bg-background focus:ring-ring w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
               disabled={fetchMutation.isPending}
               required
             />
@@ -125,7 +125,7 @@ export function OpenApiSourceInput({
               disabled={!url.trim() || fetchMutation.isPending}
               className="w-full"
             >
-              {fetchMutation.isPending && <Spinner className="size-4 mr-2" />}
+              {fetchMutation.isPending && <Spinner className="mr-2 size-4" />}
               {fetchMutation.isPending ? "Loading..." : "Load OpenAPI Spec"}
             </Button>
           </Stack>
@@ -134,23 +134,23 @@ export function OpenApiSourceInput({
       {documentSlug && (
         <TabsContent value="cli" className="my-3 space-y-3">
           <div>
-            <p className="text-xs text-muted-foreground mb-1.5">
+            <p className="text-muted-foreground mb-1.5 text-xs">
               Direct upload
             </p>
             <CodeBlock
               language="bash"
-              className="!border-0 !bg-muted/50 !rounded-lg"
+              className="!bg-muted/50 !rounded-lg !border-0"
             >
               {`gram upload --type openapiv3 \\\n  --slug ${documentSlug} \\\n  --name "${documentSlug}" \\\n  --location ./path/to/spec.yaml`}
             </CodeBlock>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground mb-1.5">
+            <p className="text-muted-foreground mb-1.5 text-xs">
               Or stage and push (useful for CI/CD)
             </p>
             <CodeBlock
               language="bash"
-              className="!border-0 !bg-muted/50 !rounded-lg"
+              className="!bg-muted/50 !rounded-lg !border-0"
             >
               {`gram stage openapi \\\n  --slug ${documentSlug} \\\n  --location ./path/to/spec.yaml\n\ngram push`}
             </CodeBlock>

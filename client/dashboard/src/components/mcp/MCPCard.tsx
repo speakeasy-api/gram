@@ -62,14 +62,14 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
         {toolset.mcpEnabled && (
           <span
             className={cn(
-              "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+              "absolute inline-flex h-full w-full animate-ping rounded-full opacity-75",
               status.pulseColor,
             )}
           />
         )}
         <span
           className={cn(
-            "relative inline-flex rounded-full h-2.5 w-2.5",
+            "relative inline-flex h-2.5 w-2.5 rounded-full",
             status.color,
           )}
         />
@@ -89,19 +89,19 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
           <img
             src={externalMcpInfo.logoUrl}
             alt={toolset.name}
-            className="w-12 h-12 object-contain"
+            className="h-12 w-12 object-contain"
           />
         ) : (
-          <Network className="w-8 h-8 text-muted-foreground" />
+          <Network className="text-muted-foreground h-8 w-8" />
         )
       }
     >
       {/* Header row with name */}
-      <div className="flex items-start justify-between gap-2 mb-2">
+      <div className="mb-2 flex items-start justify-between gap-2">
         <Type
           variant="subheading"
           as="div"
-          className="truncate flex-1 text-md group-hover:text-primary transition-colors"
+          className="text-md group-hover:text-primary flex-1 truncate transition-colors"
           title={toolset.name}
         >
           {toolset.name}
@@ -120,11 +120,11 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
       </div>
 
       {/* Footer row with status indicator and open link */}
-      <div className="flex items-center justify-between gap-2 mt-auto pt-2">
+      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
         {statusIndicator}
-        <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
+        <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
           <span>Open</span>
-          <ArrowRight className="w-3.5 h-3.5" />
+          <ArrowRight className="h-3.5 w-3.5" />
         </div>
       </div>
     </DotCard>
@@ -134,16 +134,16 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
 export function MCPCardSkeleton() {
   return (
     <DotCard>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="h-5 w-2/3 bg-muted rounded animate-pulse" />
-        <div className="h-5 w-10 bg-muted rounded-full animate-pulse" />
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="bg-muted h-5 w-2/3 animate-pulse rounded" />
+        <div className="bg-muted h-5 w-10 animate-pulse rounded-full" />
       </div>
-      <div className="flex items-center justify-between gap-2 mt-auto pt-2">
+      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
         <div className="flex items-center gap-2">
-          <div className="h-2.5 w-2.5 rounded-full bg-muted animate-pulse" />
-          <div className="h-3.5 w-12 bg-muted rounded animate-pulse" />
+          <div className="bg-muted h-2.5 w-2.5 animate-pulse rounded-full" />
+          <div className="bg-muted h-3.5 w-12 animate-pulse rounded" />
         </div>
-        <div className="h-3.5 w-10 bg-muted rounded animate-pulse" />
+        <div className="bg-muted h-3.5 w-10 animate-pulse rounded" />
       </div>
     </DotCard>
   );

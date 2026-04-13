@@ -23,14 +23,14 @@ export function EnterpriseGate({
   }
 
   return (
-    <div className="flex flex-col items-center justify-center py-24 px-8 m-8 rounded-xl border border-dashed bg-muted/20">
-      <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-        <Icon name={icon} className="w-6 h-6 text-muted-foreground" />
+    <div className="bg-muted/20 m-8 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-24">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <Icon name={icon} className="text-muted-foreground h-6 w-6" />
       </div>
       <Type variant="subheading" className="mb-1">
         {title}
       </Type>
-      <Type small muted className="text-center mb-4 max-w-md">
+      <Type small muted className="mb-4 max-w-md text-center">
         {description}
       </Type>
       <Button variant="brand" asChild>

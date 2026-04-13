@@ -177,7 +177,7 @@ export function PlaygroundElements({
   // Don't render until we have a valid MCP URL
   if (!mcpUrl || !toolsetSlug) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <Type muted>Select a toolset to start chatting</Type>
       </div>
     );
@@ -254,20 +254,20 @@ export function PlaygroundElements({
         theme={resolvedTheme === "dark" ? "dark" : "light"}
         toolset={toolset}
       >
-        <div className="h-full flex flex-col min-h-0">
-          <div className="flex items-center justify-between gap-2 py-3 shrink-0 border-b-border border-b px-4">
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="border-b-border flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
             <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
               <PopoverTrigger asChild>
                 <Button size="sm" variant="ghost">
-                  <HistoryIcon className="size-4 mr-2" />
+                  <HistoryIcon className="mr-2 size-4" />
                   Chat History
                 </Button>
               </PopoverTrigger>
               <PopoverContent
                 align="start"
-                className="w-72 p-0 min-h-fit max-h-96 overflow-y-scroll"
+                className="max-h-96 min-h-fit w-72 overflow-y-scroll p-0"
               >
-                <ChatHistory className="h-full min-h-fit max-h-96 overflow-y-auto" />
+                <ChatHistory className="h-full max-h-96 min-h-fit overflow-y-auto" />
               </PopoverContent>
             </Popover>
             <div className="flex items-center gap-2">{additionalActions}</div>
@@ -297,7 +297,7 @@ function AuthWarningBanner({
   const routes = useRoutes();
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2.5 bg-warning/15 border-b border-warning/30 text-sm font-medium text-warning-foreground">
+    <div className="bg-warning/15 border-warning/30 text-warning-foreground flex items-center gap-2 border-b px-4 py-2.5 text-sm font-medium">
       <AlertCircle className="size-4 shrink-0" />
       <span>
         {missingCount} authentication{" "}
@@ -305,7 +305,7 @@ function AuthWarningBanner({
         <routes.mcp.details.Link
           params={[toolsetSlug]}
           hash="authentication"
-          className="underline hover:text-foreground font-medium"
+          className="hover:text-foreground font-medium underline"
         >
           Configure now
         </routes.mcp.details.Link>
@@ -316,16 +316,16 @@ function AuthWarningBanner({
 
 function OAuthRequiredNotice({ providerName }: { providerName: string }) {
   return (
-    <div className="h-full flex items-center justify-center">
-      <div className="flex flex-col items-center gap-3 text-center max-w-md px-4">
-        <div className="rounded-full bg-warning/15 p-3">
-          <ShieldAlert className="size-6 text-warning" />
+    <div className="flex h-full items-center justify-center">
+      <div className="flex max-w-md flex-col items-center gap-3 px-4 text-center">
+        <div className="bg-warning/15 rounded-full p-3">
+          <ShieldAlert className="text-warning size-6" />
         </div>
         <Type className="font-medium">OAuth Connection Required</Type>
         <Type muted className="text-sm">
           This MCP server requires authentication with{" "}
-          <span className="font-medium text-foreground">{providerName}</span>.
-          Use the <span className="font-medium text-foreground">Connect</span>{" "}
+          <span className="text-foreground font-medium">{providerName}</span>.
+          Use the <span className="text-foreground font-medium">Connect</span>{" "}
           button in the Authentication section of the sidebar to authorize
           access.
         </Type>

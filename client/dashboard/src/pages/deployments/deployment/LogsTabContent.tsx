@@ -557,7 +557,7 @@ export const LogsTabContent = ({
             part.toLowerCase() === searchQuery.toLowerCase() ? (
               <mark
                 key={i}
-                className="bg-yellow-200 dark:bg-yellow-800 text-inherit"
+                className="bg-yellow-200 text-inherit dark:bg-yellow-800"
               >
                 {part}
               </mark>
@@ -585,7 +585,7 @@ export const LogsTabContent = ({
               Source
             </Type>
             <Select value={selectedSource} onValueChange={setSelectedSource}>
-              <SelectTrigger size="sm" className="min-w-[180px] bg-background">
+              <SelectTrigger size="sm" className="bg-background min-w-[180px]">
                 <SelectValue placeholder="All sources" />
               </SelectTrigger>
               <SelectContent>
@@ -606,28 +606,28 @@ export const LogsTabContent = ({
       )}
 
       {/* Logs container */}
-      <div className="relative bg-surface rounded-lg border border-border overflow-hidden">
+      <div className="bg-surface border-border relative overflow-hidden rounded-lg border">
         <div
           className={cn(
-            "flex items-center gap-2 p-2 bg-surface/50 transition-all",
-            isScrolled && "border-b border-border",
+            "bg-surface/50 flex items-center gap-2 p-2 transition-all",
+            isScrolled && "border-border border-b",
           )}
         >
-          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+          <div className="text-muted-foreground flex items-center gap-3 text-[11px]">
             {searchQuery ? (
               <>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                     N
                   </kbd>
                   <span>/</span>
-                  <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                     ⇧N
                   </kbd>
                   <span className="ml-0.5">results</span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                     ESC
                   </kbd>
                   <span>clear</span>
@@ -636,23 +636,23 @@ export const LogsTabContent = ({
             ) : (
               <>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                     J
                   </kbd>
                   <span>/</span>
-                  <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                     K
                   </kbd>
                   <span className="ml-0.5">navigate</span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                     G
                   </kbd>
                   <span>first</span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted px-1 py-0.5 rounded-sm font-mono text-[10px]">
+                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                     ⇧G
                   </kbd>
                   <span>last</span>
@@ -664,7 +664,7 @@ export const LogsTabContent = ({
             <div className="relative">
               <Icon
                 name="search"
-                className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none"
+                className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2"
               />
               <Input
                 data-search-input
@@ -674,28 +674,28 @@ export const LogsTabContent = ({
                 onChange={(e) => handleSearchChange(e.target.value)}
                 onFocus={() => setSearchInputFocused(true)}
                 onBlur={() => setSearchInputFocused(false)}
-                className="pl-7 pr-16 w-48 text-xs py-1 rounded-sm"
+                className="w-48 rounded-sm py-1 pr-16 pl-7 text-xs"
               />
               {searchQuery || searchInputFocused ? (
                 filteredIndices.length > 0 ? (
-                  <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                    <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm">
+                  <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
+                    <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
                       ESC
                     </span>
-                    <span className="text-[10px] text-muted-foreground mx-0.5">
+                    <span className="text-muted-foreground mx-0.5 text-[10px]">
                       {effectiveSearchIndex + 1}/{filteredIndices.length}
                     </span>
                     <div className="flex items-center">
                       <button
                         onClick={() => navigateToResult("prev")}
-                        className="p-0.5 hover:bg-muted rounded-sm opacity-60 hover:opacity-100 transition-opacity"
+                        className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
                         title="Previous (Shift+N)"
                       >
                         <Icon name="chevron-up" className="size-2.5" />
                       </button>
                       <button
                         onClick={() => navigateToResult("next")}
-                        className="p-0.5 hover:bg-muted rounded-sm opacity-60 hover:opacity-100 transition-opacity"
+                        className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
                         title="Next (N)"
                       >
                         <Icon name="chevron-down" className="size-2.5" />
@@ -703,18 +703,18 @@ export const LogsTabContent = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                    <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm">
+                  <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
+                    <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
                       ESC
                     </span>
-                    <span className="text-[10px] text-muted-foreground ml-0.5">
+                    <span className="text-muted-foreground ml-0.5 text-[10px]">
                       0/0
                     </span>
                   </div>
                 )
               ) : (
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
-                  <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm font-mono">
+                <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
+                  <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
                     /
                   </span>
                 </div>
@@ -726,21 +726,21 @@ export const LogsTabContent = ({
         <div
           ref={logsContainerRef}
           tabIndex={0}
-          className="font-mono text-xs max-h-[500px] overflow-y-auto pb-2 focus:outline-none"
+          className="max-h-[500px] overflow-y-auto pb-2 font-mono text-xs focus:outline-none"
         >
           {parsedLogs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <Icon name="file-text" className="size-8 mb-3 opacity-30" />
-              <p className="text-sm font-sans">No logs to display</p>
+            <div className="text-muted-foreground flex flex-col items-center justify-center py-12">
+              <Icon name="file-text" className="mb-3 size-8 opacity-30" />
+              <p className="font-sans text-sm">No logs to display</p>
             </div>
           ) : groupBySource && groupedLogs ? (
             // Grouped view
             groupedLogs.map(([source, group]) => (
               <details key={source} className="group" open>
-                <summary className="px-3 py-3 cursor-pointer hover:bg-muted/30 flex items-center gap-2 border-b border-border">
+                <summary className="hover:bg-muted/30 border-border flex cursor-pointer items-center gap-2 border-b px-3 py-3">
                   <Icon
                     name="chevron-right"
-                    className="size-3 group-open:rotate-90 transition-transform"
+                    className="size-3 transition-transform group-open:rotate-90"
                   />
                   <span className="font-sans font-medium">{source}</span>
                   <span className="text-muted-foreground font-sans text-xs">
@@ -767,16 +767,16 @@ export const LogsTabContent = ({
                           `fallback-${globalIndex}`
                         }
                         className={cn(
-                          "px-3 py-1.5 transition-colors relative",
+                          "relative px-3 py-1.5 transition-colors",
                           "hover:bg-muted/20",
                           isError && "bg-destructive/10 text-destructive",
                           isWarn && "bg-warning/10 text-warning",
                           isSkipped && "bg-muted/50 text-muted-foreground",
                           isHighlighted &&
-                            "border-l-4 border-l-foreground pl-2",
+                            "border-l-foreground border-l-4 pl-2",
                         )}
                       >
-                        <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex min-w-0 items-center gap-2.5">
                           <span
                             className={cn(
                               "size-1.5 shrink-0 rounded-full",
@@ -785,7 +785,7 @@ export const LogsTabContent = ({
                           />
                           <span
                             className={cn(
-                              "text-[11px] tabular-nums shrink-0",
+                              "shrink-0 text-[11px] tabular-nums",
                               isError
                                 ? "text-destructive"
                                 : isWarn
@@ -831,15 +831,15 @@ export const LogsTabContent = ({
                   }}
                   key={visibleEvents[index]?.id || `fallback-${index}`}
                   className={cn(
-                    "px-3 py-1.5 transition-colors relative",
+                    "relative px-3 py-1.5 transition-colors",
                     "hover:bg-muted/20",
                     isError && "bg-destructive/10 text-destructive",
                     isWarn && "bg-warning/10 text-warning",
                     isSkipped && "bg-muted/50 text-muted-foreground",
-                    isHighlighted && "border-l-4 border-l-foreground pl-2",
+                    isHighlighted && "border-l-foreground border-l-4 pl-2",
                   )}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex min-w-0 items-center gap-2.5">
                     <span
                       className={cn(
                         "size-1.5 shrink-0 rounded-full",
@@ -848,7 +848,7 @@ export const LogsTabContent = ({
                     />
                     <span
                       className={cn(
-                        "text-[11px] tabular-nums shrink-0",
+                        "shrink-0 text-[11px] tabular-nums",
                         isError
                           ? "text-destructive"
                           : isWarn
@@ -878,7 +878,7 @@ export const LogsTabContent = ({
         </div>
 
         {showBottomFade && (
-          <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background to-transparent pointer-events-none rounded-b-lg" />
+          <div className="from-background pointer-events-none absolute right-0 bottom-0 left-0 h-12 rounded-b-lg bg-gradient-to-t to-transparent" />
         )}
       </div>
     </>

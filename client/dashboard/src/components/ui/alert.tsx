@@ -41,7 +41,7 @@ const AlertTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <h5
     ref={ref}
-    className={cn("mb-1 font-medium leading-none tracking-tight", className)}
+    className={cn("mb-1 leading-none font-medium tracking-tight", className)}
     {...props}
   />
 ));
@@ -82,7 +82,7 @@ const ErrorAlert = ({
         {onDismiss && (
           <button
             onClick={onDismiss}
-            className="ml-2 opacity-70 hover:opacity-100 transition-opacity"
+            className="ml-2 opacity-70 transition-opacity hover:opacity-100"
             aria-label="Dismiss"
           >
             <Icon name="x" className="h-4 w-4" />

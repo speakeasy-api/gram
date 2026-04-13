@@ -30,12 +30,12 @@ export function AnyField({
   const descriptors = `${hintId} ${errorId}`;
 
   return (
-    <div className="flex flex-col gap-2 group">
+    <div className="group flex flex-col gap-2">
       <Label
         htmlFor={id}
         className={cn(
           optionality === "visible"
-            ? "after:content-(--optional-label) after:inline-block after:text-sm after:text-muted-foreground after:ms-2 group-has-[[readonly],[disabled],[required]]:after:content-['']"
+            ? "after:text-muted-foreground after:ms-2 after:inline-block after:text-sm after:content-(--optional-label) group-has-[[readonly],[disabled],[required]]:after:content-['']"
             : null,
         )}
       >
@@ -45,13 +45,13 @@ export function AnyField({
       {hint ? (
         <p
           id={hintId}
-          className={cn("text-sm text-muted-foreground", error && "sr-only")}
+          className={cn("text-muted-foreground text-sm", error && "sr-only")}
         >
           {hint}
         </p>
       ) : null}
       {error ? (
-        <p id={errorId} className="text-sm text-destructive">
+        <p id={errorId} className="text-destructive text-sm">
           {error}
         </p>
       ) : null}

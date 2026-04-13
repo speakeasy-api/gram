@@ -182,7 +182,7 @@ export function EditServerNameDialog({
               {allServers.map((server) => (
                 <div key={server.rawServerName} className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Label className="flex-1 font-mono text-xs text-muted-foreground">
+                    <Label className="text-muted-foreground flex-1 font-mono text-xs">
                       {server.rawServerName}
                     </Label>
                     {server.id && (
@@ -191,7 +191,7 @@ export function EditServerNameDialog({
                         size="sm"
                         onClick={() => handleDelete(server.id)}
                         disabled={deletingIds.has(server.id) || isProcessing}
-                        className="h-7 px-2 shrink-0"
+                        className="h-7 shrink-0 px-2"
                       >
                         {deletingIds.has(server.id) ? (
                           <Icon
@@ -223,7 +223,7 @@ export function EditServerNameDialog({
                   />
                 </div>
               ))}
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Change a server's display name to move it to a different group,
                 or restore its original name to ungroup it. Click the trash icon
                 to remove the override entirely.
@@ -243,7 +243,7 @@ export function EditServerNameDialog({
                     id="raw-name"
                     value={groupedOverrides[0].rawServerName}
                     readOnly
-                    className="font-mono text-sm bg-muted"
+                    className="bg-muted font-mono text-sm"
                   />
                 </div>
               )}
@@ -266,7 +266,7 @@ export function EditServerNameDialog({
                     }
                   }}
                 />
-                <p className="text-xs text-muted-foreground mt-3">
+                <p className="text-muted-foreground mt-3 text-xs">
                   This name will be shown in the UI instead of the raw server
                   name
                 </p>
@@ -293,7 +293,7 @@ export function EditServerNameDialog({
                 <>
                   <Icon
                     name="loader-circle"
-                    className="size-4 animate-spin mr-2"
+                    className="mr-2 size-4 animate-spin"
                   />
                   Removing...
                 </>
@@ -317,7 +317,7 @@ export function EditServerNameDialog({
               <>
                 <Icon
                   name="loader-circle"
-                  className="size-4 animate-spin mr-2"
+                  className="mr-2 size-4 animate-spin"
                 />
                 Saving...
               </>

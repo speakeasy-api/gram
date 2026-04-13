@@ -513,22 +513,22 @@ function HooksContent() {
       subtitle="Ask me about your hooks! Powered by Elements + Gram MCP"
       hideTrigger={isLogsDisabled}
     >
-      <div className="h-full overflow-hidden flex flex-col">
+      <div className="flex h-full flex-col overflow-hidden">
         <Page>
           <Page.Header>
             <Page.Header.Breadcrumbs fullWidth />
           </Page.Header>
           {isLogsDisabled ? (
             <Page.Body fullWidth className="space-y-6">
-              <div className="flex flex-col gap-1 min-w-0">
+              <div className="flex min-w-0 flex-col gap-1">
                 <h1 className="text-xl font-semibold">Hooks</h1>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   Monitor hook events and tool executions across all servers
                 </p>
               </div>
-              <div className="flex-1 relative">
+              <div className="relative flex-1">
                 <div
-                  className="pointer-events-none select-none h-full"
+                  className="pointer-events-none h-full select-none"
                   aria-hidden="true"
                 >
                   <ObservabilitySkeleton />
@@ -663,13 +663,13 @@ function HooksInnerContent({
 
   return (
     <>
-      <div className="flex flex-col flex-1 min-h-0 w-full">
+      <div className="flex min-h-0 w-full flex-1 flex-col">
         {/* Header section */}
-        <div className="px-8 pt-8 pb-4 shrink-0">
-          <div className="flex items-start justify-between gap-4 mb-4">
-            <div className="flex flex-col gap-1 min-w-0">
+        <div className="shrink-0 px-8 pt-8 pb-4">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div className="flex min-w-0 flex-col gap-1">
               <h1 className="text-xl font-semibold">Hooks</h1>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 Monitor hook events and tool executions across all servers
               </p>
             </div>
@@ -689,7 +689,7 @@ function HooksInnerContent({
             (summaryData.servers.length > 0 ||
               (summaryData.users && summaryData.users.length > 0) ||
               (summaryData.skills && summaryData.skills.length > 0)) && (
-              <div className="mb-4 border rounded-lg overflow-hidden">
+              <div className="mb-4 overflow-hidden rounded-lg border">
                 {summaryData.servers.length > 0 && (
                   <div className={summaryView !== "servers" ? "hidden" : ""}>
                     <HooksServerTable
@@ -724,12 +724,12 @@ function HooksInnerContent({
             )}
 
           {/* Filter and Search Row */}
-          <div className="flex items-center gap-2 flex-wrap mt-4">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <MultiSearch
               value={serverInput}
               onChange={setServerInput}
               placeholder="Filter by server name"
-              className="flex-1 min-w-[200px]"
+              className="min-w-[200px] flex-1"
               chips={activeFilters
                 .filter((f) => f.path === "gram.tool_call.source")
                 .map((f) => ({ display: f.display, value: f.display }))}
@@ -741,7 +741,7 @@ function HooksInnerContent({
               value={userEmailInput}
               onChange={setUserEmailInput}
               placeholder="Filter by user email"
-              className="flex-1 min-w-[200px]"
+              className="min-w-[200px] flex-1"
               chips={activeFilters
                 .filter((f) => f.path === "user.email")
                 .map((f) => ({ display: f.display, value: f.display }))}
@@ -766,28 +766,28 @@ function HooksInnerContent({
         </div>
 
         {/* Content section */}
-        <div className="flex-1 overflow-hidden min-h-0 border-t">
-          <div className="h-full flex flex-col bg-background">
+        <div className="min-h-0 flex-1 overflow-hidden border-t">
+          <div className="bg-background flex h-full flex-col">
             {isFetching && groupedTraces.length > 0 && (
-              <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
-                <div className="h-full bg-primary animate-pulse" />
+              <div className="bg-primary/20 absolute top-0 right-0 left-0 z-20 h-1">
+                <div className="bg-primary h-full animate-pulse" />
               </div>
             )}
 
             {/* Header */}
-            <div className="flex items-center gap-3 px-5 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
-              <div className="shrink-0 w-[150px]">Timestamp</div>
-              <div className="shrink-0 w-5" />
-              <div className="flex-1 min-w-0">Server / Tool</div>
-              <div className="shrink-0 w-[260px]">User</div>
-              <div className="shrink-0 w-[120px]">Source</div>
-              <div className="shrink-0 w-20 text-right">Status</div>
+            <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase">
+              <div className="w-[150px] shrink-0">Timestamp</div>
+              <div className="w-5 shrink-0" />
+              <div className="min-w-0 flex-1">Server / Tool</div>
+              <div className="w-[260px] shrink-0">User</div>
+              <div className="w-[120px] shrink-0">Source</div>
+              <div className="w-20 shrink-0 text-right">Status</div>
             </div>
 
             {/* Scrollable trace list */}
             <div
               ref={containerRef}
-              className="overflow-y-auto flex-1"
+              className="flex-1 overflow-y-auto"
               onScroll={handleScroll}
             >
               <HooksTraceContent
@@ -805,7 +805,7 @@ function HooksInnerContent({
 
             {/* Footer */}
             {groupedTraces.length > 0 && (
-              <div className="flex items-center gap-4 px-5 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
+              <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-4 border-t px-5 py-3 text-sm">
                 <span>
                   {groupedTraces.length}{" "}
                   {groupedTraces.length === 1 ? "trace" : "traces"}
@@ -864,10 +864,10 @@ function HookTypeFilter({
         <Button
           variant="outline"
           size="sm"
-          className="shrink-0 w-[200px] h-[42px] justify-between"
+          className="h-[42px] w-[200px] shrink-0 justify-between"
         >
           <span className="text-sm">{getButtonText()}</span>
-          <Icon name="chevron-down" className="size-4 ml-2" />
+          <Icon name="chevron-down" className="ml-2 size-4" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[200px] p-3" align="start">
@@ -889,7 +889,7 @@ function HookTypeFilter({
               />
               <label
                 htmlFor={`hook-type-${option.value}`}
-                className="text-sm font-medium leading-none cursor-pointer"
+                className="cursor-pointer text-sm leading-none font-medium"
               >
                 {option.label}
               </label>
@@ -942,9 +942,9 @@ function SummaryTable({
   return (
     <div className="bg-background relative">
       {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-1 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
+      <div className="bg-muted/30 text-muted-foreground flex items-center gap-3 border-b px-5 py-1 text-xs font-medium tracking-wide uppercase">
         {/* First column - tabs or header */}
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           {tabs && tabValue && onTabChange ? (
             <Tabs value={tabValue} onValueChange={onTabChange}>
               <TabsList className="h-7 p-0.5">
@@ -952,7 +952,7 @@ function SummaryTable({
                   <TabsTrigger
                     key={tab.value}
                     value={tab.value}
-                    className="text-xs px-2.5 h-6"
+                    className="h-6 px-2.5 text-xs"
                   >
                     {tab.label}
                   </TabsTrigger>
@@ -963,9 +963,9 @@ function SummaryTable({
             "Name"
           )}
         </div>
-        <div className="shrink-0 w-[100px] text-right">{uniqueToolsLabel}</div>
-        <div className="shrink-0 w-[100px] text-right">{toolCallsLabel}</div>
-        <div className="shrink-0 w-[100px] text-right">Success Rate</div>
+        <div className="w-[100px] shrink-0 text-right">{uniqueToolsLabel}</div>
+        <div className="w-[100px] shrink-0 text-right">{toolCallsLabel}</div>
+        <div className="w-[100px] shrink-0 text-right">Success Rate</div>
       </div>
 
       {/* Rows */}
@@ -978,34 +978,34 @@ function SummaryTable({
         {sortedItems.map((item) => (
           <div
             key={item.name}
-            className="group w-full flex items-center gap-3 px-5 py-3 border-b last:border-b-0"
+            className="group flex w-full items-center gap-3 border-b px-5 py-3 last:border-b-0"
           >
             {/* Name + Actions */}
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <span className="text-sm font-medium truncate">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="truncate text-sm font-medium">
                 {item.displayName || item.name}
               </span>
 
               {/* Actions - shown on hover */}
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+              <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                 {!hideFilterAction && (
                   <button
                     onClick={() => onItemSelect(item.name)}
-                    className="p-1.5 rounded hover:bg-primary/10"
+                    className="hover:bg-primary/10 rounded p-1.5"
                     title={`Filter by ${item.displayName || item.name}`}
                   >
-                    <Filter className="size-4 text-muted-foreground hover:text-primary" />
+                    <Filter className="text-muted-foreground hover:text-primary size-4" />
                   </button>
                 )}
                 {onItemEdit && (
                   <button
                     onClick={() => onItemEdit(item.name)}
-                    className="p-1.5 rounded hover:bg-primary/10"
+                    className="hover:bg-primary/10 rounded p-1.5"
                     title={`Edit display name for ${item.displayName || item.name}`}
                   >
                     <Icon
                       name="pencil"
-                      className="size-4 text-muted-foreground hover:text-primary"
+                      className="text-muted-foreground hover:text-primary size-4"
                     />
                   </button>
                 )}
@@ -1013,17 +1013,17 @@ function SummaryTable({
             </div>
 
             {/* Unique Tools */}
-            <div className="shrink-0 w-[100px] text-right text-sm text-muted-foreground">
+            <div className="text-muted-foreground w-[100px] shrink-0 text-right text-sm">
               {item.uniqueTools}
             </div>
 
             {/* Tool Calls (successCount + failureCount (eventCount is something else)) */}
-            <div className="shrink-0 w-[100px] text-right text-sm">
+            <div className="w-[100px] shrink-0 text-right text-sm">
               {item.toolCallCount}
             </div>
 
             {/* Success Rate */}
-            <div className="shrink-0 w-[100px] flex justify-end items-center gap-1.5">
+            <div className="flex w-[100px] shrink-0 items-center justify-end gap-1.5">
               <span className="text-sm font-medium tabular-nums">
                 {Math.round((1 - item.failureRate) * 100)}%
               </span>
@@ -1042,13 +1042,13 @@ function SummaryTable({
           variant="ghost"
           size="sm"
           onClick={() => setIsExpanded(!isExpanded)}
-          className="absolute bottom-2 left-1/2 -translate-x-1/2 h-7 px-2 bg-background/95 backdrop-blur-sm shadow-sm border border-border/50 hover:bg-muted"
+          className="bg-background/95 border-border/50 hover:bg-muted absolute bottom-2 left-1/2 h-7 -translate-x-1/2 border px-2 shadow-sm backdrop-blur-sm"
         >
           <Icon
             name={isExpanded ? "chevrons-up" : "chevrons-down"}
             className="size-3.5"
           />
-          <span className="text-xs ml-1">
+          <span className="ml-1 text-xs">
             {isExpanded ? "Collapse" : "Expand"}
           </span>
         </Button>
@@ -1382,13 +1382,13 @@ function HooksTraceContent({
   if (error) {
     return (
       <div className="flex flex-col items-center gap-3 py-12">
-        <div className="size-12 rounded-full bg-destructive/10 flex items-center justify-center">
-          <Icon name="x" className="size-6 text-destructive" />
+        <div className="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
+          <Icon name="x" className="text-destructive size-6" />
         </div>
-        <span className="font-medium text-foreground">
+        <span className="text-foreground font-medium">
           Error loading hook events
         </span>
-        <span className="text-sm text-muted-foreground max-w-sm text-center">
+        <span className="text-muted-foreground max-w-sm text-center text-sm">
           {error.message}
         </span>
       </div>
@@ -1397,7 +1397,7 @@ function HooksTraceContent({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+      <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
         <Icon name="loader-circle" className="size-5 animate-spin" />
         <span>Loading hook events...</span>
       </div>
@@ -1416,13 +1416,13 @@ function HooksTraceContent({
     return (
       <div className="py-12 text-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="size-12 rounded-full bg-muted flex items-center justify-center">
-            <Icon name="inbox" className="size-6 text-muted-foreground" />
+          <div className="bg-muted flex size-12 items-center justify-center rounded-full">
+            <Icon name="inbox" className="text-muted-foreground size-6" />
           </div>
-          <span className="font-medium text-foreground">
+          <span className="text-foreground font-medium">
             No matching hook events
           </span>
-          <span className="text-sm text-muted-foreground max-w-sm">
+          <span className="text-muted-foreground max-w-sm text-sm">
             Try adjusting your search query or time range
           </span>
         </div>
@@ -1444,7 +1444,7 @@ function HooksTraceContent({
       ))}
 
       {isFetchingNextPage && (
-        <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground border-t">
+        <div className="text-muted-foreground flex items-center justify-center gap-2 border-t py-4">
           <Icon name="loader-circle" className="size-4 animate-spin" />
           <span className="text-sm">Loading more events...</span>
         </div>
@@ -1499,7 +1499,7 @@ function HookTraceRow({
     // For skills, show [Skill] badge
     if (toolName === "Skill" && skillName) {
       return (
-        <span className="text-xs font-mono truncate px-2 py-1 rounded-md shrink-0 bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 font-medium">
+        <span className="shrink-0 truncate rounded-md border border-purple-500/20 bg-purple-500/10 px-2 py-1 font-mono text-xs font-medium text-purple-600 dark:text-purple-400">
           Skill
         </span>
       );
@@ -1509,10 +1509,10 @@ function HookTraceRow({
     return (
       <span
         className={cn(
-          "text-xs font-mono truncate px-2 py-1 rounded-md shrink-0",
+          "shrink-0 truncate rounded-md px-2 py-1 font-mono text-xs",
           isLocal
             ? "bg-muted/50 text-muted-foreground"
-            : "bg-primary/10 text-primary border border-primary/20 font-medium",
+            : "bg-primary/10 text-primary border-primary/20 border font-medium",
         )}
       >
         {displayServerName || "local"}
@@ -1542,29 +1542,29 @@ function HookTraceRow({
   }, [trace.hookStatus]);
 
   return (
-    <div className="border-b border-border/50 last:border-b-0">
+    <div className="border-border/50 border-b last:border-b-0">
       {/* Parent trace row */}
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-3 px-5 py-2.5 hover:bg-muted/50 transition-colors text-left"
+        className="hover:bg-muted/50 flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors"
       >
         {/* Timestamp */}
-        <div className="shrink-0 w-[150px] text-sm text-muted-foreground font-mono">
+        <div className="text-muted-foreground w-[150px] shrink-0 font-mono text-sm">
           {timeAgo}
         </div>
 
         {/* Expand/collapse indicator */}
-        <div className="shrink-0 w-5 flex items-center justify-center">
+        <div className="flex w-5 shrink-0 items-center justify-center">
           <Icon
             name={isExpanded ? "chevron-down" : "chevron-right"}
-            className="size-4 text-muted-foreground"
+            className="text-muted-foreground size-4"
           />
         </div>
 
         {/* Server badge + Tool name */}
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           {serverNameBadge}
-          <span className="text-sm font-mono truncate">
+          <span className="truncate font-mono text-sm">
             {toolName === "Skill" && skillName
               ? skillName
               : toolName || "unknown"}
@@ -1572,25 +1572,25 @@ function HookTraceRow({
         </div>
 
         {/* User email */}
-        <div className="shrink-0 w-[260px] text-sm text-muted-foreground truncate">
+        <div className="text-muted-foreground w-[260px] shrink-0 truncate text-sm">
           {userEmail || "—"}
         </div>
 
         {/* Hook source */}
-        <div className="shrink-0 w-[120px] flex items-center gap-2">
+        <div className="flex w-[120px] shrink-0 items-center gap-2">
           <HookSourceIcon source={hookSource} className="size-4 shrink-0" />
           {hookSource && (
-            <span className="text-xs text-foreground font-medium truncate">
+            <span className="text-foreground truncate text-xs font-medium">
               {hookSource}
             </span>
           )}
         </div>
 
         {/* Status badge */}
-        <div className="shrink-0 w-20 flex justify-end">
+        <div className="flex w-20 shrink-0 justify-end">
           <div
             className={cn(
-              "inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium",
+              "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium",
               statusConfig.bgColor,
               statusConfig.color,
             )}

@@ -48,25 +48,25 @@ export function ServerTableRow({
   return (
     <DotRow
       onClick={handleRowClick}
-      className={cn(isAdded && "border-l-2 border-l-success/50")}
+      className={cn(isAdded && "border-l-success/50 border-l-2")}
       icon={
         server.iconUrl ? (
           <img
             src={server.iconUrl}
             alt={displayName}
-            className="w-6 h-6 object-contain"
+            className="h-6 w-6 object-contain"
           />
         ) : undefined
       }
     >
       {/* Selection */}
-      <td className="px-3 py-3 w-10">
+      <td className="w-10 px-3 py-3">
         {isSelected ? (
-          <div className="size-5 rounded-full bg-[#1DA1F2] flex items-center justify-center">
+          <div className="flex size-5 items-center justify-center rounded-full bg-[#1DA1F2]">
             <Check className="size-3 text-white" strokeWidth={5} />
           </div>
         ) : (
-          <div className="size-5 rounded-full border-2 border-muted-foreground/30" />
+          <div className="border-muted-foreground/30 size-5 rounded-full border-2" />
         )}
       </td>
 
@@ -76,7 +76,7 @@ export function ServerTableRow({
           <Type
             variant="subheading"
             as="div"
-            className="truncate text-sm group-hover:text-primary transition-colors"
+            className="group-hover:text-primary truncate text-sm transition-colors"
             title={displayName}
           >
             {displayName}
@@ -105,8 +105,8 @@ export function ServerTableRow({
       </td>
 
       {/* Description */}
-      <td className="px-3 py-3 max-w-xs">
-        <Type small muted className="truncate block">
+      <td className="max-w-xs px-3 py-3">
+        <Type small muted className="block truncate">
           {server.description}
         </Type>
       </td>
@@ -122,7 +122,7 @@ export function ServerTableRow({
           <Button variant="secondary" size="sm">
             <Button.Text>View</Button.Text>
             <Button.RightIcon>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <ArrowRight className="h-3.5 w-3.5" />
             </Button.RightIcon>
           </Button>
         </Link>

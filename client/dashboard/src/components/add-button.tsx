@@ -9,7 +9,7 @@ export const AddButton = ({ onClick }: { onClick?: () => void }) => {
       onClick={onClick}
     >
       <Button.LeftIcon>
-        <PlusIcon className="w-4 h-4" />
+        <PlusIcon className="h-4 w-4" />
       </Button.LeftIcon>
       <Button.Text className="sr-only">Add</Button.Text>
     </Button>

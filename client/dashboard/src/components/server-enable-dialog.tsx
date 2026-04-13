@@ -49,7 +49,7 @@ export function ServerEnableDialog({
       <Dialog.Content className="max-w-md">
         <Dialog.Header>
           <Dialog.Title className="flex items-center gap-2">
-            <Server className="w-5 h-5" />
+            <Server className="h-5 w-5" />
             {currentlyEnabled ? "Disable" : "Enable"} MCP Server
           </Dialog.Title>
         </Dialog.Header>
@@ -75,7 +75,7 @@ export function ServerEnableDialog({
           </Button>
           {!canEnable ? (
             <Button onClick={handleUpgrade} className="gap-2">
-              <CreditCard className="w-4 h-4" />
+              <CreditCard className="h-4 w-4" />
               Upgrade Plan
             </Button>
           ) : (

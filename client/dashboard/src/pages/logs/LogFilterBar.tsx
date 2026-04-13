@@ -259,31 +259,31 @@ export function LogFilterBar({
         <PopoverAnchor asChild>
           <div
             className={cn(
-              "flex flex-wrap items-center gap-1.5 min-h-[42px] border border-border rounded-md px-3 py-1.5 transition-[border-color,box-shadow]",
-              inputFocused && "border-ring ring-[3px] ring-ring/50",
+              "border-border flex min-h-[42px] flex-wrap items-center gap-1.5 rounded-md border px-3 py-1.5 transition-[border-color,box-shadow]",
+              inputFocused && "border-ring ring-ring/50 ring-[3px]",
             )}
           >
-            <Search className="size-4 text-muted-foreground shrink-0" />
+            <Search className="text-muted-foreground size-4 shrink-0" />
             {filters.map((filter) => (
               <button
                 key={filter.id}
                 onClick={() => removeFilter(filter.id)}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-border bg-accent text-accent-foreground text-xs font-mono hover:bg-accent/80 transition-colors group shrink-0"
+                className="border-border bg-accent text-accent-foreground hover:bg-accent/80 group inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-xs transition-colors"
               >
                 <span>
                   {filter.path} {OP_LABELS[filter.op]}
                   {filter.value !== undefined ? ` ${filter.value}` : ""}
                 </span>
-                <X className="size-3 text-muted-foreground group-hover:text-foreground" />
+                <X className="text-muted-foreground group-hover:text-foreground size-3" />
               </button>
             ))}
             {step === "operator" && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-ring bg-accent text-accent-foreground text-xs font-mono shrink-0">
+              <span className="border-ring bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-xs">
                 {selectedKey}
               </span>
             )}
             {step === "value" ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md border border-ring bg-accent text-accent-foreground text-xs font-mono shrink-0">
+              <span className="border-ring bg-accent text-accent-foreground inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 font-mono text-xs">
                 <span>
                   {selectedKey} {selectedOp && OP_LABELS[selectedOp]}
                   {"\u00A0"}
@@ -309,7 +309,7 @@ export function LogFilterBar({
                     }
                   }}
                   placeholder={valuePlaceholder}
-                  className="bg-transparent outline-none text-xs font-mono w-[80px]"
+                  className="w-[80px] bg-transparent font-mono text-xs outline-none"
                   style={{
                     width: `${Math.max(filterValue.length, valuePlaceholder.length)}ch`,
                   }}
@@ -337,7 +337,7 @@ export function LogFilterBar({
                       ? "Add filter..."
                       : "Search by URN or filter (e.g. http.response.status_code != 200)"
                 }
-                className="flex-1 min-w-[120px] bg-transparent outline-none min-h-[24px] text-sm"
+                className="min-h-[24px] min-w-[120px] flex-1 bg-transparent text-sm outline-none"
               />
             )}
             {searchInput && (
@@ -347,7 +347,7 @@ export function LogFilterBar({
                   resetFlow();
                   onSearchSubmit("");
                 }}
-                className="text-muted-foreground hover:text-foreground transition-opacity shrink-0"
+                className="text-muted-foreground hover:text-foreground shrink-0 transition-opacity"
                 aria-label="Clear search"
               >
                 <X className="size-4" />
@@ -356,7 +356,7 @@ export function LogFilterBar({
             {filters.length > 0 && !searchInput && (
               <button
                 onClick={clearAll}
-                className="text-muted-foreground hover:text-foreground transition-opacity shrink-0"
+                className="text-muted-foreground hover:text-foreground shrink-0 transition-opacity"
                 aria-label="Clear all filters"
               >
                 <X className="size-4" />
@@ -411,11 +411,11 @@ export function LogFilterBar({
                     onSelect={() => handleOpSelect(op.value)}
                     className="cursor-pointer"
                   >
-                    <div className="flex items-center justify-between w-full">
+                    <div className="flex w-full items-center justify-between">
                       <span className="font-mono text-xs">
                         {OP_LABELS[op.value]}
                       </span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-muted-foreground text-xs">
                         {op.description}
                       </span>
                     </div>

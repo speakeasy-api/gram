@@ -107,39 +107,39 @@ function MCPLoading() {
       </Page.Header>
       <Page.Body fullWidth noPadding>
         {/* Hero skeleton */}
-        <div className="relative w-full h-64 bg-muted/30 animate-pulse">
-          <div className="absolute bottom-0 left-0 right-0 px-8 py-8 max-w-[1270px] mx-auto w-full">
+        <div className="bg-muted/30 relative h-64 w-full animate-pulse">
+          <div className="absolute right-0 bottom-0 left-0 mx-auto w-full max-w-[1270px] px-8 py-8">
             <Stack gap={2}>
-              <div className="h-8 w-64 bg-muted rounded" />
-              <div className="h-4 w-96 bg-muted rounded" />
+              <div className="bg-muted h-8 w-64 rounded" />
+              <div className="bg-muted h-4 w-96 rounded" />
             </Stack>
           </div>
         </div>
 
         {/* Tabs skeleton */}
         <div className="border-b">
-          <div className="max-w-[1270px] mx-auto px-8">
-            <div className="flex gap-6 h-11">
-              <div className="h-4 w-20 bg-muted rounded animate-pulse" />
-              <div className="h-4 w-16 bg-muted rounded animate-pulse" />
-              <div className="h-4 w-20 bg-muted rounded animate-pulse" />
-              <div className="h-4 w-28 bg-muted rounded animate-pulse" />
+          <div className="mx-auto max-w-[1270px] px-8">
+            <div className="flex h-11 gap-6">
+              <div className="bg-muted h-4 w-20 animate-pulse rounded" />
+              <div className="bg-muted h-4 w-16 animate-pulse rounded" />
+              <div className="bg-muted h-4 w-20 animate-pulse rounded" />
+              <div className="bg-muted h-4 w-28 animate-pulse rounded" />
             </div>
           </div>
         </div>
 
         {/* Content skeleton */}
-        <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+        <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
           <Stack gap={6}>
             <div className="space-y-4">
-              <div className="h-6 w-48 bg-muted rounded animate-pulse" />
-              <div className="h-4 w-full max-w-2xl bg-muted rounded animate-pulse" />
-              <div className="h-32 w-full bg-muted rounded animate-pulse" />
+              <div className="bg-muted h-6 w-48 animate-pulse rounded" />
+              <div className="bg-muted h-4 w-full max-w-2xl animate-pulse rounded" />
+              <div className="bg-muted h-32 w-full animate-pulse rounded" />
             </div>
             <div className="space-y-4">
-              <div className="h-6 w-40 bg-muted rounded animate-pulse" />
-              <div className="h-4 w-full max-w-2xl bg-muted rounded animate-pulse" />
-              <div className="h-24 w-full bg-muted rounded animate-pulse" />
+              <div className="bg-muted h-6 w-40 animate-pulse rounded" />
+              <div className="bg-muted h-4 w-full max-w-2xl animate-pulse rounded" />
+              <div className="bg-muted h-24 w-full animate-pulse rounded" />
             </div>
           </Stack>
         </div>
@@ -211,7 +211,7 @@ export function MCPDetailPage() {
     statusBadge = (
       <Badge variant="neutral">
         <Badge.LeftIcon>
-          <XCircleIcon className="w-3 h-3" />
+          <XCircleIcon className="h-3 w-3" />
         </Badge.LeftIcon>
         <Badge.Text>Disabled</Badge.Text>
       </Badge>
@@ -220,7 +220,7 @@ export function MCPDetailPage() {
     statusBadge = (
       <Badge variant="neutral">
         <Badge.LeftIcon>
-          <CheckCircleIcon className="w-3 h-3 text-green-600" />
+          <CheckCircleIcon className="h-3 w-3 text-green-600" />
         </Badge.LeftIcon>
         <Badge.Text>Public</Badge.Text>
       </Badge>
@@ -229,7 +229,7 @@ export function MCPDetailPage() {
     statusBadge = (
       <Badge variant="neutral">
         <Badge.LeftIcon>
-          <LockIcon className="w-3 h-3" />
+          <LockIcon className="h-3 w-3" />
         </Badge.LeftIcon>
         <Badge.Text>Private</Badge.Text>
       </Badge>
@@ -252,7 +252,7 @@ export function MCPDetailPage() {
                   className="bg-background hover:bg-accent border-border"
                 >
                   <Button.LeftIcon>
-                    <Play className="w-4 h-4" />
+                    <Play className="h-4 w-4" />
                   </Button.LeftIcon>
                   <Button.Text>Playground</Button.Text>
                 </Button>
@@ -263,12 +263,12 @@ export function MCPDetailPage() {
         >
           <div className="flex items-end justify-between">
             <Stack gap={2}>
-              <div className="flex items-center gap-3 ml-1">
+              <div className="ml-1 flex items-center gap-3">
                 <Heading variant="h1">{toolset.name}</Heading>
                 {statusBadge}
               </div>
-              <div className="flex items-center gap-2 ml-1">
-                <Type className="max-w-2xl truncate text-muted-foreground">
+              <div className="ml-1 flex items-center gap-2">
+                <Type className="text-muted-foreground max-w-2xl truncate">
                   {mcpUrl}
                 </Type>
                 <Button
@@ -280,7 +280,7 @@ export function MCPDetailPage() {
                       toast.success("URL copied to clipboard");
                     }
                   }}
-                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                  className="text-muted-foreground hover:text-foreground shrink-0"
                 >
                   <Button.LeftIcon>
                     <svg
@@ -309,11 +309,11 @@ export function MCPDetailPage() {
         <Tabs
           value={activeTab}
           onValueChange={handleTabChange}
-          className="w-full flex-1 flex flex-col"
+          className="flex w-full flex-1 flex-col"
         >
           <div className="border-b">
-            <div className="max-w-[1270px] mx-auto px-8">
-              <TabsList className="h-auto bg-transparent p-0 gap-6 rounded-none">
+            <div className="mx-auto max-w-[1270px] px-8">
+              <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
                 <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
                 <PageTabsTrigger value="tools">Tools</PageTabsTrigger>
                 <PageTabsTrigger value="resources">Resources</PageTabsTrigger>
@@ -322,7 +322,7 @@ export function MCPDetailPage() {
                   <span className="flex items-center gap-1.5">
                     Authentication
                     {missingRequiredEnvVars > 0 && (
-                      <AlertTriangle className="h-3.5 w-3.5 text-warning" />
+                      <AlertTriangle className="text-warning h-3.5 w-3.5" />
                     )}
                   </span>
                 </PageTabsTrigger>
@@ -335,7 +335,7 @@ export function MCPDetailPage() {
           </div>
 
           {/* Tab Content */}
-          <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
+          <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
             <TabsContent value="overview" className="mt-0 w-full">
               <MCPOverviewTab toolset={toolset} onTabChange={handleTabChange} />
             </TabsContent>
@@ -463,7 +463,7 @@ function MCPOverviewTab({
             Your server is private. To share with external users, you must make
             it public in the{" "}
             <button
-              className="underline appearance-none"
+              className="appearance-none underline"
               onClick={() => onTabChange("settings")}
             >
               server settings
@@ -516,14 +516,14 @@ function ServerInstructionsSection({
       <div className="relative">
         <Textarea
           placeholder={`Describe how your tools work together, required workflows,\nand any constraints (rate limits, auth requirements, etc.).\n\nKeep it concise — don't repeat individual tool descriptions.`}
-          className="w-full min-h-[150px]"
+          className="min-h-[150px] w-full"
           value={form.instructionsHandlers.value ?? ""}
           onChange={form.instructionsHandlers.onChange}
         />
         {charCount > 0 && (
           <span
             className={cn(
-              "absolute bottom-2 right-3 text-xs",
+              "absolute right-3 bottom-2 text-xs",
               overLimit ? "text-destructive" : "text-muted-foreground",
             )}
           >
@@ -611,7 +611,7 @@ Respond with ONLY the server instructions as plain text. Do not wrap in JSON or 
       disabled={generating || tools.length === 0}
     >
       <Button.LeftIcon>
-        <Icon name="wand-sparkles" className="w-4 h-4" />
+        <Icon name="wand-sparkles" className="h-4 w-4" />
       </Button.LeftIcon>
       <Button.Text>
         {generating ? "Generating..." : "Generate with AI"}
@@ -801,15 +801,15 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
           selectedValues={selectedGroups}
           setSelectedValues={setSelectedGroups}
           placeholder="Filter tools"
-          className="w-fit mb-4 capitalize"
+          className="mb-4 w-fit capitalize"
         />
       )}
 
       {/* Tools list or empty state */}
       {hasOrphanedTools ? (
         <Stack gap={4} align="center" className="py-12">
-          <div className="text-center max-w-md">
-            <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-warning" />
+          <div className="max-w-md text-center">
+            <AlertTriangle className="text-warning mx-auto mb-4 h-12 w-12" />
             <Heading variant="h3" className="mb-2">
               Tool Source Deleted
             </Heading>
@@ -1217,7 +1217,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
               </Type>
               {!toolset.customDomainId ? (
                 <Input
-                  className="border rounded px-2 py-1 w-full"
+                  className="w-full rounded border px-2 py-1"
                   placeholder="Enter MCP Slug"
                   value={mcpSlug}
                   onChange={handleMcpSlugChange}
@@ -1226,7 +1226,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
                 />
               ) : (
                 <Input
-                  className="border rounded px-2 py-1 w-full"
+                  className="w-full rounded border px-2 py-1"
                   placeholder="Enter MCP Slug"
                   value={mcpSlug}
                   onChange={handleMcpSlugChange}
@@ -1285,7 +1285,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
                 disabled={!toolset?.mcpEnabled || !toolset?.mcpSlug}
               >
                 <Button.LeftIcon>
-                  <Download className="w-4 h-4" />
+                  <Download className="h-4 w-4" />
                 </Button.LeftIcon>
                 <Button.Text>Export JSON</Button.Text>
               </Button>
@@ -1300,7 +1300,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       </PageSection>
 
       {/* Danger Zone */}
-      <div className="border border-destructive/30 rounded-lg p-6 mt-8">
+      <div className="border-destructive/30 mt-8 rounded-lg border p-6">
         <Type variant="subheading" className="text-destructive mb-1">
           Danger Zone
         </Type>
@@ -1332,7 +1332,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
           </Dialog.Header>
           <div className="space-y-4 py-4">
             <Type variant="body">
-              <code className="font-mono font-bold px-1 py-0.5 bg-muted rounded">
+              <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
                 {toolset.name}
               </code>{" "}
               and all its configuration will be permanently deleted. Connected
@@ -1457,13 +1457,13 @@ export function MCPJson({
     >
       <Grid.Item>
         <Type className="font-medium">Pass-through Authentication</Type>
-        <Type muted small className="max-w-3xl mb-2!">
+        <Type muted small className="mb-2! max-w-3xl">
           Pass API credentials directly to the MCP server.
           <br />
           <span
             className={
               !toolset.mcpIsPublic
-                ? "font-medium text-warning-foreground"
+                ? "text-warning-foreground font-medium"
                 : "italic"
             }
           >
@@ -1474,7 +1474,7 @@ export function MCPJson({
       </Grid.Item>
       <Grid.Item>
         <Type className="font-medium">Managed Authentication</Type>
-        <Type muted small className="max-w-3xl mb-2!">
+        <Type muted small className="mb-2! max-w-3xl">
           Manage API authentication with Gram environments.
           <br />
           Users need a single Gram API Key rather than bringing their own keys.
@@ -1652,7 +1652,7 @@ export function OAuthDetailsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content className="max-w-2xl max-h-[80vh] flex flex-col">
+      <Dialog.Content className="flex max-h-[80vh] max-w-2xl flex-col">
         <Dialog.Header className="shrink-0">
           <Dialog.Title>
             {toolset.externalOauthServer
@@ -1677,7 +1677,7 @@ export function OAuthDetailsModal({
                   {toolset.oauthProxyServer.oauthProxyProviders?.[0]
                     ?.environmentSlug && (
                     <div>
-                      <Type small className="font-medium text-muted-foreground">
+                      <Type small className="text-muted-foreground font-medium">
                         Environment:
                       </Type>
                       <CodeBlock className="mt-1">
@@ -1704,27 +1704,27 @@ export function OAuthDetailsModal({
                         onEditRequest();
                       }}
                     >
-                      <Pencil className="w-4 h-4 mr-2" />
+                      <Pencil className="mr-2 h-4 w-4" />
                       Edit
                     </Button>
                     <Button
                       variant="tertiary"
                       size="sm"
-                      className="hover:bg-destructive hover:text-white border-none"
+                      className="hover:bg-destructive border-none hover:text-white"
                       onClick={() =>
                         removeOAuthMutation.mutate({
                           request: { slug: toolset.slug },
                         })
                       }
                     >
-                      <Trash2 className="w-4 h-4 mr-2" />
+                      <Trash2 className="mr-2 h-4 w-4" />
                       Unlink
                     </Button>
                   </div>
                 </div>
                 <Stack gap={2} className="pl-4">
                   <div>
-                    <Type small className="font-medium text-muted-foreground">
+                    <Type small className="text-muted-foreground font-medium">
                       Server Slug:
                     </Type>
                     <CodeBlock className="mt-1">
@@ -1733,7 +1733,7 @@ export function OAuthDetailsModal({
                   </div>
                   {toolset.oauthProxyServer.audience && (
                     <div>
-                      <Type small className="font-medium text-muted-foreground">
+                      <Type small className="text-muted-foreground font-medium">
                         Audience:
                       </Type>
                       <CodeBlock className="mt-1">
@@ -1752,7 +1752,7 @@ export function OAuthDetailsModal({
                       <div>
                         <Type
                           small
-                          className="font-medium text-muted-foreground"
+                          className="text-muted-foreground font-medium"
                         >
                           Authorization Endpoint:
                         </Type>
@@ -1763,7 +1763,7 @@ export function OAuthDetailsModal({
                       <div>
                         <Type
                           small
-                          className="font-medium text-muted-foreground"
+                          className="text-muted-foreground font-medium"
                         >
                           Token Endpoint:
                         </Type>
@@ -1777,7 +1777,7 @@ export function OAuthDetailsModal({
                           <div>
                             <Type
                               small
-                              className="font-medium text-muted-foreground"
+                              className="text-muted-foreground font-medium"
                             >
                               Token Auth Method:
                             </Type>
@@ -1793,7 +1793,7 @@ export function OAuthDetailsModal({
                           <div>
                             <Type
                               small
-                              className="font-medium text-muted-foreground"
+                              className="text-muted-foreground font-medium"
                             >
                               Supported Scopes:
                             </Type>
@@ -1806,7 +1806,7 @@ export function OAuthDetailsModal({
                         <div>
                           <Type
                             small
-                            className="font-medium text-muted-foreground"
+                            className="text-muted-foreground font-medium"
                           >
                             Environment:
                           </Type>
@@ -1834,14 +1834,14 @@ export function OAuthDetailsModal({
                     }
                   >
                     <Button.LeftIcon>
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="h-4 w-4" />
                     </Button.LeftIcon>
                     <Button.Text className="sr-only">Remove OAuth</Button.Text>
                   </Button>
                 </div>
                 <Stack gap={2} className="pl-4">
                   <div>
-                    <Type small className="font-medium text-muted-foreground">
+                    <Type small className="text-muted-foreground font-medium">
                       External OAuth Server Slug:
                     </Type>
                     <CodeBlock className="mt-1">
@@ -1849,7 +1849,7 @@ export function OAuthDetailsModal({
                     </CodeBlock>
                   </div>
                   <div>
-                    <Type small className="font-medium text-muted-foreground">
+                    <Type small className="text-muted-foreground font-medium">
                       OAuth Authorization Server Discovery URL:
                     </Type>
                     <CodeBlock className="mt-1">
@@ -1861,7 +1861,7 @@ export function OAuthDetailsModal({
                     </CodeBlock>
                   </div>
                   <div>
-                    <Type small className="font-medium text-muted-foreground">
+                    <Type small className="text-muted-foreground font-medium">
                       OAuth Authorization Server Metadata:
                     </Type>
                     <CodeBlock className="mt-1">
@@ -1890,7 +1890,7 @@ export function OAuthDetailsModal({
                 })
               }
             >
-              <Trash2 className="w-4 h-4 mr-2" />
+              <Trash2 className="mr-2 h-4 w-4" />
               Unlink
             </Button>
           </Dialog.Footer>
@@ -1948,14 +1948,14 @@ export function GramOAuthProxyModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content className="max-w-2xl max-h-[90vh] overflow-hidden">
+      <Dialog.Content className="max-h-[90vh] max-w-2xl overflow-hidden">
         <Dialog.Header>
           <Dialog.Title>Gram OAuth</Dialog.Title>
         </Dialog.Header>
 
-        <div className="space-y-4 overflow-auto max-h-[60vh]">
+        <div className="max-h-[60vh] space-y-4 overflow-auto">
           <div>
-            <Type className="font-medium mb-2">Gram OAuth Configuration</Type>
+            <Type className="mb-2 font-medium">Gram OAuth Configuration</Type>
             <Type small className="mb-4">
               Configure Gram OAuth to let users with access to your organization
               use this MCP server. Users will authenticate using their Gram
@@ -2472,7 +2472,7 @@ function OAuthTabModal({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <Dialog.Content className="max-w-6xl max-h-[90vh] overflow-hidden">
+        <Dialog.Content className="max-h-[90vh] max-w-6xl overflow-hidden">
           <Dialog.Header>
             <Dialog.Title>{wizardTitle}</Dialog.Title>
           </Dialog.Header>
@@ -2480,7 +2480,7 @@ function OAuthTabModal({
           {wizardStep === "choose" && (
             <div className="space-y-4">
               {discoveredOAuth && (
-                <div className="border border-border bg-muted/50 rounded-md p-4 flex items-start justify-between gap-4">
+                <div className="border-border bg-muted/50 flex items-start justify-between gap-4 rounded-md border p-4">
                   <div>
                     <Type small className="font-medium">
                       OAuth detected from {discoveredOAuth.name}
@@ -2502,7 +2502,7 @@ function OAuthTabModal({
                 <button
                   type="button"
                   className={cn(
-                    "flex flex-col items-start gap-2 rounded-lg border border-border p-6 text-left transition-colors",
+                    "border-border flex flex-col items-start gap-2 rounded-lg border p-6 text-left transition-colors",
                     "hover:border-primary hover:bg-muted/50",
                   )}
                   onClick={() => {
@@ -2513,7 +2513,7 @@ function OAuthTabModal({
                     setWizardStep("form");
                   }}
                 >
-                  <Globe className="h-6 w-6 text-muted-foreground" />
+                  <Globe className="text-muted-foreground h-6 w-6" />
                   <Type className="font-medium">External OAuth</Type>
                   <Type muted small>
                     For APIs that meet the MCP OAuth spec. Uses authorization
@@ -2524,7 +2524,7 @@ function OAuthTabModal({
                 <button
                   type="button"
                   className={cn(
-                    "flex flex-col items-start gap-2 rounded-lg border border-border p-6 text-left transition-colors",
+                    "border-border flex flex-col items-start gap-2 rounded-lg border p-6 text-left transition-colors",
                     "hover:border-primary hover:bg-muted/50",
                   )}
                   onClick={() => {
@@ -2535,7 +2535,7 @@ function OAuthTabModal({
                     setWizardStep("form");
                   }}
                 >
-                  <LockIcon className="h-6 w-6 text-muted-foreground" />
+                  <LockIcon className="text-muted-foreground h-6 w-6" />
                   <Type className="font-medium">OAuth Proxy</Type>
                   <Type muted small>
                     For internal servers that don't natively support MCP OAuth.
@@ -2547,10 +2547,10 @@ function OAuthTabModal({
           )}
 
           {wizardStep === "form" && selectedType === "external" && (
-            <div className="space-y-4 overflow-auto max-h-[60vh]">
+            <div className="max-h-[60vh] space-y-4 overflow-auto">
               {hasMultipleOAuth2AuthCode && (
-                <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
-                  <Type small className="text-red-600 mt-1">
+                <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-4">
+                  <Type small className="mt-1 text-red-600">
                     Not Supported: This MCP server has{" "}
                     {toolset.oauthEnablementMetadata?.oauth2SecurityCount}{" "}
                     OAuth2 security schemes detected.
@@ -2558,7 +2558,7 @@ function OAuthTabModal({
                 </div>
               )}
               {discoveredOAuth && !prefilled.external && (
-                <div className="border border-border bg-muted/50 rounded-md p-4 mb-4 flex items-start justify-between gap-4">
+                <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 rounded-md border p-4">
                   <div>
                     <Type small className="font-medium">
                       OAuth detected from {discoveredOAuth.name}
@@ -2579,7 +2579,7 @@ function OAuthTabModal({
                 </div>
               )}
               {prefilled.external && (
-                <div className="border border-border bg-muted/50 rounded-md p-4 mb-4">
+                <div className="border-border bg-muted/50 mb-4 rounded-md border p-4">
                   <Type small className="font-medium">
                     Pre-filled from detected OAuth metadata
                   </Type>
@@ -2592,7 +2592,7 @@ function OAuthTabModal({
                 </div>
               )}
               <div>
-                <Type className="font-medium mb-2">
+                <Type className="mb-2 font-medium">
                   External OAuth Server Configuration
                 </Type>
                 <Type muted small className="mb-4">
@@ -2609,7 +2609,7 @@ function OAuthTabModal({
 
                 <Stack gap={4}>
                   <div>
-                    <Type className="font-medium mb-2">OAuth Server Slug</Type>
+                    <Type className="mb-2 font-medium">OAuth Server Slug</Type>
                     <Input
                       placeholder="my-oauth-server"
                       value={externalSlug}
@@ -2619,11 +2619,11 @@ function OAuthTabModal({
                   </div>
 
                   <div>
-                    <Type className="font-medium mb-2">
+                    <Type className="mb-2 font-medium">
                       OAuth Authorization Server Metadata
                     </Type>
                     {jsonError && (
-                      <Type className="text-red-500! text-sm mt-1">
+                      <Type className="mt-1 text-sm text-red-500!">
                         {jsonError}
                       </Type>
                     )}
@@ -2659,14 +2659,14 @@ function OAuthTabModal({
           )}
 
           {wizardStep === "form" && selectedType === "proxy" && (
-            <div className="space-y-4 overflow-auto max-h-[60vh]">
+            <div className="max-h-[60vh] space-y-4 overflow-auto">
               <div>
-                <Type muted small className="font-medium mb-2">
+                <Type muted small className="mb-2 font-medium">
                   Ideal for internal MCP servers. The OAuth Proxy configuration
                   can be used to set up auth for an MCP server even though the
                   underlying API doesn't support MCP OAuth.
                 </Type>
-                <Type muted small className="font-medium mb-4">
+                <Type muted small className="mb-4 font-medium">
                   Getting proxy settings correct can be tricky. Need help?
                   <Link
                     external
@@ -2677,7 +2677,7 @@ function OAuthTabModal({
                 </Type>
 
                 {discoveredOAuth && !prefilled.proxy && (
-                  <div className="border border-border bg-muted/50 rounded-md p-4 mb-4 flex items-start justify-between gap-4">
+                  <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 rounded-md border p-4">
                     <div>
                       <Type small className="font-medium">
                         OAuth detected from {discoveredOAuth.name}
@@ -2698,7 +2698,7 @@ function OAuthTabModal({
                   </div>
                 )}
                 {prefilled.proxy && (
-                  <div className="border border-border bg-muted/50 rounded-md p-4 mb-4">
+                  <div className="border-border bg-muted/50 mb-4 rounded-md border p-4">
                     <Type small className="font-medium">
                       Pre-filled from detected OAuth metadata
                     </Type>
@@ -2712,14 +2712,14 @@ function OAuthTabModal({
                 )}
 
                 {proxyError && (
-                  <Type className="text-red-500! text-sm mb-4">
+                  <Type className="mb-4 text-sm text-red-500!">
                     {proxyError}
                   </Type>
                 )}
 
                 <Stack gap={4}>
                   <div>
-                    <Type className="font-medium mb-2">
+                    <Type className="mb-2 font-medium">
                       OAuth Proxy Server Slug
                     </Type>
                     <Input
@@ -2732,7 +2732,7 @@ function OAuthTabModal({
                   </div>
 
                   <div>
-                    <Type className="font-medium mb-2">
+                    <Type className="mb-2 font-medium">
                       Authorization Endpoint
                     </Type>
                     <Input
@@ -2743,7 +2743,7 @@ function OAuthTabModal({
                   </div>
 
                   <div>
-                    <Type className="font-medium mb-2">Token Endpoint</Type>
+                    <Type className="mb-2 font-medium">Token Endpoint</Type>
                     <Input
                       placeholder="https://provider.com/oauth/token"
                       value={proxyTokenEndpoint}
@@ -2752,7 +2752,7 @@ function OAuthTabModal({
                   </div>
 
                   <div>
-                    <Type className="font-medium mb-2">
+                    <Type className="mb-2 font-medium">
                       Scopes (comma-separated)
                     </Type>
                     <Input
@@ -2763,7 +2763,7 @@ function OAuthTabModal({
                   </div>
 
                   <div>
-                    <Type className="font-medium mb-2">
+                    <Type className="mb-2 font-medium">
                       Audience (optional)
                     </Type>
                     <Input
@@ -2779,11 +2779,11 @@ function OAuthTabModal({
                   </div>
 
                   <div>
-                    <Type className="font-medium mb-2">
+                    <Type className="mb-2 font-medium">
                       Token Endpoint Auth Method
                     </Type>
                     <select
-                      className="w-full border rounded px-3 py-2 bg-background"
+                      className="bg-background w-full rounded border px-3 py-2"
                       value={proxyTokenAuthMethod}
                       onChange={(e) => setProxyTokenAuthMethod(e.target.value)}
                     >
@@ -2802,7 +2802,7 @@ function OAuthTabModal({
           )}
 
           {wizardStep === "credentials" && selectedType === "proxy" && (
-            <div className="space-y-4 overflow-auto max-h-[60vh]">
+            <div className="max-h-[60vh] space-y-4 overflow-auto">
               <div>
                 <Type muted small className="mb-4">
                   Enter the client credentials from your OAuth provider. These
@@ -2811,14 +2811,14 @@ function OAuthTabModal({
                 </Type>
 
                 {proxyError && (
-                  <Type className="text-red-500! text-sm mb-4">
+                  <Type className="mb-4 text-sm text-red-500!">
                     {proxyError}
                   </Type>
                 )}
 
                 <Stack gap={4}>
                   <div>
-                    <Type className="font-medium mb-2">Client ID</Type>
+                    <Type className="mb-2 font-medium">Client ID</Type>
                     <Input
                       placeholder="your-client-id"
                       value={proxyClientId}
@@ -2827,7 +2827,7 @@ function OAuthTabModal({
                   </div>
 
                   <div>
-                    <Type className="font-medium mb-2">Client Secret</Type>
+                    <Type className="mb-2 font-medium">Client Secret</Type>
                     <Input
                       placeholder="your-client-secret"
                       value={proxyClientSecret}

@@ -148,31 +148,31 @@ export default function OrgDomains() {
           branded URL instead of the default Gram domain.
         </Type>
         {domain?.domain ? (
-          <div className="rounded-lg border border-border bg-card p-4">
+          <div className="border-border bg-card rounded-lg border p-4">
             <Stack direction="horizontal" justify="space-between" align="start">
               <Stack gap={1}>
                 <Stack direction="horizontal" align="center" gap={2}>
-                  <Globe className="h-4 w-4 text-muted-foreground" />
+                  <Globe className="text-muted-foreground h-4 w-4" />
                   <Type variant="body" className="font-mono font-medium">
                     {domain.domain}
                   </Type>
                   {domain.isUpdating ? (
                     <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
-                      <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                      <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                     </SimpleTooltip>
                   ) : domain.verified ? (
                     <SimpleTooltip tooltip="Domain verified and active">
-                      <Check className="w-4 h-4 stroke-3 text-green-500" />
+                      <Check className="h-4 w-4 stroke-3 text-green-500" />
                     </SimpleTooltip>
                   ) : (
                     <SimpleTooltip tooltip="Domain verification failed. Ensure your DNS records are set up correctly.">
-                      <X className="w-4 h-4 stroke-3 text-red-500" />
+                      <X className="h-4 w-4 stroke-3 text-red-500" />
                     </SimpleTooltip>
                   )}
                 </Stack>
                 <Type
                   variant="body"
-                  className="text-muted-foreground text-sm ml-6"
+                  className="text-muted-foreground ml-6 text-sm"
                 >
                   Linked <HumanizeDateTime date={domain.createdAt} />
                 </Type>
@@ -202,7 +202,7 @@ export default function OrgDomains() {
           </div>
         ) : (
           !domainIsLoading && (
-            <div className="rounded-lg border border-dashed border-border p-6">
+            <div className="border-border rounded-lg border border-dashed p-6">
               <Stack gap={2} align="center" justify="center">
                 <Type variant="body" className="text-muted-foreground">
                   No custom domain configured
@@ -244,7 +244,7 @@ export default function OrgDomains() {
             <div className="space-y-4 py-4">
               <Type variant="body">
                 Are you sure you want to remove{" "}
-                <span className="italic font-bold">{domain?.domain}</span>? This
+                <span className="font-bold italic">{domain?.domain}</span>? This
                 will delete the associated ingress and TLS certificate.
               </Type>
               <div className="flex justify-end space-x-2">
@@ -278,11 +278,11 @@ export default function OrgDomains() {
             <Dialog.Header>
               <Dialog.Title>Connect a Custom Domain</Dialog.Title>
             </Dialog.Header>
-            <div className="space-y-6 py-4 min-h-[420px]">
+            <div className="min-h-[420px] space-y-6 py-4">
               <div>
                 <Type
                   variant="body"
-                  className="font-extrabold text-lg mb-2 block"
+                  className="mb-2 block text-lg font-extrabold"
                 >
                   Step 1
                 </Type>
@@ -302,7 +302,7 @@ export default function OrgDomains() {
                     readOnly={!!domain?.domain}
                   />
                   {domainError && (
-                    <Type variant="body" className="text-red-500 text-sm">
+                    <Type variant="body" className="text-sm text-red-500">
                       {domainError}
                     </Type>
                   )}
@@ -311,7 +311,7 @@ export default function OrgDomains() {
               <div>
                 <Type
                   variant="body"
-                  className="font-extrabold text-lg mb-2 block"
+                  className="mb-2 block text-lg font-extrabold"
                 >
                   Step 2
                 </Type>
@@ -320,7 +320,7 @@ export default function OrgDomains() {
                   <span className="font-mono break-all">{subdomain}</span>{" "}
                   pointing to the following:
                 </Type>
-                <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
+                <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
                   <code className="flex-1 break-all">{CNAME_VALUE}</code>
                   <Button
                     variant="tertiary"
@@ -339,7 +339,7 @@ export default function OrgDomains() {
               <div>
                 <Type
                   variant="body"
-                  className="font-extrabold text-lg mb-2 block"
+                  className="mb-2 block text-lg font-extrabold"
                 >
                   Step 3
                 </Type>
@@ -348,7 +348,7 @@ export default function OrgDomains() {
                   <span className="font-mono break-all">{txtName}</span> with
                   the following value:
                 </Type>
-                <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
+                <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
                   <code className="flex-1 break-all">{txtValue}</code>
                   <Button
                     variant="tertiary"
@@ -364,7 +364,7 @@ export default function OrgDomains() {
                   </Button>
                 </div>
               </div>
-              <div className="flex justify-end mt-4">
+              <div className="mt-4 flex justify-end">
                 <Button
                   onClick={handleRegisterDomain}
                   disabled={

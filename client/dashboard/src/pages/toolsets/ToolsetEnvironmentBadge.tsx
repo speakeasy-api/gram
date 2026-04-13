@@ -162,7 +162,7 @@ export const ToolsetEnvironmentBadge = ({
       <routes.environments.environment.Link params={[envSlug]}>
         <SimpleTooltip tooltip="The environment for this toolset is fully configured.">
           <Badge size={size} variant={variant}>
-            <Check className={cn("w-4 h-4 stroke-3", colors.success)} />
+            <Check className={cn("h-4 w-4 stroke-3", colors.success)} />
             Environment
           </Badge>
         </SimpleTooltip>

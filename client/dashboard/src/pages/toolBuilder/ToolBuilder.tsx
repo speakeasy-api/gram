@@ -327,7 +327,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
           variant="secondary"
           size="sm"
           className={
-            "bg-card dark:bg-background border-stone-300 dark:border-stone-700 border-1"
+            "bg-card dark:bg-background border-1 border-stone-300 dark:border-stone-700"
           }
           disabled={steps.length >= 10}
         >
@@ -491,7 +491,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   return (
     <ResizablePanel
       direction="horizontal"
-      className="h-full [&>[role='separator']]:border-border [&>[role='separator']]:mx-8 [&>[role='separator']]:border-1"
+      className="[&>[role='separator']]:border-border h-full [&>[role='separator']]:mx-8 [&>[role='separator']]:border-1"
     >
       <ResizablePanel.Pane minSize={35}>
         <Stack gap={1} className="h-full overflow-y-scroll">
@@ -737,13 +737,13 @@ const StepCard = ({
   }
 
   return (
-    <BlockInner className="p-0 rounded-md overflow-clip">
+    <BlockInner className="overflow-clip rounded-md p-0">
       <Stack>
         <Stack
           direction="horizontal"
           align="center"
           justify="space-between"
-          className="px-4 py-3 border-b border-stone-300 dark:border-stone-700 group/heading"
+          className="group/heading border-b border-stone-300 px-4 py-3 dark:border-stone-700"
         >
           {step.canonicalTool ? (
             <Type variant="subheading">Use the {toolBadge} tool to...</Type>
@@ -752,7 +752,7 @@ const StepCard = ({
           )}
           <Stack
             direction="horizontal"
-            className="mr-[-8px] mt-[-8px] group-hover/heading:opacity-100 opacity-0 trans"
+            className="trans mt-[-8px] mr-[-8px] opacity-0 group-hover/heading:opacity-100"
           >
             {moveUp && (
               <Button
@@ -797,7 +797,7 @@ const StepCard = ({
               small
               className={cn(
                 step.instructions === instructionsPlaceholder &&
-                  "italic text-muted-foreground!",
+                  "text-muted-foreground! italic",
               )}
             >
               <MustacheHighlight>{step.instructions}</MustacheHighlight>
@@ -840,7 +840,7 @@ const ToolSelectPopover = ({
               <SimpleTooltip tooltip="Create a step that doesn't use any tools">
                 <CommandItem
                   value={"none"}
-                  className="cursor-pointer min-w-fit text-sm"
+                  className="min-w-fit cursor-pointer text-sm"
                   onSelect={() => onSelect("none")}
                 >
                   <Icon name="file-text" size="small" />
@@ -858,7 +858,7 @@ const ToolSelectPopover = ({
                   <CommandItem
                     key={tool.name}
                     value={tool.name}
-                    className="cursor-pointer min-w-fit"
+                    className="min-w-fit cursor-pointer"
                     onSelect={() => onSelect(tool)}
                   >
                     {tool.displayName}

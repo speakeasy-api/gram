@@ -262,7 +262,7 @@ function SidebarTrigger({
       variant="tertiary"
       size="sm"
       className={cn(
-        "size-7 cursor-pointer text-muted-foreground hover:text-foreground transition",
+        "text-muted-foreground hover:text-foreground size-7 cursor-pointer transition",
         className,
       )}
       onClick={(event) => {
@@ -309,7 +309,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "bg-surface-primary relative flex flex-1 min-w-0 flex-col overflow-auto",
+        "bg-surface-primary relative flex min-w-0 flex-1 flex-col overflow-auto",
         "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
         className,
       )}
@@ -337,7 +337,7 @@ function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="sidebar-header"
       data-sidebar="header"
-      className={cn("flex flex-col gap-2 p-2 mb-3", className)}
+      className={cn("mb-3 flex flex-col gap-2 p-2", className)}
       {...props}
     />
   );
@@ -405,7 +405,7 @@ function SidebarGroupLabel({
       data-slot="sidebar-group-label"
       data-sidebar="group-label"
       className={cn(
-        "text-foreground ring-sidebar-ring flex h-8 shrink-0 items-center rounded-md px-2 text-xs uppercase font-mono font-normal outline-hidden transition-[margin,opacity] duration-200 ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
+        "text-foreground ring-sidebar-ring flex h-8 shrink-0 items-center rounded-md px-2 font-mono text-xs font-normal uppercase outline-hidden transition-[margin,opacity] duration-200 ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
         "group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0",
         className,
       )}
@@ -525,7 +525,7 @@ function SidebarMenuButton({
       className={cn(
         sidebarMenuButtonVariants({ variant, size }),
         className,
-        "cursor-pointer trans",
+        "trans cursor-pointer",
         props.href && "hover:no-underline",
       )}
       {...(props.href && { to: props.href })}

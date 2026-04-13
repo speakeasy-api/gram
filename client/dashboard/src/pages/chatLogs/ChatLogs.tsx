@@ -72,19 +72,19 @@ function ScoreIndicator({
 // Score legend component
 function ScoreLegend() {
   return (
-    <div className="flex items-center px-5 py-3 bg-background border-b text-xs text-muted-foreground whitespace-nowrap overflow-x-auto">
+    <div className="bg-background text-muted-foreground flex items-center overflow-x-auto border-b px-5 py-3 text-xs whitespace-nowrap">
       {/* Spacer to align icon with score rings - matches the score ring column width */}
-      <div className="w-[44px] shrink-0 flex items-center justify-center">
+      <div className="flex w-[44px] shrink-0 items-center justify-center">
         <Icon name="gauge" className="size-5" />
       </div>
-      <div className="flex items-center gap-4 flex-1">
-        <div className="flex items-center gap-2 shrink-0">
+      <div className="flex flex-1 items-center gap-4">
+        <div className="flex shrink-0 items-center gap-2">
           <span className="font-medium">Resolution Score</span>
           <span className="text-muted-foreground/70">
             — How well the assistant resolved user goals
           </span>
         </div>
-        <div className="flex items-center gap-4 ml-auto shrink-0">
+        <div className="ml-auto flex shrink-0 items-center gap-4">
           <ScoreIndicator colorClass={resolutionBgColors.success}>
             80-100 Good
           </ScoreIndicator>
@@ -416,21 +416,21 @@ function ChatLogsContent({
 }) {
   if (isLogsDisabled) {
     return (
-      <div className="h-full overflow-hidden flex flex-col">
+      <div className="flex h-full flex-col overflow-hidden">
         <Page>
           <Page.Header>
             <Page.Header.Breadcrumbs fullWidth />
           </Page.Header>
           <Page.Body fullWidth className="space-y-6">
-            <div className="flex flex-col gap-1 min-w-0">
+            <div className="flex min-w-0 flex-col gap-1">
               <h1 className="text-xl font-semibold">Agent Sessions</h1>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 View and debug individual agent sessions
               </p>
             </div>
-            <div className="flex-1 relative">
+            <div className="relative flex-1">
               <div
-                className="pointer-events-none select-none h-full"
+                className="pointer-events-none h-full select-none"
                 aria-hidden="true"
               >
                 <ObservabilitySkeleton />
@@ -445,18 +445,18 @@ function ChatLogsContent({
 
   return (
     <>
-      <div className="h-full overflow-hidden flex flex-col">
+      <div className="flex h-full flex-col overflow-hidden">
         <Page>
           <Page.Header>
             <Page.Header.Breadcrumbs fullWidth />
           </Page.Header>
           <Page.Body fullWidth noPadding overflowHidden>
-            <div className="flex flex-col flex-1 min-h-0 w-full">
+            <div className="flex min-h-0 w-full flex-1 flex-col">
               {/* Header section */}
-              <div className="px-8 py-4 shrink-0 space-y-4">
-                <div className="flex flex-col gap-1 min-w-0">
+              <div className="shrink-0 space-y-4 px-8 py-4">
+                <div className="flex min-w-0 flex-col gap-1">
                   <h1 className="text-xl font-semibold">Agent Sessions</h1>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     View and debug individual agent sessions
                   </p>
                 </div>
@@ -468,18 +468,18 @@ function ChatLogsContent({
                     resolutionStatus={resolutionStatus}
                     onResolutionStatusChange={setResolutionStatus}
                   />
-                  <div className="flex items-center gap-3 ml-auto shrink-0">
+                  <div className="ml-auto flex shrink-0 items-center gap-3">
                     {/* Sort segmented control: label + dropdown + direction button */}
-                    <div className="flex items-center h-10 rounded-md border border-border">
-                      <span className="px-3 text-sm font-medium text-muted-foreground">
+                    <div className="border-border flex h-10 items-center rounded-md border">
+                      <span className="text-muted-foreground px-3 text-sm font-medium">
                         Sort
                       </span>
-                      <div className="w-px h-5 bg-border" />
+                      <div className="bg-border h-5 w-px" />
                       <Select
                         value={sortField}
                         onValueChange={(v) => setSortField(v as SortField)}
                       >
-                        <SelectTrigger className="h-full border-0 shadow-none rounded-none min-w-[100px]">
+                        <SelectTrigger className="h-full min-w-[100px] rounded-none border-0 shadow-none">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="w-[280px]">
@@ -503,13 +503,13 @@ function ChatLogsContent({
                           </SelectItem>
                         </SelectContent>
                       </Select>
-                      <div className="w-px h-5 bg-border" />
+                      <div className="bg-border h-5 w-px" />
                       <div className="flex items-center px-1.5">
                         <SimpleTooltip tooltip="Sort direction">
                           <button
                             type="button"
                             onClick={toggleSortOrder}
-                            className="size-7 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
+                            className="text-muted-foreground hover:text-foreground hover:bg-accent flex size-7 items-center justify-center rounded transition-colors"
                           >
                             {sortOrder === "desc" ? (
                               <ArrowDownIcon className="size-4" />
@@ -532,15 +532,15 @@ function ChatLogsContent({
               </div>
 
               {/* Content section - full width */}
-              <div className="flex-1 overflow-hidden min-h-0 border-t">
-                <div className="h-full flex flex-col bg-background overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-hidden border-t">
+                <div className="bg-background flex h-full flex-col overflow-hidden">
                   {/* Score legend header */}
                   <div className="shrink-0">
                     <ScoreLegend />
                   </div>
 
                   {/* Scrollable chat list */}
-                  <div className="overflow-y-auto flex-1">
+                  <div className="flex-1 overflow-y-auto">
                     <ChatLogsTable
                       chats={chats}
                       selectedChatId={selectedChat?.id}
@@ -552,14 +552,14 @@ function ChatLogsContent({
 
                   {/* Sticky pagination at bottom */}
                   {(hasMore || offset > 0) && (
-                    <div className="p-4 flex justify-center items-center gap-4 border-t bg-background shrink-0">
+                    <div className="bg-background flex shrink-0 items-center justify-center gap-4 border-t p-4">
                       <Button
                         onClick={() => setOffset(Math.max(0, offset - limit))}
                         disabled={offset === 0}
                       >
                         Previous
                       </Button>
-                      <span className="text-sm text-muted-foreground tabular-nums">
+                      <span className="text-muted-foreground text-sm tabular-nums">
                         Page {Math.floor(offset / limit) + 1}
                         {total > 0 && ` of ${Math.ceil(total / limit)}`}
                       </span>

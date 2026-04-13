@@ -96,7 +96,7 @@ export function SourceSettingsTab({
 
   return (
     <>
-      <div className="max-w-[1270px] mx-auto px-8 py-8 w-full space-y-8">
+      <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
         <div>
           <Type variant="subheading" className="mb-4">
             Source Actions
@@ -123,7 +123,7 @@ export function SourceSettingsTab({
           </Stack>
         </div>
 
-        <div className="border border-destructive/30 rounded-lg p-6">
+        <div className="border-destructive/30 rounded-lg border p-6">
           <Type variant="subheading" className="text-destructive mb-1">
             Danger Zone
           </Type>
@@ -146,7 +146,7 @@ export function SourceSettingsTab({
 
       {!isOpenAPI && (
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <Dialog.Content className="min-w-[80vw] h-[90vh]">
+          <Dialog.Content className="h-[90vh] min-w-[80vw]">
             <ViewSourceDialogContent
               source={source || null}
               isOpenAPI={isOpenAPI}

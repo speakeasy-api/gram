@@ -60,7 +60,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     titleNode={
                       <span className="flex items-center gap-1.5">
                         Team
-                        <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                        <ExternalLink className="text-muted-foreground h-3 w-3" />
                       </span>
                     }
                     href={externalTeamUrl}

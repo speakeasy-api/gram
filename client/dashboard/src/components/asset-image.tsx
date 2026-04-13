@@ -11,7 +11,7 @@ export const AssetImage = ({
     <img
       src={`${getServerURL()}/rpc/assets.serveImage?id=${assetId}`}
       alt={"Uploaded image"}
-      className={cn("w-[200px] h-[200px] rounded-lg", className)}
+      className={cn("h-[200px] w-[200px] rounded-lg", className)}
     />
   );
 };

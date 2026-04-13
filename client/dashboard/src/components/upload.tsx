@@ -53,15 +53,15 @@ export function ImageUpload({
   if (assetId) {
     return (
       <div
-        className="group relative cursor-pointer w-fit"
+        className="group relative w-fit cursor-pointer"
         onClick={() => {
           setAssetId(null);
           onUpload({ id: "" } as Asset);
         }}
       >
         <AssetImage assetId={assetId} className={className} />
-        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-          <span className="text-white font-medium">Change</span>
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+          <span className="font-medium text-white">Change</span>
         </div>
       </div>
     );
@@ -150,14 +150,14 @@ export function FullWidthUpload({
   return (
     <div
       tabIndex={0}
-      className={cn("grid gap-4 w-full max-w-2xl", className)}
+      className={cn("grid w-full max-w-2xl gap-4", className)}
       {...(isLoading ? {} : handlers)}
     >
-      <div className="flex items-center justify-center w-full">
+      <div className="flex w-full items-center justify-center">
         <label
           htmlFor="dropzone-file"
           className={cn(
-            "flex flex-col items-center justify-center w-full p-10 border-1 border-dashed rounded-lg trans",
+            "trans flex w-full flex-col items-center justify-center rounded-lg border-1 border-dashed p-10",
             isLoading
               ? "border-primary/50 bg-primary/5 cursor-default"
               : !handlers.isValidFile
@@ -167,8 +167,8 @@ export function FullWidthUpload({
         >
           {isLoading ? (
             <Stack align={"center"} justify={"center"} gap={3}>
-              <Loader2 className="w-5 h-5 animate-spin text-primary" />
-              <p className="my-2 text-sm text-card-foreground font-semibold">
+              <Loader2 className="text-primary h-5 w-5 animate-spin" />
+              <p className="text-card-foreground my-2 text-sm font-semibold">
                 Uploading and validating...
               </p>
               <Type small mono muted>
@@ -177,8 +177,8 @@ export function FullWidthUpload({
             </Stack>
           ) : (
             <Stack align={"center"} justify={"center"} gap={3}>
-              <UploadIcon className="w-4 h-4" />
-              <p className="my-2 text-sm text-card-foreground">
+              <UploadIcon className="h-4 w-4" />
+              <p className="text-card-foreground my-2 text-sm">
                 {label ?? (
                   <>
                     <span className="font-semibold">Click to upload</span> or
@@ -234,8 +234,8 @@ export function CompactUpload({
       htmlFor="dropzone-file"
       tabIndex={0}
       className={cn(
-        "inline-flex flex-col gap-2 items-center justify-center",
-        "p-6 border-1 border-dashed rounded-lg cursor-pointer",
+        "inline-flex flex-col items-center justify-center gap-2",
+        "cursor-pointer rounded-lg border-1 border-dashed p-6",
         "aspect-square",
         !isValidFile
           ? "border-destructive bg-destructive/10"
@@ -246,7 +246,7 @@ export function CompactUpload({
     >
       {(renderFilePreview && renderFilePreview()) ?? (
         <Stack align={"center"} gap={2}>
-          <UploadIcon className="w-4 h-4" />
+          <UploadIcon className="h-4 w-4" />
           <Type mono muted className="text-xs">
             {allowedExtensions?.map((ext) => `.${ext}`)?.join(", ")}
           </Type>

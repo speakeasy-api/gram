@@ -10,9 +10,9 @@
     "/client/dashboard/src/App.css",
     "/client/dashboard/src/components/tools-badge.tsx",
     "/client/dashboard/src/lib/constants.ts",
-    "/client/dashboard/src/styles/globals.css",
     "/client/sdk/**",
     "/elements/docs/**",
+    "/elements/examples/tanstack-start/src/routeTree.gen.ts",
     "/server/**/fixtures/**",
     "/server/gen/**"
   ],

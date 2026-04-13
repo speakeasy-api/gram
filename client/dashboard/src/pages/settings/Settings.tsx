@@ -27,19 +27,19 @@ export default function Settings() {
         <SettingsDangerZone />
 
         {isAdmin && (
-          <div className="mt-8 p-4 rounded-lg bg-red-500/5 border border-red-500/20">
+          <div className="mt-8 rounded-lg border border-red-500/20 bg-red-500/5 p-4">
             <Stack
               direction="horizontal"
               align="center"
               gap={2}
               className="mb-3"
             >
-              <ShieldAlert className="w-5 h-5 text-red-500" />
+              <ShieldAlert className="h-5 w-5 text-red-500" />
               <Heading variant="h4" className="text-red-600 dark:text-red-400">
                 Admin Only
               </Heading>
             </Stack>
-            <dl className="grid grid-cols-[max-content_auto] gap-x-6 gap-y-2 mb-4">
+            <dl className="mb-4 grid grid-cols-[max-content_auto] gap-x-6 gap-y-2">
               <dt className="text-end">Organization ID</dt>
               <dd className="font-mono text-sm">{organization.id}</dd>
               <dt className="text-end">Project ID</dt>

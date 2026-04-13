@@ -58,8 +58,8 @@ export default function UploadOpenAPI() {
           {/* Header */}
           <Stack gap={3} className="mb-8">
             <Stack direction="horizontal" gap={3} align="center">
-              <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                <FileTextIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
+                <FileTextIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               </div>
               <Heading variant="h3">Import OpenAPI Specification</Heading>
             </Stack>
@@ -490,7 +490,7 @@ export function UploadOpenAPIContent({
           <Stack
             direction={"horizontal"}
             gap={2}
-            className="max-w-sm relative z-10"
+            className="relative z-10 max-w-sm"
           >
             <Input value={apiName} onChange={setApiName} placeholder="My API" />
             <Button
@@ -608,7 +608,7 @@ export function DeploymentLogs(props: {
         key={e.id}
         className={cn(
           e.event.includes("error") && "text-destructive",
-          "py-1 px-4 dark:hover:bg-white/15 rounded hover:bg-gray-100",
+          "rounded px-4 py-1 hover:bg-gray-100 dark:hover:bg-white/15",
         )}
       >
         {e.message}
@@ -617,7 +617,7 @@ export function DeploymentLogs(props: {
   });
 
   return (
-    <div className="font-mono text-sm max-h-[250px] overflow-y-auto">
+    <div className="max-h-[250px] overflow-y-auto font-mono text-sm">
       {lines.length > 0 ? lines : "OpenAPI document processed without issue"}
     </div>
   );

@@ -182,10 +182,10 @@ export function EditToolDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="min-w-2xl max-w-3xl">
+      <Dialog.Content className="max-w-3xl min-w-2xl">
         <Dialog.Header>
           <Dialog.Title className="flex items-center gap-2">
-            <ToolIcon className="size-4 text-muted-foreground" />
+            <ToolIcon className="text-muted-foreground size-4" />
             <span>{source}</span>
             <Badge variant="secondary" className="text-xs">
               {typeLabel}
@@ -194,7 +194,7 @@ export function EditToolDialog({
         </Dialog.Header>
 
         {/* Editable fields */}
-        <div className="py-4 space-y-4">
+        <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="tool-name" className="text-sm font-medium">
               Name
@@ -239,14 +239,14 @@ export function EditToolDialog({
           {hasAnnotations && (
             <div className="space-y-3">
               <Label className="text-sm font-medium">Behavior Hints</Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Override how this tool is presented to AI models.
               </p>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm">Read-only</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-muted-foreground text-xs">
                       Tool does not modify its environment
                     </p>
                   </div>
@@ -259,7 +259,7 @@ export function EditToolDialog({
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm">Destructive</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-muted-foreground text-xs">
                       Tool may perform destructive updates
                     </p>
                   </div>
@@ -272,7 +272,7 @@ export function EditToolDialog({
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm">Idempotent</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-muted-foreground text-xs">
                       Repeated calls with same arguments have no additional
                       effect
                     </p>
@@ -286,7 +286,7 @@ export function EditToolDialog({
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm">Open-world</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-muted-foreground text-xs">
                       Tool interacts with external entities
                     </p>
                   </div>
@@ -302,7 +302,7 @@ export function EditToolDialog({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-between pt-4 border-t">
+        <div className="flex items-center justify-between border-t pt-4">
           <Button variant="destructive-secondary" onClick={handleRemove}>
             Remove
           </Button>

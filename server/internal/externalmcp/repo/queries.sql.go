@@ -52,7 +52,7 @@ RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier,
 
 type CreateExternalMCPAttachmentParams struct {
 	DeploymentID            uuid.UUID
-	RegistryID              uuid.UUID
+	RegistryID              uuid.NullUUID
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
@@ -61,7 +61,7 @@ type CreateExternalMCPAttachmentParams struct {
 type CreateExternalMCPAttachmentRow struct {
 	ID                      uuid.UUID
 	DeploymentID            uuid.UUID
-	RegistryID              uuid.UUID
+	RegistryID              uuid.NullUUID
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
@@ -437,7 +437,7 @@ type GetExternalMCPToolDefinitionByURNRow struct {
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 	DeploymentID               uuid.UUID
-	RegistryID                 uuid.UUID
+	RegistryID                 uuid.NullUUID
 	RegistryServerName         string
 	Slug                       string
 	RegistryServerSpecifier    string
@@ -540,7 +540,7 @@ type GetExternalMCPToolsRequiringOAuthRow struct {
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 	DeploymentID               uuid.UUID
-	RegistryID                 uuid.UUID
+	RegistryID                 uuid.NullUUID
 	RegistryServerName         string
 	Slug                       string
 	RegistryServerSpecifier    string
@@ -805,7 +805,7 @@ ORDER BY created_at ASC
 type ListExternalMCPAttachmentsRow struct {
 	ID                      uuid.UUID
 	DeploymentID            uuid.UUID
-	RegistryID              uuid.UUID
+	RegistryID              uuid.NullUUID
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
@@ -905,7 +905,7 @@ type ListExternalMCPToolDefinitionsRow struct {
 	CreatedAt                  pgtype.Timestamptz
 	UpdatedAt                  pgtype.Timestamptz
 	DeploymentID               uuid.UUID
-	RegistryID                 uuid.UUID
+	RegistryID                 uuid.NullUUID
 	RegistryServerName         string
 	Slug                       string
 	RegistryServerSpecifier    string
