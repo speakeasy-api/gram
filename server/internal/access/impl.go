@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -521,20 +520,22 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "list org users from workos").Log(ctx, s.logger)
 	}
 
-	// Build a WorkOS-user-ID → Gram-user lookup so the member list returns
-	// Gram user IDs (the stable identity used by UpdateMemberRole and the
-	// organization_user_relationships table).
-	localUsers := make(map[string]usersrepo.User, len(users))
+	// Batch-resolve WorkOS user IDs to local Gram users so the member list
+	// returns Gram user IDs (the stable identity used by UpdateMemberRole
+	// and the organization_user_relationships table).
+	workosIDs := make([]string, 0, len(users))
 	for workosUID := range users {
-		gramID, err := usersrepo.New(s.db).GetUserIDByWorkosID(ctx, pgtype.Text{String: workosUID, Valid: true})
-		if err != nil {
-			continue // user exists in WorkOS but hasn't logged into Gram yet
+		workosIDs = append(workosIDs, workosUID)
+	}
+	localUserRows, err := usersrepo.New(s.db).GetUsersByWorkosIDs(ctx, workosIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve local users by workos ids").Log(ctx, s.logger)
+	}
+	localUsers := make(map[string]usersrepo.User, len(localUserRows))
+	for _, u := range localUserRows {
+		if u.WorkosID.Valid {
+			localUsers[u.WorkosID.String] = u
 		}
-		u, err := usersrepo.New(s.db).GetUser(ctx, gramID)
-		if err != nil {
-			continue
-		}
-		localUsers[workosUID] = u
 	}
 
 	result := make([]*gen.AccessMember, 0, len(members))
