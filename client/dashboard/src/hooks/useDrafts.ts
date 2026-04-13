@@ -1,9 +1,9 @@
+import { rpc } from "@/lib/rpc";
 import type { DraftDocument } from "@/pages/context/mock-data";
 
 export type ApiDraft = {
   id: string;
   project_id: string;
-  organization_id: string;
   file_path: string;
   content: string | null;
   operation: "create" | "update" | "delete";
@@ -38,51 +38,26 @@ export function apiDraftToDisplay(draft: ApiDraft): DraftDocument {
   };
 }
 
-const API_BASE = "/v1/projects";
-
 export async function fetchDrafts(
-  projectId: string,
-  token: string,
+  _projectId: string,
+  _token?: string,
   status?: string,
 ): Promise<DraftDocument[]> {
-  let url = `${API_BASE}/${projectId}/corpus/drafts`;
-  if (status) {
-    url += `?status=${encodeURIComponent(status)}`;
-  }
-
-  const resp = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
+  const result = await rpc<{ drafts: ApiDraft[] }>("corpus.listDrafts", {
+    ...(status ? { status } : {}),
   });
 
-  if (!resp.ok) {
-    throw new Error(`Failed to fetch drafts: ${resp.status}`);
-  }
-
-  const apiDrafts: ApiDraft[] = await resp.json();
-  return apiDrafts.map(apiDraftToDisplay);
+  return result.drafts.map(apiDraftToDisplay);
 }
 
 export async function publishDrafts(
-  projectId: string,
-  token: string,
-  draftIds: string[],
+  _projectId: string,
+  _token?: string,
+  draftIds?: string[],
 ): Promise<{ commitSha: string }> {
-  const resp = await fetch(`${API_BASE}/${projectId}/corpus/drafts/publish`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ draft_ids: draftIds }),
+  const result = await rpc<{ commit_sha: string }>("corpus.publishDrafts", {
+    draft_ids: draftIds,
   });
 
-  if (!resp.ok) {
-    throw new Error(`Failed to publish drafts: ${resp.status}`);
-  }
-
-  const data = await resp.json();
-  return { commitSha: data.commit_sha };
+  return { commitSha: result.commit_sha };
 }

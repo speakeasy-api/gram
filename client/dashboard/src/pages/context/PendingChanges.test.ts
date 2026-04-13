@@ -89,17 +89,17 @@ describe("fetchDrafts", () => {
     ];
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => apiDrafts,
+      json: async () => ({ drafts: apiDrafts }),
     });
 
     const result = await fetchDrafts("proj-1", "bearer-token");
 
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("/v1/projects/proj-1/corpus/drafts"),
+      expect.stringContaining("/rpc/corpus.listDrafts"),
       expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: "Bearer bearer-token",
-        }),
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({}),
       }),
     );
     expect(result).toHaveLength(2);
@@ -118,7 +118,7 @@ describe("publishDrafts", () => {
     const result = await publishDrafts("proj-1", "bearer-token", ["draft-1"]);
 
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("/v1/projects/proj-1/corpus/drafts/publish"),
+      expect.stringContaining("/rpc/corpus.publishDrafts"),
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ draft_ids: ["draft-1"] }),
@@ -139,7 +139,7 @@ describe("publishDrafts", () => {
     ]);
 
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("/v1/projects/proj-1/corpus/drafts/publish"),
+      expect.stringContaining("/rpc/corpus.publishDrafts"),
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ draft_ids: ["draft-1", "draft-2"] }),
