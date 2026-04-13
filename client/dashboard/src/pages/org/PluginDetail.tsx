@@ -113,9 +113,9 @@ export default function PluginDetail() {
     });
   };
 
-  const handleDownload = async (platform: "claude" | "cursor") => {
+  const handleDownload = async () => {
     const resp = await fetch(
-      `/rpc/plugins.downloadPluginPackage?plugin_id=${pluginId}&platform=${platform}`,
+      `/rpc/plugins.downloadPluginPackage?plugin_id=${pluginId}&platform=claude`,
       { credentials: "include" },
     );
     if (!resp.ok) return;
@@ -250,28 +250,15 @@ export default function PluginDetail() {
           Download
         </Heading>
 
-        <Stack direction="horizontal" className="gap-3">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => handleDownload("claude")}
-          >
-            <Button.LeftIcon>
-              <Icon name="download" className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Download Claude ZIP</Button.Text>
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => handleDownload("cursor")}
-          >
-            <Button.LeftIcon>
-              <Icon name="download" className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Download Cursor ZIP</Button.Text>
-          </Button>
-        </Stack>
+        <Heading variant="h5" className="mb-3">
+          Download
+        </Heading>
+        <Button variant="secondary" size="sm" onClick={handleDownload}>
+          <Button.LeftIcon>
+            <Icon name="download" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Download Claude Code Plugin</Button.Text>
+        </Button>
 
         {/* Edit Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
