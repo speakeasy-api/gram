@@ -83,28 +83,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   // State for the list of environment variables (managed locally for UI updates)
   const [envVars, setEnvVars] = useState<EnvironmentVariable[]>([]);
   const [isAddingNew, setIsAddingNew] = useState(false);
-  const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
-  const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
-  const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
-  const [isOAuthEditModalOpen, setIsOAuthEditModalOpen] = useState(false);
-
-  const isOAuthConnected = !!(
-    toolset?.oauthProxyServer || toolset?.externalOauthServer
-  );
-  const availableOAuthAuthCode =
-    toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
-  const isOAuthEligible =
-    toolset.mcpEnabled && (toolset.mcpIsPublic ? availableOAuthAuthCode : true);
-
-  const oauthParadigm = useMemo(() => {
-    if (toolset.externalOauthServer) return "external" as const;
-    if (toolset.oauthProxyServer) {
-      const providerType =
-        toolset.oauthProxyServer.oauthProxyProviders?.[0]?.providerType;
-      return providerType === "gram" ? ("gram" as const) : ("proxy" as const);
-    }
-    return null;
-  }, [toolset.externalOauthServer, toolset.oauthProxyServer]);
 
   const [selectedEnvironmentView, setSelectedEnvironmentView] =
     useState<string>(toolset.defaultEnvironmentSlug || "default");
@@ -716,99 +694,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
 
   return (
     <Stack className="mb-4">
-      <PageSection
-        heading="OAuth"
-        description="OAuth allows you to secure your MCP server using an identity provider. When enabled, users will need to authenticate through the provider before accessing the MCP server."
-        headingExtra={undefined}
-        action={
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {!isOAuthEligible ? (
-                <span className="inline-block">
-                  <Button disabled>
-                    <Button.Text>Configure</Button.Text>
-                  </Button>
-                </span>
-              ) : (
-                <Button
-                  onClick={() =>
-                    isOAuthConnected
-                      ? setIsOAuthDetailsModalOpen(true)
-                      : toolset.mcpIsPublic
-                        ? setIsOAuthModalOpen(true)
-                        : setIsGramOAuthModalOpen(true)
-                  }
-                >
-                  <Button.Text>
-                    {isOAuthConnected ? "Manage" : "Configure"}
-                  </Button.Text>
-                </Button>
-              )}
-            </TooltipTrigger>
-            {!isOAuthEligible && (
-              <TooltipContent>
-                {!toolset.mcpEnabled
-                  ? "Enable the MCP server to configure OAuth"
-                  : "This MCP server does not require the OAuth authorization code flow"}
-              </TooltipContent>
-            )}
-          </Tooltip>
-        }
-      >
-        {isOAuthConnected ? (
-          <div className="border rounded-lg border-dashed p-8 text-center border-success-softest bg-success-softest">
-            <p className="text-success-foreground mb-1">
-              <CheckCircle className="h-5 w-5 mx-auto mb-1 text-success-foreground" />
-              {oauthParadigm === "external"
-                ? "External OAuth"
-                : oauthParadigm === "gram"
-                  ? "Gram OAuth"
-                  : "OAuth Proxy"}{" "}
-              is configured
-            </p>
-            <p className="text-sm text-success-foreground">
-              {oauthParadigm === "external"
-                ? "Users will authenticate with your external OAuth server before accessing this MCP server."
-                : oauthParadigm === "gram"
-                  ? "Users will authenticate with Gram OAuth before accessing this MCP server."
-                  : "The CLIENT_ID and CLIENT_SECRET environment variables will be used to authenticate with the OAuth provider before users can access this MCP server."}
-            </p>
-          </div>
-        ) : isOAuthEligible ? (
-          <div className="border rounded-lg border-dashed p-4 text-center">
-            <p className="text-muted-foreground mb-1">
-              <Shield className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
-              OAuth is available but not configured
-            </p>
-            <p className="text-sm text-muted-foreground mb-3">
-              Enable OAuth to require users to authenticate before accessing
-              this MCP server.
-            </p>
-            <Button
-              variant="secondary"
-              onClick={() =>
-                toolset.mcpIsPublic
-                  ? setIsOAuthModalOpen(true)
-                  : setIsGramOAuthModalOpen(true)
-              }
-            >
-              <Button.Text>Configure OAuth</Button.Text>
-            </Button>
-          </div>
-        ) : (
-          <div className="border rounded-lg border-dashed p-4 text-center">
-            <p className="text-muted-foreground mb-1">
-              <Shield className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
-              OAuth is not available
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {!toolset.mcpEnabled
-                ? "Enable the MCP server to configure OAuth."
-                : "This MCP server does not require the OAuth authorization code flow."}
-            </p>
-          </div>
-        )}
-      </PageSection>
+      <OAuthSection toolset={toolset} />
 
       <PageSection
         heading="Environment Variables"
@@ -977,8 +863,144 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
+    </Stack>
+  );
+}
+
+type OAuthSectionProps = {
+  toolset: Toolset;
+};
+
+function OAuthSection({ toolset }: OAuthSectionProps) {
+  const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
+  const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
+  const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
+  const [isOAuthEditModalOpen, setIsOAuthEditModalOpen] = useState(false);
+
+  const isOAuthConnected = !!(
+    toolset?.oauthProxyServer || toolset?.externalOauthServer
+  );
+  const availableOAuthAuthCode =
+    toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
+  const isOAuthEligible =
+    toolset.mcpEnabled && (toolset.mcpIsPublic ? availableOAuthAuthCode : true);
+
+  const oauthParadigm = useMemo(() => {
+    if (toolset.externalOauthServer) return "external" as const;
+    if (toolset.oauthProxyServer) {
+      const providerType =
+        toolset.oauthProxyServer.oauthProxyProviders?.[0]?.providerType;
+      return providerType === "gram" ? ("gram" as const) : ("proxy" as const);
+    }
+    return null;
+  }, [toolset.externalOauthServer, toolset.oauthProxyServer]);
+
+  return (
+    <PageSection
+      heading="OAuth"
+      description="OAuth allows you to secure your MCP server using an identity provider. When enabled, users will need to authenticate through the provider before accessing the MCP server."
+      headingExtra={undefined}
+      action={
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {!isOAuthEligible ? (
+              <span className="inline-block">
+                <Button disabled>
+                  <Button.Text>Configure</Button.Text>
+                </Button>
+              </span>
+            ) : (
+              <Button
+                onClick={() =>
+                  isOAuthConnected
+                    ? setIsOAuthDetailsModalOpen(true)
+                    : toolset.mcpIsPublic
+                      ? setIsOAuthModalOpen(true)
+                      : setIsGramOAuthModalOpen(true)
+                }
+              >
+                <Button.Text>
+                  {isOAuthConnected ? "Manage" : "Configure"}
+                </Button.Text>
+              </Button>
+            )}
+          </TooltipTrigger>
+          {!isOAuthEligible && (
+            <TooltipContent>
+              {!toolset.mcpEnabled
+                ? "Enable the MCP server to configure OAuth"
+                : "This MCP server does not require the OAuth authorization code flow"}
+            </TooltipContent>
+          )}
+        </Tooltip>
+      }
+    >
+      {isOAuthConnected ? (
+        <div className="border rounded-lg border-dashed p-8 text-center border-success-softest bg-success-softest">
+          <p className="text-success-foreground mb-1">
+            <CheckCircle className="h-5 w-5 mx-auto mb-1 text-success-foreground" />
+            {oauthParadigm === "external"
+              ? "External OAuth"
+              : oauthParadigm === "gram"
+                ? "Gram OAuth"
+                : "OAuth Proxy"}{" "}
+            is configured
+          </p>
+          <p className="text-sm text-success-foreground">
+            {oauthParadigm === "external"
+              ? "Users will authenticate with your external OAuth server before accessing this MCP server."
+              : oauthParadigm === "gram"
+                ? "Users will authenticate with Gram OAuth before accessing this MCP server."
+                : "The attached CLIENT_ID and CLIENT_SECRET environment variables will be used to authenticate with the OAuth provider before users can access this MCP server."}
+          </p>
+        </div>
+      ) : isOAuthEligible ? (
+        <div className="border rounded-lg border-dashed p-4 text-center">
+          <p className="text-muted-foreground mb-1">
+            <Shield className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+            OAuth is available but not configured
+          </p>
+          <p className="text-sm text-muted-foreground mb-3">
+            Enable OAuth to require users to authenticate before accessing this
+            MCP server.
+          </p>
+          <Button
+            variant="secondary"
+            onClick={() =>
+              toolset.mcpIsPublic
+                ? setIsOAuthModalOpen(true)
+                : setIsGramOAuthModalOpen(true)
+            }
+          >
+            <Button.Text>Configure OAuth</Button.Text>
+          </Button>
+        </div>
+      ) : (
+        <div className="border rounded-lg border-dashed p-4 text-center">
+          <p className="text-muted-foreground mb-1">
+            <Shield className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+            OAuth is not available
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {!toolset.mcpEnabled
+              ? "Enable the MCP server to configure OAuth."
+              : "This MCP server does not require the OAuth authorization code flow."}
+          </p>
+        </div>
+      )}
 
       {/* OAuth Modals */}
+      <GramOAuthProxyModal
+        isOpen={isGramOAuthModalOpen}
+        onClose={() => setIsGramOAuthModalOpen(false)}
+        toolset={toolset}
+      />
+      <OAuthDetailsModal
+        isOpen={isOAuthDetailsModalOpen}
+        onClose={() => setIsOAuthDetailsModalOpen(false)}
+        toolset={toolset}
+        onEditRequest={() => setIsOAuthEditModalOpen(true)}
+      />
       <ConnectOAuthModal
         isOpen={isOAuthModalOpen}
         onClose={() => setIsOAuthModalOpen(false)}
@@ -996,17 +1018,6 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
             : undefined
         }
       />
-      <GramOAuthProxyModal
-        isOpen={isGramOAuthModalOpen}
-        onClose={() => setIsGramOAuthModalOpen(false)}
-        toolset={toolset}
-      />
-      <OAuthDetailsModal
-        isOpen={isOAuthDetailsModalOpen}
-        onClose={() => setIsOAuthDetailsModalOpen(false)}
-        toolset={toolset}
-        onEditRequest={() => setIsOAuthEditModalOpen(true)}
-      />
-    </Stack>
+    </PageSection>
   );
 }
