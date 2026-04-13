@@ -394,6 +394,30 @@ func TestBuildTelemetryAttributesWithMetadata_InvalidSkillsMetadataIgnored(t *te
 	require.False(t, hasSkillResolutionStatus)
 }
 
+func TestBuildTelemetryAttributesWithMetadata_NullSkillsIgnored(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	metadata := &SessionMetadata{
+		UserEmail:   "dev@example.com",
+		ProjectID:   uuid.NewString(),
+		GramOrgID:   uuid.NewString(),
+		ServiceName: "claude",
+	}
+
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudeHookPayload{
+		HookEventName: "PreToolUse",
+		AdditionalData: map[string]any{
+			"skills": nil,
+		},
+	}, metadata)
+
+	_, hasSkillName := attrs[attr.SkillNameKey]
+	_, hasSkillScope := attrs[attr.SkillScopeKey]
+	require.False(t, hasSkillName)
+	require.False(t, hasSkillScope)
+}
+
 func TestBuildTelemetryAttributesWithMetadata_EmptySkillsSliceIgnored(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

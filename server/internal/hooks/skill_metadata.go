@@ -12,7 +12,7 @@ func (s *Service) extractSkillTelemetryAttributes(ctx context.Context, additiona
 	}
 
 	rawSkills, ok := additionalData["skills"]
-	if !ok {
+	if !ok || rawSkills == nil {
 		return nil
 	}
 
