@@ -885,15 +885,14 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   const isOAuthEligible =
     toolset.mcpEnabled && (toolset.mcpIsPublic ? availableOAuthAuthCode : true);
 
-  const oauthParadigm = useMemo(() => {
-    if (toolset.externalOauthServer) return "external" as const;
-    if (toolset.oauthProxyServer) {
-      const providerType =
-        toolset.oauthProxyServer.oauthProxyProviders?.[0]?.providerType;
-      return providerType === "gram" ? ("gram" as const) : ("proxy" as const);
-    }
-    return null;
-  }, [toolset.externalOauthServer, toolset.oauthProxyServer]);
+  const oauthParadigm = toolset.externalOauthServer
+    ? ("external" as const)
+    : toolset.oauthProxyServer
+      ? toolset.oauthProxyServer.oauthProxyProviders?.[0]?.providerType ===
+        "gram"
+        ? ("gram" as const)
+        : ("proxy" as const)
+      : null;
 
   return (
     <PageSection
@@ -1017,6 +1016,7 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
         }}
       />
       <ConnectOAuthModal
+        key={isOAuthModalEditMode ? "edit" : "create"}
         isOpen={isOAuthModalOpen}
         onClose={() => {
           setIsOAuthModalOpen(false);
