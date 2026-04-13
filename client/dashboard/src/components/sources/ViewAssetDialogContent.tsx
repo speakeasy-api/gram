@@ -108,7 +108,7 @@ export function ViewAssetDialogContent({ asset }: ViewAssetDialogContentProps) {
           {asset.type === "openapi" ? "OpenAPI Specification" : "Tool Manifest"}
         </Dialog.Title>
         {asset.type !== "openapi" && (
-          <Type className="text-muted-foreground text-sm mt-1">
+          <Type className="text-muted-foreground mt-1 text-sm">
             Shows the tool definitions extracted from the function bundle
           </Type>
         )}
@@ -117,7 +117,7 @@ export function ViewAssetDialogContent({ asset }: ViewAssetDialogContentProps) {
         {isLoading ? (
           <SkeletonCode lines={20} />
         ) : error ? (
-          <div className="text-center py-8">
+          <div className="py-8 text-center">
             <Type className="text-destructive">
               {error instanceof Error
                 ? error.message
@@ -139,7 +139,7 @@ export function ViewAssetDialogContent({ asset }: ViewAssetDialogContentProps) {
             height="calc(90vh - 120px)"
           />
         ) : (
-          <Type className="text-muted-foreground text-center py-8">
+          <Type className="text-muted-foreground py-8 text-center">
             No content available
           </Type>
         )}

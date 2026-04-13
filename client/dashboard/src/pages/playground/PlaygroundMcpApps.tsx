@@ -163,7 +163,7 @@ export const PlaygroundMcpToolFallback: ToolCallMessagePartComponent = ({
         : "Running";
 
   return (
-    <div className="flex w-full flex-col border-b border-border last:border-b-0">
+    <div className="border-border flex w-full flex-col border-b last:border-b-0">
       <div className="px-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
@@ -174,16 +174,16 @@ export const PlaygroundMcpToolFallback: ToolCallMessagePartComponent = ({
               {binding?.description ?? "Tool execution"}
             </Type>
           </div>
-          <span className="rounded-full border border-border bg-background px-2 py-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+          <span className="border-border bg-background text-muted-foreground rounded-full border px-2 py-1 text-[11px] font-medium tracking-[0.08em] uppercase">
             {statusLabel}
           </span>
         </div>
 
-        <details className="mt-3 overflow-auto rounded-xl border border-border bg-background">
-          <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
+        <details className="border-border bg-background mt-3 overflow-auto rounded-xl border">
+          <summary className="text-muted-foreground cursor-pointer px-3 py-2 text-xs font-medium">
             Request / Result
           </summary>
-          <div className="grid gap-3 border-t border-border px-3 py-3">
+          <div className="border-border grid gap-3 border-t px-3 py-3">
             <JsonPanel label="Request" value={args} />
             <JsonPanel label="Result" value={result} />
           </div>
@@ -264,7 +264,7 @@ function PlaygroundMcpAppRenderer({
 
   if (resourceQuery.isLoading) {
     return (
-      <div className="flex items-center gap-2 border-t border-border px-4 py-4 text-sm text-muted-foreground">
+      <div className="border-border text-muted-foreground flex items-center gap-2 border-t px-4 py-4 text-sm">
         <LoaderCircle className="size-4 animate-spin" />
         Loading MCP app resource…
       </div>
@@ -273,7 +273,7 @@ function PlaygroundMcpAppRenderer({
 
   if (resourceQuery.isError) {
     return (
-      <div className="border-t border-border px-4 py-4">
+      <div className="border-border border-t px-4 py-4">
         <Type variant="small" className="font-medium">
           MCP app failed to load
         </Type>
@@ -292,7 +292,7 @@ function PlaygroundMcpAppRenderer({
   const mimeType = resource?.mimeType ?? listing?.mimeType;
   if (!resource || mimeType !== MCP_APP_MIME_TYPE) {
     return (
-      <div className="border-t border-border px-4 py-4">
+      <div className="border-border border-t px-4 py-4">
         <Type variant="small" className="font-medium">
           Unsupported MCP app resource
         </Type>
@@ -441,8 +441,8 @@ function McpAppFrame({
   }, [isInitialized, theme]);
 
   return (
-    <div className="border-t border-border px-4 pb-4">
-      <div className="overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
+    <div className="border-border border-t px-4 pb-4">
+      <div className="border-border bg-background overflow-hidden rounded-2xl border shadow-sm">
         <iframe
           ref={iframeRef}
           allow={buildAllowAttribute(uiMeta)}
@@ -766,11 +766,11 @@ function JsonPanel({ label, value }: { label: string; value: unknown }) {
     <div className="space-y-1">
       <Type
         muted
-        className="text-[11px] font-medium uppercase tracking-[0.08em]"
+        className="text-[11px] font-medium tracking-[0.08em] uppercase"
       >
         {label}
       </Type>
-      <pre className="overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 font-mono text-xs leading-5 text-foreground">
+      <pre className="border-border bg-muted/40 text-foreground overflow-x-auto rounded-lg border p-3 font-mono text-xs leading-5">
         {formatJson(value)}
       </pre>
     </div>

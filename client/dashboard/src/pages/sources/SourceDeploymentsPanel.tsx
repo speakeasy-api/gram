@@ -19,7 +19,7 @@ function StatusDot({ status }: { status: string }) {
   return (
     <span
       className={cn(
-        "size-2 rounded-full shrink-0",
+        "size-2 shrink-0 rounded-full",
         status === "completed" && "bg-success",
         status === "failed" && "bg-destructive",
         status !== "completed" && status !== "failed" && "bg-warning",
@@ -49,7 +49,7 @@ function DeploymentSidebarItem({
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left px-3 py-3 border-b border-border transition-colors",
+        "border-border w-full border-b px-3 py-3 text-left transition-colors",
         "hover:bg-muted/50",
         isSelected && "bg-muted",
       )}
@@ -59,19 +59,19 @@ function DeploymentSidebarItem({
         <span className="text-sm capitalize">{deployment.status}</span>
         <span className="ml-auto">
           {isActive ? (
-            <Badge variant="success" className="py-0 px-1.5">
+            <Badge variant="success" className="px-1.5 py-0">
               <Badge.Text className="text-[10px]">Active</Badge.Text>
             </Badge>
           ) : deployment.status === "completed" ? (
-            <Badge variant="neutral" className="py-0 px-1.5">
+            <Badge variant="neutral" className="px-1.5 py-0">
               <Badge.Text className="text-[10px]">Completed</Badge.Text>
             </Badge>
           ) : deployment.status === "failed" ? (
-            <Badge variant="destructive" className="py-0 px-1.5">
+            <Badge variant="destructive" className="px-1.5 py-0">
               <Badge.Text className="text-[10px]">Failed</Badge.Text>
             </Badge>
           ) : (
-            <Badge variant="warning" className="py-0 px-1.5">
+            <Badge variant="warning" className="px-1.5 py-0">
               <Badge.Text className="text-[10px]">
                 {deployment.status === "pending"
                   ? "Pending"
@@ -83,12 +83,12 @@ function DeploymentSidebarItem({
           )}
         </span>
       </div>
-      <div className="flex items-center gap-2 mt-1 pl-4">
-        <span className="text-xs font-mono text-muted-foreground">
+      <div className="mt-1 flex items-center gap-2 pl-4">
+        <span className="text-muted-foreground font-mono text-xs">
           {deployment.id.slice(0, 8)}
         </span>
-        <span className="text-xs text-muted-foreground">&middot;</span>
-        <span className="text-xs text-muted-foreground">{timeLabel}</span>
+        <span className="text-muted-foreground text-xs">&middot;</span>
+        <span className="text-muted-foreground text-xs">{timeLabel}</span>
       </div>
     </button>
   );
@@ -126,12 +126,12 @@ function DeploymentDetailPanel({
       : "Assets";
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+    <div className="flex-1 space-y-6 overflow-y-auto p-6">
       {/* Info section */}
-      <div className="rounded-lg border border-border p-4">
+      <div className="border-border rounded-lg border p-4">
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
           <div>
-            <dt className="text-muted-foreground text-xs mb-0.5">
+            <dt className="text-muted-foreground mb-0.5 text-xs">
               Deployment ID
             </dt>
             <dd className="flex items-center gap-1">
@@ -141,12 +141,12 @@ function DeploymentDetailPanel({
           </div>
 
           <div>
-            <dt className="text-muted-foreground text-xs mb-0.5">Status</dt>
+            <dt className="text-muted-foreground mb-0.5 text-xs">Status</dt>
             <dd className="flex items-center gap-2">
               <StatusDot status={deployment.status} />
               <span className="capitalize">{deployment.status}</span>
               {isActive && (
-                <Badge variant="success" className="py-0 px-1.5">
+                <Badge variant="success" className="px-1.5 py-0">
                   <Badge.Text className="text-[10px]">Active</Badge.Text>
                 </Badge>
               )}
@@ -154,19 +154,19 @@ function DeploymentDetailPanel({
           </div>
 
           <div>
-            <dt className="text-muted-foreground text-xs mb-0.5">Created</dt>
+            <dt className="text-muted-foreground mb-0.5 text-xs">Created</dt>
             <dd>{dateTimeFormatters.humanize(deployment.createdAt)}</dd>
           </div>
 
           <div className="flex gap-6">
             <div>
-              <dt className="text-muted-foreground text-xs mb-0.5">
+              <dt className="text-muted-foreground mb-0.5 text-xs">
                 {assetLabel}
               </dt>
               <dd>{assetCount}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground text-xs mb-0.5">Tools</dt>
+              <dt className="text-muted-foreground mb-0.5 text-xs">Tools</dt>
               <dd>{toolCount}</dd>
             </div>
           </div>
@@ -176,7 +176,7 @@ function DeploymentDetailPanel({
       {/* Logs section */}
       <Suspense
         fallback={
-          <div className="text-sm text-muted-foreground">Loading logs...</div>
+          <div className="text-muted-foreground text-sm">Loading logs...</div>
         }
       >
         <LogsTabContent
@@ -215,8 +215,8 @@ export function SourceDeploymentsPanel({
     deployments.find((d) => d.id === selectedId) ?? deployments[0]!;
 
   return (
-    <div className="max-w-[1270px] mx-auto px-8 py-8 w-full h-full min-h-0 flex flex-col">
-      <div className="flex items-center justify-between mb-4 shrink-0">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-[1270px] flex-col px-8 py-8">
+      <div className="mb-4 flex shrink-0 items-center justify-between">
         <div>
           <Heading variant="h4">Deployments</Heading>
           <Type muted small>
@@ -233,9 +233,9 @@ export function SourceDeploymentsPanel({
         </routes.deployments.Link>
       </div>
 
-      <div className="grid grid-cols-[280px_1fr] flex-1 min-h-0 rounded-lg border border-border overflow-hidden">
+      <div className="border-border grid min-h-0 flex-1 grid-cols-[280px_1fr] overflow-hidden rounded-lg border">
         {/* ── Left sidebar ── */}
-        <div className="border-r border-border overflow-y-auto bg-muted/30">
+        <div className="border-border bg-muted/30 overflow-y-auto border-r">
           {deployments.map((d) => (
             <DeploymentSidebarItem
               key={d.id}

@@ -163,11 +163,11 @@ export default function Team() {
             <img
               src={member.photoUrl}
               alt={member.name}
-              className="w-8 h-8 rounded-full"
+              className="h-8 w-8 rounded-full"
             />
           ) : (
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium text-white"
               style={{
                 backgroundImage: `linear-gradient(${getMemberColors(member.id).angle}deg, ${getMemberColors(member.id).from}, ${getMemberColors(member.id).to})`,
               }}
@@ -244,7 +244,7 @@ export default function Team() {
             className={isExpired ? "opacity-50" : ""}
           >
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white shrink-0"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
               style={{
                 backgroundImage: `linear-gradient(${getMemberColors(invite.email).angle}deg, ${getMemberColors(invite.email).from}, ${getMemberColors(invite.email).to})`,
               }}
@@ -352,11 +352,11 @@ export default function Team() {
               noResultsMessage={
                 <Stack
                   gap={2}
-                  className="h-full p-8 bg-background"
+                  className="bg-background h-full p-8"
                   align="center"
                   justify="center"
                 >
-                  <Users className="h-12 w-12 text-muted-foreground" />
+                  <Users className="text-muted-foreground h-12 w-12" />
                   <Type variant="body" className="text-muted-foreground">
                     No team members yet
                   </Type>
@@ -394,7 +394,7 @@ export default function Team() {
             <form className="space-y-4 py-4" onSubmit={handleInvite}>
               <Type variant="body" className="text-muted-foreground">
                 Enter the email address of the person you'd like to invite to{" "}
-                <span className="font-medium text-foreground">
+                <span className="text-foreground font-medium">
                   {organization.name}
                 </span>
                 .

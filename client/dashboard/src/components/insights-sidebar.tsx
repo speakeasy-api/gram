@@ -119,7 +119,7 @@ When the user asks about "current period", "selected period", "this timeframe", 
       <div className="flex h-full w-full">
         {/* Main content area - shrinks when sidebar opens */}
         <div
-          className="flex-1 min-w-0 transition-all duration-300 ease-in-out overflow-hidden"
+          className="min-w-0 flex-1 overflow-hidden transition-all duration-300 ease-in-out"
           style={{
             marginRight: isExpanded ? sidebarWidth : 0,
           }}
@@ -141,8 +141,8 @@ When the user asks about "current period", "selected period", "this timeframe", 
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className={cn(
-              "fixed right-0 top-1/2 -translate-y-1/2 z-40 flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-2.5 rounded-l-lg shadow-lg hover:bg-primary/90 transition-all duration-300 group",
-              isExpanded && "opacity-0 pointer-events-none",
+              "bg-primary text-primary-foreground hover:bg-primary/90 group fixed top-1/2 right-0 z-40 flex -translate-y-1/2 items-center gap-1.5 rounded-l-lg px-3 py-2.5 shadow-lg transition-all duration-300",
+              isExpanded && "pointer-events-none opacity-0",
             )}
             aria-label="Open AI Insights"
           >
@@ -154,20 +154,20 @@ When the user asks about "current period", "selected period", "this timeframe", 
         {/* Sidebar panel - fixed position that slides in */}
         <div
           className={cn(
-            "fixed right-0 top-0 bottom-0 z-30 flex flex-col bg-background border-l border-border shadow-xl transition-transform duration-300 ease-in-out",
+            "bg-background border-border fixed top-0 right-0 bottom-0 z-30 flex flex-col border-l shadow-xl transition-transform duration-300 ease-in-out",
             isExpanded ? "translate-x-0" : "translate-x-full",
           )}
           style={{ width: sidebarWidth }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+          <div className="border-border bg-muted/30 flex items-center justify-between border-b px-4 py-3">
             <div className="flex items-center gap-2">
-              <Sparkles className="size-5 text-primary" />
+              <Sparkles className="text-primary size-5" />
               <span className="font-semibold">AI Insights</span>
             </div>
             <button
               onClick={() => setIsExpanded(false)}
-              className="p-1.5 rounded hover:bg-muted transition-colors"
+              className="hover:bg-muted rounded p-1.5 transition-colors"
               aria-label="Close AI Insights"
             >
               <ChevronRight className="size-5" />
@@ -176,11 +176,11 @@ When the user asks about "current period", "selected period", "this timeframe", 
 
           {/* Dev notice when MCP is not configured */}
           {devObservabilityMcpMissing && !("mcp" in mcpConfig) && (
-            <div className="mx-4 mt-3 flex items-start gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+            <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
               <Terminal className="mt-0.5 size-3.5 shrink-0" />
               <span>
                 AI tools are unavailable. Run{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">
+                <code className="bg-muted text-foreground rounded px-1 py-0.5 font-mono">
                   mise seed
                 </code>{" "}
                 to enable the observability MCP server.

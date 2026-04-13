@@ -199,41 +199,41 @@ export function RBACDevToolbar() {
   ).length;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[9999] select-none">
+    <div className="fixed right-4 bottom-4 z-[9999] select-none">
       <div className={`
           rounded-xl border shadow-2xl backdrop-blur-md transition-all duration-200
           ${collapsed ? "w-auto" : "w-80"}
-          ${state.enabled ? "bg-background/98 border-foreground/15 dark:bg-gray-950/98 dark:border-foreground/15" : "bg-white/98 border-border dark:bg-gray-950/98"}
+          ${state.enabled ? "bg-background/98 border-foreground/15 dark:border-foreground/15 dark:bg-gray-950/98" : "border-border bg-white/98 dark:bg-gray-950/98"}
         `}>
         {/* Header */}
         <button
           type="button"
           onClick={() => setCollapsed((c) => !c)}
           className={`
-            flex items-center gap-2.5 w-full px-3.5 py-2.5 transition-colors
+            flex w-full items-center gap-2.5 px-3.5 py-2.5 transition-colors
             ${collapsed ? "rounded-xl" : "rounded-t-xl"}
             hover:bg-black/[0.03] dark:hover:bg-white/[0.03]
           `}
         >
           <div className={`
-              flex items-center justify-center w-6 h-6 rounded-md
+              flex h-6 w-6 items-center justify-center rounded-md
               ${state.enabled ? "bg-foreground text-background" : "bg-muted text-muted-foreground"}
             `}>
-            <Shield className="w-3.5 h-3.5" />
+            <Shield className="h-3.5 w-3.5" />
           </div>
-          <span className="text-xs font-semibold tracking-wide text-foreground">
+          <span className="text-foreground text-xs font-semibold tracking-wide">
             RBAC Dev Tools
           </span>
           {state.enabled && (
-            <span className="text-[10px] font-mono tabular-nums text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+            <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 font-mono text-[10px] tabular-nums">
               {activeCount}/{SCOPE_DEFS.length}
             </span>
           )}
-          <div className="ml-auto text-muted-foreground">
+          <div className="text-muted-foreground ml-auto">
             {collapsed ? (
-              <ChevronUp className="w-3.5 h-3.5" />
+              <ChevronUp className="h-3.5 w-3.5" />
             ) : (
-              <ChevronDown className="w-3.5 h-3.5" />
+              <ChevronDown className="h-3.5 w-3.5" />
             )}
           </div>
         </button>
@@ -242,12 +242,12 @@ export function RBACDevToolbar() {
         {!collapsed && (
           <div className="border-t border-inherit">
             {/* Master toggle */}
-            <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-inherit">
+            <div className="flex items-center justify-between border-b border-inherit px-3.5 py-2.5">
               <div className="flex items-center gap-2">
                 <div
-                  className={`w-1.5 h-1.5 rounded-full ${state.enabled ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/30"}`}
+                  className={`h-1.5 w-1.5 rounded-full ${state.enabled ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/30"}`}
                 />
-                <span className="text-xs font-medium text-foreground">
+                <span className="text-foreground text-xs font-medium">
                   {state.enabled ? "Override active" : "Override disabled"}
                 </span>
               </div>
@@ -260,7 +260,7 @@ export function RBACDevToolbar() {
 
             {/* Scope groups */}
             <div
-              className={`px-2 py-2 space-y-1 max-h-[400px] overflow-y-auto ${!state.enabled ? "opacity-40 pointer-events-none" : ""}`}
+              className={`max-h-[400px] space-y-1 overflow-y-auto px-2 py-2 ${!state.enabled ? "pointer-events-none opacity-40" : ""}`}
             >
               {GROUP_ORDER.map((group) => {
                 const scopes = SCOPE_DEFS.filter(
@@ -269,7 +269,7 @@ export function RBACDevToolbar() {
                 return (
                   <div key={group.key}>
                     <div className="px-2 pt-1.5 pb-1">
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      <span className="text-muted-foreground text-[10px] font-semibold tracking-widest uppercase">
                         {group.label}
                       </span>
                     </div>
@@ -294,17 +294,17 @@ export function RBACDevToolbar() {
                       return (
                         <div key={def.scope}>
                           <div className={`
-                              flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors
+                              flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 transition-colors
                               ${scopeState.enabled ? "hover:bg-black/[0.04] dark:hover:bg-white/[0.04]" : ""}
                             `} onClick={() => toggleScope(def.scope)}>
                             <div className={`
-                                w-3.5 h-3.5 rounded border-[1.5px] flex items-center justify-center transition-all text-[9px]
+                                flex h-3.5 w-3.5 items-center justify-center rounded border-[1.5px] text-[9px] transition-all
                                 ${scopeState.enabled ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30 bg-transparent"}
                               `}>{scopeState.enabled && "✓"}</div>
-                            <div className="flex-1 min-w-0">
+                            <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5">
                                 <span
-                                  className={`text-xs font-mono font-medium ${
+                                  className={`font-mono text-xs font-medium ${
                                     scopeState.enabled
                                       ? "text-foreground"
                                       : "text-muted-foreground line-through"
@@ -313,7 +313,7 @@ export function RBACDevToolbar() {
                                   {def.label}
                                 </span>
                                 {isRestricted && scopeState.enabled && (
-                                  <span className="text-[9px] px-1 py-px rounded bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 font-medium">
+                                  <span className="rounded bg-blue-100 px-1 py-px text-[9px] font-medium text-blue-600 dark:bg-blue-900/50 dark:text-blue-400">
                                     scoped
                                   </span>
                                 )}
@@ -323,7 +323,7 @@ export function RBACDevToolbar() {
                               def.resourceType !== "org" && (
                                 <button
                                   type="button"
-                                  className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground"
+                                  className="text-muted-foreground rounded p-0.5 hover:bg-black/10 dark:hover:bg-white/10"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setExpandedScope(
@@ -332,9 +332,9 @@ export function RBACDevToolbar() {
                                   }}
                                 >
                                   {isExpanded ? (
-                                    <ChevronUp className="w-3 h-3" />
+                                    <ChevronUp className="h-3 w-3" />
                                   ) : (
-                                    <ChevronDown className="w-3 h-3" />
+                                    <ChevronDown className="h-3 w-3" />
                                   )}
                                 </button>
                               )}
@@ -360,13 +360,13 @@ export function RBACDevToolbar() {
             </div>
 
             {/* Footer */}
-            <div className="border-t border-inherit px-3.5 py-2 flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground">
+            <div className="flex items-center justify-between border-t border-inherit px-3.5 py-2">
+              <span className="text-muted-foreground text-[10px]">
                 local only
               </span>
               <button
                 type="button"
-                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                className="text-muted-foreground hover:text-foreground text-[10px] transition-colors"
                 onClick={() => {
                   setState({
                     enabled: false,
@@ -421,9 +421,9 @@ function ResourcePicker({
   };
 
   return (
-    <div className="ml-7 mr-2 mb-1.5 rounded-lg border border-dashed border-border bg-muted/30 p-2 space-y-1.5">
+    <div className="border-border bg-muted/30 mr-2 mb-1.5 ml-7 space-y-1.5 rounded-lg border border-dashed p-2">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-medium text-muted-foreground">
+        <span className="text-muted-foreground text-[10px] font-medium">
           Resources
         </span>
         <button
@@ -445,27 +445,27 @@ function ResourcePicker({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="filter…"
-          className="w-full text-[11px] font-mono bg-background border border-border rounded px-1.5 py-0.5 text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-foreground/30"
+          className="bg-background border-border text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/30 w-full rounded border px-1.5 py-0.5 font-mono text-[11px] outline-none"
         />
       )}
 
       {/* Resource list */}
-      <div className="max-h-[140px] overflow-y-auto space-y-0.5">
+      <div className="max-h-[140px] space-y-0.5 overflow-y-auto">
         {suggestions.map((r) => {
           const isChecked = alreadySelected.has(r.id);
           return (
             <button
               key={r.id}
               type="button"
-              className={`w-full text-left px-1.5 py-0.5 rounded hover:bg-muted/50 transition-colors flex items-center gap-1.5 ${isChecked ? "bg-muted/30" : ""}`}
+              className={`hover:bg-muted/50 flex w-full items-center gap-1.5 rounded px-1.5 py-0.5 text-left transition-colors ${isChecked ? "bg-muted/30" : ""}`}
               onClick={() => toggleResource(r.id)}
             >
               <div
-                className={`w-3 h-3 shrink-0 rounded-sm border flex items-center justify-center text-[8px] transition-all ${isChecked ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30"}`}
+                className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-sm border text-[8px] transition-all ${isChecked ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30"}`}
               >
                 {isChecked && "✓"}
               </div>
-              <span className="text-[11px] font-mono text-foreground truncate">
+              <span className="text-foreground truncate font-mono text-[11px]">
                 {r.label}
               </span>
             </button>

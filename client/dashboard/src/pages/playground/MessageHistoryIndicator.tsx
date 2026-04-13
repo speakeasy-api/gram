@@ -17,7 +17,7 @@ export function MessageHistoryIndicator({
   }
 
   return (
-    <div className="absolute bottom-2 right-2 bg-background/80 backdrop-blur-sm border rounded-md px-2 py-1 z-10">
+    <div className="bg-background/80 absolute right-2 bottom-2 z-10 rounded-md border px-2 py-1 backdrop-blur-sm">
       <Stack direction="horizontal" gap={1} align="center">
         <Type variant="small" muted className="text-xs">
           History: {historyIndex + 1}/{totalMessages}

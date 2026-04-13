@@ -79,7 +79,7 @@ export function Button({
     <Icon
       name={iconName}
       className={cn(
-        "w-4 h-4 text-muted-foreground group-hover:text-foreground",
+        "text-muted-foreground group-hover:text-foreground h-4 w-4",
         iconColors,
       )}
     />
@@ -119,8 +119,8 @@ export function Button({
       data-slot="button"
       className={cn(
         buttonVariants({ variant, size, className }),
-        "cursor-pointer group trans",
-        caps && "uppercase font-mono",
+        "group trans cursor-pointer",
+        caps && "font-mono uppercase",
       )}
       {...props}
       {...(onClick ? { onClick } : {})}

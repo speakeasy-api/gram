@@ -65,7 +65,7 @@ export function Combobox<T extends DropdownItem>({
         disabled={!!disabledMessage}
         tooltip={disabledMessage || tooltip}
       >
-        <div className="flex items-center justify-between w-full gap-2">
+        <div className="flex w-full items-center justify-between gap-2">
           <div className="truncate font-medium">{children}</div>
           <ChevronsUpDown className="opacity-50" />
         </div>
@@ -78,7 +78,7 @@ export function Combobox<T extends DropdownItem>({
       <Stack
         direction="horizontal"
         align="center"
-        className="bg-stone-200 dark:bg-stone-800 rounded-md w-fit"
+        className="w-fit rounded-md bg-stone-200 dark:bg-stone-800"
       >
         <Type variant="small" className="px-2">
           {label}

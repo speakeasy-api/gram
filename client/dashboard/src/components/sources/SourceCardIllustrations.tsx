@@ -67,7 +67,7 @@ export function MCPPatternIllustration({
     <img
       src={patternImage}
       alt=""
-      className={cn("w-full h-full object-fill", className)}
+      className={cn("h-full w-full object-fill", className)}
       aria-hidden="true"
     />
   );
@@ -98,7 +98,7 @@ export function ExternalMCPIllustration({
 
   if (logoUrl) {
     return (
-      <div className={cn("w-full h-full relative", className)}>
+      <div className={cn("relative h-full w-full", className)}>
         {/* Pattern background */}
         <MCPPatternIllustration
           toolsetSlug={slug}
@@ -106,11 +106,11 @@ export function ExternalMCPIllustration({
         />
         {/* Logo overlay */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg">
+          <div className="bg-background/90 rounded-lg p-3 shadow-lg backdrop-blur-sm">
             <img
               src={logoUrl}
               alt={name || "MCP Server"}
-              className="w-12 h-12 object-contain"
+              className="h-12 w-12 object-contain"
             />
           </div>
         </div>
@@ -120,7 +120,7 @@ export function ExternalMCPIllustration({
 
   // Fallback: just use the pattern illustration
   return (
-    <div className={cn("w-full h-full", className)}>
+    <div className={cn("h-full w-full", className)}>
       <MCPPatternIllustration
         toolsetSlug={slug}
         className={cn("transition-all duration-300", saturationClass)}

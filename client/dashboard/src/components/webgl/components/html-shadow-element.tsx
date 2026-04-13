@@ -67,7 +67,7 @@ export const HtmlShadowElement = memo(
         id={`shadow-element-${id}`}
         ref={mergeRefs([registerElement, ref])}
         className={cn(
-          "relative z-10 h-full w-full pointer-events-none",
+          "pointer-events-none relative z-10 h-full w-full",
           "[&_video]:opacity-0",
           className,
         )}

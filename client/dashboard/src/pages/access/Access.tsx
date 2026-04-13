@@ -73,8 +73,8 @@ export default function Access() {
         </div>
 
         <Tabs value={currentTab} onValueChange={handleTabChange}>
-          <div className="border-b border-border -mx-8 px-8">
-            <TabsList className="bg-transparent p-0 h-auto rounded-none justify-start gap-4 text-sm">
+          <div className="border-border -mx-8 border-b px-8">
+            <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
               <PageTabsTrigger value="roles">
                 Roles{roleCount != null ? ` (${roleCount})` : ""}
               </PageTabsTrigger>

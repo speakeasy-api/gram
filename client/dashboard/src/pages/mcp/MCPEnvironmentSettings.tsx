@@ -739,7 +739,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
 
         <div className="space-y-4">
           {envVars.length > 0 ? (
-            <div className="border rounded-lg overflow-hidden">
+            <div className="overflow-hidden rounded-lg border">
               <EnvironmentSwitcher
                 environments={environments}
                 selectedEnvironmentView={selectedEnvironmentView}
@@ -778,11 +778,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
               ))}
             </div>
           ) : (
-            <div className="border rounded-lg border-dashed p-8 text-center">
+            <div className="rounded-lg border border-dashed p-8 text-center">
               <p className="text-muted-foreground mb-2">
                 No environment variables configured yet.
               </p>
-              <p className="text-sm text-muted-foreground mb-4">
+              <p className="text-muted-foreground mb-4 text-sm">
                 Add key-value pairs to pass API keys, configuration, or any
                 custom data to your backend. Environments can be shared across
                 multiple MCP servers.
@@ -797,7 +797,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
           )}
 
           <div className="flex justify-end">
-            <routes.environments.Link className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <routes.environments.Link className="text-muted-foreground hover:text-foreground text-sm transition-colors">
               Manage environments →
             </routes.environments.Link>
           </div>
@@ -825,7 +825,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
           </Dialog.Header>
           <div className="space-y-4 py-4">
             <div>
-              <Label className="text-sm font-medium mb-2 block">
+              <Label className="mb-2 block text-sm font-medium">
                 Environment Name
               </Label>
               <Input
@@ -935,9 +935,9 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
       }
     >
       {isOAuthConnected ? (
-        <div className="border rounded-lg border-dashed p-8 text-center border-success-softest bg-success-softest">
+        <div className="border-success-softest bg-success-softest rounded-lg border border-dashed p-8 text-center">
           <p className="text-success-foreground mb-1">
-            <CheckCircle className="h-5 w-5 mx-auto mb-1 text-success-foreground" />
+            <CheckCircle className="text-success-foreground mx-auto mb-1 h-5 w-5" />
             {oauthParadigm === "external"
               ? "External OAuth"
               : oauthParadigm === "gram"
@@ -945,7 +945,7 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
                 : "OAuth Proxy"}{" "}
             is configured
           </p>
-          <p className="text-sm text-success-foreground">
+          <p className="text-success-foreground text-sm">
             {oauthParadigm === "external"
               ? "Users will authenticate with your external OAuth server before accessing this MCP server."
               : oauthParadigm === "gram"
@@ -954,12 +954,12 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
           </p>
         </div>
       ) : isOAuthEligible ? (
-        <div className="border rounded-lg border-dashed p-4 text-center">
+        <div className="rounded-lg border border-dashed p-4 text-center">
           <p className="text-muted-foreground mb-1">
-            <Shield className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+            <Shield className="text-muted-foreground mx-auto mb-1 h-5 w-5" />
             OAuth is available but not configured
           </p>
-          <p className="text-sm text-muted-foreground mb-3">
+          <p className="text-muted-foreground mb-3 text-sm">
             Enable OAuth to require users to authenticate before accessing this
             MCP server.
           </p>
@@ -975,22 +975,22 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
           </Button>
         </div>
       ) : (
-        <div className="border rounded-lg border-dashed p-4 text-center">
+        <div className="rounded-lg border border-dashed p-4 text-center">
           <p className="text-muted-foreground mb-1">
-            <Shield className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+            <Shield className="text-muted-foreground mx-auto mb-1 h-5 w-5" />
             OAuth is not applicable
           </p>
           {!toolset.mcpEnabled ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Enable the MCP server to configure OAuth.
             </p>
           ) : (
             <>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 OAuth cannot be configured because there are no tools in this
                 server that require OAuth authentication.
               </p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 OAuth is available for public MCP servers that have at least one
                 tool requiring OAuth authentication, or private servers (using
                 Speakeasy as an auth provider).

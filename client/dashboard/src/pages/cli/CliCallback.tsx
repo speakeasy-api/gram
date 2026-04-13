@@ -74,9 +74,9 @@ export default function CliCallback(props: CliCallbackProps) {
 
 function FailedScreen({ error }: { error: string }) {
   return (
-    <div className="flex items-center justify-center h-screen">
+    <div className="flex h-screen items-center justify-center">
       <div className="text-center">
-        <h1 className="text-2xl font-bold text-red-600 mb-2">Error</h1>
+        <h1 className="mb-2 text-2xl font-bold text-red-600">Error</h1>
         <p className="text-gray-600">{error}</p>
       </div>
     </div>
@@ -85,9 +85,9 @@ function FailedScreen({ error }: { error: string }) {
 
 function WaitScreen() {
   return (
-    <div className="flex items-center justify-center h-screen">
+    <div className="flex h-screen items-center justify-center">
       <div className="text-center">
-        <h1 className="text-2xl font-bold mb-2">Redirecting...</h1>
+        <h1 className="mb-2 text-2xl font-bold">Redirecting...</h1>
         <p className="text-gray-600">You will be redirected shortly</p>
       </div>
     </div>

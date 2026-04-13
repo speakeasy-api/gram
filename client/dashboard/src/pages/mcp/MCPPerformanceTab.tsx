@@ -36,9 +36,9 @@ function ModeCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        "flex flex-col gap-4 rounded-lg border p-5 text-left transition-colors cursor-pointer",
+        "flex cursor-pointer flex-col gap-4 rounded-lg border p-5 text-left transition-colors",
         selected
-          ? "border-primary bg-card ring-1 ring-primary"
+          ? "border-primary bg-card ring-primary ring-1"
           : "border-border hover:border-muted-foreground/40 hover:bg-card/50",
       )}
     >
@@ -64,7 +64,7 @@ function ModeCard({
         <Type className="text-sm font-medium">Best for</Type>
         <ul className="flex flex-col gap-1 pl-4">
           {bestFor.map((item) => (
-            <li key={item} className="list-disc text-sm text-muted-foreground">
+            <li key={item} className="text-muted-foreground list-disc text-sm">
               {item}
             </li>
           ))}
@@ -121,7 +121,7 @@ export function MCPPerformanceTab({ toolset }: { toolset: Toolset }) {
         </Type>
       </Stack>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ModeCard
           selected={toolSelectionMode === "static"}
           onSelect={() => onSelectMode("static")}
@@ -152,7 +152,7 @@ export function MCPPerformanceTab({ toolset }: { toolset: Toolset }) {
         href="https://www.speakeasy.com/docs/mcp/build/toolsets/dynamic-toolsets"
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
       >
         Learn more about tool selection modes
         <ExternalLink className="h-3.5 w-3.5" />

@@ -295,10 +295,10 @@ export function PlaygroundConfigPanel({
   };
 
   return (
-    <div className="h-full flex flex-col border-r overflow-y-auto">
+    <div className="flex h-full flex-col overflow-y-auto border-r">
       {/* Toolset Selector - Always at top */}
-      <div className="px-4 py-3 border-b">
-        <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5 block">
+      <div className="border-b px-4 py-3">
+        <Label className="text-muted-foreground mb-1.5 block text-[11px] font-medium tracking-wider uppercase">
           MCP Server
         </Label>
         {toolsetSelector}
@@ -308,19 +308,19 @@ export function PlaygroundConfigPanel({
       {authSettings && (
         <div className="border-b">
           <Collapsible open={authOpen} onOpenChange={setAuthOpen}>
-            <CollapsibleTrigger className="flex w-full items-center px-4 py-2.5 hover:bg-muted/30 transition-colors group">
+            <CollapsibleTrigger className="hover:bg-muted/30 group flex w-full items-center px-4 py-2.5 transition-colors">
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <span className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
                   Authentication
                 </span>
                 {authOpen ? (
-                  <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                  <ChevronDownIcon className="text-muted-foreground h-3.5 w-3.5" />
                 ) : (
-                  <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                  <ChevronRightIcon className="text-muted-foreground h-3.5 w-3.5" />
                 )}
               </div>
             </CollapsibleTrigger>
-            <CollapsibleContent className="px-4 pb-3 pt-2">
+            <CollapsibleContent className="px-4 pt-2 pb-3">
               {authSettings}
             </CollapsibleContent>
           </Collapsible>
@@ -330,15 +330,15 @@ export function PlaygroundConfigPanel({
       {/* Tools Section */}
       <div className="border-b">
         <Collapsible open={toolsOpen} onOpenChange={setToolsOpen}>
-          <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors group">
+          <CollapsibleTrigger className="hover:bg-muted/30 group flex w-full items-center justify-between px-4 py-2.5 transition-colors">
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
                 Tools
               </span>
               {toolsOpen ? (
-                <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                <ChevronDownIcon className="text-muted-foreground h-3.5 w-3.5" />
               ) : (
-                <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                <ChevronRightIcon className="text-muted-foreground h-3.5 w-3.5" />
               )}
             </div>
 
@@ -364,19 +364,19 @@ export function PlaygroundConfigPanel({
                       {/* Group Header */}
                       <button
                         onClick={() => toggleGroup(group.title)}
-                        className="w-full px-3 py-2 flex items-center gap-2 bg-surface-secondary-default hover:bg-active transition-colors text-left group/item"
+                        className="bg-surface-secondary-default hover:bg-active group/item flex w-full items-center gap-2 px-3 py-2 text-left transition-colors"
                       >
-                        <group.icon className="size-3.5 shrink-0 text-muted-foreground" />
+                        <group.icon className="text-muted-foreground size-3.5 shrink-0" />
                         <div className="min-w-0 truncate text-xs">
                           {group.title}
                         </div>
                         {isExpanded ? (
-                          <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                          <ChevronDownIcon className="text-muted-foreground size-3.5 shrink-0" />
                         ) : (
-                          <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                          <ChevronRightIcon className="text-muted-foreground size-3.5 shrink-0" />
                         )}
                         <div className="flex-1" />
-                        <div className="text-[11px] text-muted-foreground tabular-nums">
+                        <div className="text-muted-foreground text-[11px] tabular-nums">
                           {group.tools.length}
                         </div>
                       </button>
@@ -388,26 +388,26 @@ export function PlaygroundConfigPanel({
                             return (
                               <div
                                 key={tool.toolUrn}
-                                className="group w-full px-3 py-2 flex items-center gap-2 hover:bg-muted/30 transition-colors"
+                                className="group hover:bg-muted/30 flex w-full items-center gap-2 px-3 py-2 transition-colors"
                               >
                                 <button
                                   onClick={() => tool && onToolClick?.(tool)}
-                                  className="flex-1 flex items-center justify-between text-left min-w-0"
+                                  className="flex min-w-0 flex-1 items-center justify-between text-left"
                                 >
-                                  <p className="text-xs leading-5 text-foreground truncate">
+                                  <p className="text-foreground truncate text-xs leading-5">
                                     {tool.name}
                                   </p>
-                                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                                  <div className="ml-2 flex shrink-0 items-center gap-2">
                                     <AnnotationBadges tool={tool} />
                                     {tool.type === "http" &&
                                       tool.httpMethod && (
                                         <MethodBadge method={tool.httpMethod} />
                                       )}
                                     {tool.type === "function" && (
-                                      <SquareFunction className="size-3.5 text-muted-foreground" />
+                                      <SquareFunction className="text-muted-foreground size-3.5" />
                                     )}
                                     {tool.type === "prompt" && (
-                                      <PencilRuler className="size-3.5 text-muted-foreground" />
+                                      <PencilRuler className="text-muted-foreground size-3.5" />
                                     )}
                                   </div>
                                 </button>
@@ -434,19 +434,19 @@ export function PlaygroundConfigPanel({
       {/* Configuration Section */}
       <div className="border-b">
         <Collapsible open={configOpen} onOpenChange={setConfigOpen}>
-          <CollapsibleTrigger className="flex w-full items-center px-4 py-2.5 hover:bg-muted/30 transition-colors group">
+          <CollapsibleTrigger className="hover:bg-muted/30 group flex w-full items-center px-4 py-2.5 transition-colors">
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
                 Model Settings
               </span>
               {configOpen ? (
-                <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                <ChevronDownIcon className="text-muted-foreground h-3.5 w-3.5" />
               ) : (
-                <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                <ChevronRightIcon className="text-muted-foreground h-3.5 w-3.5" />
               )}
             </div>
           </CollapsibleTrigger>
-          <CollapsibleContent className="px-4 pb-3 pt-2 space-y-4">
+          <CollapsibleContent className="space-y-4 px-4 pt-2 pb-3">
             {/* Model */}
             {model !== undefined && onModelChange && (
               <div className="space-y-2">
@@ -538,7 +538,7 @@ export function PlaygroundConfigPanel({
                     Temperature
                   </Label>
                   <SimpleTooltip tooltip="Controls randomness in responses. Lower values (0.0-0.3) make outputs more focused and deterministic. Higher values (0.7-1.0) increase creativity and variety.">
-                    <span className="text-xs text-muted-foreground cursor-help font-mono">
+                    <span className="text-muted-foreground cursor-help font-mono text-xs">
                       {temperature.toFixed(1)}
                     </span>
                   </SimpleTooltip>
@@ -563,7 +563,7 @@ export function PlaygroundConfigPanel({
                     Max Tokens
                   </Label>
                   <SimpleTooltip tooltip="Maximum number of tokens in the response. Higher values allow longer responses but may increase cost.">
-                    <span className="text-xs text-muted-foreground cursor-help font-mono">
+                    <span className="text-muted-foreground cursor-help font-mono text-xs">
                       {maxTokens}
                     </span>
                   </SimpleTooltip>

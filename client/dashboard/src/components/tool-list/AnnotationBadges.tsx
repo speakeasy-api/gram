@@ -38,25 +38,25 @@ export function AnnotationBadges({ tool }: { tool: Tool }) {
   if (!readOnly && !destructive && !idempotent && !openWorld) return null;
 
   return (
-    <div className="flex items-center gap-1 shrink-0">
+    <div className="flex shrink-0 items-center gap-1">
       {readOnly && (
         <SimpleTooltip tooltip="Read-only">
-          <Shield className="size-3.5 text-muted-foreground/70" />
+          <Shield className="text-muted-foreground/70 size-3.5" />
         </SimpleTooltip>
       )}
       {destructive && !readOnly && (
         <SimpleTooltip tooltip="Destructive">
-          <AlertTriangle className="size-3.5 text-muted-foreground/70" />
+          <AlertTriangle className="text-muted-foreground/70 size-3.5" />
         </SimpleTooltip>
       )}
       {idempotent && !readOnly && (
         <SimpleTooltip tooltip="Idempotent">
-          <Repeat className="size-3.5 text-muted-foreground/70" />
+          <Repeat className="text-muted-foreground/70 size-3.5" />
         </SimpleTooltip>
       )}
       {openWorld && (
         <SimpleTooltip tooltip="Open-world">
-          <Globe className="size-3.5 text-muted-foreground/70" />
+          <Globe className="text-muted-foreground/70 size-3.5" />
         </SimpleTooltip>
       )}
     </div>

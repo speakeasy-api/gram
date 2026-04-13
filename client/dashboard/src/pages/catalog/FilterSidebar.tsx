@@ -114,21 +114,21 @@ export function FilterSidebar({
         <Button
           variant="outline"
           className={cn(
-            "gap-2 h-10 bg-background border-input",
+            "bg-background border-input h-10 gap-2",
             activeCount > 0 && "border-primary text-primary",
           )}
         >
-          <Filter className="w-4 h-4" />
+          <Filter className="h-4 w-4" />
           <span>Filters</span>
           {activeCount > 0 && (
-            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground text-xs">
+            <span className="bg-primary text-primary-foreground ml-1 rounded-full px-1.5 py-0.5 text-xs">
               {activeCount}
             </span>
           )}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="end">
-        <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex items-center justify-between border-b p-4">
           <span className="font-medium">Filters</span>
           {activeCount > 0 && (
             <Button
@@ -137,15 +137,15 @@ export function FilterSidebar({
               onClick={() => {
                 onClear();
               }}
-              className="h-auto p-1 text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground h-auto p-1"
             >
-              <X className="w-4 h-4 mr-1" />
+              <X className="mr-1 h-4 w-4" />
               Clear all
             </Button>
           )}
         </div>
 
-        <div className="p-4 space-y-6 max-h-[400px] overflow-y-auto">
+        <div className="max-h-[400px] space-y-6 overflow-y-auto p-4">
           {/* Auth Type */}
           <div className="space-y-3">
             <Label className="text-sm font-medium">Auth Type</Label>
@@ -161,7 +161,7 @@ export function FilterSidebar({
                   />
                   <Label
                     htmlFor={`auth-${option.value}`}
-                    className="text-sm font-normal cursor-pointer"
+                    className="cursor-pointer text-sm font-normal"
                   >
                     {option.label}
                   </Label>
@@ -187,7 +187,7 @@ export function FilterSidebar({
                   />
                   <Label
                     htmlFor={`behavior-${option.value}`}
-                    className="text-sm font-normal cursor-pointer"
+                    className="cursor-pointer text-sm font-normal"
                   >
                     {option.label}
                   </Label>
@@ -218,7 +218,7 @@ export function FilterSidebar({
                   />
                   <Label
                     htmlFor={`popularity-${option.value}`}
-                    className="text-sm font-normal cursor-pointer"
+                    className="cursor-pointer text-sm font-normal"
                   >
                     {option.label}
                   </Label>
@@ -246,7 +246,7 @@ export function FilterSidebar({
                   />
                   <Label
                     htmlFor={`updated-${option.value}`}
-                    className="text-sm font-normal cursor-pointer"
+                    className="cursor-pointer text-sm font-normal"
                   >
                     {option.label}
                   </Label>
@@ -277,7 +277,7 @@ export function FilterSidebar({
                   />
                   <Label
                     htmlFor={`tools-${option.value}`}
-                    className="text-sm font-normal cursor-pointer"
+                    className="cursor-pointer text-sm font-normal"
                   >
                     {option.label}
                   </Label>

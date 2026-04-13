@@ -33,17 +33,17 @@ function SaveActionBar({
   onCancel,
 }: SaveActionBarProps) {
   return (
-    <div className="flex items-center justify-between pt-4 border-t">
+    <div className="flex items-center justify-between border-t pt-4">
       {saveError && (
         <div
-          className="flex items-center gap-2 text-sm text-destructive"
+          className="text-destructive flex items-center gap-2 text-sm"
           role="alert"
         >
           <AlertCircle className="h-4 w-4" aria-hidden="true" />
           {saveError}
         </div>
       )}
-      <div className="flex items-center gap-3 ml-auto">
+      <div className="ml-auto flex items-center gap-3">
         <Button
           type="button"
           variant="tertiary"
@@ -134,7 +134,7 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
             <select
               value={selectedToolset}
               onChange={(e) => setSelectedToolset(e.target.value)}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             >
               <option value="">Select a toolset</option>
               {options.map((option) => (
@@ -526,17 +526,17 @@ export default function EnvironmentPage() {
                   return (
                     <div
                       key={entry.name}
-                      className="grid grid-cols-2 gap-4 items-center mb-2"
+                      className="mb-2 grid grid-cols-2 items-center gap-4"
                     >
-                      <label className="text-sm font-medium text-foreground">
+                      <label className="text-foreground text-sm font-medium">
                         {entry.name}
                         {isNew && (
-                          <span className="ml-2 text-xs text-blue-600 font-normal">
+                          <span className="ml-2 text-xs font-normal text-blue-600">
                             (new)
                           </span>
                         )}
                       </label>
-                      <div className="flex items-center gap-2 w-full">
+                      <div className="flex w-full items-center gap-2">
                         <div className="flex-1">
                           <Input
                             value={displayValue}
@@ -555,14 +555,14 @@ export default function EnvironmentPage() {
                                 ? "text"
                                 : "password"
                             }
-                            className={`font-mono text-sm w-full ${isEdited ? "ring-1 ring-blue-500" : ""}`}
+                            className={`w-full font-mono text-sm ${isEdited ? "ring-1 ring-blue-500" : ""}`}
                             disabled={isSaving}
                           />
                         </div>
                         <Button
                           variant="tertiary"
                           size="sm"
-                          className="h-8 w-8 flex-shrink-0 self-start mt-[1px]"
+                          className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
                           onClick={() => handleToggleVisibility(entry.name)}
                           disabled={isSaving}
                           aria-label={
@@ -582,7 +582,7 @@ export default function EnvironmentPage() {
                         <Button
                           variant="tertiary"
                           size="sm"
-                          className="h-8 w-8 flex-shrink-0 self-start mt-[1px]"
+                          className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
                           onClick={() => handleRemoveVariable(entry.name)}
                           disabled={isSaving}
                           aria-label={`Remove ${entry.name}`}
@@ -598,7 +598,7 @@ export default function EnvironmentPage() {
 
                 {isAddingNew && (
                   <div className="space-y-2">
-                    <div className="grid grid-cols-2 gap-4 items-center mb-2">
+                    <div className="mb-2 grid grid-cols-2 items-center gap-4">
                       <Input
                         value={newEntryName}
                         onChange={(value) =>
@@ -610,25 +610,25 @@ export default function EnvironmentPage() {
                           }
                         }}
                         placeholder="NAME"
-                        className="font-mono text-sm w-full"
+                        className="w-full font-mono text-sm"
                         disabled={isSaving}
                         autoFocus
                       />
-                      <div className="flex items-center gap-2 w-full">
+                      <div className="flex w-full items-center gap-2">
                         <div className="flex-1">
                           <Input
                             value={newEntryValue}
                             onChange={setNewEntryValue}
                             placeholder="Value"
                             type={newEntryVisible ? "text" : "password"}
-                            className="font-mono text-sm w-full"
+                            className="w-full font-mono text-sm"
                             disabled={isSaving}
                           />
                         </div>
                         <Button
                           variant="tertiary"
                           size="sm"
-                          className="h-8 w-8 flex-shrink-0 self-start mt-[1px]"
+                          className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
                           onClick={() => setNewEntryVisible(!newEntryVisible)}
                           disabled={isSaving}
                           aria-label={
@@ -646,7 +646,7 @@ export default function EnvironmentPage() {
                         <Button
                           variant="tertiary"
                           size="sm"
-                          className="h-8 w-8 flex-shrink-0 self-start mt-[1px]"
+                          className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
                           onClick={handleCancelNewEntry}
                           disabled={isSaving}
                           aria-label="Cancel new entry"
@@ -659,7 +659,7 @@ export default function EnvironmentPage() {
                     </div>
                     {!validateEntryName(newEntryName) &&
                       newEntryName.length > 0 && (
-                        <p className="text-xs text-destructive">
+                        <p className="text-destructive text-xs">
                           Variable name must start with a letter, underscore,
                           dash, or period and contain only alphanumeric
                           characters, underscores, dashes, or periods
@@ -679,13 +679,13 @@ export default function EnvironmentPage() {
               )}
 
               {allEntries.length === 0 && !isAddingNew && (
-                <div className="text-center py-8">
-                  <p className="text-sm text-muted-foreground">
+                <div className="py-8 text-center">
+                  <p className="text-muted-foreground text-sm">
                     No environment variables defined
                   </p>
-                  <div className="mt-4 flex flex-col gap-2 items-center">
+                  <div className="mt-4 flex flex-col items-center gap-2">
                     <Button onClick={handleAddNewEntry}>
-                      <Plus className="h-4 w-4 mr-2" />
+                      <Plus className="mr-2 h-4 w-4" />
                       ADD YOUR FIRST VARIABLE
                     </Button>
                     <Button

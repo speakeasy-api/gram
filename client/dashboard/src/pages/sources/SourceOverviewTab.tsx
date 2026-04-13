@@ -70,14 +70,14 @@ export function SourceOverviewTab({
     : "Unknown";
 
   return (
-    <div className="max-w-[1270px] mx-auto px-8 py-8 w-full">
-      <div className="grid grid-cols-[280px_1fr] gap-8 items-start">
+    <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+      <div className="grid grid-cols-[280px_1fr] items-start gap-8">
         {/* Source Information */}
         <div className="flex flex-col">
           <Heading variant="h4" className="mb-3">
             Source Information
           </Heading>
-          <div className="border rounded-lg divide-y">
+          <div className="divide-y rounded-lg border">
             <OverviewRow label={isOpenAPI ? "API name" : "Function name"}>
               <Type className="font-medium">{source?.name || "—"}</Type>
             </OverviewRow>
@@ -131,12 +131,12 @@ export function SourceOverviewTab({
                   params={[activeDeploymentItem.id]}
                   className="flex items-center gap-1 hover:no-underline"
                 >
-                  <Type className="font-mono text-sm text-primary">
+                  <Type className="text-primary font-mono text-sm">
                     {activeDeploymentItem.id.slice(0, 8)}
                   </Type>
                 </routes.deployments.deployment.Link>
               ) : (
-                <Type className="text-sm text-muted-foreground">—</Type>
+                <Type className="text-muted-foreground text-sm">—</Type>
               )}
             </OverviewRow>
           </div>
@@ -144,7 +144,7 @@ export function SourceOverviewTab({
 
         {/* Source Activity */}
         <div className="flex flex-col">
-          <div className="flex items-center justify-between mb-3">
+          <div className="mb-3 flex items-center justify-between">
             <Heading variant="h4">Source Activity</Heading>
             <Type muted small>
               Last 7 days
@@ -152,13 +152,13 @@ export function SourceOverviewTab({
           </div>
 
           {isLoadingTelemetry ? (
-            <div className="rounded-lg border p-6 animate-pulse bg-muted/20 h-48" />
+            <div className="bg-muted/20 h-48 animate-pulse rounded-lg border p-6" />
           ) : sourceToolMetrics.length > 0 ? (
             <div className="space-y-4">
               {sourceTelemetrySummary && (
                 <TelemetrySummaryRow summary={sourceTelemetrySummary} />
               )}
-              <div className="border rounded-lg p-4">
+              <div className="rounded-lg border p-4">
                 <Type muted small className="mb-3 block">
                   Tool usage
                 </Type>
@@ -166,8 +166,8 @@ export function SourceOverviewTab({
               </div>
             </div>
           ) : (
-            <div className="border rounded-lg p-12 text-center flex flex-col items-center justify-center">
-              <Type muted className="block mb-1">
+            <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
+              <Type muted className="mb-1 block">
                 No invocation data yet
               </Type>
               <Type muted small>
@@ -234,7 +234,7 @@ function ToolBarList({ tools }: { tools: ToolMetric[] }) {
 
   if (barListData.length === 0) {
     return (
-      <div className="text-center text-muted-foreground py-8">
+      <div className="text-muted-foreground py-8 text-center">
         No tool data available
       </div>
     );
@@ -249,11 +249,11 @@ function ToolBarList({ tools }: { tools: ToolMetric[] }) {
 
         return (
           <div key={item.name} className="flex items-center gap-2">
-            <span className="text-sm font-medium text-right shrink-0 min-w-[3rem]">
+            <span className="min-w-[3rem] shrink-0 text-right text-sm font-medium">
               {item.value.toLocaleString()}
             </span>
-            <div className="flex-1 relative h-7">
-              <span className="absolute inset-y-0 left-2 flex items-center text-sm font-medium text-foreground truncate pr-2 z-0">
+            <div className="relative h-7 flex-1">
+              <span className="text-foreground absolute inset-y-0 left-2 z-0 flex items-center truncate pr-2 text-sm font-medium">
                 {item.name}
               </span>
               <div
@@ -261,10 +261,10 @@ function ToolBarList({ tools }: { tools: ToolMetric[] }) {
                 style={{ width: `${Math.max(widthPercent, 5)}%` }}
               />
               <div
-                className="absolute inset-y-0 left-0 overflow-hidden z-10"
+                className="absolute inset-y-0 left-0 z-10 overflow-hidden"
                 style={{ width: `${Math.max(widthPercent, 5)}%` }}
               >
-                <span className="absolute inset-y-0 left-2 flex items-center text-sm font-medium text-white truncate pr-2 whitespace-nowrap">
+                <span className="absolute inset-y-0 left-2 flex items-center truncate pr-2 text-sm font-medium whitespace-nowrap text-white">
                   {item.name}
                 </span>
               </div>

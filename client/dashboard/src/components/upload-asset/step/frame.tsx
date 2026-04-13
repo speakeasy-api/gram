@@ -25,12 +25,12 @@ export default function Frame({ children }: FrameProps) {
   return (
     <div
       className={cn(
-        "flex flex-row gap-4 p-0 flex-nowrap items-stretch justify-start trans w-full",
+        "trans flex w-full flex-row flex-nowrap items-stretch justify-start gap-4 p-0",
         step.isCurrentStep ? "opacity-100" : "opacity-50",
       )}
     >
       {indicator}
-      <div className="flex flex-col gap-4 p-0 flex-nowrap items-stretch justify-start w-full">
+      <div className="flex w-full flex-col flex-nowrap items-stretch justify-start gap-4 p-0">
         {header}
         {content}
       </div>

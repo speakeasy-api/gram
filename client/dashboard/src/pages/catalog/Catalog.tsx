@@ -156,20 +156,20 @@ export default function Catalog() {
               >
                 <Stack direction="horizontal" gap={3} align="center">
                   <div className="relative w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                     <Input
                       placeholder="Search MCP servers..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10 pr-9 h-10"
+                      className="h-10 pr-9 pl-10"
                     />
                     {searchQuery && (
                       <button
                         onClick={() => setSearchQuery("")}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 transition-colors"
                         aria-label="Clear search"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="h-4 w-4" />
                       </button>
                     )}
                   </div>
@@ -208,7 +208,7 @@ export default function Catalog() {
 
               {/* Server grid / table */}
               {isLoading ? (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                   {Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map(
                     (id) => (
                       <Skeleton key={id} className="h-[200px]" />
@@ -218,7 +218,7 @@ export default function Catalog() {
               ) : viewMode === "grid" ? (
                 <div
                   ref={setGridElement}
-                  className="grid grid-cols-1 xl:grid-cols-2 gap-6"
+                  className="grid grid-cols-1 gap-6 xl:grid-cols-2"
                 >
                   {filteredServers.map((server) => {
                     const serverKey = `${server.registryId}-${server.registrySpecifier}`;
@@ -273,11 +273,11 @@ export default function Catalog() {
               {!isLoading && hasNextPage && !searchQuery && (
                 <div
                   ref={loadMoreRef}
-                  className="flex justify-center items-center py-8"
+                  className="flex items-center justify-center py-8"
                 >
                   {isFetchingNextPage && (
                     <Stack direction="horizontal" gap={2} align="center">
-                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
                       <Type small muted>
                         Loading more...
                       </Type>
@@ -335,15 +335,15 @@ function EmptySearchResult({
   onClear: () => void;
 }) {
   return (
-    <div className="w-full flex items-center justify-center bg-background rounded-xl border py-8">
+    <div className="bg-background flex w-full items-center justify-center rounded-xl border py-8">
       <Stack
         gap={1}
-        className="w-full max-w-sm m-8"
+        className="m-8 w-full max-w-sm"
         align="center"
         justify="center"
       >
         <div className="py-6">
-          <SearchXIcon className="size-16 text-foreground" />
+          <SearchXIcon className="text-foreground size-16" />
         </div>
         <Heading variant="h5" className="font-medium">
           No matching servers

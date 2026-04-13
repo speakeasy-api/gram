@@ -32,39 +32,39 @@ export function TraceRow({
   const ToolIcon = getToolIcon(trace);
 
   return (
-    <div className="border-b border-border/50 last:border-b-0">
+    <div className="border-border/50 border-b last:border-b-0">
       {/* Parent trace row */}
       <div
-        className="flex items-center gap-3 px-8 py-2.5 cursor-pointer hover:bg-muted/50 transition-colors"
+        className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-8 py-2.5 transition-colors"
         onClick={onToggle}
       >
         {/* Timestamp */}
-        <div className="shrink-0 w-[150px] text-sm text-muted-foreground font-mono whitespace-nowrap">
+        <div className="text-muted-foreground w-[150px] shrink-0 font-mono text-sm whitespace-nowrap">
           {formatNanoTimestamp(trace.startTimeUnixNano)}
         </div>
 
         {/* Expand/collapse indicator */}
-        <div className="shrink-0 w-5 flex items-center justify-center">
+        <div className="flex w-5 shrink-0 items-center justify-center">
           {isExpanded ? (
-            <ChevronDownIcon className="size-4 text-muted-foreground" />
+            <ChevronDownIcon className="text-muted-foreground size-4" />
           ) : (
-            <ChevronRightIcon className="size-4 text-muted-foreground" />
+            <ChevronRightIcon className="text-muted-foreground size-4" />
           )}
         </div>
 
         {/* Icon + Source badge + Tool name */}
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <ToolIcon className="size-4 shrink-0" strokeWidth={1.5} />
           {sourceName && (
-            <span className="shrink-0 px-1.5 py-0.5 text-xs font-medium rounded bg-muted text-muted-foreground">
+            <span className="bg-muted text-muted-foreground shrink-0 rounded px-1.5 py-0.5 text-xs font-medium">
               {sourceName}
             </span>
           )}
-          <span className="text-sm font-mono truncate">{toolName}</span>
+          <span className="truncate font-mono text-sm">{toolName}</span>
         </div>
 
         {/* Log count */}
-        <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+        <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
           {trace.logCount} {trace.logCount === 1 ? "log" : "logs"}
         </span>
 

@@ -279,7 +279,7 @@ function ExternalMcpOAuthConnection({
     oauthMode === "custom-proxy" ? "MCP OAuth 2.1" : "OAuth";
 
   return (
-    <div className="border rounded-md p-3 bg-muted/30">
+    <div className="bg-muted/30 rounded-md border p-3">
       <Stack gap={2}>
         <Stack
           direction="horizontal"
@@ -290,10 +290,10 @@ function ExternalMcpOAuthConnection({
             {oauthVersionLabel}
           </Type>
           {statusLoading ? (
-            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+            <Loader2 className="text-muted-foreground size-4 animate-spin" />
           ) : isConnected ? (
             <Badge variant="success">
-              <CheckCircle className="size-3 mr-1" />
+              <CheckCircle className="mr-1 size-3" />
               Connected
             </Badge>
           ) : (
@@ -313,7 +313,7 @@ function ExternalMcpOAuthConnection({
             onClick={() => disconnectMutation.mutate()}
             disabled={disconnectMutation.isPending}
           >
-            <LogOut className="size-3 mr-2" />
+            <LogOut className="mr-2 size-3" />
             Disconnect
           </Button>
         ) : (
@@ -323,7 +323,7 @@ function ExternalMcpOAuthConnection({
             className="w-full"
             onClick={handleConnect}
           >
-            <ExternalLink className="size-3 mr-2" />
+            <ExternalLink className="mr-2 size-3" />
             Connect
           </Button>
         )}
@@ -437,7 +437,7 @@ export function PlaygroundAuth({
   // Show "no auth required" only if there are no env vars AND no OAuth
   if (envVars.length === 0 && !hasOAuth) {
     return (
-      <div className="text-center py-4">
+      <div className="py-4 text-center">
         <Type variant="small" className="text-muted-foreground">
           No authentication required
         </Type>
@@ -536,7 +536,7 @@ export function PlaygroundAuth({
                 }));
               }}
               placeholder={placeholder}
-              className="font-mono text-xs h-7"
+              className="h-7 font-mono text-xs"
               readOnly={!isEditable}
               disabled={!isEditable}
             />
@@ -552,7 +552,7 @@ export function PlaygroundAuth({
           disabled={editedKeys.size === 0 || playgroundEnv.isSaving}
         >
           {playgroundEnv.isSaving ? (
-            <Loader2 className="size-3 mr-2 animate-spin" />
+            <Loader2 className="mr-2 size-3 animate-spin" />
           ) : null}
           Save
         </Button>
@@ -567,7 +567,7 @@ export function PlaygroundAuth({
         <routes.mcp.details.Link
           params={[toolset.slug]}
           hash="authentication"
-          className="underline hover:text-foreground"
+          className="hover:text-foreground underline"
         >
           Configure auth
         </routes.mcp.details.Link>

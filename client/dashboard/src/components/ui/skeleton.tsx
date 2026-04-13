@@ -6,7 +6,7 @@ function Skeleton({ className, ...props }: React.ComponentProps<"span">) {
     <span
       data-slot="skeleton"
       className={cn(
-        "block bg-foreground/7 animate-pulse rounded-md",
+        "bg-foreground/7 block animate-pulse rounded-md",
         className,
       )}
       {...props}
@@ -60,7 +60,7 @@ export function SkeletonCode({ lines = 24 }: { lines?: number }) {
   const importLines = Math.floor(lines / 4);
   const codeLines = lines - importLines;
 
-  const LineNumber = () => <Skeleton className="h-5 w-6 mr-4 flex-shrink-0" />;
+  const LineNumber = () => <Skeleton className="mr-4 h-5 w-6 flex-shrink-0" />;
 
   const EmptyLine = () => <LineNumber />;
 
@@ -72,7 +72,7 @@ export function SkeletonCode({ lines = 24 }: { lines?: number }) {
   );
 
   return (
-    <div className="border rounded-lg p-4">
+    <div className="rounded-lg border p-4">
       <Stack gap={2}>
         {/* Import lines - typically shorter */}
         {Array.from({ length: importLines }).map((_, i) => (

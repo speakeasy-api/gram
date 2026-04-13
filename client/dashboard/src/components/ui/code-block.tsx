@@ -32,7 +32,7 @@ function CopyButton({ content }: { content: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="text-slate-400 hover:text-slate-200 rounded p-1 transition-colors"
+      className="rounded p-1 text-slate-400 transition-colors hover:text-slate-200"
       aria-label="Copy to clipboard"
     >
       {copied ? (
@@ -147,9 +147,9 @@ export function CodeBlock({ content, title, className }: CodeBlockProps) {
   }, [content]);
 
   return (
-    <div className={cn("w-full rounded-lg overflow-hidden", className)}>
+    <div className={cn("w-full overflow-hidden rounded-lg", className)}>
       {title && (
-        <div className="flex items-center justify-between bg-slate-900 px-4 py-2 border-b border-slate-700">
+        <div className="flex items-center justify-between border-b border-slate-700 bg-slate-900 px-4 py-2">
           <span className="text-xs font-medium text-slate-400">{title}</span>
           <CopyButton content={formattedContent} />
         </div>
@@ -192,7 +192,7 @@ export function CollapsibleCodeSection({
   }, [content]);
 
   return (
-    <div className="border-t border-border">
+    <div className="border-border border-t">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between px-4 py-2.5 text-left transition-colors"
@@ -209,7 +209,7 @@ export function CollapsibleCodeSection({
         </div>
       </button>
       {isExpanded && (
-        <div className="border-t border-border">
+        <div className="border-border border-t">
           <CodeBlock content={content} />
         </div>
       )}

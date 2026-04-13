@@ -46,9 +46,9 @@ export function TraceLogsList({
 
   if (isPending) {
     return (
-      <div className="flex items-center gap-3 px-5 py-2 text-muted-foreground bg-muted/30">
-        <div className="shrink-0 w-[150px]" />
-        <div className="shrink-0 w-5 flex justify-center">
+      <div className="text-muted-foreground bg-muted/30 flex items-center gap-3 px-5 py-2">
+        <div className="w-[150px] shrink-0" />
+        <div className="flex w-5 shrink-0 justify-center">
           <Icon name="loader-circle" className="size-4 animate-spin" />
         </div>
         <span className="text-sm">Loading spans...</span>
@@ -58,10 +58,10 @@ export function TraceLogsList({
 
   if (error) {
     return (
-      <div className="flex items-center gap-3 px-5 py-2 bg-muted/30">
-        <div className="shrink-0 w-[150px]" />
-        <div className="shrink-0 w-5" />
-        <span className="text-sm text-destructive">
+      <div className="bg-muted/30 flex items-center gap-3 px-5 py-2">
+        <div className="w-[150px] shrink-0" />
+        <div className="w-5 shrink-0" />
+        <span className="text-destructive text-sm">
           Failed to load spans: {error.message}
         </span>
       </div>
@@ -72,9 +72,9 @@ export function TraceLogsList({
 
   if (logs.length === 0) {
     return (
-      <div className="flex items-center gap-3 px-5 py-2 text-muted-foreground bg-muted/30">
-        <div className="shrink-0 w-[150px]" />
-        <div className="shrink-0 w-5" />
+      <div className="text-muted-foreground bg-muted/30 flex items-center gap-3 px-5 py-2">
+        <div className="w-[150px] shrink-0" />
+        <div className="w-5 shrink-0" />
         <span className="text-sm">No spans found for this trace</span>
       </div>
     );
@@ -114,35 +114,35 @@ function ChildLogRow({
 
   return (
     <div
-      className="flex items-center gap-3 px-5 py-2 cursor-pointer hover:bg-background transition-colors group"
+      className="hover:bg-background group flex cursor-pointer items-center gap-3 px-5 py-2 transition-colors"
       onClick={onClick}
     >
       {/* Timestamp - same width as parent for alignment, hidden if same as parent */}
-      <div className="shrink-0 w-[150px] text-sm text-muted-foreground font-mono whitespace-nowrap">
+      <div className="text-muted-foreground w-[150px] shrink-0 font-mono text-sm whitespace-nowrap">
         {showTimestamp ? formattedTimestamp : null}
       </div>
 
       {/* Tree line area - aligns with parent's chevron */}
-      <div className="shrink-0 w-5 flex justify-center relative h-6">
+      <div className="relative flex h-6 w-5 shrink-0 justify-center">
         {/* Vertical line */}
         <div
-          className={`absolute left-1/2 -translate-x-1/2 w-px bg-border ${
+          className={`bg-border absolute left-1/2 w-px -translate-x-1/2 ${
             isLast ? "-top-2 h-5" : "-top-2 -bottom-2"
           }`}
         />
         {/* Horizontal connector */}
-        <div className="absolute top-1/2 left-1/2 w-3 h-px bg-border" />
+        <div className="bg-border absolute top-1/2 left-1/2 h-px w-3" />
       </div>
 
       {/* Severity badge inline */}
       <span
-        className={`shrink-0 px-1.5 py-0.5 text-xs font-medium rounded ${getSeverityBadgeClass(log.severityText)}`}
+        className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${getSeverityBadgeClass(log.severityText)}`}
       >
         {log.severityText?.toLowerCase() || "info"}
       </span>
 
       {/* Message - takes remaining space */}
-      <span className="flex-1 min-w-0 text-sm text-muted-foreground truncate">
+      <span className="text-muted-foreground min-w-0 flex-1 truncate text-sm">
         {formatLogBody(log)}
       </span>
     </div>

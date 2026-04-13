@@ -427,9 +427,9 @@ const AppLoadingShell = () => (
   <SidebarProvider
     style={{ "--sidebar-width": "14rem" } as React.CSSProperties}
   >
-    <div className="flex flex-col h-screen w-full">
+    <div className="flex h-screen w-full flex-col">
       {/* Header */}
-      <header className="flex items-center h-14 pl-5 pr-4 border-b bg-white dark:bg-background shrink-0">
+      <header className="dark:bg-background flex h-14 shrink-0 items-center border-b bg-white pr-4 pl-5">
         <div className="flex items-center gap-3">
           <GramLogo className="w-28" />
           <span className="text-muted-foreground/50 text-xl select-none">
@@ -446,7 +446,7 @@ const AppLoadingShell = () => (
         </div>
       </header>
       {/* Body */}
-      <div className="flex flex-1 w-full overflow-hidden pt-2">
+      <div className="flex w-full flex-1 overflow-hidden pt-2">
         <Sidebar collapsible="offcanvas" variant="inset">
           <SidebarContent className="pt-2">
             {Object.entries(LOADING_NAV).map(([group, items]) => (
@@ -476,7 +476,7 @@ const AppLoadingShell = () => (
         <SidebarInset>
           <PageHeader>
             <PageHeader.Breadcrumbs />
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
           </PageHeader>
         </SidebarInset>
       </div>

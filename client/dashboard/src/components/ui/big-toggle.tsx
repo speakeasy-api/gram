@@ -34,7 +34,7 @@ export const BigToggle = ({
   };
 
   const toggle = (
-    <Stack gap={1} className="border rounded-md p-1 w-fit bg-background">
+    <Stack gap={1} className="bg-background w-fit rounded-md border p-1">
       {options.map((option) => {
         const isActive = selectedValue === option.value;
         return (

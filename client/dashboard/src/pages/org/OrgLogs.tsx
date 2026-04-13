@@ -101,7 +101,7 @@ export default function OrgLogs() {
           enabled, tool calls and traces are recorded for debugging and
           analytics.
         </Type>
-        <div className="rounded-lg border border-border bg-card p-4">
+        <div className="border-border bg-card rounded-lg border p-4">
           <Stack gap={4}>
             <Stack
               direction="horizontal"
@@ -110,14 +110,14 @@ export default function OrgLogs() {
             >
               <Stack gap={1}>
                 <Stack direction="horizontal" align="center" gap={2}>
-                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <FileText className="text-muted-foreground h-4 w-4" />
                   <Type variant="body" className="font-medium">
                     Enable Logs
                   </Type>
                 </Stack>
                 <Type
                   variant="body"
-                  className="text-muted-foreground text-sm ml-6"
+                  className="text-muted-foreground ml-6 text-sm"
                 >
                   Record tool call traces and telemetry data
                 </Type>
@@ -132,7 +132,7 @@ export default function OrgLogs() {
               )}
             </Stack>
 
-            <div className="border-t border-border" />
+            <div className="border-border border-t" />
 
             <Stack
               direction="horizontal"
@@ -141,14 +141,14 @@ export default function OrgLogs() {
             >
               <Stack gap={1}>
                 <Stack direction="horizontal" align="center" gap={2}>
-                  <Eye className="h-4 w-4 text-muted-foreground" />
+                  <Eye className="text-muted-foreground h-4 w-4" />
                   <Type variant="body" className="font-medium">
                     Record Tool I/O
                   </Type>
                 </Stack>
                 <Type
                   variant="body"
-                  className="text-muted-foreground text-sm ml-6"
+                  className="text-muted-foreground ml-6 text-sm"
                 >
                   Store tool inputs and outputs. May expose sensitive data in
                   logs.
@@ -164,7 +164,7 @@ export default function OrgLogs() {
               )}
             </Stack>
 
-            <div className="border-t border-border" />
+            <div className="border-border border-t" />
 
             <Stack
               direction="horizontal"
@@ -173,14 +173,14 @@ export default function OrgLogs() {
             >
               <Stack gap={1}>
                 <Stack direction="horizontal" align="center" gap={2}>
-                  <Monitor className="h-4 w-4 text-muted-foreground" />
+                  <Monitor className="text-muted-foreground h-4 w-4" />
                   <Type variant="body" className="font-medium">
                     Claude Code Session Capture
                   </Type>
                 </Stack>
                 <Type
                   variant="body"
-                  className="text-muted-foreground text-sm ml-6"
+                  className="text-muted-foreground ml-6 text-sm"
                 >
                   Capture user prompts and assistant responses from Claude Code
                   sessions. Sessions appear in the Agent Sessions tab.

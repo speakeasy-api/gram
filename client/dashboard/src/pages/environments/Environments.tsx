@@ -85,7 +85,7 @@ export default function Environments() {
           <Page.Section.CTA>
             <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
               <Button.LeftIcon>
-                <Plus className="w-4 h-4" />
+                <Plus className="h-4 w-4" />
               </Button.LeftIcon>
               <Button.Text>New Environment</Button.Text>
             </Button>

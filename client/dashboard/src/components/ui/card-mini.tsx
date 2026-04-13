@@ -36,13 +36,13 @@ const MiniCardComponent = ({
     <div
       data-slot="card"
       className={cn(
-        "bg-card max-w-sm max-h-fit text-card-foreground flex justify-between items-center rounded-md border px-3 py-4 group/card",
+        "bg-card text-card-foreground group/card flex max-h-fit max-w-sm items-center justify-between rounded-md border px-3 py-4",
         size === "sm" && "gap-4 py-4",
         className,
       )}
       {...props}
     >
-      <div data-slot="card-content" className={"flex flex-col gap-1.5 w-full"}>
+      <div data-slot="card-content" className={"flex w-full flex-col gap-1.5"}>
         {slots.title}
         {slots.description}
       </div>
@@ -59,7 +59,7 @@ function MiniCardTitle({
   return (
     <Type
       data-slot="card-title"
-      className={cn("leading-none font-normal text-foreground!", className)}
+      className={cn("text-foreground! leading-none font-normal", className)}
       {...props}
     />
   );
@@ -110,10 +110,10 @@ function MiniCardSkeleton() {
   return (
     <MiniCard>
       <MiniCard.Title>
-        <Skeleton className="w-[150px] h-4" />
+        <Skeleton className="h-4 w-[150px]" />
       </MiniCard.Title>
       <MiniCard.Description>
-        <Skeleton className="w-full h-4" />
+        <Skeleton className="h-4 w-full" />
       </MiniCard.Description>
     </MiniCard>
   );

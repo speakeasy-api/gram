@@ -123,22 +123,22 @@ export function FilterChips({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-sm text-muted-foreground">Active:</span>
+      <span className="text-muted-foreground text-sm">Active:</span>
       {chips.map((chip) => (
         <button
           key={chip.key}
           onClick={chip.onRemove}
-          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-secondary text-secondary-foreground text-sm hover:bg-secondary/80 transition-colors group"
+          className="bg-secondary text-secondary-foreground hover:bg-secondary/80 group inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm transition-colors"
         >
           <span>{chip.label}</span>
-          <X className="w-3 h-3 text-muted-foreground group-hover:text-foreground" />
+          <X className="text-muted-foreground group-hover:text-foreground h-3 w-3" />
         </button>
       ))}
       <Button
         variant="ghost"
         size="sm"
         onClick={onClearAll}
-        className="h-7 text-xs text-muted-foreground hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground h-7 text-xs"
       >
         Clear all
       </Button>

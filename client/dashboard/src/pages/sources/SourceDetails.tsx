@@ -240,14 +240,14 @@ export default function SourceDetails() {
       >
         <DetailHero>
           <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-3 ml-1">
+            <div className="ml-1 flex items-center gap-3">
               <Heading variant="h1">{source?.name || sourceSlug}</Heading>
               <Badge variant="neutral">
                 <Badge.Text>{sourceType}</Badge.Text>
               </Badge>
             </div>
-            <div className="flex items-center gap-2 ml-1">
-              <Type className="max-w-2xl truncate text-muted-foreground">
+            <div className="ml-1 flex items-center gap-2">
+              <Type className="text-muted-foreground max-w-2xl truncate">
                 {source?.slug}
               </Type>
             </div>
@@ -258,11 +258,11 @@ export default function SourceDetails() {
         <Tabs
           value={activeTab}
           onValueChange={handleTabChange}
-          className="w-full flex-1 flex flex-col min-h-0"
+          className="flex min-h-0 w-full flex-1 flex-col"
         >
-          <div className="border-b shrink-0">
-            <div className="max-w-[1270px] mx-auto px-8">
-              <TabsList className="h-auto bg-transparent p-0 gap-6 rounded-none">
+          <div className="shrink-0 border-b">
+            <div className="mx-auto max-w-[1270px] px-8">
+              <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
                 <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
                 <PageTabsTrigger value="tools">
                   Tools {relatedTools.length > 0 && `(${relatedTools.length})`}
@@ -299,7 +299,7 @@ export default function SourceDetails() {
 
           <TabsContent
             value="tools"
-            className="mt-0 flex-1 flex flex-col min-h-0"
+            className="mt-0 flex min-h-0 flex-1 flex-col"
           >
             <SourceToolsTab
               relatedTools={relatedTools}
@@ -319,7 +319,7 @@ export default function SourceDetails() {
                   <SkeletonCode lines={20} />
                 </div>
               ) : specError ? (
-                <div className="text-center py-8">
+                <div className="py-8 text-center">
                   <Type className="text-destructive">
                     {specError instanceof Error
                       ? specError.message
@@ -342,14 +342,14 @@ export default function SourceDetails() {
                   wordWrap="on"
                 />
               ) : (
-                <Type className="text-muted-foreground text-center py-8">
+                <Type className="text-muted-foreground py-8 text-center">
                   No spec content available
                 </Type>
               )}
             </TabsContent>
           )}
 
-          <TabsContent value="deployments" className="mt-0 flex-1 min-h-0">
+          <TabsContent value="deployments" className="mt-0 min-h-0 flex-1">
             <Suspense
               fallback={<div className="p-8">Loading deployments...</div>}
             >

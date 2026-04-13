@@ -100,7 +100,7 @@ export const SdkContent = ({
   );
 
   let heading = (
-    <div className="flex justify-between items-end gap-4">
+    <div className="flex items-end justify-between gap-4">
       <Type variant="subheading">
         Use Gram toolsets to build agentic workflows in many popular frameworks
       </Type>
@@ -113,7 +113,7 @@ export const SdkContent = ({
       <Stack gap={1}>
         <Type variant="subheading">
           What should the agent do?{" "}
-          <span className="text-muted-foreground italic text-sm">
+          <span className="text-muted-foreground text-sm italic">
             Chat history will also be included in the prompt.
           </span>
         </Type>

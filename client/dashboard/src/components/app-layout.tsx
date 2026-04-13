@@ -62,14 +62,14 @@ const ImpersonationBanner = () => {
   const client = useSdkClient();
 
   return (
-    <div className="flex items-center justify-center gap-3 bg-red-600 px-4 py-2 text-white text-sm">
+    <div className="flex items-center justify-center gap-3 bg-red-600 px-4 py-2 text-sm text-white">
       <ShieldAlert className="h-4 w-4 shrink-0" />
-      <span className="font-bold font-mono">
+      <span className="font-mono font-bold">
         Impersonating {organization.slug}
       </span>
       <button
         type="button"
-        className="ml-2 rounded bg-white/20 px-2 py-0.5 text-xs font-medium hover:bg-white/30 transition-colors"
+        className="ml-2 rounded bg-white/20 px-2 py-0.5 text-xs font-medium transition-colors hover:bg-white/30"
         onClick={async () => {
           document.cookie = "gram_admin_override=; path=/; max-age=0;";
           await client.auth.logout();
@@ -88,16 +88,16 @@ const AppLayoutContent = ({
   isImpersonating: boolean;
 }) => {
   return (
-    <div className="flex flex-col h-screen w-full">
+    <div className="flex h-screen w-full flex-col">
       {isImpersonating && <ImpersonationBanner />}
       <TopHeader />
-      <div className="flex flex-1 w-full overflow-hidden pt-2">
+      <div className="flex w-full flex-1 overflow-hidden pt-2">
         <AppSidebar variant="inset" />
         <SidebarInset>
           <Outlet />
           <Modal
             closable
-            className="rounded-sm min-w-auto p-0 h-full 2xl:w-2/3 w-9/12 max-w-[1100px] 2xl:max-w-[1000px] max-h-[450px] min-h-auto"
+            className="h-full max-h-[450px] min-h-auto w-9/12 max-w-[1100px] min-w-auto rounded-sm p-0 2xl:w-2/3 2xl:max-w-[1000px]"
             layout="custom"
           />
         </SidebarInset>
@@ -121,10 +121,10 @@ export const OrgLayout = () => {
       }
     >
       <ModalProvider>
-        <div className="flex flex-col h-screen w-full">
+        <div className="flex h-screen w-full flex-col">
           {isImpersonating && <ImpersonationBanner />}
           <TopHeader />
-          <div className="flex flex-1 w-full overflow-hidden pt-2">
+          <div className="flex w-full flex-1 overflow-hidden pt-2">
             <OrgSidebar variant="inset" />
             <SidebarInset>
               <Outlet />

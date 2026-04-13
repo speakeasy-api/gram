@@ -29,10 +29,10 @@ function StepNumber({
   return (
     <div
       className={cn(
-        "flex items-center justify-center w-7 h-7 rounded-full bg-accent mt-1",
+        "bg-accent mt-1 flex h-7 w-7 items-center justify-center rounded-full",
         active && "bg-primary text-primary-foreground",
         completed &&
-          "dark:bg-emerald-900 dark:text-emerald-300 bg-emerald-300 text-emerald-900",
+          "bg-emerald-300 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-300",
         failed && "bg-destructive text-destructive-foreground",
       )}
     >
@@ -111,8 +111,8 @@ export function Step({
       gap={4}
       direction={"horizontal"}
       className={cn(
-        "trans opacity-50 mb-4 w-full",
-        isActive && "opacity-100 mb-8",
+        "trans mb-4 w-full opacity-50",
+        isActive && "mb-8 opacity-100",
       )}
     >
       <StepNumber
