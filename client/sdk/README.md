@@ -193,6 +193,27 @@ run();
 * [create](docs/sdks/chatsessions/README.md#create) - create chatSessions
 * [revoke](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 
+### [Corpus](docs/sdks/corpus/README.md)
+
+* [addComment](docs/sdks/corpus/README.md#addcomment) - addComment corpus
+* [createAnnotation](docs/sdks/corpus/README.md#createannotation) - createAnnotation corpus
+* [createDraft](docs/sdks/corpus/README.md#createdraft) - createDraft corpus
+* [deleteAnnotation](docs/sdks/corpus/README.md#deleteannotation) - deleteAnnotation corpus
+* [deleteDraft](docs/sdks/corpus/README.md#deletedraft) - deleteDraft corpus
+* [getAutoPublishConfig](docs/sdks/corpus/README.md#getautopublishconfig) - getAutoPublishConfig corpus
+* [getDraft](docs/sdks/corpus/README.md#getdraft) - getDraft corpus
+* [getEnrichments](docs/sdks/corpus/README.md#getenrichments) - getEnrichments corpus
+* [getFeedback](docs/sdks/corpus/README.md#getfeedback) - getFeedback corpus
+* [listAnnotations](docs/sdks/corpus/README.md#listannotations) - listAnnotations corpus
+* [listComments](docs/sdks/corpus/README.md#listcomments) - listComments corpus
+* [listDrafts](docs/sdks/corpus/README.md#listdrafts) - listDrafts corpus
+* [publishDrafts](docs/sdks/corpus/README.md#publishdrafts) - publishDrafts corpus
+* [corpusSearchLogs](docs/sdks/corpus/README.md#corpussearchlogs) - searchLogs corpus
+* [corpusSearchStats](docs/sdks/corpus/README.md#corpussearchstats) - searchStats corpus
+* [setAutoPublishConfig](docs/sdks/corpus/README.md#setautopublishconfig) - setAutoPublishConfig corpus
+* [updateDraft](docs/sdks/corpus/README.md#updatedraft) - updateDraft corpus
+* [voteFeedback](docs/sdks/corpus/README.md#votefeedback) - voteFeedback corpus
+
 ### [Deployments](docs/sdks/deployments/README.md)
 
 * [active](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
@@ -424,6 +445,24 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`chatSessionsCreate`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`chatSessionsRevoke`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 - [`chatSubmitFeedback`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
+- [`corpusAddComment`](docs/sdks/corpus/README.md#addcomment) - addComment corpus
+- [`corpusCorpusSearchLogs`](docs/sdks/corpus/README.md#corpussearchlogs) - searchLogs corpus
+- [`corpusCorpusSearchStats`](docs/sdks/corpus/README.md#corpussearchstats) - searchStats corpus
+- [`corpusCreateAnnotation`](docs/sdks/corpus/README.md#createannotation) - createAnnotation corpus
+- [`corpusCreateDraft`](docs/sdks/corpus/README.md#createdraft) - createDraft corpus
+- [`corpusDeleteAnnotation`](docs/sdks/corpus/README.md#deleteannotation) - deleteAnnotation corpus
+- [`corpusDeleteDraft`](docs/sdks/corpus/README.md#deletedraft) - deleteDraft corpus
+- [`corpusGetAutoPublishConfig`](docs/sdks/corpus/README.md#getautopublishconfig) - getAutoPublishConfig corpus
+- [`corpusGetDraft`](docs/sdks/corpus/README.md#getdraft) - getDraft corpus
+- [`corpusGetEnrichments`](docs/sdks/corpus/README.md#getenrichments) - getEnrichments corpus
+- [`corpusGetFeedback`](docs/sdks/corpus/README.md#getfeedback) - getFeedback corpus
+- [`corpusListAnnotations`](docs/sdks/corpus/README.md#listannotations) - listAnnotations corpus
+- [`corpusListComments`](docs/sdks/corpus/README.md#listcomments) - listComments corpus
+- [`corpusListDrafts`](docs/sdks/corpus/README.md#listdrafts) - listDrafts corpus
+- [`corpusPublishDrafts`](docs/sdks/corpus/README.md#publishdrafts) - publishDrafts corpus
+- [`corpusSetAutoPublishConfig`](docs/sdks/corpus/README.md#setautopublishconfig) - setAutoPublishConfig corpus
+- [`corpusUpdateDraft`](docs/sdks/corpus/README.md#updatedraft) - updateDraft corpus
+- [`corpusVoteFeedback`](docs/sdks/corpus/README.md#votefeedback) - voteFeedback corpus
 - [`deploymentsActive`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`deploymentsCreate`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`deploymentsEvolveDeployment`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
@@ -572,6 +611,24 @@ To learn about this feature and how to get started, check
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`useConfigureSlackAppMutation`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
+- [`useCorpusAddCommentMutation`](docs/sdks/corpus/README.md#addcomment) - addComment corpus
+- [`useCorpusCorpusSearchLogsMutation`](docs/sdks/corpus/README.md#corpussearchlogs) - searchLogs corpus
+- [`useCorpusCorpusSearchStatsMutation`](docs/sdks/corpus/README.md#corpussearchstats) - searchStats corpus
+- [`useCorpusCreateAnnotationMutation`](docs/sdks/corpus/README.md#createannotation) - createAnnotation corpus
+- [`useCorpusCreateDraftMutation`](docs/sdks/corpus/README.md#createdraft) - createDraft corpus
+- [`useCorpusDeleteAnnotationMutation`](docs/sdks/corpus/README.md#deleteannotation) - deleteAnnotation corpus
+- [`useCorpusDeleteDraftMutation`](docs/sdks/corpus/README.md#deletedraft) - deleteDraft corpus
+- [`useCorpusGetAutoPublishConfigMutation`](docs/sdks/corpus/README.md#getautopublishconfig) - getAutoPublishConfig corpus
+- [`useCorpusGetDraftMutation`](docs/sdks/corpus/README.md#getdraft) - getDraft corpus
+- [`useCorpusGetEnrichmentsMutation`](docs/sdks/corpus/README.md#getenrichments) - getEnrichments corpus
+- [`useCorpusGetFeedbackMutation`](docs/sdks/corpus/README.md#getfeedback) - getFeedback corpus
+- [`useCorpusListAnnotationsMutation`](docs/sdks/corpus/README.md#listannotations) - listAnnotations corpus
+- [`useCorpusListCommentsMutation`](docs/sdks/corpus/README.md#listcomments) - listComments corpus
+- [`useCorpusListDraftsMutation`](docs/sdks/corpus/README.md#listdrafts) - listDrafts corpus
+- [`useCorpusPublishDraftsMutation`](docs/sdks/corpus/README.md#publishdrafts) - publishDrafts corpus
+- [`useCorpusSetAutoPublishConfigMutation`](docs/sdks/corpus/README.md#setautopublishconfig) - setAutoPublishConfig corpus
+- [`useCorpusUpdateDraftMutation`](docs/sdks/corpus/README.md#updatedraft) - updateDraft corpus
+- [`useCorpusVoteFeedbackMutation`](docs/sdks/corpus/README.md#votefeedback) - voteFeedback corpus
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage

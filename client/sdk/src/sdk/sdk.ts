@@ -10,6 +10,7 @@ import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
+import { Corpus } from "./corpus.js";
 import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
@@ -62,6 +63,11 @@ export class Gram extends ClientSDK {
   private _chatSessions?: ChatSessions;
   get chatSessions(): ChatSessions {
     return (this._chatSessions ??= new ChatSessions(this._options));
+  }
+
+  private _corpus?: Corpus;
+  get corpus(): Corpus {
+    return (this._corpus ??= new Corpus(this._options));
   }
 
   private _deployments?: Deployments;
