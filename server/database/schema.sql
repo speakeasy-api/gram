@@ -1634,3 +1634,56 @@ ON audit_logs (organization_id, seq DESC);
 
 CREATE INDEX IF NOT EXISTS audit_logs_organization_id_project_id_seq_idx
 ON audit_logs (organization_id, project_id, seq DESC);
+
+-- Remote MCP servers are upstream MCP endpoints that Gram proxies requests to.
+-- See https://modelcontextprotocol.io/registry/remote-servers
+CREATE TABLE IF NOT EXISTS remote_mcp_servers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  transport_type TEXT NOT NULL CHECK (transport_type <> ''),
+  url TEXT NOT NULL CHECK (url <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_mcp_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS remote_mcp_servers_project_id_idx
+ON remote_mcp_servers (project_id)
+WHERE deleted IS FALSE;
+
+-- Headers sent to a remote MCP server when proxying requests. Either value
+-- (a static/system-defined value) or value_from_request_header (pass-through
+-- from the incoming client request) is set, never both.
+-- See https://modelcontextprotocol.io/registry/remote-servers#http-headers
+CREATE TABLE IF NOT EXISTS remote_mcp_server_headers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  remote_mcp_server_id uuid NOT NULL,
+  name TEXT NOT NULL CHECK (name <> ''),
+  description TEXT,
+  is_required BOOLEAN NOT NULL DEFAULT FALSE,
+  is_secret BOOLEAN NOT NULL DEFAULT FALSE,
+  value TEXT,
+  value_from_request_header TEXT CHECK (value_from_request_header IS NULL OR value_from_request_header <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_mcp_server_headers_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_mcp_server_headers_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers (id) ON DELETE CASCADE,
+  CONSTRAINT remote_mcp_server_headers_value_source_check CHECK ((value IS NULL) != (value_from_request_header IS NULL))
+);
+
+CREATE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_idx
+ON remote_mcp_server_headers (remote_mcp_server_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_name_key
+ON remote_mcp_server_headers (remote_mcp_server_id, name)
+WHERE deleted IS FALSE;
