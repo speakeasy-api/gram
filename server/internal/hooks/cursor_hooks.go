@@ -254,6 +254,11 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		}
 	}
 
+	skillAttrs := s.extractSkillTelemetryAttributes(ctx, payload.AdditionalData)
+	for key, value := range skillAttrs {
+		attrs[key] = value
+	}
+
 	return attrs
 }
 

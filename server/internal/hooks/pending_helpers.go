@@ -151,6 +151,11 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		}
 	}
 
+	skillAttrs := s.extractSkillTelemetryAttributes(ctx, payload.AdditionalData)
+	for key, value := range skillAttrs {
+		attrs[key] = value
+	}
+
 	return attrs
 }
 
