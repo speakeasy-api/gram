@@ -321,7 +321,7 @@ export default function Team() {
   ];
 
   return (
-    <RequireScope scope="org:read" level="page">
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
       <Page>
         <Page.Header>
           <Page.Header.Breadcrumbs />

@@ -136,7 +136,7 @@ export default function OrgDomains() {
   }, [domain?.isUpdating, domainRefetch]);
 
   return (
-    <RequireScope scope="org:read" level="page">
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
       <Page>
         <Page.Header>
           <Page.Header.Title>Custom Domain</Page.Header.Title>
@@ -267,17 +267,21 @@ export default function OrgDomains() {
                   >
                     Cancel
                   </Button>
-                  <Button
-                    variant="destructive-primary"
-                    onClick={() =>
-                      deleteDomainMutation.mutate({
-                        security: { sessionHeaderGramSession: "" },
-                      })
-                    }
-                    disabled={deleteDomainMutation.isPending}
-                  >
-                    {deleteDomainMutation.isPending ? "Removing..." : "Remove"}
-                  </Button>
+                  <RequireScope scope="org:admin" level="component">
+                    <Button
+                      variant="destructive-primary"
+                      onClick={() =>
+                        deleteDomainMutation.mutate({
+                          security: { sessionHeaderGramSession: "" },
+                        })
+                      }
+                      disabled={deleteDomainMutation.isPending}
+                    >
+                      {deleteDomainMutation.isPending
+                        ? "Removing..."
+                        : "Remove"}
+                    </Button>
+                  </RequireScope>
                 </div>
               </div>
             </Dialog.Content>
@@ -378,20 +382,22 @@ export default function OrgDomains() {
                   </div>
                 </div>
                 <div className="flex justify-end mt-4">
-                  <Button
-                    onClick={handleRegisterDomain}
-                    disabled={
-                      !domainInput.trim() ||
-                      !!domainError ||
-                      registerDomainMutation.isPending
-                    }
-                  >
-                    {registerDomainMutation.isPending
-                      ? "Registering..."
-                      : domain?.domain
-                        ? "Reverify"
-                        : "Register"}
-                  </Button>
+                  <RequireScope scope="org:admin" level="component">
+                    <Button
+                      onClick={handleRegisterDomain}
+                      disabled={
+                        !domainInput.trim() ||
+                        !!domainError ||
+                        registerDomainMutation.isPending
+                      }
+                    >
+                      {registerDomainMutation.isPending
+                        ? "Registering..."
+                        : domain?.domain
+                          ? "Reverify"
+                          : "Register"}
+                    </Button>
+                  </RequireScope>
                 </div>
               </div>
             </Dialog.Content>

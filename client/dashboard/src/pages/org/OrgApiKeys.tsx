@@ -168,7 +168,7 @@ export default function OrgApiKeys() {
   ];
 
   return (
-    <RequireScope scope="org:admin" level="page">
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
       <Page>
         <Page.Header>
           <Page.Header.Title>API Keys</Page.Header.Title>
@@ -194,9 +194,11 @@ export default function OrgApiKeys() {
               placeholder="Search by key name"
               className="w-64"
             />
-            <Button onClick={() => setIsCreateDialogOpen(true)}>
-              New API Key
-            </Button>
+            <RequireScope scope="org:admin" level="component">
+              <Button onClick={() => setIsCreateDialogOpen(true)}>
+                New API Key
+              </Button>
+            </RequireScope>
           </Stack>
           <Table
             columns={apiKeyColumns}
@@ -206,7 +208,7 @@ export default function OrgApiKeys() {
             noResultsMessage={
               <Stack
                 gap={2}
-                className="h-full p-4 bg-background"
+                className="h-full p-4 gap-4 py-6 bg-background"
                 align="center"
                 justify="center"
               >
@@ -214,16 +216,18 @@ export default function OrgApiKeys() {
                   {apiKeySearch ? "No matching API keys" : "No API keys yet"}
                 </Type>
                 {!apiKeySearch && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => setIsCreateDialogOpen(true)}
-                  >
-                    <Button.LeftIcon>
-                      <Icon name="key-round" className="h-4 w-4" />
-                    </Button.LeftIcon>
-                    <Button.Text>Create Key</Button.Text>
-                  </Button>
+                  <RequireScope scope="org:admin" level="component">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setIsCreateDialogOpen(true)}
+                    >
+                      <Button.LeftIcon>
+                        <Icon name="key-round" className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Create Key</Button.Text>
+                    </Button>
+                  </RequireScope>
                 )}
               </Stack>
             }

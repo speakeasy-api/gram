@@ -33,7 +33,7 @@ export default function OrgHome() {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <RequireScope scope="build:read" level="page">
+    <RequireScope scope={["build:read", "org:admin"]} level="page">
       <Page>
         <Page.Header>
           <Page.Header.Title>Home</Page.Header.Title>
