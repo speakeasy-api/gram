@@ -42,38 +42,15 @@ func (s *Service) extractSkillTelemetryAttributes(ctx context.Context, additiona
 			continue
 		}
 
-		fields := skillTelemetryFields{
-			Name:             stringValue(skillMap["name"]),
-			Scope:            stringValue(skillMap["scope"]),
-			DiscoveryRoot:    stringValue(skillMap["discovery_root"]),
-			SourceType:       stringValue(skillMap["source_type"]),
-			ID:               stringValue(skillMap["skill_id"]),
-			VersionID:        stringValue(skillMap["skill_version_id"]),
-			ResolutionStatus: stringValue(skillMap["resolution_status"]),
-		}
-
+		fields := skillTelemetryFields{}
 		attrs := map[attr.Key]any{}
-		if fields.Name != "" {
-			attrs[attr.SkillNameKey] = fields.Name
-		}
-		if fields.Scope != "" {
-			attrs[attr.SkillScopeKey] = fields.Scope
-		}
-		if fields.DiscoveryRoot != "" {
-			attrs[attr.SkillDiscoveryRootKey] = fields.DiscoveryRoot
-		}
-		if fields.SourceType != "" {
-			attrs[attr.SkillSourceTypeKey] = fields.SourceType
-		}
-		if fields.ID != "" {
-			attrs[attr.SkillIDKey] = fields.ID
-		}
-		if fields.VersionID != "" {
-			attrs[attr.SkillVersionIDKey] = fields.VersionID
-		}
-		if fields.ResolutionStatus != "" {
-			attrs[attr.SkillResolutionStatusKey] = fields.ResolutionStatus
-		}
+		setSkillFieldAndAttr(skillMap, "name", attr.SkillNameKey, &fields.Name, attrs)
+		setSkillFieldAndAttr(skillMap, "scope", attr.SkillScopeKey, &fields.Scope, attrs)
+		setSkillFieldAndAttr(skillMap, "discovery_root", attr.SkillDiscoveryRootKey, &fields.DiscoveryRoot, attrs)
+		setSkillFieldAndAttr(skillMap, "source_type", attr.SkillSourceTypeKey, &fields.SourceType, attrs)
+		setSkillFieldAndAttr(skillMap, "skill_id", attr.SkillIDKey, &fields.ID, attrs)
+		setSkillFieldAndAttr(skillMap, "skill_version_id", attr.SkillVersionIDKey, &fields.VersionID, attrs)
+		setSkillFieldAndAttr(skillMap, "resolution_status", attr.SkillResolutionStatusKey, &fields.ResolutionStatus, attrs)
 
 		if len(attrs) == 0 {
 			continue
@@ -85,11 +62,12 @@ func (s *Service) extractSkillTelemetryAttributes(ctx context.Context, additiona
 	return nil
 }
 
-func stringValue(v any) string {
-	s, ok := v.(string)
-	if !ok {
-		return ""
+func setSkillFieldAndAttr(raw map[string]any, sourceKey string, attrKey attr.Key, field *string, attrs map[attr.Key]any) {
+	value, ok := raw[sourceKey].(string)
+	if !ok || value == "" {
+		return
 	}
 
-	return s
+	*field = value
+	attrs[attrKey] = value
 }
