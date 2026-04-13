@@ -249,7 +249,7 @@ export default function Plugins() {
                 Cancel
               </Button>
               <Button
-                variant="destructive"
+                variant="destructive-primary"
                 onClick={handleDelete}
                 disabled={deleteMutation.isPending}
               >
