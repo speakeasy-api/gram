@@ -50,7 +50,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
-	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -613,12 +612,14 @@ func newTelemetryLogger(
 	chDB clickhouse.Conn,
 	logsEnabled telemetry.FeatureChecker,
 	toolIOLogsEnabled telemetry.FeatureChecker,
-) (*tm.Logger, func(context.Context) error) {
+) (*telemetry.Logger, func(context.Context) error) {
+	// #nosec G118 -- this context must be tied to the lifetime of the
+	// application and not cancelled coming out of this function.
 	shutdownCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	shutdown := func(context.Context) error {
 		cancel()
 		return nil
 	}
 
-	return tm.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled), shutdown
+	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled), shutdown
 }
