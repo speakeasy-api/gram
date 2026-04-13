@@ -63,6 +63,7 @@ SET
   , updated_at = clock_timestamp()
 WHERE project_id = @project_id
   AND id = @id
+  AND deleted IS FALSE
 RETURNING *;
 
 -- name: ArchiveSkill :one
@@ -82,6 +83,7 @@ WITH skill_lookup AS (
   FROM skills
   WHERE skills.id = @skill_id
     AND skills.project_id = @project_id
+    AND skills.deleted IS FALSE
 )
 INSERT INTO skill_versions (
     skill_id
@@ -154,6 +156,7 @@ SET
   , updated_at = clock_timestamp()
 WHERE skills.project_id = @project_id
   AND skills.id = @id
+  AND skills.deleted IS FALSE
   AND EXISTS (
     SELECT 1
     FROM skill_versions sv
