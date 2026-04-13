@@ -9,6 +9,23 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+/**
+ * The scope slug this grant applies to.
+ */
+export const ListRoleGrantScope = {
+  OrgRead: "org:read",
+  OrgAdmin: "org:admin",
+  BuildRead: "build:read",
+  BuildWrite: "build:write",
+  McpRead: "mcp:read",
+  McpWrite: "mcp:write",
+  McpConnect: "mcp:connect",
+} as const;
+/**
+ * The scope slug this grant applies to.
+ */
+export type ListRoleGrantScope = ClosedEnum<typeof ListRoleGrantScope>;
+
 export const SubScopes = {
   OrgRead: "org:read",
   OrgAdmin: "org:admin",
@@ -24,16 +41,21 @@ export type ListRoleGrant = {
   /**
    * Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
    */
-  resources: Array<string>;
+  resources?: Array<string> | undefined;
   /**
    * The scope slug this grant applies to.
    */
-  scope: string;
+  scope: ListRoleGrantScope;
   /**
    * The inherited scopes the primary scope grants.
    */
-  subScopes: Array<SubScopes>;
+  subScopes?: Array<SubScopes> | undefined;
 };
+
+/** @internal */
+export const ListRoleGrantScope$inboundSchema: z.ZodMiniEnum<
+  typeof ListRoleGrantScope
+> = z.enum(ListRoleGrantScope);
 
 /** @internal */
 export const SubScopes$inboundSchema: z.ZodMiniEnum<typeof SubScopes> = z.enum(
@@ -46,9 +68,9 @@ export const ListRoleGrant$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    resources: z.array(z.string()),
-    scope: z.string(),
-    sub_scopes: z.array(SubScopes$inboundSchema),
+    resources: z.optional(z.array(z.string())),
+    scope: ListRoleGrantScope$inboundSchema,
+    sub_scopes: z.optional(z.array(SubScopes$inboundSchema)),
   }),
   z.transform((v) => {
     return remap$(v, {
