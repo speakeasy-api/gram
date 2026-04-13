@@ -136,10 +136,6 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 		return nil, oops.E(oops.CodeBadRequest, nil, "content sha256 mismatch")
 	}
 
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("seek temp file: %w", err), "error buffering skill artifact")
-	}
-
 	existing, err := s.findExistingAsset(ctx, *authCtx.ProjectID, contentSHA)
 	if err != nil {
 		return nil, err

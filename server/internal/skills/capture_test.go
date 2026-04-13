@@ -104,6 +104,48 @@ func TestService_Capture_UnsupportedContentType(t *testing.T) {
 	require.Equal(t, oops.CodeUnsupportedMedia, oopsErr.Code)
 }
 
+func TestService_Capture_ZeroContentLength(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestSkillsService(t)
+
+	content := []byte("PK\x03\x04skill-zip-content-zero-length")
+	sha := sha256.Sum256(content)
+	expectedSHA := hex.EncodeToString(sha[:])
+
+	_, err := ti.service.Capture(
+		ctx,
+		newCapturePayload("application/zip", 0, expectedSHA),
+		io.NopCloser(bytes.NewReader(content)),
+	)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "content length must be > 0")
+}
+
+func TestService_Capture_ContentLengthExceedsLimit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestSkillsService(t)
+
+	content := []byte("PK\x03\x04skill-zip-content-size-limit")
+	sha := sha256.Sum256(content)
+	expectedSHA := hex.EncodeToString(sha[:])
+
+	_, err := ti.service.Capture(
+		ctx,
+		newCapturePayload("application/zip", 10*1024*1024+1, expectedSHA),
+		io.NopCloser(bytes.NewReader(content)),
+	)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "content length exceeds 10 MiB limit")
+}
+
 func TestService_Capture_ContentSHA256Mismatch(t *testing.T) {
 	t.Parallel()
 
