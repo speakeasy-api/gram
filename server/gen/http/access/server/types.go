@@ -1833,10 +1833,10 @@ type ListRoleGrantResponseBody struct {
 	// The scope slug this grant applies to.
 	Scope string `form:"scope" json:"scope" xml:"scope"`
 	// The inherited scopes the primary scope grants.
-	SubScopes []string `form:"sub_scopes" json:"sub_scopes" xml:"sub_scopes"`
+	SubScopes []string `form:"sub_scopes,omitempty" json:"sub_scopes,omitempty" xml:"sub_scopes,omitempty"`
 	// Resource allowlist. Null means unrestricted access. An array means only the
 	// listed resource IDs.
-	Resources []string `form:"resources" json:"resources" xml:"resources"`
+	Resources []string `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 }
 
 // RoleGrantRequestBody is used to define fields on request body types.

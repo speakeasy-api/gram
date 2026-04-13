@@ -2235,13 +2235,17 @@ func unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(v *ListRoleGrantRes
 	res := &access.ListRoleGrant{
 		Scope: *v.Scope,
 	}
-	res.SubScopes = make([]string, len(v.SubScopes))
-	for i, val := range v.SubScopes {
-		res.SubScopes[i] = val
+	if v.SubScopes != nil {
+		res.SubScopes = make([]string, len(v.SubScopes))
+		for i, val := range v.SubScopes {
+			res.SubScopes[i] = val
+		}
 	}
-	res.Resources = make([]string, len(v.Resources))
-	for i, val := range v.Resources {
-		res.Resources[i] = val
+	if v.Resources != nil {
+		res.Resources = make([]string, len(v.Resources))
+		for i, val := range v.Resources {
+			res.Resources[i] = val
+		}
 	}
 
 	return res

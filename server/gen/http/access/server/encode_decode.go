@@ -2038,16 +2038,12 @@ func marshalAccessListRoleGrantToListRoleGrantResponseBody(v *access.ListRoleGra
 		for i, val := range v.SubScopes {
 			res.SubScopes[i] = val
 		}
-	} else {
-		res.SubScopes = []string{}
 	}
 	if v.Resources != nil {
 		res.Resources = make([]string, len(v.Resources))
 		for i, val := range v.Resources {
 			res.Resources[i] = val
 		}
-	} else {
-		res.Resources = []string{}
 	}
 
 	return res

@@ -5906,11 +5906,10 @@ func ValidateListRoleGrantResponseBody(body *ListRoleGrantResponseBody) (err err
 	if body.Scope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
-	if body.SubScopes == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("sub_scopes", "body"))
-	}
-	if body.Resources == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resources", "body"))
+	if body.Scope != nil {
+		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "build:read" || *body.Scope == "build:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect"}))
+		}
 	}
 	for _, e := range body.SubScopes {
 		if !(e == "org:read" || e == "org:admin" || e == "build:read" || e == "build:write" || e == "mcp:read" || e == "mcp:write" || e == "mcp:connect") {

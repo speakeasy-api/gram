@@ -270,9 +270,12 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 // The response for the ListUserGrants endpoint. This endpoint is special in that it returns the inherited scopes the primary scope grants.
 var ListRoleGrantModel = Type("ListRoleGrant", func() {
-	Required("scope", "sub_scopes", "resources")
+	Required("scope")
 
-	Attribute("scope", String, "The scope slug this grant applies to.")
+	Attribute("scope", String, func() {
+		Description("The scope slug this grant applies to.")
+		Enum("org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect")
+	})
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
