@@ -1,5 +1,6 @@
 import path from "node:path";
 import crypto from "node:crypto";
+import { TextDecoder } from "node:util";
 import { readFile, readdir, stat } from "node:fs/promises";
 
 import { BUILTIN_IGNORE_GLOBS, CAPTURE_LIMITS } from "./constants.mjs";
@@ -31,7 +32,11 @@ function parseGitignoreLines(content) {
 
 function matchesPattern(relPath, pattern) {
   const p = pattern.startsWith("/") ? pattern.slice(1) : pattern;
-  return path.matchesGlob(relPath, p) || path.matchesGlob(relPath, `${p}/**`);
+  return (
+    path.matchesGlob(relPath, p) ||
+    path.matchesGlob(relPath, `${p}/**`) ||
+    path.matchesGlob(path.posix.basename(relPath), p)
+  );
 }
 
 function shouldIgnoreByPatterns(relPath, patterns) {
@@ -53,6 +58,20 @@ async function readGitignorePatterns(skillDir) {
   }
 }
 
+function byteStableCompare(a, b) {
+  return Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
+}
+
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+
+function decodeUtf8Strict(buffer) {
+  try {
+    return utf8Decoder.decode(buffer);
+  } catch {
+    return null;
+  }
+}
+
 async function collectCanonicalFiles(skillDir, limits = CAPTURE_LIMITS) {
   const gitignorePatterns = await readGitignorePatterns(skillDir);
 
@@ -61,7 +80,7 @@ async function collectCanonicalFiles(skillDir, limits = CAPTURE_LIMITS) {
 
   async function walk(dir) {
     const entries = await readdir(dir, { withFileTypes: true });
-    entries.sort((a, b) => a.name.localeCompare(b.name));
+    entries.sort((a, b) => byteStableCompare(a.name, b.name));
 
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
@@ -119,7 +138,7 @@ async function collectCanonicalFiles(skillDir, limits = CAPTURE_LIMITS) {
     return { errorStatus: walkError.errorStatus };
   }
 
-  files.sort((a, b) => a.relPath.localeCompare(b.relPath));
+  files.sort((a, b) => byteStableCompare(a.relPath, b.relPath));
 
   return {
     files,
@@ -129,60 +148,121 @@ async function collectCanonicalFiles(skillDir, limits = CAPTURE_LIMITS) {
 }
 
 function normalizeFileForHash(relPath, contentBuffer) {
-  if (relPath === "SKILL.md") {
-    const asText = contentBuffer.toString("utf8").replace(/\r\n/g, "\n");
-    return Buffer.from(stripRegistryManagedFrontmatter(asText), "utf8");
+  const asText = decodeUtf8Strict(contentBuffer);
+  if (asText == null) {
+    return contentBuffer;
   }
 
-  const asText = contentBuffer.toString("utf8");
-  const looksText = !asText.includes("\u0000");
-  if (!looksText) {
-    return contentBuffer;
+  if (relPath === "SKILL.md") {
+    return Buffer.from(
+      stripRegistryManagedFrontmatter(asText.replace(/\r\n/g, "\n")),
+      "utf8",
+    );
   }
 
   return Buffer.from(asText.replace(/\r\n/g, "\n"), "utf8");
 }
 
-export async function computeCanonicalContentSha256(
-  skillDir,
-  limits = CAPTURE_LIMITS,
-) {
-  const collected = await collectCanonicalFiles(skillDir, limits);
-  if (collected.errorStatus) {
-    return {
-      errorStatus: collected.errorStatus,
-      contentSha256: null,
-      fileCount: 0,
-      totalBytes: 0,
-    };
-  }
-
-  if (collected.estimatedTooLargeForCompression) {
-    return {
-      errorStatus: "capture_skipped_size_limit",
-      contentSha256: null,
-      fileCount: collected.files.length,
-      totalBytes: collected.totalBytes,
-    };
-  }
-
+function buildCanonicalContentSha256FromFiles(files) {
   const hasher = crypto.createHash("sha256");
 
-  for (const file of collected.files) {
-    const raw = await readFile(file.fullPath);
-    const normalized = normalizeFileForHash(file.relPath, raw);
-
+  for (const file of files) {
+    const normalized = normalizeFileForHash(file.relPath, file.content);
     hasher.update(file.relPath, "utf8");
     hasher.update("\n", "utf8");
     hasher.update(normalized);
     hasher.update("\n", "utf8");
   }
 
+  return hasher.digest("hex");
+}
+
+async function collectCanonicalFileSnapshot(skillDir, limits = CAPTURE_LIMITS) {
+  const collected = await collectCanonicalFiles(skillDir, limits);
+  if (collected.errorStatus) {
+    return {
+      errorStatus: collected.errorStatus,
+      files: [],
+      fileCount: 0,
+      totalBytes: 0,
+      contentSha256: null,
+      zipBuffer: null,
+    };
+  }
+
+  if (collected.estimatedTooLargeForCompression) {
+    return {
+      errorStatus: "capture_skipped_size_limit",
+      files: [],
+      fileCount: collected.files.length,
+      totalBytes: collected.totalBytes,
+      contentSha256: null,
+      zipBuffer: null,
+    };
+  }
+
+  const files = [];
+  for (const file of collected.files) {
+    const content = await readFile(file.fullPath);
+    files.push({ relPath: file.relPath, content });
+  }
+
+  const zipBuffer = buildDeterministicZipEntries(files);
+  if (zipBuffer.length > limits.maxCompressedBytes) {
+    return {
+      errorStatus: "capture_skipped_size_limit",
+      files,
+      fileCount: files.length,
+      totalBytes: collected.totalBytes,
+      contentSha256: null,
+      zipBuffer: null,
+    };
+  }
+
   return {
     errorStatus: null,
-    contentSha256: hasher.digest("hex"),
-    fileCount: collected.files.length,
+    files,
+    fileCount: files.length,
     totalBytes: collected.totalBytes,
+    contentSha256: buildCanonicalContentSha256FromFiles(files),
+    zipBuffer,
+  };
+}
+
+export async function buildCanonicalArchiveSnapshot(
+  skillDir,
+  limits = CAPTURE_LIMITS,
+) {
+  const snapshot = await collectCanonicalFileSnapshot(skillDir, limits);
+  if (snapshot.errorStatus) {
+    return {
+      errorStatus: snapshot.errorStatus,
+      contentSha256: null,
+      zipBuffer: null,
+      fileCount: snapshot.fileCount,
+      totalBytes: snapshot.totalBytes,
+    };
+  }
+
+  return {
+    errorStatus: null,
+    contentSha256: snapshot.contentSha256,
+    zipBuffer: snapshot.zipBuffer,
+    fileCount: snapshot.fileCount,
+    totalBytes: snapshot.totalBytes,
+  };
+}
+
+export async function computeCanonicalContentSha256(
+  skillDir,
+  limits = CAPTURE_LIMITS,
+) {
+  const snapshot = await buildCanonicalArchiveSnapshot(skillDir, limits);
+  return {
+    errorStatus: snapshot.errorStatus,
+    contentSha256: snapshot.contentSha256,
+    fileCount: snapshot.fileCount,
+    totalBytes: snapshot.totalBytes,
   };
 }
 
@@ -279,37 +359,12 @@ export async function createDeterministicZipBuffer(
   skillDir,
   limits = CAPTURE_LIMITS,
 ) {
-  const collected = await collectCanonicalFiles(skillDir, limits);
-  if (collected.errorStatus) {
-    return {
-      errorStatus: collected.errorStatus,
-      zipBuffer: null,
-      fileCount: 0,
-      totalBytes: 0,
-    };
-  }
-
-  const filesWithContent = [];
-  for (const file of collected.files) {
-    const content = await readFile(file.fullPath);
-    filesWithContent.push({ relPath: file.relPath, content });
-  }
-
-  const zipBuffer = buildDeterministicZipEntries(filesWithContent);
-  if (zipBuffer.length > limits.maxCompressedBytes) {
-    return {
-      errorStatus: "capture_skipped_size_limit",
-      zipBuffer: null,
-      fileCount: collected.files.length,
-      totalBytes: collected.totalBytes,
-    };
-  }
-
+  const snapshot = await buildCanonicalArchiveSnapshot(skillDir, limits);
   return {
-    errorStatus: null,
-    zipBuffer,
-    fileCount: collected.files.length,
-    totalBytes: collected.totalBytes,
+    errorStatus: snapshot.errorStatus,
+    zipBuffer: snapshot.zipBuffer,
+    fileCount: snapshot.fileCount,
+    totalBytes: snapshot.totalBytes,
   };
 }
 

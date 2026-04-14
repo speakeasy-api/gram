@@ -32,6 +32,7 @@ Current status: additive only. Hook installer commands are not switched yet.
   - upload request validation/execution helpers
   - detached worker spawning and request-file serialization
   - temp request files are written with restricted permissions
+  - worker request files exclude `Gram-Key` / `Gram-Project` and worker injects from runtime env
 - `producer-upload-worker.mjs`
   - detached background worker entrypoint
   - executes one upload request from temp request file
@@ -115,7 +116,7 @@ node hooks/shared-producer/producer-cli.mjs --agent=cursor --payload-file ./hook
 
 - `GRAM_HOOK_AGENT` when `--agent` is not provided
 - `GRAM_HOOK_PAYLOAD_FILE` when `--payload-file` is not provided
-- `GRAM_SKILLS_RESOLUTION_STATUS` to force `resolution_status`
+- `GRAM_SKILLS_RESOLUTION_STATUS` to override `resolution_status` only when compatible with discovery (it will not force unresolved skills to `resolved`)
 - `GRAM_HOOKS_SERVER_URL`, `GRAM_API_KEY`, `GRAM_PROJECT_SLUG` for upload request shaping
 - `GRAM_SKILLS_UPLOAD_ENABLED=true` to enable detached upload worker execution from CLI
 - `GRAM_SKILLS_UPLOAD_ENABLED` defaults to disabled unless explicitly set to `true`

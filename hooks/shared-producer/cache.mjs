@@ -31,15 +31,38 @@ export function getDefaultCachePath(homeDir = os.homedir()) {
   return path.join(homeDir, CACHE_DIRNAME, CACHE_FILENAME);
 }
 
+function parseCacheIdentity({ project, skillName, canonicalContentSha256 }) {
+  const parsed = {
+    project: normalizeString(project),
+    skillName: normalizeString(skillName),
+    canonicalContentSha256: normalizeString(canonicalContentSha256),
+  };
+
+  return {
+    ...parsed,
+    isComplete:
+      parsed.project != null &&
+      parsed.skillName != null &&
+      parsed.canonicalContentSha256 != null,
+  };
+}
+
 export function computeCacheKey({
   project,
   skillName,
   canonicalContentSha256,
 }) {
-  const p = normalizeString(project) ?? "-";
-  const s = normalizeString(skillName) ?? "-";
-  const h = normalizeString(canonicalContentSha256) ?? "-";
-  return `${p}::${s}::${h}`;
+  const identity = parseCacheIdentity({
+    project,
+    skillName,
+    canonicalContentSha256,
+  });
+
+  if (!identity.isComplete) {
+    return null;
+  }
+
+  return `${identity.project}::${identity.skillName}::${identity.canonicalContentSha256}`;
 }
 
 function parseCache(raw) {
@@ -102,7 +125,7 @@ export async function shouldSuppressUpload(options = {}) {
     canonicalContentSha256: options.canonicalContentSha256,
   });
 
-  if (key.endsWith("::-")) {
+  if (!key) {
     return false;
   }
 
@@ -126,7 +149,7 @@ export async function markUploadSeen(options = {}) {
     canonicalContentSha256: options.canonicalContentSha256,
   });
 
-  if (key.endsWith("::-")) {
+  if (!key) {
     return;
   }
 

@@ -92,9 +92,14 @@ test("requestFromSerializable decodes base64 body", () => {
     bodyBase64: body.toString("base64"),
   };
 
-  const req = requestFromSerializable(serialized);
+  const req = requestFromSerializable(serialized, {
+    gramKey: "k",
+    gramProject: "p",
+  });
   assert.equal(req.method, "POST");
   assert.equal(req.url, "https://example.com");
+  assert.equal(req.headers["Gram-Key"], "k");
+  assert.equal(req.headers["Gram-Project"], "p");
   assert.equal(Buffer.compare(req.body, body), 0);
 });
 
@@ -111,6 +116,7 @@ test("runUploadWorkerFromFile loads request and executes upload", async () => {
       "X-Gram-Skill-Content-Sha256": createHash("sha256")
         .update(body)
         .digest("hex"),
+      "Gram-Key": "should-not-win",
     },
     bodyBase64: body.toString("base64"),
   };
@@ -118,13 +124,23 @@ test("runUploadWorkerFromFile loads request and executes upload", async () => {
   await writeFile(file, JSON.stringify(serialized), "utf8");
 
   const fakeFetch = async () => ({ ok: true, status: 200 });
+  let seenHeaders = null;
+  const verifyingFetch = async (_url, options) => {
+    seenHeaders = options.headers;
+    return fakeFetch();
+  };
+
   const result = await runUploadWorkerFromFile(file, {
-    fetchImpl: fakeFetch,
+    fetchImpl: verifyingFetch,
     timeoutMs: 5000,
+    gramKey: "real-key",
+    gramProject: "real-project",
   });
 
   assert.equal(result.ok, true);
   assert.equal(result.status, 200);
+  assert.equal(seenHeaders["Gram-Key"], "real-key");
+  assert.equal(seenHeaders["Gram-Project"], "real-project");
 });
 
 test("runUploadWorkerFromFile returns invalid_request_file for bad json", async () => {
