@@ -139,12 +139,20 @@ func (m *Manager) resolveRoleSlug(ctx context.Context, userID, orgID string) (st
 	}
 
 	user, err := usersrepo.New(m.db).GetUser(ctx, userID)
-	if err != nil || !user.WorkosID.Valid || user.WorkosID.String == "" {
+	if err != nil {
+		m.logger.WarnContext(ctx, "resolve role slug: get user", attr.SlogUserID(userID), attr.SlogError(err))
+		return "", nil
+	}
+	if !user.WorkosID.Valid || user.WorkosID.String == "" {
 		return "", nil
 	}
 
 	org, err := orgrepo.New(m.db).GetOrganizationMetadata(ctx, orgID)
-	if err != nil || !org.WorkosID.Valid || org.WorkosID.String == "" {
+	if err != nil {
+		m.logger.WarnContext(ctx, "resolve role slug: get org", attr.SlogOrganizationID(orgID), attr.SlogError(err))
+		return "", nil
+	}
+	if !org.WorkosID.Valid || org.WorkosID.String == "" {
 		return "", nil
 	}
 
