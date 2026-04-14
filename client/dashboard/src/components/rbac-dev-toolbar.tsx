@@ -310,8 +310,8 @@ export function RBACDevToolbar() {
           <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-widest text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
             DEV
           </span>
-          <span className="text-foreground text-xs font-semibold">
-            GRAM DEVELOPER TOOLKIT
+          <span className="text-muted-foreground text-xs font-semibold">
+            Developer Toolkit
           </span>
           <div className="text-muted-foreground ml-auto">
             {collapsed ? (
