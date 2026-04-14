@@ -18362,6 +18362,40 @@ components:
           description: The list of resources
       required:
         - resources
+    ListRoleGrant:
+      type: object
+      properties:
+        resources:
+          type: array
+          items:
+            type: string
+          description: Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
+        scope:
+          type: string
+          description: The scope slug this grant applies to.
+          enum:
+            - org:read
+            - org:admin
+            - build:read
+            - build:write
+            - mcp:read
+            - mcp:write
+            - mcp:connect
+        sub_scopes:
+          type: array
+          items:
+            type: string
+            enum:
+              - org:read
+              - org:admin
+              - build:read
+              - build:write
+              - mcp:read
+              - mcp:write
+              - mcp:connect
+          description: The inherited scopes the primary scope grants.
+      required:
+        - scope
     ListRolesResult:
       type: object
       properties:
@@ -18421,7 +18455,7 @@ components:
         grants:
           type: array
           items:
-            $ref: '#/components/schemas/RoleGrant'
+            $ref: '#/components/schemas/ListRoleGrant'
           description: The user's effective grants in this organization.
       required:
         - grants
