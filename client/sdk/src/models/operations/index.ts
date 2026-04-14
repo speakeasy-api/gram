@@ -58,6 +58,7 @@ export * from "./getperiodusage.js";
 export * from "./getproductfeatures.js";
 export * from "./getproject.js";
 export * from "./getprojectmetricssummary.js";
+export * from "./getprojectoverview.js";
 export * from "./getrole.js";
 export * from "./getslackapp.js";
 export * from "./getsourceenvironment.js";

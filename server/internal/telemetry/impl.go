@@ -817,40 +817,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	comparisonStart := timeStart - duration
 	comparisonEnd := timeStart
 
-	// Convert timestamps for PostgreSQL queries
-	timeStartPG := pgtype.Timestamptz{Time: time.Unix(0, timeStart), Valid: true}
-	timeEndPG := pgtype.Timestamptz{Time: time.Unix(0, timeEnd), Valid: true}
-	comparisonStartPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonStart), Valid: true}
-	comparisonEndPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonEnd), Valid: true}
-
-	// Determine metrics mode: Check if there are chat sessions in PostgreSQL
-	sessionCount, err := s.chatRepo.GetChatSessionCount(ctx, chatRepo.GetChatSessionCountParams{
-		ProjectID: *authCtx.ProjectID,
-		TimeStart: timeStartPG,
-		TimeEnd:   timeEndPG,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error checking session count")
-	}
-
-	sessionMode := sessionCount > 0
-	metricsMode := "tool_call"
-	if sessionMode {
-		metricsMode = "session"
-	}
-
-	// Fetch chat metrics from PostgreSQL for current period
-	chatMetrics, err := s.chatRepo.GetChatMetricsSummary(ctx, chatRepo.GetChatMetricsSummaryParams{
-		ProjectID: *authCtx.ProjectID,
-		TimeStart: timeStartPG,
-		TimeEnd:   timeEndPG,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving chat metrics summary")
-	}
-
-	// Fetch tool call metrics from ClickHouse for current period
-	toolMetrics, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
+	// Fetch all data sequentially to avoid ClickHouse concurrent query limits
+	summary, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
 		GramProjectID:  projectID,
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
@@ -859,21 +827,10 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		ToolsetSlug:    toolsetSlug,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tool call metrics")
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
 	}
 
-	// Fetch comparison period metrics from PostgreSQL
-	chatMetricsComparison, err := s.chatRepo.GetChatMetricsSummary(ctx, chatRepo.GetChatMetricsSummaryParams{
-		ProjectID: *authCtx.ProjectID,
-		TimeStart: comparisonStartPG,
-		TimeEnd:   comparisonEndPG,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison chat metrics")
-	}
-
-	// Fetch comparison period tool metrics from ClickHouse
-	toolMetricsComparison, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
+	comparison, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
 		GramProjectID:  projectID,
 		TimeStart:      comparisonStart,
 		TimeEnd:        comparisonEnd,
@@ -882,7 +839,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		ToolsetSlug:    toolsetSlug,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison tool call metrics")
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
 	}
 
 	var timeSeries []repo.TimeSeriesBucket
@@ -929,6 +886,118 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by failure rate")
 	}
 
+	// Convert to API types
+	return &telem_gen.GetObservabilityOverviewResult{
+		Summary:               toObservabilitySummary(summary),
+		Comparison:            toObservabilitySummary(comparison),
+		TimeSeries:            toTimeSeriesBuckets(timeSeries),
+		TopToolsByCount:       toToolMetrics(toolsByCount),
+		TopToolsByFailureRate: toToolMetrics(toolsByFailure),
+		IntervalSeconds:       intervalSeconds,
+	}, nil
+}
+
+// GetProjectOverview retrieves project-level overview metrics including total chats, tool calls,
+// active servers/users, and top lists. This endpoint does not support filtering.
+func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.GetProjectOverviewPayload) (res *telem_gen.GetProjectOverviewResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	projectID := authCtx.ProjectID.String()
+
+	// Calculate comparison period (same duration as current period, ending at current period start)
+	duration := timeEnd - timeStart
+	comparisonStart := timeStart - duration
+	comparisonEnd := timeStart
+
+	// Convert timestamps for PostgreSQL queries
+	timeStartPG := pgtype.Timestamptz{Time: time.Unix(0, timeStart), Valid: true}
+	timeEndPG := pgtype.Timestamptz{Time: time.Unix(0, timeEnd), Valid: true}
+	comparisonStartPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonStart), Valid: true}
+	comparisonEndPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonEnd), Valid: true}
+
+	// Determine metrics mode: Check if there are chat sessions in PostgreSQL
+	sessionCount, err := s.chatRepo.GetChatSessionCount(ctx, chatRepo.GetChatSessionCountParams{
+		ProjectID: *authCtx.ProjectID,
+		TimeStart: timeStartPG,
+		TimeEnd:   timeEndPG,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error checking session count")
+	}
+
+	sessionMode := sessionCount > 0
+	metricsMode := "tool_call"
+	if sessionMode {
+		metricsMode = "session"
+	}
+
+	// Fetch chat metrics from PostgreSQL for current period
+	chatMetrics, err := s.chatRepo.GetChatMetricsSummary(ctx, chatRepo.GetChatMetricsSummaryParams{
+		ProjectID: *authCtx.ProjectID,
+		TimeStart: timeStartPG,
+		TimeEnd:   timeEndPG,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving chat metrics summary")
+	}
+
+	// Fetch tool call metrics from ClickHouse for current period (no filters)
+	toolMetrics, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
+		GramProjectID:  projectID,
+		TimeStart:      timeStart,
+		TimeEnd:        timeEnd,
+		ExternalUserID: "",
+		APIKeyID:       "",
+		ToolsetSlug:    "",
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tool call metrics")
+	}
+
+	// Fetch comparison period metrics from PostgreSQL
+	chatMetricsComparison, err := s.chatRepo.GetChatMetricsSummary(ctx, chatRepo.GetChatMetricsSummaryParams{
+		ProjectID: *authCtx.ProjectID,
+		TimeStart: comparisonStartPG,
+		TimeEnd:   comparisonEndPG,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison chat metrics")
+	}
+
+	// Fetch comparison period tool metrics from ClickHouse
+	toolMetricsComparison, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
+		GramProjectID:  projectID,
+		TimeStart:      comparisonStart,
+		TimeEnd:        comparisonEnd,
+		ExternalUserID: "",
+		APIKeyID:       "",
+		ToolsetSlug:    "",
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison tool call metrics")
+	}
+
 	// Get active counts and user/session data based on metrics mode
 	var activeServersCount int64
 	var activeUsersCount int64
@@ -940,9 +1009,9 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		GramProjectID:  projectID,
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
-		ExternalUserID: externalUserID,
-		APIKeyID:       apiKeyID,
-		ToolsetSlug:    toolsetSlug,
+		ExternalUserID: "",
+		APIKeyID:       "",
+		ToolsetSlug:    "",
 		SessionMode:    sessionMode,
 	})
 	if err != nil {
@@ -989,9 +1058,9 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			GramProjectID:  projectID,
 			TimeStart:      timeStart,
 			TimeEnd:        timeEnd,
-			ExternalUserID: externalUserID,
-			APIKeyID:       apiKeyID,
-			ToolsetSlug:    toolsetSlug,
+			ExternalUserID: "",
+			APIKeyID:       "",
+			ToolsetSlug:    "",
 			Limit:          10,
 			SessionMode:    false,
 		})
@@ -1004,9 +1073,9 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			GramProjectID:  projectID,
 			TimeStart:      timeStart,
 			TimeEnd:        timeEnd,
-			ExternalUserID: externalUserID,
-			APIKeyID:       apiKeyID,
-			ToolsetSlug:    toolsetSlug,
+			ExternalUserID: "",
+			APIKeyID:       "",
+			ToolsetSlug:    "",
 			SessionMode:    false,
 		})
 		if err != nil {
@@ -1020,9 +1089,9 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		GramProjectID:  projectID,
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
-		ExternalUserID: externalUserID,
-		APIKeyID:       apiKeyID,
-		ToolsetSlug:    toolsetSlug,
+		ExternalUserID: "",
+		APIKeyID:       "",
+		ToolsetSlug:    "",
 		Limit:          10,
 	})
 	if err != nil {
@@ -1045,8 +1114,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	topServersWithOverrides := applyServerNameOverrides(topServers, overrideMap)
 
 	// Convert to API types - build summaries with nested fields
-	return &telem_gen.GetObservabilityOverviewResult{
-		Summary: buildObservabilitySummary(
+	return &telem_gen.GetProjectOverviewResult{
+		Summary: buildProjectOverviewSummary(
 			chatMetrics,
 			toolMetrics,
 			activeServersCount,
@@ -1055,7 +1124,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			toTopServers(topServersWithOverrides),
 			llmClientBreakdown,
 		),
-		Comparison: buildObservabilitySummary(
+		Comparison: buildProjectOverviewSummary(
 			chatMetricsComparison,
 			toolMetricsComparison,
 			0, // Don't need active counts for comparison
@@ -1064,11 +1133,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			nil,
 			nil,
 		),
-		TimeSeries:            toTimeSeriesBuckets(timeSeries),
-		TopToolsByCount:       toToolMetrics(toolsByCount),
-		TopToolsByFailureRate: toToolMetrics(toolsByFailure),
-		IntervalSeconds:       intervalSeconds,
-		MetricsMode:           metricsMode,
+		MetricsMode: metricsMode,
 	}, nil
 }
 
@@ -1094,7 +1159,36 @@ func calculateInterval(timeStart, timeEnd int64) int64 {
 
 // buildObservabilitySummary builds an ObservabilitySummary from multiple data sources.
 // Chat metrics come from PostgreSQL, tool metrics from ClickHouse, and additional data from both.
-func buildObservabilitySummary(
+// toObservabilitySummary converts repo summary to API type.
+func toObservabilitySummary(summary *repo.OverviewSummary) *telem_gen.ObservabilitySummary {
+	if summary == nil {
+		return &telem_gen.ObservabilitySummary{
+			TotalChats:           0,
+			ResolvedChats:        0,
+			FailedChats:          0,
+			AvgSessionDurationMs: 0,
+			AvgResolutionTimeMs:  0,
+			TotalToolCalls:       0,
+			FailedToolCalls:      0,
+			AvgLatencyMs:         0,
+		}
+	}
+	//nolint:gosec // Values are bounded counts that won't overflow int64
+	return &telem_gen.ObservabilitySummary{
+		TotalChats:           int64(summary.TotalChats),
+		ResolvedChats:        int64(summary.ResolvedChats),
+		FailedChats:          int64(summary.FailedChats),
+		AvgSessionDurationMs: sanitizeFloat64(summary.AvgSessionDurationMs),
+		AvgResolutionTimeMs:  sanitizeFloat64(summary.AvgResolutionTimeMs),
+		TotalToolCalls:       int64(summary.TotalToolCalls),
+		FailedToolCalls:      int64(summary.FailedToolCalls),
+		AvgLatencyMs:         sanitizeFloat64(summary.AvgLatencyMs),
+	}
+}
+
+// buildProjectOverviewSummary builds a ProjectOverviewSummary from multiple data sources.
+// Chat metrics come from PostgreSQL, tool metrics from ClickHouse, and additional data from both.
+func buildProjectOverviewSummary(
 	chatMetrics chatRepo.GetChatMetricsSummaryRow,
 	toolMetrics *repo.OverviewSummary,
 	activeServersCount int64,
@@ -1102,14 +1196,12 @@ func buildObservabilitySummary(
 	topUsers []*telem_gen.TopUser,
 	topServers []*telem_gen.TopServer,
 	llmClientBreakdown []*telem_gen.LLMClientUsage,
-) *telem_gen.ObservabilitySummary {
+) *telem_gen.ProjectOverviewSummary {
 	// Get tool metrics from ClickHouse (or defaults if nil)
 	var totalToolCalls, failedToolCalls int64
-	var avgLatencyMs float64
 	if toolMetrics != nil {
 		totalToolCalls = int64(toolMetrics.TotalToolCalls)   //nolint:gosec // Bounded count that won't overflow int64
 		failedToolCalls = int64(toolMetrics.FailedToolCalls) //nolint:gosec // Bounded count that won't overflow int64
-		avgLatencyMs = sanitizeFloat64(toolMetrics.AvgLatencyMs)
 	}
 
 	// Ensure arrays are non-nil
@@ -1123,17 +1215,14 @@ func buildObservabilitySummary(
 		llmClientBreakdown = []*telem_gen.LLMClientUsage{}
 	}
 
-	return &telem_gen.ObservabilitySummary{
+	return &telem_gen.ProjectOverviewSummary{
 		// Chat metrics from PostgreSQL
-		TotalChats:           chatMetrics.TotalChats,
-		ResolvedChats:        chatMetrics.ResolvedChats,
-		FailedChats:          chatMetrics.FailedChats,
-		AvgSessionDurationMs: sanitizeFloat64(chatMetrics.AvgSessionDurationMs),
-		AvgResolutionTimeMs:  sanitizeFloat64(chatMetrics.AvgResolutionTimeMs),
+		TotalChats:    chatMetrics.TotalChats,
+		ResolvedChats: chatMetrics.ResolvedChats,
+		FailedChats:   chatMetrics.FailedChats,
 		// Tool metrics from ClickHouse
 		TotalToolCalls:  totalToolCalls,
 		FailedToolCalls: failedToolCalls,
-		AvgLatencyMs:    avgLatencyMs,
 		// Activity counts and top lists
 		ActiveServersCount: activeServersCount,
 		ActiveUsersCount:   activeUsersCount,

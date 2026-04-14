@@ -249,6 +249,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetObservabilityOverview", "type": "query"}`)
 	})
 
+	Method("getProjectOverview", func() {
+		Description("Get project-level overview including total chats, tool calls, active servers/users, and top lists")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetProjectOverviewPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetProjectOverviewResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getProjectOverview")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getProjectOverview")
+		Meta("openapi:extension:x-speakeasy-name-override", "getProjectOverview")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetProjectOverview", "type": "query"}`)
+	})
+
 	Method("listFilterOptions", func() {
 		Description("List available filter options (API keys or users) for the observability overview")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -929,11 +958,35 @@ var GetObservabilityOverviewResult = Type("GetObservabilityOverviewResult", func
 	Attribute("top_tools_by_count", ArrayOf(ToolMetricType), "Top tools by call count")
 	Attribute("top_tools_by_failure_rate", ArrayOf(ToolMetricType), "Top tools by failure rate")
 	Attribute("interval_seconds", Int64, "The time bucket interval in seconds used for the time series data")
+
+	Required("summary", "comparison", "time_series", "top_tools_by_count", "top_tools_by_failure_rate", "interval_seconds")
+})
+
+var GetProjectOverviewPayload = Type("GetProjectOverviewPayload", func() {
+	Description("Payload for getting project-level overview")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+
+	Required("from", "to")
+})
+
+var GetProjectOverviewResult = Type("GetProjectOverviewResult", func() {
+	Description("Result of project overview query")
+
+	Attribute("summary", ProjectOverviewSummaryType, "Current period summary metrics")
+	Attribute("comparison", ProjectOverviewSummaryType, "Previous period summary metrics for trend calculation")
 	Attribute("metrics_mode", String, "Indicates whether metrics are session-based or tool-call-based", func() {
 		Enum("session", "tool_call")
 	})
 
-	Required("summary", "comparison", "time_series", "top_tools_by_count", "top_tools_by_failure_rate", "interval_seconds", "metrics_mode")
+	Required("summary", "comparison", "metrics_mode")
 })
 
 var ObservabilitySummaryType = Type("ObservabilitySummary", func() {
@@ -951,6 +1004,30 @@ var ObservabilitySummaryType = Type("ObservabilitySummary", func() {
 	Attribute("failed_tool_calls", Int64, "Number of failed tool calls")
 	Attribute("avg_latency_ms", Float64, "Average tool latency in milliseconds")
 
+	Required(
+		"total_chats",
+		"resolved_chats",
+		"failed_chats",
+		"avg_session_duration_ms",
+		"avg_resolution_time_ms",
+		"total_tool_calls",
+		"failed_tool_calls",
+		"avg_latency_ms",
+	)
+})
+
+var ProjectOverviewSummaryType = Type("ProjectOverviewSummary", func() {
+	Description("Aggregated project-level summary metrics for a time period")
+
+	// Chat metrics
+	Attribute("total_chats", Int64, "Total number of chat sessions")
+	Attribute("resolved_chats", Int64, "Number of resolved chat sessions")
+	Attribute("failed_chats", Int64, "Number of failed chat sessions")
+
+	// Tool metrics
+	Attribute("total_tool_calls", Int64, "Total number of tool calls")
+	Attribute("failed_tool_calls", Int64, "Number of failed tool calls")
+
 	// Activity counts
 	Attribute("active_servers_count", Int64, "Number of MCP servers with at least one tool call in the time period")
 	Attribute("active_users_count", Int64, "Number of unique users with activity in the time period")
@@ -964,11 +1041,8 @@ var ObservabilitySummaryType = Type("ObservabilitySummary", func() {
 		"total_chats",
 		"resolved_chats",
 		"failed_chats",
-		"avg_session_duration_ms",
-		"avg_resolution_time_ms",
 		"total_tool_calls",
 		"failed_tool_calls",
-		"avg_latency_ms",
 		"active_servers_count",
 		"active_users_count",
 		"top_users",

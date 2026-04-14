@@ -57,6 +57,7 @@ export * from "./getMcpMetadata.js";
 export * from "./getObservabilityOverview.js";
 export * from "./getPeriodUsage.js";
 export * from "./getProjectMetricsSummary.js";
+export * from "./getProjectOverview.js";
 export * from "./getSlackApp.js";
 export * from "./getSourceEnvironment.js";
 export * from "./getToolsetEnvironment.js";

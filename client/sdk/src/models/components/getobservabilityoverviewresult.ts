@@ -5,7 +5,6 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -19,18 +18,6 @@ import {
 import { ToolMetric, ToolMetric$inboundSchema } from "./toolmetric.js";
 
 /**
- * Indicates whether metrics are session-based or tool-call-based
- */
-export const MetricsMode = {
-  Session: "session",
-  ToolCall: "tool_call",
-} as const;
-/**
- * Indicates whether metrics are session-based or tool-call-based
- */
-export type MetricsMode = ClosedEnum<typeof MetricsMode>;
-
-/**
  * Result of observability overview query
  */
 export type GetObservabilityOverviewResult = {
@@ -42,10 +29,6 @@ export type GetObservabilityOverviewResult = {
    * The time bucket interval in seconds used for the time series data
    */
   intervalSeconds: number;
-  /**
-   * Indicates whether metrics are session-based or tool-call-based
-   */
-  metricsMode: MetricsMode;
   /**
    * Aggregated summary metrics for a time period
    */
@@ -65,10 +48,6 @@ export type GetObservabilityOverviewResult = {
 };
 
 /** @internal */
-export const MetricsMode$inboundSchema: z.ZodMiniEnum<typeof MetricsMode> = z
-  .enum(MetricsMode);
-
-/** @internal */
 export const GetObservabilityOverviewResult$inboundSchema: z.ZodMiniType<
   GetObservabilityOverviewResult,
   unknown
@@ -76,7 +55,6 @@ export const GetObservabilityOverviewResult$inboundSchema: z.ZodMiniType<
   z.object({
     comparison: ObservabilitySummary$inboundSchema,
     interval_seconds: z.int(),
-    metrics_mode: MetricsMode$inboundSchema,
     summary: ObservabilitySummary$inboundSchema,
     time_series: z.array(TimeSeriesBucket$inboundSchema),
     top_tools_by_count: z.array(ToolMetric$inboundSchema),
@@ -85,7 +63,6 @@ export const GetObservabilityOverviewResult$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "interval_seconds": "intervalSeconds",
-      "metrics_mode": "metricsMode",
       "time_series": "timeSeries",
       "top_tools_by_count": "topToolsByCount",
       "top_tools_by_failure_rate": "topToolsByFailureRate",

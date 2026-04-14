@@ -33,6 +33,9 @@ type Service interface {
 	// Get observability overview metrics including time series, tool breakdowns,
 	// and summary stats
 	GetObservabilityOverview(context.Context, *GetObservabilityOverviewPayload) (res *GetObservabilityOverviewResult, err error)
+	// Get project-level overview including total chats, tool calls, active
+	// servers/users, and top lists
+	GetProjectOverview(context.Context, *GetProjectOverviewPayload) (res *GetProjectOverviewResult, err error)
 	// List available filter options (API keys or users) for the observability
 	// overview
 	ListFilterOptions(context.Context, *ListFilterOptionsPayload) (res *ListFilterOptionsResult, err error)
@@ -66,7 +69,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "listHooksTraces"}
+var MethodNames = [13]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "getProjectOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -200,8 +203,6 @@ type GetObservabilityOverviewResult struct {
 	TopToolsByFailureRate []*ToolMetric
 	// The time bucket interval in seconds used for the time series data
 	IntervalSeconds int64
-	// Indicates whether metrics are session-based or tool-call-based
-	MetricsMode string
 }
 
 // GetProjectMetricsSummaryPayload is the payload type of the telemetry service
@@ -214,6 +215,29 @@ type GetProjectMetricsSummaryPayload struct {
 	From string
 	// End time in ISO 8601 format
 	To string
+}
+
+// GetProjectOverviewPayload is the payload type of the telemetry service
+// getProjectOverview method.
+type GetProjectOverviewPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+}
+
+// GetProjectOverviewResult is the result type of the telemetry service
+// getProjectOverview method.
+type GetProjectOverviewResult struct {
+	// Current period summary metrics
+	Summary *ProjectOverviewSummary
+	// Previous period summary metrics for trend calculation
+	Comparison *ProjectOverviewSummary
+	// Indicates whether metrics are session-based or tool-call-based
+	MetricsMode string
 }
 
 // GetUserMetricsSummaryPayload is the payload type of the telemetry service
@@ -416,6 +440,20 @@ type ObservabilitySummary struct {
 	FailedToolCalls int64
 	// Average tool latency in milliseconds
 	AvgLatencyMs float64
+}
+
+// Aggregated project-level summary metrics for a time period
+type ProjectOverviewSummary struct {
+	// Total number of chat sessions
+	TotalChats int64
+	// Number of resolved chat sessions
+	ResolvedChats int64
+	// Number of failed chat sessions
+	FailedChats int64
+	// Total number of tool calls
+	TotalToolCalls int64
+	// Number of failed tool calls
+	FailedToolCalls int64
 	// Number of MCP servers with at least one tool call in the time period
 	ActiveServersCount int64
 	// Number of unique users with activity in the time period
