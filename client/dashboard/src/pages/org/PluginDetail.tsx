@@ -251,12 +251,14 @@ export default function PluginDetail() {
         <Heading variant="h5" className="mb-3">
           Download
         </Heading>
-        <Button variant="secondary" size="sm" onClick={handleDownload}>
-          <Button.LeftIcon>
-            <Icon name="download" className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Download Claude Code Plugin</Button.Text>
-        </Button>
+        <div>
+          <Button variant="secondary" size="sm" onClick={handleDownload}>
+            <Button.LeftIcon>
+              <Icon name="download" className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Download Claude Plugin</Button.Text>
+          </Button>
+        </div>
 
         {/* Edit Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
