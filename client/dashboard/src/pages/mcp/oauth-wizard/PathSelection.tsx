@@ -39,22 +39,6 @@ export function PathSelection({
             "border-border flex flex-col items-start gap-2 rounded-lg border p-6 text-left transition-colors",
             "hover:border-primary hover:bg-muted/50",
           )}
-          onClick={() => dispatch({ type: "SELECT_EXTERNAL", discoveredOAuth })}
-        >
-          <Globe className="text-muted-foreground h-6 w-6" />
-          <Type className="font-medium">External OAuth</Type>
-          <Type muted small>
-            For APIs that meet the MCP OAuth spec. Uses authorization code flow
-            with your external authorization server.
-          </Type>
-        </button>
-
-        <button
-          type="button"
-          className={cn(
-            "border-border flex flex-col items-start gap-2 rounded-lg border p-6 text-left transition-colors",
-            "hover:border-primary hover:bg-muted/50",
-          )}
           onClick={() => dispatch({ type: "SELECT_PROXY", discoveredOAuth })}
         >
           <LockIcon className="text-muted-foreground h-6 w-6" />
@@ -62,6 +46,21 @@ export function PathSelection({
           <Type muted small>
             For internal servers that don't natively support MCP OAuth. Gram
             proxies OAuth on behalf of your server.
+          </Type>
+        </button>
+        <button
+          type="button"
+          className={cn(
+            "border-border flex flex-col items-start gap-2 rounded-lg border p-6 text-left transition-colors",
+            "hover:border-primary hover:bg-muted/50",
+          )}
+          onClick={() => dispatch({ type: "SELECT_EXTERNAL", discoveredOAuth })}
+        >
+          <Globe className="text-muted-foreground h-6 w-6" />
+          <Type className="font-medium">External OAuth</Type>
+          <Type muted small>
+            For APIs that meet the MCP OAuth spec. Uses authorization code flow
+            with your external authorization server.
           </Type>
         </button>
       </div>
