@@ -10,7 +10,7 @@ import {
   getDefaultCachePath,
   markUploadSeen,
   shouldSuppressUpload,
-} from "./cache.mjs";
+} from "./cache.mts";
 
 test("getDefaultCachePath uses ~/.gram/skills-upload-cache.json", () => {
   const p = getDefaultCachePath("/home/tester");

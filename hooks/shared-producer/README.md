@@ -6,44 +6,44 @@ Current status: additive only. Hook installer commands are not switched yet.
 
 ## Module layout
 
-- `producer-cli.mjs`
+- `producer-cli.mts`
   - command entrypoint
   - reads hook payload JSON (stdin or file)
   - resolves runtime options
   - prints enriched payload JSON to stdout
   - optionally spawns detached upload worker (best-effort)
-- `producer-core.mjs`
+- `producer-core.mts`
   - orchestration/facade module
   - stable public API surface for callers/tests
-- `constants.mjs`
+- `constants.mts`
   - shared constants (status taxonomy, limits, discovery roots)
-- `discovery.mjs`
+- `discovery.mts`
   - skill name extraction from hook payload
   - deterministic root precedence and skill root resolution
-- `frontmatter.mjs`
+- `frontmatter.mts`
   - `x-gram-ignore` detection
   - registry-managed frontmatter stripping for hash normalization
-- `packaging.mjs`
+- `packaging.mts`
   - canonical file collection + ignore handling
   - deterministic content hash
   - deterministic ZIP generation
   - `skills.capture` request shaping helper
-- `upload.mjs`
+- `upload.mts`
   - upload request validation/execution helpers
   - detached worker spawning and request-file serialization
   - temp request files are written with restricted permissions
   - worker request files exclude `Gram-Key` / `Gram-Project` and worker injects from runtime env
-- `producer-upload-worker.mjs`
+- `producer-upload-worker.mts`
   - detached background worker entrypoint
   - executes one upload request from temp request file
-- `cache.mjs`
+- `cache.mts`
   - recent-seen upload suppression cache (`~/.gram/skills-upload-cache.json`)
   - TTL-based best-effort dedupe gate before worker spawn
-- `producer-core.test.mjs`
+- `producer-core.test.mts`
   - focused unit/integration-style tests for discovery/enrichment/packaging
-- `upload.test.mjs`
+- `upload.test.mts`
   - focused tests for upload execution + worker file flow
-- `cache.test.mjs`
+- `cache.test.mts`
   - focused tests for cache keying, TTL, and suppression behavior
 
 ## Current behavior
@@ -106,10 +106,10 @@ CLI compatibility:
 
 ```bash
 # stdin mode
-cat hook-payload.json | node hooks/shared-producer/producer-cli.mjs --agent=claude
+cat hook-payload.json | node hooks/shared-producer/producer-cli.mts --agent=claude
 
 # file mode
-node hooks/shared-producer/producer-cli.mjs --agent=cursor --payload-file ./hook-payload.json
+node hooks/shared-producer/producer-cli.mts --agent=cursor --payload-file ./hook-payload.json
 ```
 
 ## Environment fallbacks

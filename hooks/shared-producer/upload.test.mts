@@ -7,14 +7,23 @@ import {
   isUploadRequestReady,
   requestFromSerializable,
   runUploadWorkerFromFile,
-} from "./upload.mjs";
+  type UploadFetch,
+} from "./upload.mts";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+function requireValue<T>(
+  value: T | null | undefined,
+  message: string,
+): NonNullable<T> {
+  assert.ok(value != null, message);
+  return value as NonNullable<T>;
+}
+
 test("isUploadRequestReady validates shape", () => {
   const good = {
-    method: "POST",
+    method: "POST" as const,
     url: "https://example.com/rpc/skills.capture",
     headers: { "Content-Type": "application/zip" },
     body: Buffer.from("zip"),
@@ -27,28 +36,47 @@ test("isUploadRequestReady validates shape", () => {
 
 test("executeUploadRequest returns skipped when fetch unavailable", async () => {
   const req = {
-    method: "POST",
+    method: "POST" as const,
     url: "https://example.com",
     headers: {},
     body: Buffer.from("zip"),
   };
 
-  const result = await executeUploadRequest(req, { fetchImpl: {} });
-  assert.equal(result.ok, false);
-  assert.equal(result.skipped, true);
-  assert.equal(result.reason, "fetch_unavailable");
+  const originalFetch = globalThis.fetch;
+  // @ts-expect-error test override
+  globalThis.fetch = undefined;
+
+  try {
+    const result = await executeUploadRequest(req, {
+      fetchImpl: undefined,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.skipped, true);
+    assert.equal(result.reason, "fetch_unavailable");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("executeUploadRequest uses provided fetch implementation", async () => {
   const req = {
-    method: "POST",
+    method: "POST" as const,
     url: "https://example.com/rpc/skills.capture",
     headers: { "X-Test": "1" },
     body: Buffer.from("zip-content"),
   };
 
-  let captured = null;
-  const fakeFetch = async (url, opts) => {
+  let captured: {
+    url: string;
+    opts?: {
+      method?: string;
+      headers?: Record<string, string>;
+      body?: Buffer;
+      signal?: AbortSignal;
+    };
+  } | null = null;
+
+  const fakeFetch: UploadFetch = async (url, opts) => {
     captured = { url, opts };
     return { ok: true, status: 202 };
   };
@@ -59,13 +87,19 @@ test("executeUploadRequest uses provided fetch implementation", async () => {
   });
   assert.equal(result.ok, true);
   assert.equal(result.status, 202);
-  assert.equal(captured.url, req.url);
-  assert.equal(captured.opts.method, "POST");
+
+  assert.ok(captured, "expected captured request");
+  const capturedRequest = captured as {
+    url: string;
+    opts?: { method?: string };
+  };
+  assert.equal(capturedRequest.url, req.url);
+  assert.equal(capturedRequest.opts?.method, "POST");
 });
 
 test("executeUploadRequest returns network_error when fetch throws", async () => {
   const req = {
-    method: "POST",
+    method: "POST" as const,
     url: "https://example.com/rpc/skills.capture",
     headers: {},
     body: Buffer.from("zip-content"),
@@ -92,10 +126,13 @@ test("requestFromSerializable decodes base64 body", () => {
     bodyBase64: body.toString("base64"),
   };
 
-  const req = requestFromSerializable(serialized, {
-    gramKey: "k",
-    gramProject: "p",
-  });
+  const req = requireValue(
+    requestFromSerializable(serialized, {
+      gramKey: "k",
+      gramProject: "p",
+    }),
+    "expected decoded request",
+  );
   assert.equal(req.method, "POST");
   assert.equal(req.url, "https://example.com");
   assert.equal(req.headers["Gram-Key"], "k");
@@ -123,11 +160,10 @@ test("runUploadWorkerFromFile loads request and executes upload", async () => {
 
   await writeFile(file, JSON.stringify(serialized), "utf8");
 
-  const fakeFetch = async () => ({ ok: true, status: 200 });
-  let seenHeaders = null;
-  const verifyingFetch = async (_url, options) => {
-    seenHeaders = options.headers;
-    return fakeFetch();
+  let seenHeaders: Record<string, string> | null = null;
+  const verifyingFetch: UploadFetch = async (_url, options) => {
+    seenHeaders = options?.headers ?? null;
+    return { ok: true, status: 200 };
   };
 
   const result = await runUploadWorkerFromFile(file, {
@@ -139,8 +175,67 @@ test("runUploadWorkerFromFile loads request and executes upload", async () => {
 
   assert.equal(result.ok, true);
   assert.equal(result.status, 200);
-  assert.equal(seenHeaders["Gram-Key"], "real-key");
-  assert.equal(seenHeaders["Gram-Project"], "real-project");
+
+  const headers = requireValue(seenHeaders, "expected seen headers");
+  assert.equal(headers["Gram-Key"], "real-key");
+  assert.equal(headers["Gram-Project"], "real-project");
+});
+
+test("runUploadWorkerFromFile falls back to GRAM_API_KEY env when gramKey option missing", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "gram-upload-worker-test-"));
+  const file = path.join(dir, "req-env.json");
+
+  const body = Buffer.from("zip");
+  const serialized = {
+    method: "POST",
+    url: "https://example.com/rpc/skills.capture",
+    headers: {
+      "Content-Type": "application/zip",
+      "X-Gram-Skill-Content-Sha256": createHash("sha256")
+        .update(body)
+        .digest("hex"),
+    },
+    bodyBase64: body.toString("base64"),
+  };
+
+  await writeFile(file, JSON.stringify(serialized), "utf8");
+
+  let seenHeaders: Record<string, string> | null = null;
+  const fakeFetch: UploadFetch = async (_url, options) => {
+    seenHeaders = options?.headers ?? null;
+    return { ok: true, status: 200 };
+  };
+
+  const originalApiKey = process.env.GRAM_API_KEY;
+  const originalLegacyKey = process.env.GRAM_KEY;
+  process.env.GRAM_API_KEY = "env-api-key";
+  delete process.env.GRAM_KEY;
+
+  try {
+    const result = await runUploadWorkerFromFile(file, {
+      fetchImpl: fakeFetch,
+      timeoutMs: 5000,
+      gramProject: "real-project",
+    });
+
+    assert.equal(result.ok, true);
+
+    const headers = requireValue(seenHeaders, "expected seen headers");
+    assert.equal(headers["Gram-Key"], "env-api-key");
+    assert.equal(headers["Gram-Project"], "real-project");
+  } finally {
+    if (originalApiKey == null) {
+      delete process.env.GRAM_API_KEY;
+    } else {
+      process.env.GRAM_API_KEY = originalApiKey;
+    }
+
+    if (originalLegacyKey == null) {
+      delete process.env.GRAM_KEY;
+    } else {
+      process.env.GRAM_KEY = originalLegacyKey;
+    }
+  }
 });
 
 test("runUploadWorkerFromFile returns invalid_request_file for bad json", async () => {

@@ -7,7 +7,35 @@ const CACHE_FILENAME = "skills-upload-cache.json";
 const DEFAULT_TTL_MS = 15 * 60 * 1000;
 const MAX_ENTRIES = 2000;
 
-function normalizeString(value) {
+interface CacheIdentityInput {
+  project?: string | null;
+  skillName?: string | null;
+  canonicalContentSha256?: string | null;
+}
+
+interface ParsedCacheIdentity {
+  project: string | null;
+  skillName: string | null;
+  canonicalContentSha256: string | null;
+  isComplete: boolean;
+}
+
+interface CacheEntry {
+  seenAtMs: number;
+}
+
+interface UploadCache {
+  entries: Record<string, CacheEntry>;
+}
+
+export interface CacheOptions extends CacheIdentityInput {
+  ttlMs?: number;
+  nowMs?: number;
+  cachePath?: string;
+  homeDir?: string;
+}
+
+function normalizeString(value: any): string | null {
   if (typeof value !== "string") {
     return null;
   }
@@ -15,11 +43,11 @@ function normalizeString(value) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function isRecord(value) {
+function isRecord(value: any): value is Record<string, any> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function toNumberOr(defaultValue, value) {
+function toNumberOr(defaultValue: number, value: any): number {
   const num = Number(value);
   if (!Number.isFinite(num) || num <= 0) {
     return defaultValue;
@@ -27,11 +55,15 @@ function toNumberOr(defaultValue, value) {
   return num;
 }
 
-export function getDefaultCachePath(homeDir = os.homedir()) {
+export function getDefaultCachePath(homeDir = os.homedir()): string {
   return path.join(homeDir, CACHE_DIRNAME, CACHE_FILENAME);
 }
 
-function parseCacheIdentity({ project, skillName, canonicalContentSha256 }) {
+function parseCacheIdentity({
+  project,
+  skillName,
+  canonicalContentSha256,
+}: CacheIdentityInput): ParsedCacheIdentity {
   const parsed = {
     project: normalizeString(project),
     skillName: normalizeString(skillName),
@@ -51,7 +83,7 @@ export function computeCacheKey({
   project,
   skillName,
   canonicalContentSha256,
-}) {
+}: CacheIdentityInput): string | null {
   const identity = parseCacheIdentity({
     project,
     skillName,
@@ -65,24 +97,37 @@ export function computeCacheKey({
   return `${identity.project}::${identity.skillName}::${identity.canonicalContentSha256}`;
 }
 
-function parseCache(raw) {
+function parseCache(raw: any): UploadCache {
   if (!isRecord(raw) || !isRecord(raw.entries)) {
     return { entries: {} };
   }
-  return { entries: raw.entries };
+
+  const entries: Record<string, CacheEntry> = {};
+  for (const [key, value] of Object.entries(raw.entries)) {
+    if (!isRecord(value)) {
+      continue;
+    }
+    const seenAtMs = Number(value.seenAtMs);
+    if (!Number.isFinite(seenAtMs)) {
+      continue;
+    }
+    entries[key] = { seenAtMs };
+  }
+
+  return { entries };
 }
 
-async function loadCache(cachePath) {
+async function loadCache(cachePath: string): Promise<UploadCache> {
   try {
     const raw = await readFile(cachePath, "utf8");
-    const parsed = JSON.parse(raw);
+    const parsed: any = JSON.parse(raw);
     return parseCache(parsed);
   } catch {
     return { entries: {} };
   }
 }
 
-async function saveCache(cachePath, cache) {
+async function saveCache(cachePath: string, cache: UploadCache): Promise<void> {
   const dir = path.dirname(cachePath);
   await mkdir(dir, { recursive: true, mode: 0o700 }).catch(() => {});
   await writeFile(cachePath, JSON.stringify(cache), {
@@ -91,13 +136,14 @@ async function saveCache(cachePath, cache) {
   });
 }
 
-function pruneEntries(entries, nowMs, ttlMs) {
-  const fresh = [];
+function pruneEntries(
+  entries: Record<string, CacheEntry>,
+  nowMs: number,
+  ttlMs: number,
+): Record<string, CacheEntry> {
+  const fresh: Array<[string, number]> = [];
 
   for (const [key, entry] of Object.entries(entries)) {
-    if (!isRecord(entry)) {
-      continue;
-    }
     const seenAtMs = Number(entry.seenAtMs);
     if (!Number.isFinite(seenAtMs)) {
       continue;
@@ -114,7 +160,9 @@ function pruneEntries(entries, nowMs, ttlMs) {
   );
 }
 
-export async function shouldSuppressUpload(options = {}) {
+export async function shouldSuppressUpload(
+  options: CacheOptions = {},
+): Promise<boolean> {
   const ttlMs = toNumberOr(DEFAULT_TTL_MS, options.ttlMs);
   const nowMs = toNumberOr(Date.now(), options.nowMs ?? Date.now());
   const cachePath = options.cachePath ?? getDefaultCachePath(options.homeDir);
@@ -131,14 +179,16 @@ export async function shouldSuppressUpload(options = {}) {
 
   const cache = await loadCache(cachePath);
   const entry = cache.entries[key];
-  if (!isRecord(entry) || !Number.isFinite(Number(entry.seenAtMs))) {
+  if (!entry || !Number.isFinite(Number(entry.seenAtMs))) {
     return false;
   }
 
   return nowMs - Number(entry.seenAtMs) <= ttlMs;
 }
 
-export async function markUploadSeen(options = {}) {
+export async function markUploadSeen(
+  options: CacheOptions = {},
+): Promise<void> {
   const ttlMs = toNumberOr(DEFAULT_TTL_MS, options.ttlMs);
   const nowMs = toNumberOr(Date.now(), options.nowMs ?? Date.now());
   const cachePath = options.cachePath ?? getDefaultCachePath(options.homeDir);
@@ -154,7 +204,7 @@ export async function markUploadSeen(options = {}) {
   }
 
   const cache = await loadCache(cachePath);
-  const entries = {
+  const entries: Record<string, CacheEntry> = {
     ...cache.entries,
     [key]: { seenAtMs: nowMs },
   };
