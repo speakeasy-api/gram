@@ -1697,8 +1697,8 @@ CREATE TABLE IF NOT EXISTS plugins (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
-  name TEXT NOT NULL,
-  slug TEXT NOT NULL,
+  name TEXT NOT NULL CHECK (name <> ''),
+  slug TEXT NOT NULL CHECK (slug <> ''),
   description TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1711,7 +1711,7 @@ CREATE TABLE IF NOT EXISTS plugins (
   CONSTRAINT plugins_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_slug_key
+CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_project_id_slug_key
   ON plugins (organization_id, project_id, slug)
   WHERE deleted IS FALSE;
 
@@ -1724,8 +1724,8 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   toolset_id uuid,
   registry_id uuid,
   registry_server_specifier TEXT,
-  external_url TEXT,
-  display_name TEXT NOT NULL,
+  external_url TEXT CHECK (external_url IS NULL OR external_url <> ''),
+  display_name TEXT NOT NULL CHECK (display_name <> ''),
   policy TEXT NOT NULL DEFAULT 'required',
   sort_order INT NOT NULL DEFAULT 0,
 
@@ -1745,6 +1745,9 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional')),
   CONSTRAINT plugin_servers_source_check CHECK (
     (toolset_id IS NOT NULL)::int + (registry_id IS NOT NULL)::int + (external_url IS NOT NULL)::int = 1
+  ),
+  CONSTRAINT plugin_servers_registry_specifier_check CHECK (
+    registry_id IS NOT NULL OR registry_server_specifier IS NULL
   )
 );
 
