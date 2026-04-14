@@ -1515,6 +1515,10 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
             <Type muted small>
               No project available for publishing.
             </Type>
+          ) : !toolset.mcpEnabled || !toolset.mcpSlug ? (
+            <Type muted small>
+              Enable this MCP server before publishing it to a collection.
+            </Type>
           ) : isLoading ? (
             <Type muted small>
               Loading collections...

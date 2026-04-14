@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 type Service struct {
@@ -32,6 +33,7 @@ type Service struct {
 	logger    *slog.Logger
 	db        *pgxpool.Pool
 	repo      *repo.Queries
+	toolsets  *toolsetsRepo.Queries
 	auth      *auth.Auth
 	sessions  *sessions.Manager
 	serverURL *url.URL
@@ -48,6 +50,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger:    logger,
 		db:        db,
 		repo:      repo.New(db),
+		toolsets:  toolsetsRepo.New(db),
 		auth:      auth.New(logger, db, sessions, accessLoader),
 		sessions:  sessions,
 		serverURL: serverURL,
@@ -232,6 +235,20 @@ func (s *Service) AttachServer(ctx context.Context, payload *gen.AttachServerPay
 	}
 	if collection.OrganizationID != authCtx.ActiveOrganizationID {
 		return nil, oops.C(oops.CodeForbidden)
+	}
+
+	toolset, err := s.toolsets.GetToolsetByID(ctx, toolsetID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get toolset").Log(ctx, s.logger)
+	}
+	if toolset.OrganizationID != authCtx.ActiveOrganizationID {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	if !toolset.McpEnabled || !toolset.McpSlug.Valid {
+		return nil, oops.E(oops.CodeInvalid, nil, "cannot attach a toolset that is not enabled as an MCP server").Log(ctx, s.logger)
 	}
 
 	if installed, checkErr := s.repo.IsToolsetInstalledFromCatalog(ctx, toolsetID); checkErr == nil && installed {

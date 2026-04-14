@@ -116,6 +116,7 @@ export default function CollectionDetail() {
       const project = projects[i];
       const data = toolsetQueries[i]?.data;
       for (const t of data?.toolsets ?? []) {
+        if (!t.mcpEnabled) continue;
         if (!t.mcpSlug) continue;
         if (t.toolUrns?.some((u) => u.startsWith("tools:externalmcp:")))
           continue;
