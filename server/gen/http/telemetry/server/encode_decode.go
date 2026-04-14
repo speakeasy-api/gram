@@ -3184,6 +3184,79 @@ func marshalTelemetryObservabilitySummaryToObservabilitySummaryResponseBody(v *t
 		TotalToolCalls:       v.TotalToolCalls,
 		FailedToolCalls:      v.FailedToolCalls,
 		AvgLatencyMs:         v.AvgLatencyMs,
+		ActiveServersCount:   v.ActiveServersCount,
+		ActiveUsersCount:     v.ActiveUsersCount,
+	}
+	if v.TopUsers != nil {
+		res.TopUsers = make([]*TopUserResponseBody, len(v.TopUsers))
+		for i, val := range v.TopUsers {
+			if val == nil {
+				res.TopUsers[i] = nil
+				continue
+			}
+			res.TopUsers[i] = marshalTelemetryTopUserToTopUserResponseBody(val)
+		}
+	} else {
+		res.TopUsers = []*TopUserResponseBody{}
+	}
+	if v.TopServers != nil {
+		res.TopServers = make([]*TopServerResponseBody, len(v.TopServers))
+		for i, val := range v.TopServers {
+			if val == nil {
+				res.TopServers[i] = nil
+				continue
+			}
+			res.TopServers[i] = marshalTelemetryTopServerToTopServerResponseBody(val)
+		}
+	} else {
+		res.TopServers = []*TopServerResponseBody{}
+	}
+	if v.LlmClientBreakdown != nil {
+		res.LlmClientBreakdown = make([]*LLMClientUsageResponseBody, len(v.LlmClientBreakdown))
+		for i, val := range v.LlmClientBreakdown {
+			if val == nil {
+				res.LlmClientBreakdown[i] = nil
+				continue
+			}
+			res.LlmClientBreakdown[i] = marshalTelemetryLLMClientUsageToLLMClientUsageResponseBody(val)
+		}
+	} else {
+		res.LlmClientBreakdown = []*LLMClientUsageResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTelemetryTopUserToTopUserResponseBody builds a value of type
+// *TopUserResponseBody from a value of type *telemetry.TopUser.
+func marshalTelemetryTopUserToTopUserResponseBody(v *telemetry.TopUser) *TopUserResponseBody {
+	res := &TopUserResponseBody{
+		UserID:        v.UserID,
+		UserType:      v.UserType,
+		ActivityCount: v.ActivityCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryTopServerToTopServerResponseBody builds a value of type
+// *TopServerResponseBody from a value of type *telemetry.TopServer.
+func marshalTelemetryTopServerToTopServerResponseBody(v *telemetry.TopServer) *TopServerResponseBody {
+	res := &TopServerResponseBody{
+		ServerName:    v.ServerName,
+		ToolCallCount: v.ToolCallCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryLLMClientUsageToLLMClientUsageResponseBody builds a value of
+// type *LLMClientUsageResponseBody from a value of type
+// *telemetry.LLMClientUsage.
+func marshalTelemetryLLMClientUsageToLLMClientUsageResponseBody(v *telemetry.LLMClientUsage) *LLMClientUsageResponseBody {
+	res := &LLMClientUsageResponseBody{
+		ClientName:    v.ClientName,
+		ActivityCount: v.ActivityCount,
 	}
 
 	return res

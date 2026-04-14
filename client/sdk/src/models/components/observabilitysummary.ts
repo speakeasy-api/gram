@@ -7,11 +7,25 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  LLMClientUsage,
+  LLMClientUsage$inboundSchema,
+} from "./llmclientusage.js";
+import { TopServer, TopServer$inboundSchema } from "./topserver.js";
+import { TopUser, TopUser$inboundSchema } from "./topuser.js";
 
 /**
  * Aggregated summary metrics for a time period
  */
 export type ObservabilitySummary = {
+  /**
+   * Number of MCP servers with at least one tool call in the time period
+   */
+  activeServersCount: number;
+  /**
+   * Number of unique users with activity in the time period
+   */
+  activeUsersCount: number;
   /**
    * Average tool latency in milliseconds
    */
@@ -33,9 +47,21 @@ export type ObservabilitySummary = {
    */
   failedToolCalls: number;
   /**
+   * Breakdown of messages/activity by LLM client/agent
+   */
+  llmClientBreakdown: Array<LLMClientUsage>;
+  /**
    * Number of resolved chat sessions
    */
   resolvedChats: number;
+  /**
+   * Top 10 MCP servers by tool call count
+   */
+  topServers: Array<TopServer>;
+  /**
+   * Top 10 users by activity (# of messages or tool calls depending on metrics_mode)
+   */
+  topUsers: Array<TopUser>;
   /**
    * Total number of chat sessions
    */
@@ -52,23 +78,33 @@ export const ObservabilitySummary$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    active_servers_count: z.int(),
+    active_users_count: z.int(),
     avg_latency_ms: z.number(),
     avg_resolution_time_ms: z.number(),
     avg_session_duration_ms: z.number(),
     failed_chats: z.int(),
     failed_tool_calls: z.int(),
+    llm_client_breakdown: z.array(LLMClientUsage$inboundSchema),
     resolved_chats: z.int(),
+    top_servers: z.array(TopServer$inboundSchema),
+    top_users: z.array(TopUser$inboundSchema),
     total_chats: z.int(),
     total_tool_calls: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "active_servers_count": "activeServersCount",
+      "active_users_count": "activeUsersCount",
       "avg_latency_ms": "avgLatencyMs",
       "avg_resolution_time_ms": "avgResolutionTimeMs",
       "avg_session_duration_ms": "avgSessionDurationMs",
       "failed_chats": "failedChats",
       "failed_tool_calls": "failedToolCalls",
+      "llm_client_breakdown": "llmClientBreakdown",
       "resolved_chats": "resolvedChats",
+      "top_servers": "topServers",
+      "top_users": "topUsers",
       "total_chats": "totalChats",
       "total_tool_calls": "totalToolCalls",
     });

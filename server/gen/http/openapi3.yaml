@@ -18085,6 +18085,12 @@ components:
                     type: integer
                     description: The time bucket interval in seconds used for the time series data
                     format: int64
+                metrics_mode:
+                    type: string
+                    description: Indicates whether metrics are session-based or tool-call-based
+                    enum:
+                        - session
+                        - tool_call
                 summary:
                     $ref: '#/components/schemas/ObservabilitySummary'
                 time_series:
@@ -18110,6 +18116,7 @@ components:
                 - top_tools_by_count
                 - top_tools_by_failure_rate
                 - interval_seconds
+                - metrics_mode
         GetProjectForm:
             type: object
             properties:
@@ -18621,6 +18628,20 @@ components:
                 - scopes
                 - created_at
                 - updated_at
+        LLMClientUsage:
+            type: object
+            properties:
+                activity_count:
+                    type: integer
+                    description: Number of messages (session mode) or tool calls (tool_call mode)
+                    format: int64
+                client_name:
+                    type: string
+                    description: Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
+            description: Usage breakdown by LLM client/agent
+            required:
+                - client_name
+                - activity_count
         ListAllowedOriginsResult:
             type: object
             properties:
@@ -19706,6 +19727,14 @@ components:
         ObservabilitySummary:
             type: object
             properties:
+                active_servers_count:
+                    type: integer
+                    description: Number of MCP servers with at least one tool call in the time period
+                    format: int64
+                active_users_count:
+                    type: integer
+                    description: Number of unique users with activity in the time period
+                    format: int64
                 avg_latency_ms:
                     type: number
                     description: Average tool latency in milliseconds
@@ -19726,10 +19755,25 @@ components:
                     type: integer
                     description: Number of failed tool calls
                     format: int64
+                llm_client_breakdown:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/LLMClientUsage'
+                    description: Breakdown of messages/activity by LLM client/agent
                 resolved_chats:
                     type: integer
                     description: Number of resolved chat sessions
                     format: int64
+                top_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TopServer'
+                    description: Top 10 MCP servers by tool call count
+                top_users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TopUser'
+                    description: Top 10 users by activity (# of messages or tool calls depending on metrics_mode)
                 total_chats:
                     type: integer
                     description: Total number of chat sessions
@@ -19748,6 +19792,11 @@ components:
                 - total_tool_calls
                 - failed_tool_calls
                 - avg_latency_ms
+                - active_servers_count
+                - active_users_count
+                - top_users
+                - top_servers
+                - llm_client_breakdown
         OpenAPIv3DeploymentAsset:
             type: object
             properties:
@@ -22061,6 +22110,41 @@ components:
                 - id
                 - toolset_id
                 - environment_id
+        TopServer:
+            type: object
+            properties:
+                server_name:
+                    type: string
+                    description: MCP server name
+                tool_call_count:
+                    type: integer
+                    description: Total number of tool calls
+                    format: int64
+            description: Top MCP server by tool call count
+            required:
+                - server_name
+                - tool_call_count
+        TopUser:
+            type: object
+            properties:
+                activity_count:
+                    type: integer
+                    description: Number of messages (session mode) or tool calls (tool_call mode)
+                    format: int64
+                user_id:
+                    type: string
+                    description: User ID (internal or external depending on availability)
+                user_type:
+                    type: string
+                    description: Type of user ID
+                    enum:
+                        - internal
+                        - external
+            description: Top user by activity
+            required:
+                - user_id
+                - user_type
+                - activity_count
         TriggerDefinition:
             type: object
             properties:

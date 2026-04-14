@@ -246,6 +246,8 @@ type GetObservabilityOverviewResponseBody struct {
 	TopToolsByFailureRate []*ToolMetricResponseBody `form:"top_tools_by_failure_rate,omitempty" json:"top_tools_by_failure_rate,omitempty" xml:"top_tools_by_failure_rate,omitempty"`
 	// The time bucket interval in seconds used for the time series data
 	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
+	// Indicates whether metrics are session-based or tool-call-based
+	MetricsMode *string `form:"metrics_mode,omitempty" json:"metrics_mode,omitempty" xml:"metrics_mode,omitempty"`
 }
 
 // ListFilterOptionsResponseBody is the type of the "telemetry" service
@@ -2807,6 +2809,43 @@ type ObservabilitySummaryResponseBody struct {
 	FailedToolCalls *int64 `form:"failed_tool_calls,omitempty" json:"failed_tool_calls,omitempty" xml:"failed_tool_calls,omitempty"`
 	// Average tool latency in milliseconds
 	AvgLatencyMs *float64 `form:"avg_latency_ms,omitempty" json:"avg_latency_ms,omitempty" xml:"avg_latency_ms,omitempty"`
+	// Number of MCP servers with at least one tool call in the time period
+	ActiveServersCount *int64 `form:"active_servers_count,omitempty" json:"active_servers_count,omitempty" xml:"active_servers_count,omitempty"`
+	// Number of unique users with activity in the time period
+	ActiveUsersCount *int64 `form:"active_users_count,omitempty" json:"active_users_count,omitempty" xml:"active_users_count,omitempty"`
+	// Top 10 users by activity (# of messages or tool calls depending on
+	// metrics_mode)
+	TopUsers []*TopUserResponseBody `form:"top_users,omitempty" json:"top_users,omitempty" xml:"top_users,omitempty"`
+	// Top 10 MCP servers by tool call count
+	TopServers []*TopServerResponseBody `form:"top_servers,omitempty" json:"top_servers,omitempty" xml:"top_servers,omitempty"`
+	// Breakdown of messages/activity by LLM client/agent
+	LlmClientBreakdown []*LLMClientUsageResponseBody `form:"llm_client_breakdown,omitempty" json:"llm_client_breakdown,omitempty" xml:"llm_client_breakdown,omitempty"`
+}
+
+// TopUserResponseBody is used to define fields on response body types.
+type TopUserResponseBody struct {
+	// User ID (internal or external depending on availability)
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Type of user ID
+	UserType *string `form:"user_type,omitempty" json:"user_type,omitempty" xml:"user_type,omitempty"`
+	// Number of messages (session mode) or tool calls (tool_call mode)
+	ActivityCount *int64 `form:"activity_count,omitempty" json:"activity_count,omitempty" xml:"activity_count,omitempty"`
+}
+
+// TopServerResponseBody is used to define fields on response body types.
+type TopServerResponseBody struct {
+	// MCP server name
+	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	// Total number of tool calls
+	ToolCallCount *int64 `form:"tool_call_count,omitempty" json:"tool_call_count,omitempty" xml:"tool_call_count,omitempty"`
+}
+
+// LLMClientUsageResponseBody is used to define fields on response body types.
+type LLMClientUsageResponseBody struct {
+	// Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
+	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
+	// Number of messages (session mode) or tool calls (tool_call mode)
+	ActivityCount *int64 `form:"activity_count,omitempty" json:"activity_count,omitempty" xml:"activity_count,omitempty"`
 }
 
 // TimeSeriesBucketResponseBody is used to define fields on response body types.
@@ -4334,6 +4373,7 @@ func NewGetUserMetricsSummaryGatewayError(body *GetUserMetricsSummaryGatewayErro
 func NewGetObservabilityOverviewResultOK(body *GetObservabilityOverviewResponseBody) *telemetry.GetObservabilityOverviewResult {
 	v := &telemetry.GetObservabilityOverviewResult{
 		IntervalSeconds: *body.IntervalSeconds,
+		MetricsMode:     *body.MetricsMode,
 	}
 	v.Summary = unmarshalObservabilitySummaryResponseBodyToTelemetryObservabilitySummary(body.Summary)
 	v.Comparison = unmarshalObservabilitySummaryResponseBodyToTelemetryObservabilitySummary(body.Comparison)
@@ -5318,6 +5358,9 @@ func ValidateGetObservabilityOverviewResponseBody(body *GetObservabilityOverview
 	if body.IntervalSeconds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
 	}
+	if body.MetricsMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("metrics_mode", "body"))
+	}
 	if body.Summary != nil {
 		if err2 := ValidateObservabilitySummaryResponseBody(body.Summary); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -5347,6 +5390,11 @@ func ValidateGetObservabilityOverviewResponseBody(body *GetObservabilityOverview
 			if err2 := ValidateToolMetricResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.MetricsMode != nil {
+		if !(*body.MetricsMode == "session" || *body.MetricsMode == "tool_call") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.metrics_mode", *body.MetricsMode, []any{"session", "tool_call"}))
 		}
 	}
 	return
@@ -8723,6 +8771,86 @@ func ValidateObservabilitySummaryResponseBody(body *ObservabilitySummaryResponse
 	}
 	if body.AvgLatencyMs == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("avg_latency_ms", "body"))
+	}
+	if body.ActiveServersCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_servers_count", "body"))
+	}
+	if body.ActiveUsersCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_users_count", "body"))
+	}
+	if body.TopUsers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_users", "body"))
+	}
+	if body.TopServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_servers", "body"))
+	}
+	if body.LlmClientBreakdown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("llm_client_breakdown", "body"))
+	}
+	for _, e := range body.TopUsers {
+		if e != nil {
+			if err2 := ValidateTopUserResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.TopServers {
+		if e != nil {
+			if err2 := ValidateTopServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.LlmClientBreakdown {
+		if e != nil {
+			if err2 := ValidateLLMClientUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateTopUserResponseBody runs the validations defined on
+// TopUserResponseBody
+func ValidateTopUserResponseBody(body *TopUserResponseBody) (err error) {
+	if body.UserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
+	}
+	if body.UserType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_type", "body"))
+	}
+	if body.ActivityCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("activity_count", "body"))
+	}
+	if body.UserType != nil {
+		if !(*body.UserType == "internal" || *body.UserType == "external") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_type", *body.UserType, []any{"internal", "external"}))
+		}
+	}
+	return
+}
+
+// ValidateTopServerResponseBody runs the validations defined on
+// TopServerResponseBody
+func ValidateTopServerResponseBody(body *TopServerResponseBody) (err error) {
+	if body.ServerName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_name", "body"))
+	}
+	if body.ToolCallCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_call_count", "body"))
+	}
+	return
+}
+
+// ValidateLLMClientUsageResponseBody runs the validations defined on
+// LLMClientUsageResponseBody
+func ValidateLLMClientUsageResponseBody(body *LLMClientUsageResponseBody) (err error) {
+	if body.ClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_name", "body"))
+	}
+	if body.ActivityCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("activity_count", "body"))
 	}
 	return
 }

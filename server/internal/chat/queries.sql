@@ -406,3 +406,104 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- name: GetTopUsersByMessages :many
+SELECT
+  COALESCE(NULLIF(c.external_user_id, ''), c.user_id) as user_id,
+  CASE WHEN c.external_user_id IS NOT NULL AND c.external_user_id != '' THEN 'external' ELSE 'internal' END as user_type,
+  COUNT(DISTINCT m.id) as message_count
+FROM chats c
+INNER JOIN chat_messages m ON m.chat_id = c.id
+WHERE c.project_id = @project_id
+  AND c.deleted IS FALSE
+  AND m.created_at >= @time_start
+  AND m.created_at <= @time_end
+  AND m.role IN ('user', 'assistant')
+  AND COALESCE(NULLIF(c.external_user_id, ''), c.user_id) IS NOT NULL
+GROUP BY COALESCE(NULLIF(c.external_user_id, ''), c.user_id), CASE WHEN c.external_user_id IS NOT NULL AND c.external_user_id != '' THEN 'external' ELSE 'internal' END
+ORDER BY message_count DESC
+LIMIT @result_limit;
+
+-- name: GetRecentChatSessions :many
+SELECT
+  c.id as chat_id,
+  c.user_id,
+  c.external_user_id,
+  c.title,
+  c.created_at,
+  c.updated_at,
+  (SELECT m2.source FROM chat_messages m2 WHERE m2.chat_id = c.id AND m2.source IS NOT NULL ORDER BY m2.created_at DESC LIMIT 1) as source,
+  COUNT(m.id)::integer as message_count,
+  SUM(m.total_tokens)::bigint as total_tokens,
+  MAX(m.created_at) as last_message_at
+FROM chats c
+LEFT JOIN chat_messages m ON m.chat_id = c.id
+WHERE c.project_id = @project_id
+  AND c.deleted IS FALSE
+  AND c.updated_at >= @time_start
+  AND c.updated_at <= @time_end
+GROUP BY c.id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at
+ORDER BY c.updated_at DESC
+LIMIT @result_limit;
+
+-- name: GetLLMClientBreakdownByMessages :many
+SELECT
+  COALESCE(m.source, 'unknown') as client_name,
+  COUNT(DISTINCT m.id) as message_count
+FROM chats c
+INNER JOIN chat_messages m ON m.chat_id = c.id
+WHERE c.project_id = @project_id
+  AND c.deleted IS FALSE
+  AND m.created_at >= @time_start
+  AND m.created_at <= @time_end
+  AND m.role IN ('user', 'assistant')
+GROUP BY client_name
+ORDER BY message_count DESC;
+
+-- name: GetActiveUserCountByMessages :one
+SELECT
+  COUNT(DISTINCT COALESCE(NULLIF(c.external_user_id, ''), c.user_id))::bigint as active_user_count
+FROM chats c
+INNER JOIN chat_messages m ON m.chat_id = c.id
+WHERE c.project_id = @project_id
+  AND c.deleted IS FALSE
+  AND m.created_at >= @time_start
+  AND m.created_at <= @time_end
+  AND m.role IN ('user', 'assistant')
+  AND COALESCE(NULLIF(c.external_user_id, ''), c.user_id) IS NOT NULL;
+
+-- name: GetChatSessionCount :one
+SELECT COUNT(DISTINCT c.id)::bigint as session_count
+FROM chats c
+INNER JOIN chat_messages m ON m.chat_id = c.id
+WHERE c.project_id = @project_id
+  AND c.deleted IS FALSE
+  AND m.created_at >= @time_start
+  AND m.created_at <= @time_end;
+
+-- name: GetChatMetricsSummary :one
+WITH chat_stats AS (
+  SELECT
+    c.id as chat_id,
+    MIN(m.created_at) as first_message_at,
+    MAX(m.created_at) as last_message_at,
+    EXTRACT(EPOCH FROM (MAX(m.created_at) - MIN(m.created_at))) * 1000 as duration_ms,
+    COALESCE(
+      (SELECT resolution FROM chat_resolutions WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1),
+      ''
+    ) as resolution_status
+  FROM chats c
+  INNER JOIN chat_messages m ON m.chat_id = c.id
+  WHERE c.project_id = @project_id
+    AND c.deleted IS FALSE
+    AND m.created_at >= @time_start
+    AND m.created_at <= @time_end
+  GROUP BY c.id
+)
+SELECT
+  COUNT(*)::bigint as total_chats,
+  COALESCE(SUM(CASE WHEN resolution_status = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
+  COALESCE(SUM(CASE WHEN resolution_status = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
+  COALESCE(AVG(duration_ms), 0)::double precision as avg_session_duration_ms,
+  COALESCE(AVG(CASE WHEN resolution_status != '' THEN duration_ms END), 0)::double precision as avg_resolution_time_ms
+FROM chat_stats;

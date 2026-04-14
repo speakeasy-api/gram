@@ -3336,6 +3336,67 @@ func unmarshalObservabilitySummaryResponseBodyToTelemetryObservabilitySummary(v 
 		TotalToolCalls:       *v.TotalToolCalls,
 		FailedToolCalls:      *v.FailedToolCalls,
 		AvgLatencyMs:         *v.AvgLatencyMs,
+		ActiveServersCount:   *v.ActiveServersCount,
+		ActiveUsersCount:     *v.ActiveUsersCount,
+	}
+	res.TopUsers = make([]*telemetry.TopUser, len(v.TopUsers))
+	for i, val := range v.TopUsers {
+		if val == nil {
+			res.TopUsers[i] = nil
+			continue
+		}
+		res.TopUsers[i] = unmarshalTopUserResponseBodyToTelemetryTopUser(val)
+	}
+	res.TopServers = make([]*telemetry.TopServer, len(v.TopServers))
+	for i, val := range v.TopServers {
+		if val == nil {
+			res.TopServers[i] = nil
+			continue
+		}
+		res.TopServers[i] = unmarshalTopServerResponseBodyToTelemetryTopServer(val)
+	}
+	res.LlmClientBreakdown = make([]*telemetry.LLMClientUsage, len(v.LlmClientBreakdown))
+	for i, val := range v.LlmClientBreakdown {
+		if val == nil {
+			res.LlmClientBreakdown[i] = nil
+			continue
+		}
+		res.LlmClientBreakdown[i] = unmarshalLLMClientUsageResponseBodyToTelemetryLLMClientUsage(val)
+	}
+
+	return res
+}
+
+// unmarshalTopUserResponseBodyToTelemetryTopUser builds a value of type
+// *telemetry.TopUser from a value of type *TopUserResponseBody.
+func unmarshalTopUserResponseBodyToTelemetryTopUser(v *TopUserResponseBody) *telemetry.TopUser {
+	res := &telemetry.TopUser{
+		UserID:        *v.UserID,
+		UserType:      *v.UserType,
+		ActivityCount: *v.ActivityCount,
+	}
+
+	return res
+}
+
+// unmarshalTopServerResponseBodyToTelemetryTopServer builds a value of type
+// *telemetry.TopServer from a value of type *TopServerResponseBody.
+func unmarshalTopServerResponseBodyToTelemetryTopServer(v *TopServerResponseBody) *telemetry.TopServer {
+	res := &telemetry.TopServer{
+		ServerName:    *v.ServerName,
+		ToolCallCount: *v.ToolCallCount,
+	}
+
+	return res
+}
+
+// unmarshalLLMClientUsageResponseBodyToTelemetryLLMClientUsage builds a value
+// of type *telemetry.LLMClientUsage from a value of type
+// *LLMClientUsageResponseBody.
+func unmarshalLLMClientUsageResponseBodyToTelemetryLLMClientUsage(v *LLMClientUsageResponseBody) *telemetry.LLMClientUsage {
+	res := &telemetry.LLMClientUsage{
+		ClientName:    *v.ClientName,
+		ActivityCount: *v.ActivityCount,
 	}
 
 	return res

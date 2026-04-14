@@ -246,6 +246,8 @@ type GetObservabilityOverviewResponseBody struct {
 	TopToolsByFailureRate []*ToolMetricResponseBody `form:"top_tools_by_failure_rate" json:"top_tools_by_failure_rate" xml:"top_tools_by_failure_rate"`
 	// The time bucket interval in seconds used for the time series data
 	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
+	// Indicates whether metrics are session-based or tool-call-based
+	MetricsMode string `form:"metrics_mode" json:"metrics_mode" xml:"metrics_mode"`
 }
 
 // ListFilterOptionsResponseBody is the type of the "telemetry" service
@@ -2715,6 +2717,43 @@ type ObservabilitySummaryResponseBody struct {
 	FailedToolCalls int64 `form:"failed_tool_calls" json:"failed_tool_calls" xml:"failed_tool_calls"`
 	// Average tool latency in milliseconds
 	AvgLatencyMs float64 `form:"avg_latency_ms" json:"avg_latency_ms" xml:"avg_latency_ms"`
+	// Number of MCP servers with at least one tool call in the time period
+	ActiveServersCount int64 `form:"active_servers_count" json:"active_servers_count" xml:"active_servers_count"`
+	// Number of unique users with activity in the time period
+	ActiveUsersCount int64 `form:"active_users_count" json:"active_users_count" xml:"active_users_count"`
+	// Top 10 users by activity (# of messages or tool calls depending on
+	// metrics_mode)
+	TopUsers []*TopUserResponseBody `form:"top_users" json:"top_users" xml:"top_users"`
+	// Top 10 MCP servers by tool call count
+	TopServers []*TopServerResponseBody `form:"top_servers" json:"top_servers" xml:"top_servers"`
+	// Breakdown of messages/activity by LLM client/agent
+	LlmClientBreakdown []*LLMClientUsageResponseBody `form:"llm_client_breakdown" json:"llm_client_breakdown" xml:"llm_client_breakdown"`
+}
+
+// TopUserResponseBody is used to define fields on response body types.
+type TopUserResponseBody struct {
+	// User ID (internal or external depending on availability)
+	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// Type of user ID
+	UserType string `form:"user_type" json:"user_type" xml:"user_type"`
+	// Number of messages (session mode) or tool calls (tool_call mode)
+	ActivityCount int64 `form:"activity_count" json:"activity_count" xml:"activity_count"`
+}
+
+// TopServerResponseBody is used to define fields on response body types.
+type TopServerResponseBody struct {
+	// MCP server name
+	ServerName string `form:"server_name" json:"server_name" xml:"server_name"`
+	// Total number of tool calls
+	ToolCallCount int64 `form:"tool_call_count" json:"tool_call_count" xml:"tool_call_count"`
+}
+
+// LLMClientUsageResponseBody is used to define fields on response body types.
+type LLMClientUsageResponseBody struct {
+	// Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
+	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
+	// Number of messages (session mode) or tool calls (tool_call mode)
+	ActivityCount int64 `form:"activity_count" json:"activity_count" xml:"activity_count"`
 }
 
 // TimeSeriesBucketResponseBody is used to define fields on response body types.
@@ -3048,6 +3087,7 @@ func NewGetUserMetricsSummaryResponseBody(res *telemetry.GetUserMetricsSummaryRe
 func NewGetObservabilityOverviewResponseBody(res *telemetry.GetObservabilityOverviewResult) *GetObservabilityOverviewResponseBody {
 	body := &GetObservabilityOverviewResponseBody{
 		IntervalSeconds: res.IntervalSeconds,
+		MetricsMode:     res.MetricsMode,
 	}
 	if res.Summary != nil {
 		body.Summary = marshalTelemetryObservabilitySummaryToObservabilitySummaryResponseBody(res.Summary)
