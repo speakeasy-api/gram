@@ -275,6 +275,10 @@ func (s *Service) setTriggerStatus(ctx context.Context, id string, status string
 	return view, nil
 }
 
+// HandleWebhook takes an incoming webhook request and passes it onto the trigger app facade
+//
+// NOTE(security): webhook signature is checked in `*App.ProcessWebhook`. Requires
+// `Definition.AuthenticateWebhook` to be defined.
 func (s *Service) HandleWebhook(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	triggerID, err := uuid.Parse(chi.URLParam(r, "id"))

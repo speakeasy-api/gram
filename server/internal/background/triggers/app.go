@@ -50,6 +50,64 @@ type Dispatcher interface {
 	Dispatch(context.Context, Task) error
 }
 
+type TriggerDeliveryLog struct {
+	Timestamp  time.Time
+	Instance   triggerrepo.TriggerInstance
+	Attributes map[attr.Key]any
+}
+
+type triggerDeliveryLogger struct {
+	write func(context.Context, TriggerDeliveryLog)
+}
+
+func NewTriggerDeliveryLogger(write func(context.Context, TriggerDeliveryLog)) DeliveryLogger {
+	return &triggerDeliveryLogger{write: write}
+}
+
+func (l *triggerDeliveryLogger) LogTriggerDelivery(
+	instance triggerrepo.TriggerInstance,
+	envelope EventEnvelope,
+	status DeliveryStatus,
+	reason string,
+	err error,
+) {
+	if l == nil || l.write == nil {
+		return
+	}
+
+	body := fmt.Sprintf("trigger event %s", status)
+	if reason != "" {
+		body += ": " + reason
+	}
+
+	attributes := map[attr.Key]any{
+		attr.TriggerDefinitionSlugKey: instance.DefinitionSlug,
+		attr.TriggerInstanceIDKey:     instance.ID.String(),
+		attr.TriggerEventIDKey:        envelope.EventID,
+		attr.TriggerCorrelationIDKey:  envelope.CorrelationID,
+		attr.TriggerDeliveryStatusKey: string(status),
+		attr.TriggerTargetKindKey:     instance.TargetKind,
+		attr.TriggerTargetRefKey:      instance.TargetRef,
+		attr.LogBodyKey:               body,
+		attr.LogSeverityKey:           conv.Ternary(status == DeliveryStatusFailed, "ERROR", "INFO"),
+	}
+	if reason != "" {
+		attributes[attr.ReasonKey] = reason
+	}
+	if instance.EnvironmentID.Valid {
+		attributes[attr.EnvironmentIDKey] = instance.EnvironmentID.UUID.String()
+	}
+	if err != nil {
+		attributes[attr.ErrorMessageKey] = err.Error()
+	}
+
+	l.write(context.Background(), TriggerDeliveryLog{
+		Timestamp:  conv.Default(envelope.ReceivedAt, time.Now().UTC()),
+		Attributes: attributes,
+		Instance:   instance,
+	})
+}
+
 type App struct {
 	logger         *slog.Logger
 	repo           *triggerrepo.Queries
