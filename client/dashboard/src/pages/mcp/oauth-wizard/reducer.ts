@@ -9,7 +9,10 @@ import type {
 // Initial state
 // ---------------------------------------------------------------------------
 
-export const INITIAL_STATE: WizardState = { step: "path_selection" };
+export const INITIAL_STATE: WizardState = {
+  step: "path_selection",
+  title: "Connect OAuth",
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -39,10 +42,11 @@ export function applyProxyDiscovered(
 }
 
 export function makeProxyState(
-  overrides?: Partial<ProxyFormData> & { prefilled?: boolean },
+  overrides?: Partial<ProxyFormData> & { prefilled?: boolean; title?: string },
 ): Extract<WizardState, { step: "oauth_proxy_server_metadata_form" }> {
   return {
     step: "oauth_proxy_server_metadata_form",
+    title: overrides?.title ?? "Configure OAuth Proxy",
     slug: overrides?.slug ?? "",
     authorizationEndpoint: overrides?.authorizationEndpoint ?? "",
     tokenEndpoint: overrides?.tokenEndpoint ?? "",
@@ -84,6 +88,7 @@ export function wizardReducer(
         : {};
       return {
         step: "external_oauth_server_metadata_form",
+        title: "Configure External OAuth",
         slug: "",
         metadataJson: "",
         jsonError: null,
@@ -96,7 +101,11 @@ export function wizardReducer(
       const discovered = action.discoveredOAuth
         ? { ...applyProxyDiscovered(action.discoveredOAuth), prefilled: true }
         : {};
-      return makeProxyState({ ...action.defaults, ...discovered });
+      return makeProxyState({
+        ...action.defaults,
+        ...discovered,
+        title: action.title,
+      });
     }
 
     case "BACK": {
@@ -110,6 +119,7 @@ export function wizardReducer(
       if (state.step !== "oauth_proxy_server_metadata_form") return state;
       return {
         step: "oauth_proxy_client_credentials_form",
+        title: "OAuth Client Credentials",
         proxyFormData: extractProxyFormData(state),
         clientId: "",
         clientSecret: "",
@@ -140,6 +150,14 @@ export function wizardReducer(
       }
       return state;
     }
+
+    case "SET_RESULT":
+      return {
+        step: "result",
+        title: action.success ? "OAuth Configured" : "Configuration Failed",
+        success: action.success,
+        message: action.message,
+      };
 
     case "RESET":
       return INITIAL_STATE;

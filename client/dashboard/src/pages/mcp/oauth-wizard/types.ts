@@ -22,9 +22,10 @@ export interface ProxyFormData {
 }
 
 export type WizardState =
-  | { step: "path_selection" }
+  | { step: "path_selection"; title: string }
   | {
       step: "external_oauth_server_metadata_form";
+      title: string;
       slug: string;
       metadataJson: string;
       jsonError: string | null;
@@ -32,6 +33,7 @@ export type WizardState =
     }
   | {
       step: "oauth_proxy_server_metadata_form";
+      title: string;
       slug: string;
       authorizationEndpoint: string;
       tokenEndpoint: string;
@@ -44,10 +46,17 @@ export type WizardState =
     }
   | {
       step: "oauth_proxy_client_credentials_form";
+      title: string;
       proxyFormData: ProxyFormData;
       clientId: string;
       clientSecret: string;
       error: string | null;
+    }
+  | {
+      step: "result";
+      title: string;
+      success: boolean;
+      message: string;
     };
 
 export type WizardAction =
@@ -56,12 +65,14 @@ export type WizardAction =
       type: "SELECT_PROXY";
       discoveredOAuth?: DiscoveredOAuth | null;
       defaults?: Partial<ProxyFormData>;
+      title?: string;
     }
   | { type: "BACK" }
   | { type: "PROXY_NEXT" }
   | { type: "UPDATE_FIELD"; field: string; value: string }
   | { type: "SET_ERROR"; error: string | null }
   | { type: "APPLY_DISCOVERED"; discoveredOAuth: DiscoveredOAuth }
+  | { type: "SET_RESULT"; success: boolean; message: string }
   | { type: "RESET" };
 
 export type WizardDispatch = React.Dispatch<WizardAction>;

@@ -27,6 +27,7 @@ import { ExternalOAuthForm } from "./ExternalOAuthForm";
 import { PathSelection } from "./PathSelection";
 import { ProxyCredentialsForm } from "./ProxyCredentialsForm";
 import { ProxyMetadataForm } from "./ProxyMetadataForm";
+import { ResultStep } from "./ResultStep";
 import { INITIAL_STATE, wizardReducer } from "./reducer";
 import type { DiscoveredOAuth } from "./types";
 
@@ -39,14 +40,12 @@ function OAuthWizard({
   onClose,
   toolsetSlug,
   toolset,
-  onSuccess,
   editMode,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
-  onSuccess: () => void;
   editMode?: { proxyServer: NonNullable<Toolset["oauthProxyServer"]> };
 }) {
   const discoveredOAuth = useMemo<DiscoveredOAuth | null>(() => {
@@ -100,6 +99,7 @@ function OAuthWizard({
     proxyAudiencePrefilledRef.current = initialAudience;
     dispatch({
       type: "SELECT_PROXY",
+      title: "Edit OAuth Proxy",
       defaults: {
         slug: editProxyServer.slug ?? "",
         audience: initialAudience,
@@ -114,11 +114,11 @@ function OAuthWizard({
     });
   }, [editProxyServer]);
 
-  // Reset wizard state when the modal closes.
+  // Reset wizard state after the modal close animation finishes.
   useEffect(() => {
-    if (!isOpen) {
-      dispatch({ type: "RESET" });
-    }
+    if (isOpen) return;
+    const id = setTimeout(() => dispatch({ type: "RESET" }), 200);
+    return () => clearTimeout(id);
   }, [isOpen]);
 
   const telemetry = useTelemetry();
@@ -137,13 +137,20 @@ function OAuthWizard({
         action: "external_oauth_configured",
         slug: toolsetSlug,
       });
-      onSuccess();
+      dispatch({
+        type: "SET_RESULT",
+        success: true,
+        message: "Your external OAuth server has been configured successfully.",
+      });
     },
     onError: (error) => {
       console.error("Failed to configure external OAuth:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to configure OAuth",
-      );
+      dispatch({
+        type: "SET_RESULT",
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Failed to configure OAuth",
+      });
     },
   });
 
@@ -156,15 +163,23 @@ function OAuthWizard({
         action: "oauth_proxy_configured",
         slug: toolsetSlug,
       });
-      onSuccess();
+      dispatch({
+        type: "SET_RESULT",
+        success: true,
+        message:
+          "Your OAuth proxy has been configured successfully. Client credentials have been stored in a new environment.",
+      });
     },
     onError: (error) => {
       console.error("Failed to configure OAuth proxy:", error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to configure OAuth proxy",
-      );
+      dispatch({
+        type: "SET_RESULT",
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to configure OAuth proxy",
+      });
     },
   });
 
@@ -175,13 +190,22 @@ function OAuthWizard({
         action: "oauth_proxy_updated",
         slug: toolsetSlug,
       });
-      onSuccess();
+      dispatch({
+        type: "SET_RESULT",
+        success: true,
+        message: "Your OAuth proxy server has been updated successfully.",
+      });
     },
     onError: (error) => {
       console.error("Failed to update OAuth proxy:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to update OAuth proxy",
-      );
+      dispatch({
+        type: "SET_RESULT",
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to update OAuth proxy",
+      });
     },
   });
 
@@ -405,18 +429,25 @@ function OAuthWizard({
               },
               onError: (error) => {
                 console.error("Failed to store OAuth credentials:", error);
-                toast.error("Failed to store OAuth credentials");
+                dispatch({
+                  type: "SET_RESULT",
+                  success: false,
+                  message: "Failed to store OAuth credentials",
+                });
               },
             },
           );
         },
         onError: (error) => {
           console.error("Failed to create environment:", error);
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : "Failed to create environment for OAuth credentials",
-          );
+          dispatch({
+            type: "SET_RESULT",
+            success: false,
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to create environment for OAuth credentials",
+          });
         },
       },
     );
@@ -431,17 +462,7 @@ function OAuthWizard({
     addOAuthProxyMutation,
   ]);
 
-  // --- Title ---
-
-  const wizardTitle = editMode
-    ? "Edit OAuth Proxy"
-    : state.step === "path_selection"
-      ? "Connect OAuth"
-      : state.step === "oauth_proxy_client_credentials_form"
-        ? "OAuth Client Credentials"
-        : state.step === "external_oauth_server_metadata_form"
-          ? "Configure External OAuth"
-          : "Configure OAuth Proxy";
+  const wizardTitle = state.title;
 
   const isProxySubmitting =
     createEnvironmentMutation.isPending ||
@@ -503,6 +524,10 @@ function OAuthWizard({
             }
           />
         )}
+
+        {state.step === "result" && (
+          <ResultStep state={state} onClose={onClose} />
+        )}
       </Dialog.Content>
     </Dialog>
   );
@@ -526,7 +551,6 @@ export function ConnectOAuthModal({
   editMode?: { proxyServer: NonNullable<Toolset["oauthProxyServer"]> };
 }) {
   const productTier = useProductTier();
-  const queryClient = useQueryClient();
   const isAccountUpgrade = productTier.includes("base");
 
   if (isAccountUpgrade) {
@@ -551,15 +575,6 @@ export function ConnectOAuthModal({
       toolsetSlug={toolsetSlug}
       toolset={toolset}
       editMode={editMode}
-      onSuccess={() => {
-        invalidateAllToolset(queryClient);
-        toast.success(
-          editMode
-            ? "OAuth proxy server updated successfully"
-            : "External OAuth server configured successfully",
-        );
-        onClose();
-      }}
     />
   );
 }
