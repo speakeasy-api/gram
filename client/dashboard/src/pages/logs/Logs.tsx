@@ -2,6 +2,7 @@ import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsSidebar } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
+import { QuerySamplesPopover } from "@/components/QuerySamplesPopover";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -94,6 +95,19 @@ function safeBase64Decode(str: string): string | null {
 }
 
 const perPage = 100;
+
+const DATE_RANGE_SAMPLES: Array<{
+  value: DateRangePreset;
+  label: string;
+  description?: string;
+}> = [
+  { value: "15m", label: "Last 15 minutes", description: "Live debugging" },
+  { value: "1h", label: "Last 1 hour", description: "Recent activity" },
+  { value: "4h", label: "Last 4 hours", description: "Incident window" },
+  { value: "1d", label: "Last 24 hours", description: "Daily health check" },
+  { value: "7d", label: "Last 7 days", description: "Weekly trend" },
+  { value: "30d", label: "Last 30 days", description: "Monthly review" },
+];
 
 /**
  * MCP Server filter dropdown
@@ -720,7 +734,15 @@ function LogsInnerContent({
                         onSearchSubmit={onSearchSubmit}
                       />
                     </div>
-                    <div className="ml-auto">
+                    <div className="ml-auto flex items-center gap-2">
+                      <QuerySamplesPopover
+                        title="Sample date ranges"
+                        ariaLabel="Show sample date ranges"
+                        samples={DATE_RANGE_SAMPLES}
+                        onSelect={(sample) =>
+                          onDateRangeChange(sample.value as DateRangePreset)
+                        }
+                      />
                       <TimeRangePicker
                         preset={customRange ? null : dateRange}
                         customRange={customRange}
