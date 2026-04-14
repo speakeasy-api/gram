@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"regexp"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,7 +36,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
-var slugPattern = regexp.MustCompile(`[^a-z0-9-]+`)
 var validPrincipalURN = regexp.MustCompile(`^(\*|role:[a-zA-Z0-9_-]+|user:[a-zA-Z0-9_-]+)$`)
 
 type Service struct {
@@ -177,7 +175,10 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, err
 	}
 
-	slug := generateSlug(payload.Name)
+	slug := conv.ToSlug(payload.Name)
+	if slug == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "plugin name must produce a valid slug")
+	}
 
 	plugin, err := s.repo.CreatePlugin(ctx, repo.CreatePluginParams{
 		OrganizationID: ac.ActiveOrganizationID,
@@ -212,7 +213,7 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
 	}
 
-	slug := generateSlug(payload.Slug)
+	slug := conv.ToSlug(payload.Slug)
 	if slug != payload.Slug {
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid slug: must contain only lowercase alphanumeric characters and hyphens")
 	}
@@ -745,17 +746,6 @@ func pluginAssignmentToGen(a repo.PluginAssignment) *gen.PluginAssignment {
 		PrincipalUrn: a.PrincipalUrn,
 		CreatedAt:    formatTime(a.CreatedAt),
 	}
-}
-
-func generateSlug(name string) string {
-	slug := strings.ToLower(name)
-	slug = strings.ReplaceAll(slug, " ", "-")
-	slug = slugPattern.ReplaceAllString(slug, "")
-	slug = strings.Trim(slug, "-")
-	if slug == "" {
-		slug = "plugin"
-	}
-	return slug
 }
 
 func formatTime(t pgtype.Timestamptz) string {
