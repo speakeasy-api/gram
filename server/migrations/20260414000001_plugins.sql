@@ -49,7 +49,8 @@ CREATE TABLE "plugin_servers" (
   CONSTRAINT "plugin_servers_registry_id_fkey" FOREIGN KEY ("registry_id") REFERENCES "mcp_registries" ("id") ON UPDATE NO ACTION ON DELETE RESTRICT,
   CONSTRAINT "plugin_servers_toolset_id_fkey" FOREIGN KEY ("toolset_id") REFERENCES "toolsets" ("id") ON UPDATE NO ACTION ON DELETE RESTRICT,
   CONSTRAINT "plugin_servers_policy_check" CHECK (policy = ANY (ARRAY['required'::text, 'optional'::text])),
-  CONSTRAINT "plugin_servers_source_check" CHECK (((((toolset_id IS NOT NULL))::integer + ((registry_id IS NOT NULL))::integer) + ((external_url IS NOT NULL))::integer) = 1)
+  CONSTRAINT "plugin_servers_source_check" CHECK (((((toolset_id IS NOT NULL))::integer + ((registry_id IS NOT NULL))::integer) + ((external_url IS NOT NULL))::integer) = 1),
+  CONSTRAINT "plugin_servers_registry_specifier_check" CHECK (registry_id IS NOT NULL OR registry_server_specifier IS NULL)
 );
 -- Create index "plugin_servers_plugin_id_display_name_key" to table: "plugin_servers"
 CREATE UNIQUE INDEX "plugin_servers_plugin_id_display_name_key" ON "plugin_servers" ("plugin_id", "display_name") WHERE (deleted IS FALSE);

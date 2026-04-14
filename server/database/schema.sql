@@ -1744,6 +1744,9 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional')),
   CONSTRAINT plugin_servers_source_check CHECK (
     (toolset_id IS NOT NULL)::int + (registry_id IS NOT NULL)::int + (external_url IS NOT NULL)::int = 1
+  ),
+  CONSTRAINT plugin_servers_registry_specifier_check CHECK (
+    registry_id IS NOT NULL OR registry_server_specifier IS NULL
   )
 );
 
