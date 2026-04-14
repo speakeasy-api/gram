@@ -18,6 +18,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useSlugs } from "@/contexts/Sdk";
+import { cn } from "@/lib/utils";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import {
@@ -38,8 +39,8 @@ import {
 } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, Settings, XIcon } from "lucide-react";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, ChevronDown, RefreshCw, Settings, XIcon } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useOrgRoutes } from "@/routes";
 import { Link, useSearchParams } from "react-router";
@@ -416,6 +417,12 @@ function LogsContent() {
     isLogsDisabled,
   } = hasStructuredFilters ? attrLogsQuery : toolCallsQuery;
 
+  const queryClient = useQueryClient();
+  const handleRefresh = useCallback(() => {
+    refetch();
+    queryClient.invalidateQueries({ queryKey: ["trace-logs"] });
+  }, [refetch, queryClient]);
+
   // Flatten all pages into a single array of traces, merging duplicates that
   // span page boundaries (attribute-filtered logs are grouped per-page, so the
   // same traceId can appear in multiple pages with partial counts).
@@ -562,6 +569,7 @@ function LogsContent() {
         hasNextPage={hasNextPage}
         isFetchingNextPage={isFetchingNextPage}
         refetch={refetch}
+        onRefresh={handleRefresh}
         // Time range props
         dateRange={dateRange}
         customRange={customRange}
@@ -604,6 +612,7 @@ function LogsInnerContent({
   hasNextPage,
   isFetchingNextPage,
   refetch,
+  onRefresh,
   // Time range props
   dateRange,
   customRange,
@@ -641,6 +650,7 @@ function LogsInnerContent({
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   refetch: () => void;
+  onRefresh: () => void;
   // Time range props
   dateRange: DateRangePreset;
   customRange: { from: Date; to: Date } | null;
@@ -694,12 +704,29 @@ function LogsInnerContent({
                 <div className="shrink-0 px-8 py-4">
                   <div className="mb-4 flex items-start justify-between gap-4">
                     {pageTitle}
-                    <Button variant="outline" size="sm" asChild>
-                      <Link to={orgRoutes.logs.href()}>
-                        <Settings className="h-4 w-4" />
-                        Configure settings
-                      </Link>
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={onRefresh}
+                        disabled={isFetching}
+                        aria-label="Refresh logs"
+                      >
+                        <RefreshCw
+                          className={cn(
+                            "h-4 w-4",
+                            isFetching && "animate-spin",
+                          )}
+                        />
+                        Refresh
+                      </Button>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link to={orgRoutes.logs.href()}>
+                          <Settings className="h-4 w-4" />
+                          Configure settings
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                   {/* Filter and Search Row */}
                   <div className="flex flex-wrap items-center gap-4">
