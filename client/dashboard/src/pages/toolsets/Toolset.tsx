@@ -32,7 +32,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
+import { MCPDetails, MCPStatusDropdown } from "../mcp/MCPDetails";
 import { AddToolsDialog } from "./AddToolsDialog";
 import { PromptsTabContent } from "./PromptsTab";
 import { ResourcesTabContent } from "./resources/ResourcesTab";
@@ -687,7 +687,7 @@ export function ToolsetView({
                 gap={2}
               >
                 <Heading variant="h2">MCP Server Settings</Heading>
-                <MCPEnableButton toolset={toolset} />
+                <MCPStatusDropdown toolset={toolset} />
               </Stack>
               <MCPDetails toolset={toolset} />
             </Stack>
