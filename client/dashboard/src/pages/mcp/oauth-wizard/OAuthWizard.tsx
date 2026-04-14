@@ -20,12 +20,12 @@ import {
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useEffect, useMemo, useReducer, useRef } from "react";
 
+import { useStepActions } from "./actions";
 import { ExternalOAuthForm } from "./ExternalOAuthForm";
 import { PathSelection } from "./PathSelection";
 import { ProxyCredentialsForm } from "./ProxyCredentialsForm";
-import type { ProxyMetadataSubmitData } from "./ProxyMetadataForm";
 import { ProxyMetadataForm } from "./ProxyMetadataForm";
 import { ResultStep } from "./ResultStep";
 import { INITIAL_STATE, wizardReducer } from "./reducer";
@@ -231,160 +231,24 @@ function OAuthWizard({
 
   const routes = useRoutes();
 
-  // --- Submit handlers ---
+  // --- Step actions ---
 
-  const handleExternalSubmit = useCallback(
-    (data: { slug: string; metadata: Record<string, unknown> }) => {
-      addExternalOAuthMutation.mutate({
-        request: {
-          slug: toolsetSlug,
-          addExternalOAuthServerRequestBody: {
-            externalOauthServer: {
-              slug: data.slug,
-              metadata: data.metadata,
-            },
-          },
-        },
-      });
-    },
-    [toolsetSlug, addExternalOAuthMutation],
-  );
-
-  const handleProxyEditSubmit = useCallback(
-    (data: ProxyMetadataSubmitData) => {
-      const audienceChanged =
-        data.audience !== proxyAudiencePrefilledRef.current;
-
-      updateOAuthProxyMutation.mutate({
-        request: {
-          slug: toolsetSlug,
-          updateOAuthProxyServerRequestBody: {
-            oauthProxyServer: {
-              audience: audienceChanged ? data.audience : undefined,
-              authorizationEndpoint: data.authorizationEndpoint,
-              tokenEndpoint: data.tokenEndpoint,
-              scopesSupported: data.scopesSupported,
-              tokenEndpointAuthMethodsSupported:
-                data.tokenEndpointAuthMethodsSupported,
-              environmentSlug: data.environmentSlug || undefined,
-            },
-          },
-        },
-      });
-    },
-    [toolsetSlug, updateOAuthProxyMutation],
-  );
-
-  const handleProxyCreateSubmit = useCallback(
-    (data: { clientId: string; clientSecret: string }) => {
-      if (state.step !== "oauth_proxy_client_credentials_form") return;
-
-      const { proxyFormData } = state;
-      const scopesArray = proxyFormData.scopes
-        .split(",")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-
-      const existingNames = new Set(environments.map((e) => e.name));
-      let envName = `${toolset.name} OAuth`;
-      if (existingNames.has(envName)) {
-        let suffix = 1;
-        while (existingNames.has(`${toolset.name} OAuth ${suffix}`)) {
-          suffix++;
-        }
-        envName = `${toolset.name} OAuth ${suffix}`;
-      }
-      createEnvironmentMutation.mutate(
-        {
-          request: {
-            createEnvironmentForm: {
-              name: envName,
-              organizationId: session.activeOrganizationId,
-              entries: [],
-            },
-          },
-        },
-        {
-          onSuccess: (env) => {
-            updateEnvironmentMutation.mutate(
-              {
-                request: {
-                  slug: env.slug,
-                  updateEnvironmentRequestBody: {
-                    entriesToUpdate: [
-                      { name: "CLIENT_ID", value: data.clientId },
-                      { name: "CLIENT_SECRET", value: data.clientSecret },
-                    ],
-                    entriesToRemove: [],
-                  },
-                },
-              },
-              {
-                onSuccess: () => {
-                  addOAuthProxyMutation.mutate({
-                    request: {
-                      slug: toolsetSlug,
-                      addOAuthProxyServerRequestBody: {
-                        oauthProxyServer: {
-                          providerType: "custom",
-                          slug: proxyFormData.slug,
-                          audience: proxyFormData.audience || undefined,
-                          authorizationEndpoint:
-                            proxyFormData.authorizationEndpoint,
-                          tokenEndpoint: proxyFormData.tokenEndpoint,
-                          scopesSupported: scopesArray,
-                          tokenEndpointAuthMethodsSupported: [
-                            proxyFormData.tokenAuthMethod,
-                          ],
-                          environmentSlug: env.slug,
-                        },
-                      },
-                    },
-                  });
-                },
-                onError: (error) => {
-                  console.error("Failed to store OAuth credentials:", error);
-                  dispatch({
-                    type: "SET_RESULT",
-                    success: false,
-                    message: "Failed to store OAuth credentials",
-                  });
-                },
-              },
-            );
-          },
-          onError: (error) => {
-            console.error("Failed to create environment:", error);
-            dispatch({
-              type: "SET_RESULT",
-              success: false,
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Failed to create environment for OAuth credentials",
-            });
-          },
-        },
-      );
-    },
-    [
-      state,
-      toolset.name,
-      toolsetSlug,
-      session.activeOrganizationId,
-      environments,
-      createEnvironmentMutation,
-      updateEnvironmentMutation,
-      addOAuthProxyMutation,
-    ],
-  );
+  const actions = useStepActions({
+    state,
+    dispatch,
+    toolsetSlug,
+    toolsetName: toolset.name,
+    activeOrganizationId: session.activeOrganizationId,
+    environments,
+    proxyAudiencePrefilled: proxyAudiencePrefilledRef.current,
+    addExternalOAuthMutation,
+    addOAuthProxyMutation,
+    updateOAuthProxyMutation,
+    createEnvironmentMutation,
+    updateEnvironmentMutation,
+  });
 
   const wizardTitle = state.title;
-
-  const isProxySubmitting =
-    createEnvironmentMutation.isPending ||
-    updateEnvironmentMutation.isPending ||
-    addOAuthProxyMutation.isPending;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -410,7 +274,7 @@ function OAuthWizard({
               toolset.oauthEnablementMetadata?.oauth2SecurityCount
             }
             isPending={addExternalOAuthMutation.isPending}
-            onSubmit={handleExternalSubmit}
+            onSubmit={actions.external_oauth_server_metadata_form.submit}
           />
         )}
 
@@ -421,7 +285,8 @@ function OAuthWizard({
             discoveredOAuth={discoveredOAuth}
             editMode={!!editMode}
             isEditPending={updateOAuthProxyMutation.isPending}
-            onEditSubmit={handleProxyEditSubmit}
+            onNext={actions.oauth_proxy_server_metadata_form.next}
+            onEditSubmit={actions.oauth_proxy_server_metadata_form.editSubmit}
             onClose={onClose}
           />
         )}
@@ -430,8 +295,10 @@ function OAuthWizard({
           <ProxyCredentialsForm
             state={state}
             dispatch={dispatch}
-            isSubmitting={isProxySubmitting}
-            onSubmit={handleProxyCreateSubmit}
+            isSubmitting={
+              actions.oauth_proxy_client_credentials_form.isSubmitting
+            }
+            onSubmit={actions.oauth_proxy_client_credentials_form.submit}
             attachedEnvironmentName={attachedEnvironmentName}
             environmentsLink={
               <routes.environments.Link className="text-muted-foreground hover:text-foreground text-sm transition-colors">

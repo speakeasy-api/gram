@@ -4,8 +4,6 @@ import { Link } from "@/components/ui/link";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { Button, Stack } from "@speakeasy-api/moonshine";
-import { useCallback } from "react";
-import { toast } from "sonner";
 
 import type { DiscoveredOAuth, WizardDispatch, WizardState } from "./types";
 
@@ -24,47 +22,8 @@ export function ExternalOAuthForm({
   hasMultipleOAuth2AuthCode: boolean;
   oauth2SecurityCount: number;
   isPending: boolean;
-  onSubmit: (data: { slug: string; metadata: Record<string, unknown> }) => void;
+  onSubmit: () => void;
 }) {
-  const handleSubmit = useCallback(() => {
-    let parsedMetadata;
-    try {
-      parsedMetadata = JSON.parse(state.metadataJson);
-    } catch {
-      dispatch({
-        type: "UPDATE_FIELD",
-        field: "jsonError",
-        value: "Invalid JSON format",
-      });
-      return;
-    }
-
-    if (!state.slug.trim()) {
-      toast.error("Please provide a slug for the OAuth server");
-      return;
-    }
-
-    const requiredEndpoints = [
-      "authorization_endpoint",
-      "token_endpoint",
-      "registration_endpoint",
-    ];
-    const missingEndpoints = requiredEndpoints.filter(
-      (endpoint) => !parsedMetadata[endpoint],
-    );
-
-    if (missingEndpoints.length > 0) {
-      dispatch({
-        type: "UPDATE_FIELD",
-        field: "jsonError",
-        value: `Missing required endpoints: ${missingEndpoints.join(", ")}`,
-      });
-      return;
-    }
-
-    dispatch({ type: "UPDATE_FIELD", field: "jsonError", value: "" });
-    onSubmit({ slug: state.slug, metadata: parsedMetadata });
-  }, [state, dispatch, onSubmit]);
   return (
     <>
       <div className="max-h-[60vh] space-y-4 overflow-auto">
@@ -193,7 +152,7 @@ export function ExternalOAuthForm({
         </Button>
         <div className="ml-auto">
           <Button
-            onClick={handleSubmit}
+            onClick={onSubmit}
             disabled={
               hasMultipleOAuth2AuthCode ||
               isPending ||
