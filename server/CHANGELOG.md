@@ -1,5 +1,21 @@
 # server
 
+## 0.39.0
+
+### Minor Changes
+
+- 98d322b: Add support for triggers across Gram.
+
+  This introduces webhook and scheduled triggers end to end, including server APIs, worker execution for trigger dispatch and cron processing, SDK support, and dashboard UI for managing trigger definitions and instances.
+
+### Patch Changes
+
+- 04e0240: Disabled the logger for the retryablehttp client to avoid noisy logs that can clutter the output.
+- 6a23890: Fixed an issue where toolset lookup for install pages had fallback logic that, when a custom-domain-scoped query returned no rows (e.g. because the toolset was deleted), would retry with a slug-only query ignoring the domain. This caused the install page to serve a different org's active toolset that shared the same MCP slug instead of returning 404.
+- 15a7b25: Ensure telemetry logs continue to be inserted into ClickHouse even if the
+  request context has been canceled.
+- 4b1aa8c: Allow resolving a server without a custom domain attached when the user is authenticated and a custom domain is available.
+
 ## 0.38.0
 
 ### Minor Changes

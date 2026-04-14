@@ -23,22 +23,34 @@ import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
 import { Button, cn, Stack } from "@speakeasy-api/moonshine";
 import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { RequireScope } from "@/components/require-scope";
 
 export default function Billing() {
-  const productTier = useProductTier();
-
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Title>Billing</Page.Header.Title>
       </Page.Header>
       <Page.Body>
-        <UsageSection />
-        {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
-        {(productTier === "base_PAID" ||
-          productTier === "__deprecated__pro") && <UsageTiers />}
+        <RequireScope scope={["org:read", "org:admin"]} level="page">
+          <BillingInner />
+        </RequireScope>
       </Page.Body>
     </Page>
+  );
+}
+
+export function BillingInner() {
+  const productTier = useProductTier();
+
+  return (
+    <>
+      <UsageSection />
+      {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
+      {(productTier === "base_PAID" || productTier === "__deprecated__pro") && (
+        <UsageTiers />
+      )}
+    </>
   );
 }
 
@@ -383,7 +395,9 @@ const UsageTiers = () => {
       <Page.Section.Description>
         A breakdown of our pricing tiers.
       </Page.Section.Description>
-      {productTier === "base" ? UpgradeCTA : polarPortalCTA}
+      <RequireScope scope="org:admin" level="section">
+        {productTier === "base" ? UpgradeCTA : polarPortalCTA}
+      </RequireScope>
       <Page.Section.Body>
         <Stack direction={"horizontal"} gap={4}>
           {isLoading ? (

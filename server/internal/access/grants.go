@@ -106,7 +106,7 @@ func syncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 	return nil
 }
 
-func grantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string) ([]*gen.RoleGrant, error) {
+func grantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string) ([]*gen.ListRoleGrant, error) {
 	rows, err := repo.New(db).ListPrincipalGrantsByOrg(ctx, repo.ListPrincipalGrantsByOrgParams{
 		OrganizationID: orgID,
 		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug).String(),
@@ -131,7 +131,7 @@ type scopeAgg struct {
 	resources    []string
 }
 
-func grantsFromRows(rows []Grant) []*gen.RoleGrant {
+func grantsFromRows(rows []Grant) []*gen.ListRoleGrant {
 	byScope := make(map[string]*scopeAgg)
 	for _, row := range rows {
 		scope := string(row.Scope)
@@ -156,14 +156,21 @@ func grantsFromRows(rows []Grant) []*gen.RoleGrant {
 	}
 	slices.Sort(scopes)
 
-	grants := make([]*gen.RoleGrant, 0, len(byScope))
+	grants := make([]*gen.ListRoleGrant, 0, len(byScope))
 	for _, scope := range scopes {
 		agg := byScope[scope]
 		if !agg.unrestricted {
 			slices.Sort(agg.resources)
 		}
 
-		grant := &gen.RoleGrant{Scope: scope, Resources: nil}
+		// also include the sub scopes that are granted by the primary scope
+		// by looking up the scope expansions map
+		scopeEnum := Scope(scope)
+
+		// The expansions map is reversed in the sense that the key is the lower privilege scope and the value is the higher privilege scopes that also satisfy it, so we need to reverse it.
+		subScopes := calculateSubScopes(scopeEnum)
+
+		grant := &gen.ListRoleGrant{Scope: scope, SubScopes: subScopes, Resources: nil}
 		if agg.unrestricted {
 			grant.Resources = nil
 		} else {
@@ -173,4 +180,13 @@ func grantsFromRows(rows []Grant) []*gen.RoleGrant {
 	}
 
 	return grants
+}
+
+func calculateSubScopes(scope Scope) []string {
+	lowers := scopeSubScopes[scope]
+	out := make([]string, len(lowers))
+	for i, s := range lowers {
+		out[i] = string(s)
+	}
+	return out
 }

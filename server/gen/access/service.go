@@ -128,6 +128,16 @@ type ListMembersResult struct {
 	Members []*AccessMember
 }
 
+type ListRoleGrant struct {
+	// The scope slug this grant applies to.
+	Scope string
+	// The inherited scopes the primary scope grants.
+	SubScopes []string
+	// Resource allowlist. Null means unrestricted access. An array means only the
+	// listed resource IDs.
+	Resources []string
+}
+
 // ListRolesPayload is the payload type of the access service listRoles method.
 type ListRolesPayload struct {
 	ApikeyToken  *string
@@ -157,7 +167,7 @@ type ListScopesResult struct {
 // method.
 type ListUserGrantsResult struct {
 	// The user's effective grants in this organization.
-	Grants []*RoleGrant
+	Grants []*ListRoleGrant
 }
 
 // Role is the result type of the access service getRole method.

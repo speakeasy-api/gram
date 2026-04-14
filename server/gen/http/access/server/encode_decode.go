@@ -2026,3 +2026,25 @@ func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember)
 
 	return res
 }
+
+// marshalAccessListRoleGrantToListRoleGrantResponseBody builds a value of type
+// *ListRoleGrantResponseBody from a value of type *access.ListRoleGrant.
+func marshalAccessListRoleGrantToListRoleGrantResponseBody(v *access.ListRoleGrant) *ListRoleGrantResponseBody {
+	res := &ListRoleGrantResponseBody{
+		Scope: v.Scope,
+	}
+	if v.SubScopes != nil {
+		res.SubScopes = make([]string, len(v.SubScopes))
+		for i, val := range v.SubScopes {
+			res.SubScopes[i] = val
+		}
+	}
+	if v.Resources != nil {
+		res.Resources = make([]string, len(v.Resources))
+		for i, val := range v.Resources {
+			res.Resources[i] = val
+		}
+	}
+
+	return res
+}

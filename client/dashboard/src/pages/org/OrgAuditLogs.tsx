@@ -1,4 +1,5 @@
 import { useQueryState } from "nuqs";
+import { RequireScope } from "@/components/require-scope";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import {
@@ -499,6 +500,21 @@ function FacetSelect({
 }
 
 export default function OrgAuditLogs() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Title>Audit Logs</Page.Header.Title>
+      </Page.Header>
+      <Page.Body>
+        <RequireScope scope="org:read" level="page">
+          <OrgAuditLogsInner />
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
+}
+
+export function OrgAuditLogsInner() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
   const [selectedProjectSlug, setSelectedProjectSlug] = useQueryState(
@@ -809,311 +825,296 @@ export default function OrgAuditLogs() {
   ]);
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Title>Audit Logs</Page.Header.Title>
-      </Page.Header>
-      <Page.Body>
-        <div className="flex w-full flex-col gap-4">
-          <div>
-            <Type className="font-medium">Recent activity across Gram</Type>
-            <Type muted small className="mt-1">
-              Review organization-wide and project-level actions in
-              chronological order.
+    <div className="flex w-full flex-col gap-4">
+      <div>
+        <Type className="font-medium">Recent activity across Gram</Type>
+        <Type muted small className="mt-1">
+          Review organization-wide and project-level actions in chronological
+          order.
+        </Type>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <FacetSelect
+          label="Project"
+          value={selectedProjectSlug}
+          onValueChange={setSelectedProjectSlug}
+          placeholder="All projects"
+          allLabel="All projects"
+          options={projects.map((project) => ({
+            value: project.slug,
+            displayName: project.slug,
+          }))}
+        />
+        <FacetSelect
+          label="Action"
+          value={selectedAction}
+          onValueChange={setSelectedAction}
+          placeholder="All actions"
+          allLabel="All actions"
+          options={actionOptions}
+        />
+        <FacetSelect
+          label="Actor"
+          value={selectedActor}
+          onValueChange={setSelectedActor}
+          placeholder="All actors"
+          allLabel="All actors"
+          options={actorOptions}
+        />
+        <div className="flex flex-col gap-1.5">
+          <Type small muted>
+            Filters
+          </Type>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!hasActiveFilters}
+            onClick={() => {
+              Promise.allSettled([
+                setSelectedProjectSlug("all"),
+                setSelectedAction("all"),
+                setSelectedActor("all"),
+              ]);
+            }}
+          >
+            Clear filters
+          </Button>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Type small muted>
+            Timestamp
+          </Type>
+          <div className="bg-background flex h-8 items-center gap-2 rounded-md border px-3">
+            <Type
+              small
+              className={
+                tsMode === "utc" ? "text-foreground" : "text-muted-foreground"
+              }
+            >
+              UTC
+            </Type>
+            <Switch
+              checked={tsMode === "local"}
+              onCheckedChange={(checked) => {
+                void setTimestampMode(checked ? "local" : "utc");
+              }}
+              aria-label="Toggle timestamp timezone"
+            />
+            <Type
+              small
+              className={
+                tsMode === "local" ? "text-foreground" : "text-muted-foreground"
+              }
+            >
+              Local
             </Type>
           </div>
+        </div>
+      </div>
 
-          <div className="flex flex-wrap items-end gap-3">
-            <FacetSelect
-              label="Project"
-              value={selectedProjectSlug}
-              onValueChange={setSelectedProjectSlug}
-              placeholder="All projects"
-              allLabel="All projects"
-              options={projects.map((project) => ({
-                value: project.slug,
-                displayName: project.slug,
-              }))}
-            />
-            <FacetSelect
-              label="Action"
-              value={selectedAction}
-              onValueChange={setSelectedAction}
-              placeholder="All actions"
-              allLabel="All actions"
-              options={actionOptions}
-            />
-            <FacetSelect
-              label="Actor"
-              value={selectedActor}
-              onValueChange={setSelectedActor}
-              placeholder="All actors"
-              allLabel="All actors"
-              options={actorOptions}
-            />
-            <div className="flex flex-col gap-1.5">
-              <Type small muted>
-                Filters
-              </Type>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!hasActiveFilters}
-                onClick={() => {
-                  Promise.allSettled([
-                    setSelectedProjectSlug("all"),
-                    setSelectedAction("all"),
-                    setSelectedActor("all"),
-                  ]);
-                }}
-              >
-                Clear filters
-              </Button>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Type small muted>
-                Timestamp
-              </Type>
-              <div className="bg-background flex h-8 items-center gap-2 rounded-md border px-3">
-                <Type
-                  small
-                  className={
-                    tsMode === "utc"
-                      ? "text-foreground"
-                      : "text-muted-foreground"
-                  }
-                >
-                  UTC
-                </Type>
-                <Switch
-                  checked={tsMode === "local"}
-                  onCheckedChange={(checked) => {
-                    void setTimestampMode(checked ? "local" : "utc");
-                  }}
-                  aria-label="Toggle timestamp timezone"
-                />
-                <Type
-                  small
-                  className={
-                    tsMode === "local"
-                      ? "text-foreground"
-                      : "text-muted-foreground"
-                  }
-                >
-                  Local
-                </Type>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-background overflow-hidden rounded-lg border">
-            {/* Search toolbar */}
-            {!isLoading && !error && logs.length > 0 && (
-              <div className="bg-surface/50 flex items-center gap-2 border-b p-2">
-                <div className="text-muted-foreground flex items-center gap-3 text-[11px]">
-                  {searchQuery ? (
-                    <>
-                      <span className="flex items-center gap-1">
-                        <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                          N
-                        </kbd>
-                        <span>/</span>
-                        <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                          ⇧N
-                        </kbd>
-                        <span className="ml-0.5">results</span>
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                          ESC
-                        </kbd>
-                        <span>clear</span>
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="flex items-center gap-1">
-                        <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                          J
-                        </kbd>
-                        <span>/</span>
-                        <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                          K
-                        </kbd>
-                        <span className="ml-0.5">navigate</span>
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                          G
-                        </kbd>
-                        <span>first</span>
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                          ⇧G
-                        </kbd>
-                        <span>last</span>
-                      </span>
-                    </>
-                  )}
-                </div>
-                <div className="relative ml-auto">
-                  <Icon
-                    name="search"
-                    className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2"
-                  />
-                  <Input
-                    data-audit-search-input
-                    type="text"
-                    placeholder="Search audit logs"
-                    value={searchQuery}
-                    onChange={(e) => handleSearchChange(e.target.value)}
-                    onFocus={() => setSearchInputFocused(true)}
-                    onBlur={() => setSearchInputFocused(false)}
-                    className="w-56 rounded-sm py-1 pr-16 pl-7 text-xs"
-                  />
-                  {searchQuery || searchInputFocused ? (
-                    searchMatchIndices.length > 0 ? (
-                      <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
-                        <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
-                          ESC
-                        </span>
-                        <span className="text-muted-foreground mx-0.5 text-[10px]">
-                          {effectiveSearchIndex + 1}/{searchMatchIndices.length}
-                        </span>
-                        <div className="flex items-center">
-                          <button
-                            onClick={() => navigateToResult("prev")}
-                            className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
-                            title="Previous (Shift+N)"
-                          >
-                            <Icon name="chevron-up" className="size-2.5" />
-                          </button>
-                          <button
-                            onClick={() => navigateToResult("next")}
-                            className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
-                            title="Next (N)"
-                          >
-                            <Icon name="chevron-down" className="size-2.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
-                        <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
-                          ESC
-                        </span>
-                        <span className="text-muted-foreground ml-0.5 text-[10px]">
-                          0/0
-                        </span>
-                      </div>
-                    )
-                  ) : (
-                    <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
-                      <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                        /
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div
-              ref={logsContainerRef}
-              tabIndex={0}
-              className="focus:outline-none"
-            >
-              {isLoading ? (
-                <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-                  <Icon name="loader-circle" className="size-4 animate-spin" />
-                  <span>Loading audit logs...</span>
-                </div>
-              ) : error ? (
-                <div className="flex flex-col items-center gap-2 py-12 text-center">
-                  <Type className="font-medium">Error loading audit logs</Type>
-                  <Type muted small>
-                    {error.message}
-                  </Type>
-                </div>
-              ) : logs.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 py-12 text-center">
-                  <Type className="font-medium">No audit logs found</Type>
-                  <Type muted small>
-                    {selectedProjectSlug === "all" &&
-                    selectedAction === "all" &&
-                    selectedActor === "all"
-                      ? "Activity will appear here as changes are made across your organization."
-                      : "No audit logs match the selected filters."}
-                  </Type>
-                </div>
+      <div className="bg-background overflow-hidden rounded-lg border">
+        {/* Search toolbar */}
+        {!isLoading && !error && logs.length > 0 && (
+          <div className="bg-surface/50 flex items-center gap-2 border-b p-2">
+            <div className="text-muted-foreground flex items-center gap-3 text-[11px]">
+              {searchQuery ? (
+                <>
+                  <span className="flex items-center gap-1">
+                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                      N
+                    </kbd>
+                    <span>/</span>
+                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                      ⇧N
+                    </kbd>
+                    <span className="ml-0.5">results</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                      ESC
+                    </kbd>
+                    <span>clear</span>
+                  </span>
+                </>
               ) : (
-                <div>
-                  {dateGroups.map((group) => (
-                    <React.Fragment key={group.key}>
-                      <DateGroupHeader date={group.date} mode={tsMode} />
-                      {group.logs.map((log, rowIndex) => {
-                        const idx = logFlatIndices.get(log.id) ?? 0;
-                        return (
-                          <AuditLogRow
-                            key={log.id}
-                            log={log}
-                            orgSlug={orgSlug}
-                            timestampMode={tsMode}
-                            isOdd={rowIndex % 2 === 1}
-                            isHighlighted={idx === currentLogIndex}
-                            rowRef={(el) => {
-                              if (el) logRefs.current.set(idx, el);
-                              else logRefs.current.delete(idx);
-                            }}
-                            highlightMatch={
-                              searchQuery ? highlightMatch : undefined
-                            }
-                          />
-                        );
-                      })}
-                    </React.Fragment>
-                  ))}
+                <>
+                  <span className="flex items-center gap-1">
+                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                      J
+                    </kbd>
+                    <span>/</span>
+                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                      K
+                    </kbd>
+                    <span className="ml-0.5">navigate</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                      G
+                    </kbd>
+                    <span>first</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                      ⇧G
+                    </kbd>
+                    <span>last</span>
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="relative ml-auto">
+              <Icon
+                name="search"
+                className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2"
+              />
+              <Input
+                data-audit-search-input
+                type="text"
+                placeholder="Search audit logs"
+                value={searchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                onFocus={() => setSearchInputFocused(true)}
+                onBlur={() => setSearchInputFocused(false)}
+                className="w-56 rounded-sm py-1 pr-16 pl-7 text-xs"
+              />
+              {searchQuery || searchInputFocused ? (
+                searchMatchIndices.length > 0 ? (
+                  <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
+                    <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
+                      ESC
+                    </span>
+                    <span className="text-muted-foreground mx-0.5 text-[10px]">
+                      {effectiveSearchIndex + 1}/{searchMatchIndices.length}
+                    </span>
+                    <div className="flex items-center">
+                      <button
+                        onClick={() => navigateToResult("prev")}
+                        className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
+                        title="Previous (Shift+N)"
+                      >
+                        <Icon name="chevron-up" className="size-2.5" />
+                      </button>
+                      <button
+                        onClick={() => navigateToResult("next")}
+                        className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
+                        title="Next (N)"
+                      >
+                        <Icon name="chevron-down" className="size-2.5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
+                    <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
+                      ESC
+                    </span>
+                    <span className="text-muted-foreground ml-0.5 text-[10px]">
+                      0/0
+                    </span>
+                  </div>
+                )
+              ) : (
+                <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
+                  <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    /
+                  </span>
                 </div>
               )}
             </div>
+          </div>
+        )}
 
-            {(logs.length > 0 || isFetchingNextPage) && (
-              <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
-                <Type muted small>
-                  {logs.length.toLocaleString()} audit log
-                  {logs.length === 1 ? "" : "s"}
-                </Type>
+        <div ref={logsContainerRef} tabIndex={0} className="focus:outline-none">
+          {isLoading ? (
+            <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
+              <Icon name="loader-circle" className="size-4 animate-spin" />
+              <span>Loading audit logs...</span>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center gap-2 py-12 text-center">
+              <Type className="font-medium">Error loading audit logs</Type>
+              <Type muted small>
+                {error.message}
+              </Type>
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-12 text-center">
+              <Type className="font-medium">No audit logs found</Type>
+              <Type muted small>
+                {selectedProjectSlug === "all" &&
+                selectedAction === "all" &&
+                selectedActor === "all"
+                  ? "Activity will appear here as changes are made across your organization."
+                  : "No audit logs match the selected filters."}
+              </Type>
+            </div>
+          ) : (
+            <div>
+              {dateGroups.map((group) => (
+                <React.Fragment key={group.key}>
+                  <DateGroupHeader date={group.date} mode={tsMode} />
+                  {group.logs.map((log, rowIndex) => {
+                    const idx = logFlatIndices.get(log.id) ?? 0;
+                    return (
+                      <AuditLogRow
+                        key={log.id}
+                        log={log}
+                        orgSlug={orgSlug}
+                        timestampMode={tsMode}
+                        isOdd={rowIndex % 2 === 1}
+                        isHighlighted={idx === currentLogIndex}
+                        rowRef={(el) => {
+                          if (el) logRefs.current.set(idx, el);
+                          else logRefs.current.delete(idx);
+                        }}
+                        highlightMatch={
+                          searchQuery ? highlightMatch : undefined
+                        }
+                      />
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </div>
+          )}
+        </div>
 
-                {hasNextPage ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fetchNextPage()}
-                    disabled={isFetchingNextPage}
-                  >
-                    {isFetchingNextPage ? (
-                      <>
-                        <Icon
-                          name="loader-circle"
-                          className="size-4 animate-spin"
-                        />
-                        Loading...
-                      </>
-                    ) : (
-                      "Load more"
-                    )}
-                  </Button>
+        {(logs.length > 0 || isFetchingNextPage) && (
+          <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
+            <Type muted small>
+              {logs.length.toLocaleString()} audit log
+              {logs.length === 1 ? "" : "s"}
+            </Type>
+
+            {hasNextPage ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+              >
+                {isFetchingNextPage ? (
+                  <>
+                    <Icon
+                      name="loader-circle"
+                      className="size-4 animate-spin"
+                    />
+                    Loading...
+                  </>
                 ) : (
-                  <Type muted small>
-                    {isFetching ? "Refreshing..." : "End of audit log history"}
-                  </Type>
+                  "Load more"
                 )}
-              </div>
+              </Button>
+            ) : (
+              <Type muted small>
+                {isFetching ? "Refreshing..." : "End of audit log history"}
+              </Type>
             )}
           </div>
-        </div>
-      </Page.Body>
-    </Page>
+        )}
+      </div>
+    </div>
   );
 }

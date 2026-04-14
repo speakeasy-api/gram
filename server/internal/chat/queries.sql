@@ -91,6 +91,7 @@ SELECT
     , (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_timestamp
 FROM chats c
 WHERE c.project_id = @project_id
+  AND c.deleted IS FALSE
 ORDER BY c.updated_at DESC;
 
 -- name: ListChatsForExternalUser :many
@@ -112,6 +113,7 @@ SELECT
     , (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_timestamp
 FROM chats c
 WHERE c.project_id = @project_id AND c.external_user_id = @external_user_id
+  AND c.deleted IS FALSE
 ORDER BY c.updated_at DESC;
 
 
@@ -134,10 +136,11 @@ SELECT
     , (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_timestamp
 FROM chats c
 WHERE c.project_id = @project_id AND c.user_id = @user_id
+  AND c.deleted IS FALSE
 ORDER BY c.updated_at DESC;
 
 -- name: GetChat :one
-SELECT * FROM chats WHERE id = @id;
+SELECT * FROM chats WHERE id = @id AND deleted IS FALSE;
 
 -- name: ListChatMessages :many
 SELECT * FROM chat_messages 
@@ -354,7 +357,7 @@ SELECT
         '[]'::json
     ) as resolutions
 FROM chats c
-WHERE c.id = @id;
+WHERE c.id = @id AND c.deleted IS FALSE;
 
 -- name: ListUserFeedbackForChat :many
 SELECT *
@@ -396,3 +399,10 @@ INSERT INTO chat_user_feedback (
 UPDATE chat_user_feedback
 SET chat_resolution_id = @chat_resolution_id
 WHERE id = @id;
+
+-- name: SoftDeleteChat :exec
+UPDATE chats
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

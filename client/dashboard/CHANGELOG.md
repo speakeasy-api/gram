@@ -1,5 +1,22 @@
 # dashboard
 
+## 0.40.0
+
+### Minor Changes
+
+- 98d322b: Add support for triggers across Gram.
+
+  This introduces webhook and scheduled triggers end to end, including server APIs, worker execution for trigger dispatch and cron processing, SDK support, and dashboard UI for managing trigger definitions and instances.
+
+### Patch Changes
+
+- 19fb17f: Add ability to soft-delete chat sessions from the dashboard with confirmation dialog, available from both the chat list table and detail panel
+- cdf94a3: Redesign deployment logs with color-coded level badges, dot indicators, inline keyboard hints, and React performance fixes
+- b20533b: fix: migrate globals.css to Tailwind CSS v4 syntax
+- 4590453: Move oauth config to the "authentication" tab of mcp page and provide indications for type of Oauth connection per MCP.
+- Updated dependencies [98d322b]
+  - @gram/client@0.33.0
+
 ## 0.39.0
 
 ### Minor Changes

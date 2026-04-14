@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -55,6 +57,9 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 	}
 
 	chat, err := g.repo.GetChat(ctx, chatID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil // chat was deleted, nothing to do
+	}
 	if err != nil {
 		return fmt.Errorf("get chat: %w", err)
 	}

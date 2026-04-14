@@ -487,6 +487,7 @@ func newWorkerCommand() *cli.Command {
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, serverURL)
 
 			mcpService := mcp.NewService(
 				logger,
@@ -509,6 +510,7 @@ func newWorkerCommand() *cli.Command {
 				telemetryService,
 				productFeatures,
 				ragService,
+				triggerApp,
 				temporalEnv,
 				accessManager,
 			)
@@ -546,6 +548,7 @@ func newWorkerCommand() *cli.Command {
 				RagService:          ragService,
 				MCPRegistryClient:   mcpRegistryClient,
 				TelemetryLogger:     telemetryLogger,
+				TriggersApp:         triggerApp,
 				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
 			})
 
