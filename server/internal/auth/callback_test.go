@@ -32,6 +32,13 @@ func TestService_Callback(t *testing.T) {
 		require.NotEmpty(t, result.SessionToken)
 		require.NotEmpty(t, result.SessionCookie)
 		require.Equal(t, result.SessionToken, result.SessionCookie)
+
+		assertDefaultRegistryCollection(
+			t,
+			instance,
+			userInfo.Organizations[0].ID,
+			userInfo.Organizations[0].Slug,
+		)
 	})
 
 	t.Run("successful callback for speakeasy user defaults to speakeasy-team", func(t *testing.T) {
