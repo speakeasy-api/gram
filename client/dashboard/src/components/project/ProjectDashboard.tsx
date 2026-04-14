@@ -1,6 +1,7 @@
 import { MetricCard } from "@/components/chart/MetricCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSlugs } from "@/contexts/Sdk";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   useAuditLogs,
   useGetHooksSummary,
@@ -14,6 +15,8 @@ import { useMemo } from "react";
 
 export function ProjectDashboard() {
   const { projectSlug } = useSlugs();
+  const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
 
   const to = useMemo(() => new Date(), []);
   const from = useMemo(() => subDays(to, 7), [to]);
@@ -126,7 +129,12 @@ export function ProjectDashboard() {
         <h2 className="mb-4 text-lg font-semibold">Top Activity (7d)</h2>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <div className="bg-card rounded-lg border p-4">
-            <h3 className="mb-3 text-sm font-semibold">Top Users</h3>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Top Users</h3>
+              <routes.hooks.Link className="text-muted-foreground hover:text-foreground text-xs no-underline">
+                View all
+              </routes.hooks.Link>
+            </div>
             {isFilterOptionsPending ? (
               <SkeletonList />
             ) : topUsers.length === 0 ? (
@@ -143,7 +151,12 @@ export function ProjectDashboard() {
           </div>
 
           <div className="bg-card rounded-lg border p-4">
-            <h3 className="mb-3 text-sm font-semibold">Top Servers</h3>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Top Servers</h3>
+              <routes.hooks.Link className="text-muted-foreground hover:text-foreground text-xs no-underline">
+                View all
+              </routes.hooks.Link>
+            </div>
             {isHooksPending ? (
               <SkeletonList />
             ) : topServers.length === 0 ? (
@@ -166,9 +179,12 @@ export function ProjectDashboard() {
         <h2 className="mb-4 text-lg font-semibold">Sessions (7d)</h2>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <div className="bg-card rounded-lg border p-4">
-            <h3 className="mb-3 text-sm font-semibold">
-              Agent Sessions by User
-            </h3>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Agent Sessions by User</h3>
+              <routes.chatSessions.Link className="text-muted-foreground hover:text-foreground text-xs no-underline">
+                View all
+              </routes.chatSessions.Link>
+            </div>
             {isHooksPending ? (
               <SkeletonList />
             ) : topUsersByHooks.length === 0 ? (
@@ -200,9 +216,12 @@ export function ProjectDashboard() {
           </div>
 
           <div className="bg-card rounded-lg border p-4">
-            <h3 className="mb-3 text-sm font-semibold">
-              Most Used LLM Clients
-            </h3>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Most Used LLM Clients</h3>
+              <routes.observability.Link className="text-muted-foreground hover:text-foreground text-xs no-underline">
+                View all
+              </routes.observability.Link>
+            </div>
             {isMetricsPending ? (
               <SkeletonList />
             ) : topModels.length === 0 ? (
@@ -224,6 +243,12 @@ export function ProjectDashboard() {
       <div>
         <h2 className="mb-4 text-lg font-semibold">Recent Activity</h2>
         <div className="bg-card rounded-lg border p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Audit Log</h3>
+            <orgRoutes.auditLogs.Link className="text-muted-foreground hover:text-foreground text-xs no-underline">
+              View all
+            </orgRoutes.auditLogs.Link>
+          </div>
           {isAuditLogsPending ? (
             <div className="space-y-3">
               {Array.from({ length: 5 }).map((_, i) => (
