@@ -526,7 +526,7 @@ func (s *Service) ensureDefaultRegistryCollection(ctx context.Context, organizat
 		created, createErr := s.collectionsRepo.CreateOrganizationMcpCollection(ctx, collectionsRepo.CreateOrganizationMcpCollectionParams{
 			OrganizationID: organizationID,
 			Name:           defaultCollectionName,
-			Description:    pgtype.Text{},
+			Description:    pgtype.Text{String: "", Valid: false},
 			Slug:           defaultCollectionSlug,
 			Visibility:     defaultVisibility,
 		})
@@ -543,16 +543,7 @@ func (s *Service) ensureDefaultRegistryCollection(ctx context.Context, organizat
 				return oops.E(oops.CodeUnexpected, createErr, "error creating default registry collection").Log(ctx, s.logger)
 			}
 		} else {
-			collection = collectionsRepo.GetOrganizationMcpCollectionBySlugAndOrgRow{
-				ID:             created.ID,
-				OrganizationID: created.OrganizationID,
-				Name:           created.Name,
-				Description:    created.Description,
-				Slug:           created.Slug,
-				Visibility:     created.Visibility,
-				CreatedAt:      created.CreatedAt,
-				UpdatedAt:      created.UpdatedAt,
-			}
+			collection = collectionsRepo.GetOrganizationMcpCollectionBySlugAndOrgRow(created)
 		}
 	}
 
