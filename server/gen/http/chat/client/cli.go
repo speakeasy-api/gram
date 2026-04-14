@@ -271,6 +271,33 @@ func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch str
 	return v, nil
 }
 
+// BuildDeleteChatPayload builds the payload for the chat deleteChat endpoint
+// from CLI flags.
+func BuildDeleteChatPayload(chatDeleteChatID string, chatDeleteChatSessionToken string, chatDeleteChatProjectSlugInput string) (*chat.DeleteChatPayload, error) {
+	var id string
+	{
+		id = chatDeleteChatID
+	}
+	var sessionToken *string
+	{
+		if chatDeleteChatSessionToken != "" {
+			sessionToken = &chatDeleteChatSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatDeleteChatProjectSlugInput != "" {
+			projectSlugInput = &chatDeleteChatProjectSlugInput
+		}
+	}
+	v := &chat.DeleteChatPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildSubmitFeedbackPayload builds the payload for the chat submitFeedback
 // endpoint from CLI flags.
 func BuildSubmitFeedbackPayload(chatSubmitFeedbackBody string, chatSubmitFeedbackSessionToken string, chatSubmitFeedbackProjectSlugInput string, chatSubmitFeedbackChatSessionsToken string) (*chat.SubmitFeedbackPayload, error) {

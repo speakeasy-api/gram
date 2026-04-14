@@ -8,7 +8,9 @@ import type {
 import { useLoadChat, useSearchLogsMutation } from "@gram/client/react-query";
 import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Dialog } from "@/components/ui/dialog";
+import { Button } from "@speakeasy-api/moonshine";
 import { CircularProgress } from "./CircularProgress";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 
@@ -16,6 +18,7 @@ interface ChatDetailPanelProps {
   chatId: string;
   resolutions: ChatResolution[];
   onClose: () => void;
+  onDelete: (chatId: string) => void;
 }
 
 function getTraceId(chatId: string): string {
@@ -272,7 +275,9 @@ export function ChatDetailPanel({
   chatId,
   resolutions,
   onClose,
+  onDelete,
 }: ChatDetailPanelProps) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { data: chat, isLoading: chatLoading } = useLoadChat(
     { id: chatId },
     undefined,
@@ -361,13 +366,22 @@ export function ChatDetailPanel({
               </Badge>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="hover:bg-muted rounded-md p-1 transition-colors"
-            aria-label="Close panel"
-          >
-            <Icon name="x" className="size-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 transition-colors"
+              aria-label="Delete chat"
+            >
+              <Icon name="trash-2" className="size-5" />
+            </button>
+            <button
+              onClick={onClose}
+              className="hover:bg-muted rounded-md p-1 transition-colors"
+              aria-label="Close panel"
+            >
+              <Icon name="x" className="size-5" />
+            </button>
+          </div>
         </div>
         <div className="text-muted-foreground mb-3 text-sm">
           {format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm:ss")}
@@ -746,6 +760,32 @@ export function ChatDetailPanel({
           </TabsContent>
         )}
       </Tabs>
+
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Delete chat session</Dialog.Title>
+            <Dialog.Description>
+              Are you sure you want to delete this chat session? This action
+              cannot be undone.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Footer>
+            <Dialog.Close asChild>
+              <Button variant="secondary">Cancel</Button>
+            </Dialog.Close>
+            <Button
+              variant="destructive-primary"
+              onClick={() => {
+                onDelete(chatId);
+                setShowDeleteConfirm(false);
+              }}
+            >
+              Delete
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
     </div>
   );
 }
