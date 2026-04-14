@@ -295,7 +295,7 @@ type marketplaceManifest struct {
 
 type marketplaceOwner struct {
 	Name  string `json:"name"`
-	Email string `json:"email"`
+	Email string `json:"email,omitempty"`
 }
 
 type marketplaceEntry struct {
