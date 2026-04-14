@@ -1966,4 +1966,4 @@ export function GramOAuthProxyModal({
   );
 }
 
-export { ConnectOAuthModal } from "./OAuthWizard";
+export { ConnectOAuthModal } from "./oauth-wizard";
