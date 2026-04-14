@@ -589,7 +589,14 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
-	for path, content := range files {
+	// Sort paths for deterministic ZIP output.
+	paths := make([]string, 0, len(files))
+	for path := range files {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		content := files[path]
 		f, err := w.Create(path)
 		if err != nil {
 			return nil, nil, oops.E(oops.CodeUnexpected, err, "create zip entry").Log(ctx, s.logger)
