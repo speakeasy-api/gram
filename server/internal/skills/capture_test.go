@@ -317,6 +317,7 @@ func TestService_Capture_ProjectOnlyPolicyRejectsUserScope(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "not permitted by effective mode")
 }
 
 func TestService_Capture_ProjectOverrideTakesPrecedence(t *testing.T) {
@@ -335,7 +336,7 @@ func TestService_Capture_ProjectOverrideTakesPrecedence(t *testing.T) {
 
 	_, err = ti.skillsRepo.UpsertProjectCapturePolicyOverride(ctx, skillsrepo.UpsertProjectCapturePolicyOverrideParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		ProjectID:      *authCtx.ProjectID,
 		Mode:           "project_and_user",
 	})
 	require.NoError(t, err)

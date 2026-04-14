@@ -212,14 +212,14 @@ SET
     deleted_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE organization_id = $1
-  AND project_id = $2
+  AND project_id = $2::uuid
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, mode, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteProjectCapturePolicyOverrideParams struct {
 	OrganizationID string
-	ProjectID      uuid.NullUUID
+	ProjectID      uuid.UUID
 }
 
 func (q *Queries) DeleteProjectCapturePolicyOverride(ctx context.Context, arg DeleteProjectCapturePolicyOverrideParams) (SkillsCapturePolicy, error) {
@@ -731,7 +731,7 @@ INSERT INTO skills_capture_policies (
 )
 VALUES (
     $1
-  , $2
+  , $2::uuid
   , $3
 )
 ON CONFLICT (organization_id, project_id)
@@ -745,7 +745,7 @@ RETURNING id, organization_id, project_id, mode, created_at, updated_at, deleted
 
 type UpsertProjectCapturePolicyOverrideParams struct {
 	OrganizationID string
-	ProjectID      uuid.NullUUID
+	ProjectID      uuid.UUID
 	Mode           string
 }
 

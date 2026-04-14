@@ -1,4 +1,4 @@
-h1:e5FydDEJE7ywlNzl39vIJF+NAmyMxIz3813MULXGIZ8=
+h1:JTUDiVPpxYYoh4ROU4YlFIkJSrRnjEkb80vESuElJqo=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -123,7 +123,7 @@ h1:e5FydDEJE7ywlNzl39vIJF+NAmyMxIz3813MULXGIZ8=
 20260406170119_registry-unique-constraints.sql h1:RWwKjKSvDxwBxNEV4vps2XAgoru+COnFNSRcievRetk=
 20260409110431_trigger-instances.sql h1:KgkrXdTnqI8hnnNQl/NhH3tfmvaWKrlat/hFE3VNXvY=
 20260413001000_add_skills_registry_tables.sql h1:OkBkZBTzgINnnDk2b8Dx0hgzLZ50BF23V01T5te0TFY=
-20260413072629_skills-capture-policy-model.sql h1:3Vb3F0GxKqeNBG4nSvle3OeLiBE2qXKp/A4Csif8/Ec=
-20260413142758_remote-mcp-servers.sql h1:R3QZ4Vjl2SlCJA+MnjRGv3Fi0dptjb7E5kgtZtygBGk=
-20260413211711_registry-type-polymorphic.sql h1:7jbaxUE90ZZ8B03M1jlDeVayIAnILLa4W+vPUwePsLk=
-20260414003339_skills-remove-skill-lifecycle-state.sql h1:SUtZiOUiEcsXFjdGs6I0LuMTPALDsqTvTrw8dL8OTW0=
+20260413072629_skills-capture-policy-model.sql h1:6wpEkdbSIalrKvD0LerzTz4yEvig5PrUgq6vKOGtbLA=
+20260413142758_remote-mcp-servers.sql h1:V535NVJg+1VjsxQ1ZNMcm1HCRC3xV/EY7PDrljlMYos=
+20260413211711_registry-type-polymorphic.sql h1:FMJqtD9VlVTelkWGFuOoG64Boy7FvTsIjKo0HAotsj4=
+20260414003339_skills-remove-skill-lifecycle-state.sql h1:CLGBo2wgZsk7eMoRoZyt3BeuJyVs9RNoZPiXmnRQQWc=

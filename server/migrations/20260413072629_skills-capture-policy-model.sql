@@ -1,5 +1,3 @@
--- Modify "skill_versions" table
-ALTER TABLE "skill_versions" DROP CONSTRAINT "skill_versions_asset_format_check", ADD CONSTRAINT "skill_versions_asset_format_check" CHECK (asset_format = 'zip'::text);
 -- Create "skills_capture_policies" table
 CREATE TABLE "skills_capture_policies" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
