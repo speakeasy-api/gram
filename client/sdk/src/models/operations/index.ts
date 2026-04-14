@@ -39,8 +39,6 @@ export * from "./deletetemplate.js";
 export * from "./deletetoolset.js";
 export * from "./deletetoolsetenvironmentlink.js";
 export * from "./deletetriggerinstance.js";
-export * from "./disablerbac.js";
-export * from "./enablerbac.js";
 export * from "./evolvedeployment.js";
 export * from "./exportmcpmetadata.js";
 export * from "./fetchopenapiv3fromurl.js";
