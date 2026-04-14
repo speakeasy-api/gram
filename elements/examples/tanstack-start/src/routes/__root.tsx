@@ -12,7 +12,7 @@ export const Route = createRootRoute({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
     ],
-    title: "Gram Elements — TanStack Start Example",
+    title: "Speakeasy Elements — TanStack Start Example",
   }),
   component: RootComponent,
 });

@@ -8,7 +8,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <title>Gram Elements — Next.js Example</title>
+        <title>Speakeasy Elements — Next.js Example</title>
       </head>
       <body>{children}</body>
     </html>

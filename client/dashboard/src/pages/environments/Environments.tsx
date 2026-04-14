@@ -79,7 +79,7 @@ export default function Environments() {
         <Page.Section>
           <Page.Section.Title>Environments</Page.Section.Title>
           <Page.Section.Description>
-            Use environments to manage API keys, allowing Gram to handle
+            Use environments to manage API keys, allowing Speakeasy to handle
             authentication for you
           </Page.Section.Description>
           <Page.Section.CTA>

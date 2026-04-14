@@ -520,7 +520,7 @@ function LogsContent() {
     <InsightsSidebar
       mcpConfig={mcpConfig}
       title="Explore Logs"
-      subtitle="Ask me about your logs! Powered by Elements + Gram MCP"
+      subtitle="Ask me about your logs! Powered by Elements + Speakeasy MCP"
       hideTrigger={isLogsDisabled}
       suggestions={[
         {

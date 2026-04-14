@@ -67,7 +67,7 @@ export function InsightsSidebar({
   const sidebarWidth = `min(${SIDEBAR_MAX_WIDTH}px, ${SIDEBAR_MAX_PERCENT}vw)`;
 
   // Build system prompt with context info
-  const baseInstructions = `You are a helpful assistant for analyzing logs in Gram, an AI observability platform. Focus exclusively on log search and analysis.
+  const baseInstructions = `You are a helpful assistant for analyzing logs in Speakeasy, an AI observability platform. Focus exclusively on log search and analysis.
 
 The current date is ${new Date().toISOString().split("T")[0]}.
 

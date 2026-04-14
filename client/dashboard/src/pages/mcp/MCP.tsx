@@ -112,8 +112,8 @@ export function MCPOverview() {
     <Page.Section>
       <Page.Section.Title>Built-in MCP Servers</Page.Section.Title>
       <Page.Section.Description>
-        Pre-configured MCP servers provided by Gram for your project. Connect
-        from Claude Desktop, Cursor, or any MCP client.
+        Pre-configured MCP servers provided by Speakeasy for your project.
+        Connect from Claude Desktop, Cursor, or any MCP client.
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">

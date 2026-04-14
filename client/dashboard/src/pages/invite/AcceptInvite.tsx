@@ -119,7 +119,7 @@ function InviteDetails({ token }: { token: string }) {
         ) : (
           "an organization"
         )}{" "}
-        on Gram
+        on Speakeasy
       </p>
 
       <Button variant="brand" onClick={handleAccept}>

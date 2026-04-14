@@ -39,7 +39,7 @@ export default function AddSourceDialogContent({
         <Dialog.Title>Add Source</Dialog.Title>
         <Dialog.Description>
           {isFunctionsEnabled || isExternalMCPEnabled
-            ? "Upload an OpenAPI document, add Gram Functions, or import an MCP server"
+            ? "Upload an OpenAPI document, add Speakeasy Functions, or import an MCP server"
             : "Upload an OpenAPI document to create tools"}
         </Dialog.Description>
       </Dialog.Header>
@@ -94,7 +94,7 @@ export default function AddSourceDialogContent({
                 <UploadAssetStep.Indicator />
                 <UploadAssetStep.Header
                   title="Generate Tools"
-                  description="Gram will generate tools for your API."
+                  description="Speakeasy will generate tools for your API."
                 />
                 <UploadAssetStep.Content>
                   <DeployStep />
@@ -141,7 +141,7 @@ export default function AddSourceDialogContent({
             <UploadAssetStep.Indicator />
             <UploadAssetStep.Header
               title="Generate Tools"
-              description="Gram will generate tools for your API."
+              description="Speakeasy will generate tools for your API."
             />
             <UploadAssetStep.Content>
               <DeployStep />

@@ -106,7 +106,7 @@ export default function SlackRegister() {
           {state === "ready" && appInfo && (
             <Stack gap={4} align="center" className="w-full">
               <Stack gap={1} align="center">
-                <Type variant="subheading">Connect to Gram</Type>
+                <Type variant="subheading">Connect to Speakeasy</Type>
                 <Type muted small className="text-center">
                   <strong>{appInfo.appName}</strong> needs to verify your
                   identity to process your messages.

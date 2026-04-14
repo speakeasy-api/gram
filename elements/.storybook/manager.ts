@@ -5,7 +5,7 @@ const theme = create({
   base: "dark",
 
   // Brand
-  brandTitle: "Gram Elements",
+  brandTitle: "Speakeasy Elements",
   brandUrl: "https://getgram.ai",
   brandTarget: "_blank",
 

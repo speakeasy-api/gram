@@ -1176,7 +1176,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
             icon: "lock",
             label: "Private",
             description:
-              "Only users with a Gram API Key from this project can read the tools hosted by this server.",
+              "Only users with a Speakeasy API Key from this project can read the tools hosted by this server.",
           },
         ]}
         selectedValue={isPublic ? "public" : "private"}
@@ -1189,7 +1189,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     <Stack className="mb-4">
       <PageSection
         heading="Visibility"
-        description="Make your MCP server visible to the world, or protected behind a Gram key."
+        description="Make your MCP server visible to the world, or protected behind a Speakeasy key."
       >
         <PublicToggle isPublic={mcpIsPublic ?? false} />
       </PageSection>
@@ -1463,7 +1463,7 @@ export function MCPJson({
                 : "italic"
             }
           >
-            Requires a Gram API key if the server is not public.
+            Requires a Speakeasy API key if the server is not public.
           </span>
         </Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
@@ -1471,9 +1471,10 @@ export function MCPJson({
       <Grid.Item>
         <Type className="font-medium">Managed Authentication</Type>
         <Type muted small className="mb-2! max-w-3xl">
-          Manage API authentication with Gram environments.
+          Manage API authentication with Speakeasy environments.
           <br />
-          Users need a single Gram API Key rather than bringing their own keys.
+          Users need a single Speakeasy API Key rather than bringing their own
+          keys.
         </Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
       </Grid.Item>
@@ -1654,7 +1655,7 @@ export function OAuthDetailsModal({
             {toolset.externalOauthServer
               ? "External OAuth Configuration"
               : isGramOAuth
-                ? "Gram OAuth Configuration"
+                ? "Speakeasy OAuth Configuration"
                 : "OAuth Proxy Configuration"}
           </Dialog.Title>
         </Dialog.Header>
@@ -1663,12 +1664,12 @@ export function OAuthDetailsModal({
             {toolset.oauthProxyServer && isGramOAuth && (
               <>
                 <div>
-                  <Type className="font-medium">Gram OAuth is Active</Type>
+                  <Type className="font-medium">Speakeasy OAuth is Active</Type>
                 </div>
                 <Stack gap={2} className="">
                   <Type className="mb-2">
-                    Gram users with access to your organization can use this MCP
-                    server.
+                    Speakeasy users with access to your organization can use
+                    this MCP server.
                   </Type>
                   {toolset.oauthProxyServer.oauthProxyProviders?.[0]
                     ?.environmentSlug && (
@@ -1946,16 +1947,18 @@ export function GramOAuthProxyModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <Dialog.Content className="max-h-[90vh] max-w-2xl overflow-hidden">
         <Dialog.Header>
-          <Dialog.Title>Gram OAuth</Dialog.Title>
+          <Dialog.Title>Speakeasy OAuth</Dialog.Title>
         </Dialog.Header>
 
         <div className="max-h-[60vh] space-y-4 overflow-auto">
           <div>
-            <Type className="mb-2 font-medium">Gram OAuth Configuration</Type>
+            <Type className="mb-2 font-medium">
+              Speakeasy OAuth Configuration
+            </Type>
             <Type small className="mb-4">
-              Configure Gram OAuth to let users with access to your organization
-              use this MCP server. Users will authenticate using their Gram
-              credentials.
+              Configure Speakeasy OAuth to let users with access to your
+              organization use this MCP server. Users will authenticate using
+              their Speakeasy credentials.
             </Type>
           </div>
         </div>
@@ -1967,7 +1970,7 @@ export function GramOAuthProxyModal({
           >
             {addOAuthProxyMutation.isPending
               ? "Enabling..."
-              : "Enable Gram OAuth"}
+              : "Enable Speakeasy OAuth"}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>

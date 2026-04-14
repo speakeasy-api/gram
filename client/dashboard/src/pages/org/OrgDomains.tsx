@@ -157,7 +157,7 @@ export function OrgDomainsInner() {
       </Heading>
       <Type muted small className="mb-6">
         Connect a custom domain to serve your MCP servers from your own branded
-        URL instead of the default Gram domain.
+        URL instead of the default Speakeasy domain.
       </Type>
       {domain?.domain ? (
         <div className="border-border bg-card rounded-lg border p-4">

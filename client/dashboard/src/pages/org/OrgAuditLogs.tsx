@@ -827,7 +827,7 @@ export function OrgAuditLogsInner() {
   return (
     <div className="flex w-full flex-col gap-4">
       <div>
-        <Type className="font-medium">Recent activity across Gram</Type>
+        <Type className="font-medium">Recent activity across Speakeasy</Type>
         <Type muted small className="mt-1">
           Review organization-wide and project-level actions in chronological
           order.

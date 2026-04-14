@@ -510,7 +510,7 @@ function HooksContent() {
     <InsightsSidebar
       mcpConfig={mcpConfig}
       title="Explore Hooks"
-      subtitle="Ask me about your hooks! Powered by Elements + Gram MCP"
+      subtitle="Ask me about your hooks! Powered by Elements + Speakeasy MCP"
       hideTrigger={isLogsDisabled}
     >
       <div className="flex h-full flex-col overflow-hidden">

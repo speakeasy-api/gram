@@ -941,7 +941,7 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
             {oauthParadigm === "external"
               ? "External OAuth"
               : oauthParadigm === "gram"
-                ? "Gram OAuth"
+                ? "Speakeasy OAuth"
                 : "OAuth Proxy"}{" "}
             is configured
           </p>
@@ -949,7 +949,7 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
             {oauthParadigm === "external"
               ? "Users will authenticate with your external OAuth server before accessing this MCP server."
               : oauthParadigm === "gram"
-                ? "Users will authenticate with Gram OAuth before accessing this MCP server."
+                ? "Users will authenticate with Speakeasy OAuth before accessing this MCP server."
                 : "The attached CLIENT_ID and CLIENT_SECRET environment variables will be used to authenticate with the OAuth provider before users can access this MCP server."}
           </p>
         </div>

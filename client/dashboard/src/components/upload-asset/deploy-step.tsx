@@ -162,7 +162,8 @@ export default function DeployStep() {
       <Stack direction="horizontal" gap={1} align="center">
         <Spinner />
         <Type>
-          Gram is generating tools for your API. This may take a few seconds.
+          Speakeasy is generating tools for your API. This may take a few
+          seconds.
         </Type>
       </Stack>
     );

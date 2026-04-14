@@ -165,8 +165,8 @@ function SetupRequiredModal({
             Get Started with Insights
           </Dialog.Title>
           <Dialog.Description className="text-center">
-            Start capturing agent sessions and tool metrics by integrating Gram
-            Elements into your application.
+            Start capturing agent sessions and tool metrics by integrating
+            Speakeasy Elements into your application.
           </Dialog.Description>
         </Dialog.Header>
         <div className="space-y-4 pt-2">
@@ -1228,7 +1228,7 @@ function ObservabilityContent({
               <div className="flex flex-col items-start text-left">
                 <span className="font-medium">Chats</span>
                 <span className="text-muted-foreground text-xs font-normal">
-                  Gram Elements SDK
+                  Speakeasy Elements SDK
                 </span>
               </div>
             </div>

@@ -433,7 +433,7 @@ export const InitialChoiceStep = ({
   return (
     <>
       <Stack gap={1}>
-        <span className="text-heading-md">Get Started with Gram</span>
+        <span className="text-heading-md">Get Started with Speakeasy</span>
         <span className="text-body-sm">What would you like to do?</span>
       </Stack>
       <div className="grid grid-cols-1 gap-4">
@@ -500,7 +500,7 @@ const ChoiceStep = ({
             onClick={() => handleChoice("cli")}
             icon={SquareFunction}
             title="Start from Code"
-            description="Deploy custom functions using the Gram CLI"
+            description="Deploy custom functions using the Speakeasy CLI"
           />
         )}
       </div>
@@ -581,7 +581,7 @@ const CliSetupStep = ({
       command: `${installCommandPrefix} build`,
     },
     {
-      label: "Push your functions to Gram",
+      label: "Push your functions to Speakeasy",
       command: `${installCommandPrefix} push`,
     },
   ];
@@ -598,7 +598,9 @@ const CliSetupStep = ({
   return (
     <>
       <Stack gap={1}>
-        <span className="text-heading-md">Get Started with Gram Functions</span>
+        <span className="text-heading-md">
+          Get Started with Speakeasy Functions
+        </span>
         <span className="text-body-sm">
           Run these commands in your terminal
         </span>
@@ -869,8 +871,8 @@ const ToolsetStep = ({
       <Stack gap={1}>
         <span className="text-heading-md">Name Your Toolset</span>
         <span className="text-body-sm">
-          This toolset will hold the tools you've added to Gram. We'll make the
-          tools it contains available in an MCP Server in the next step.
+          This toolset will hold the tools you've added to Speakeasy. We'll make
+          the tools it contains available in an MCP Server in the next step.
         </span>
       </Stack>
       <InputField

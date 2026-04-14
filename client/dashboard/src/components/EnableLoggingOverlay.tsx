@@ -61,10 +61,10 @@ export function EnableLoggingOverlay({ onEnabled }: EnableLoggingOverlayProps) {
               className="text-muted-foreground mt-0.5 size-4 shrink-0"
             />
             <p className="text-muted-foreground text-xs">
-              When enabled, Gram will collect tool call payloads, response data,
-              and agent session logs for analysis. This data is stored securely
-              and used to generate the metrics and insights. You can disable
-              logging at any time from the Logs page.
+              When enabled, Speakeasy will collect tool call payloads, response
+              data, and agent session logs for analysis. This data is stored
+              securely and used to generate the metrics and insights. You can
+              disable logging at any time from the Logs page.
             </p>
           </div>
         </div>

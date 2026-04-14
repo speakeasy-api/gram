@@ -16,7 +16,7 @@ export function PromptsEmptyState({
   return (
     <EmptyState
       heading="No prompts yet"
-      description="Gram's prompt builder allows you to easily create and distribute reusable MCP prompts to your users."
+      description="Speakeasy's prompt builder allows you to easily create and distribute reusable MCP prompts to your users."
       nonEmptyProjectCTA={cta}
       graphic={<ToolsetsGraphic />}
       graphicClassName="scale-90"

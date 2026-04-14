@@ -56,7 +56,7 @@ function SlackAppsEmptyState({ onCreate }: { onCreate: () => void }) {
         No assistants yet
       </Type>
       <Type small muted className="mb-4 max-w-md text-center">
-        Create an assistant to let your team interact with Gram toolsets
+        Create an assistant to let your team interact with Speakeasy toolsets
         directly.
       </Type>
       <Button onClick={onCreate}>
@@ -295,7 +295,7 @@ export default function SlackAppsIndex() {
           <Page.Section>
             <Page.Section.Title>Assistants</Page.Section.Title>
             <Page.Section.Description>
-              Create and manage assistants that connect your team to Gram
+              Create and manage assistants that connect your team to Speakeasy
               toolsets in Slack.
             </Page.Section.Description>
             <Page.Section.CTA>

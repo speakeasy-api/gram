@@ -16,7 +16,7 @@ export function ResourcesEmptyState({
   return (
     <EmptyState
       heading="No resources yet"
-      description="MCP resources can be created through Gram Functions."
+      description="MCP resources can be created through Speakeasy Functions."
       nonEmptyProjectCTA={cta}
       graphic={<ToolsetsGraphic />}
       graphicClassName="scale-90"

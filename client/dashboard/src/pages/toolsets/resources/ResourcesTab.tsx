@@ -88,7 +88,7 @@ export function ResourcesTabContent({
             <Dialog.Header>
               <Dialog.Title>Add Resources</Dialog.Title>
               <Dialog.Description>
-                Add Gram Functions to create resources
+                Add Speakeasy Functions to create resources
               </Dialog.Description>
             </Dialog.Header>
             <GettingStartedInstructions />

@@ -8,7 +8,7 @@ export function MCPEmptyState({
   return (
     <EmptyState
       heading="No MCP servers yet"
-      description="Gram generates MCP-ready tools from your OpenAPI documents. Get a hosted MCP server in seconds, not days."
+      description="Speakeasy generates MCP-ready tools from your OpenAPI documents. Get a hosted MCP server in seconds, not days."
       graphic={<MCPEmptyGraphic />}
       nonEmptyProjectCTA={nonEmptyProjectCTA}
     />

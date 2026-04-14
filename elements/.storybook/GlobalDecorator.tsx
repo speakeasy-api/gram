@@ -53,7 +53,7 @@ const DEFAULT_ELEMENTS_CONFIG: ElementsConfig = {
     defaultOpen: true,
     expandable: true,
     defaultExpanded: true,
-    title: "Gram Elements Demo",
+    title: "Speakeasy Elements Demo",
   },
   tools: {
     expandToolGroupsByDefault: true,

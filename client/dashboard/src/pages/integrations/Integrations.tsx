@@ -187,7 +187,7 @@ function CreateIntegrationDialog({
           label: "Integration Summary",
           value: summary,
           onChange: setSummary,
-          placeholder: "Access your Hubspot data in Gram.",
+          placeholder: "Access your Hubspot data in Speakeasy.",
         },
         {
           label: "Integration Keywords",

@@ -83,7 +83,7 @@ export function HooksEmptyState() {
             <div>
               <h2 className="mb-2 text-xl font-semibold">No Hook Logs Yet</h2>
               <p className="text-muted-foreground mx-auto max-w-md text-sm">
-                Install Gram Hooks in your AI coding assistant to start
+                Install Speakeasy Hooks in your AI coding assistant to start
                 capturing tool execution logs
               </p>
             </div>
