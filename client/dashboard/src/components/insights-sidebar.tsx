@@ -6,22 +6,54 @@ import { useState, useMemo, createContext, useContext } from "react";
 import { cn } from "@/lib/utils";
 import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
 
-// Context for sidebar state
+// Context for sidebar state. `available` lets descendants detect whether
+// they're inside an InsightsSidebar provider — so a page-header-level
+// trigger can self-hide on pages that aren't wrapped.
 const InsightsContext = createContext<{
+  available: boolean;
   isExpanded: boolean;
   setIsExpanded: (expanded: boolean) => void;
 }>({
+  available: false,
   isExpanded: false,
   setIsExpanded: () => {},
 });
 
 /**
  * Hook to access the insights sidebar state.
- * Returns { isExpanded, setIsExpanded } to allow pages to adapt their layout
- * and control the sidebar.
+ * Returns { available, isExpanded, setIsExpanded } to allow pages to adapt
+ * their layout and control the sidebar. `available` is false when no
+ * InsightsSidebar ancestor exists.
  */
 export function useInsightsState() {
   return useContext(InsightsContext);
+}
+
+/**
+ * Header-bar trigger for opening the AI Insights sidebar. Renders only
+ * when inside an InsightsSidebar provider so it can be slotted globally
+ * (e.g. into PageHeaderBreadcrumbs) without appearing on pages that don't
+ * use insights.
+ */
+export function InsightsTrigger({ className }: { className?: string }) {
+  const { available, isExpanded, setIsExpanded } = useInsightsState();
+  if (!available) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => setIsExpanded(!isExpanded)}
+      aria-label={isExpanded ? "Close AI Insights" : "Open AI Insights"}
+      aria-pressed={isExpanded}
+      className={cn(
+        "border-border hover:bg-accent hover:text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
+        isExpanded && "bg-accent text-accent-foreground",
+        className,
+      )}
+    >
+      <Wand2 className="size-3.5" />
+      <span className="font-medium">AI Insights</span>
+    </button>
+  );
 }
 
 interface InsightsSidebarProps {
@@ -110,8 +142,8 @@ When the user asks about "current period", "selected period", "this timeframe", 
   );
 
   const contextValue = useMemo(
-    () => ({ isExpanded, setIsExpanded }),
-    [isExpanded],
+    () => ({ available: !hideTrigger, isExpanded, setIsExpanded }),
+    [hideTrigger, isExpanded],
   );
 
   return (
@@ -136,22 +168,9 @@ When the user asks about "current period", "selected period", "this timeframe", 
           />
         )}
 
-        {/* Toggle button - shows when collapsed and not hidden */}
-        {!hideTrigger && (
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className={cn(
-              "bg-primary text-primary-foreground hover:bg-primary/90 group fixed top-1/2 right-0 z-40 flex -translate-y-1/2 items-center gap-1.5 rounded-l-lg px-3 py-2.5 shadow-lg transition-all duration-300",
-              isExpanded && "pointer-events-none opacity-0",
-            )}
-            aria-label="Open AI Insights"
-          >
-            <Wand2 className="size-4" />
-            <span className="text-sm font-medium">Ask AI</span>
-          </button>
-        )}
-
-        {/* Sidebar panel - fixed position that slides in */}
+        {/* Sidebar panel - fixed position that slides in.
+            Note: the trigger for opening this panel now lives in the top
+            breadcrumb bar via <InsightsTrigger />, rendered by PageHeader. */}
         <div
           className={cn(
             "bg-background border-border fixed top-0 right-0 bottom-0 z-30 flex flex-col border-l shadow-xl transition-transform duration-300 ease-in-out",

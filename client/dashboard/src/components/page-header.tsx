@@ -1,3 +1,4 @@
+import { InsightsTrigger } from "@/components/insights-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useSlugs } from "@/contexts/Sdk.tsx";
@@ -122,28 +123,31 @@ function PageHeaderBreadcrumbs({
 
   return (
     <PageHeader.Title className={cn(fullWidth ? "max-w-full" : "", className)}>
-      <div className="ml-auto flex items-center gap-2 normal-case">
-        {visibleElements.map((elem, index) => (
-          <React.Fragment key={elem.url}>
-            {elem.isCurrentPage ? (
-              <span>{elem.display}</span>
-            ) : (
-              <Link
-                to={
-                  projectSlug
-                    ? `/${orgSlug}/projects/${projectSlug}${elem.url}`
-                    : `/${orgSlug}${elem.url}`
-                }
-                className="text-muted-foreground hover:text-foreground trans"
-              >
-                {elem.display}
-              </Link>
-            )}
-            {index < visibleElements.length - 1 && (
-              <span className="text-muted-foreground"> / </span>
-            )}
-          </React.Fragment>
-        ))}
+      <div className="ml-auto flex items-center gap-3 normal-case">
+        <div className="flex items-center gap-2">
+          {visibleElements.map((elem, index) => (
+            <React.Fragment key={elem.url}>
+              {elem.isCurrentPage ? (
+                <span>{elem.display}</span>
+              ) : (
+                <Link
+                  to={
+                    projectSlug
+                      ? `/${orgSlug}/projects/${projectSlug}${elem.url}`
+                      : `/${orgSlug}${elem.url}`
+                  }
+                  className="text-muted-foreground hover:text-foreground trans"
+                >
+                  {elem.display}
+                </Link>
+              )}
+              {index < visibleElements.length - 1 && (
+                <span className="text-muted-foreground"> / </span>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+        <InsightsTrigger />
       </div>
     </PageHeader.Title>
   );
