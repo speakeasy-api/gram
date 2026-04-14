@@ -503,7 +503,7 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 // set to call the "collections" service "update" endpoint
 func (c *Client) BuildUpdateRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateCollectionsPath()}
-	req, err := http.NewRequest("PATCH", u.String(), nil)
+	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("collections", "update", u.String(), err)
 	}

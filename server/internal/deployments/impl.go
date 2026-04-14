@@ -460,21 +460,13 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 
 	newExternalMCPs := make([]upsertExternalMCP, 0, len(form.ExternalMcps))
 	for _, add := range form.ExternalMcps {
-		var registryID uuid.NullUUID
-		var collectionRegistryID uuid.NullUUID
-		if add.RegistryID != nil {
-			parsedID, err := uuid.Parse(*add.RegistryID)
-			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "error parsing external mcp registry id").Log(ctx, s.logger)
-			}
-			registryID = uuid.NullUUID{UUID: parsedID, Valid: true}
+		registryID, err := conv.PtrToNullUUID(add.RegistryID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
 		}
-		if add.OrganizationMcpCollectionRegistryID != nil {
-			parsedID, err := uuid.Parse(*add.OrganizationMcpCollectionRegistryID)
-			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "error parsing collection registry id").Log(ctx, s.logger)
-			}
-			collectionRegistryID = uuid.NullUUID{UUID: parsedID, Valid: true}
+		collectionRegistryID, err := conv.PtrToNullUUID(add.OrganizationMcpCollectionRegistryID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid organization_mcp_collection_registry_id").Log(ctx, s.logger)
 		}
 		newExternalMCPs = append(newExternalMCPs, upsertExternalMCP{
 			registryID:                          registryID,
@@ -671,21 +663,13 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 
 	externalMCPsToUpsert := make([]upsertExternalMCP, 0, len(form.UpsertExternalMcps))
 	for _, add := range form.UpsertExternalMcps {
-		var registryID uuid.NullUUID
-		var collectionRegistryID uuid.NullUUID
-		if add.RegistryID != nil {
-			parsedID, err := uuid.Parse(*add.RegistryID)
-			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "error parsing external mcp registry id to upsert").Log(ctx, s.logger)
-			}
-			registryID = uuid.NullUUID{UUID: parsedID, Valid: true}
+		registryID, err := conv.PtrToNullUUID(add.RegistryID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
 		}
-		if add.OrganizationMcpCollectionRegistryID != nil {
-			parsedID, err := uuid.Parse(*add.OrganizationMcpCollectionRegistryID)
-			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "error parsing collection registry id to upsert").Log(ctx, s.logger)
-			}
-			collectionRegistryID = uuid.NullUUID{UUID: parsedID, Valid: true}
+		collectionRegistryID, err := conv.PtrToNullUUID(add.OrganizationMcpCollectionRegistryID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid organization_mcp_collection_registry_id").Log(ctx, s.logger)
 		}
 		externalMCPsToUpsert = append(externalMCPsToUpsert, upsertExternalMCP{
 			registryID:                          registryID,

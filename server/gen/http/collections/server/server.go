@@ -57,7 +57,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"Create", "POST", "/rpc/collections.create"},
 			{"List", "GET", "/rpc/collections.list"},
-			{"Update", "PATCH", "/rpc/collections.update"},
+			{"Update", "POST", "/rpc/collections.update"},
 			{"Delete", "DELETE", "/rpc/collections.delete"},
 			{"AttachServer", "POST", "/rpc/collections.attachServer"},
 			{"DetachServer", "POST", "/rpc/collections.detachServer"},
@@ -221,7 +221,7 @@ func MountUpdateHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("PATCH", "/rpc/collections.update", f)
+	mux.Handle("POST", "/rpc/collections.update", f)
 }
 
 // NewUpdateHandler creates a HTTP handler which loads the HTTP request and

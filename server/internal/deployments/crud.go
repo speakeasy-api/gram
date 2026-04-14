@@ -78,7 +78,7 @@ func createDeployment(
 		key = uuid.New().String()
 	}
 
-	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert); err != nil {
+	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert, externalMCPsToUpsert); err != nil {
 		return uuid.Nil, oops.E(oops.CodeInvalid, err, "one or more deployment assets are invalid:\n%s", err.Error()).Log(ctx, logger)
 	}
 
@@ -164,7 +164,7 @@ func cloneDeployment(
 	defer span.End()
 	defer span.SetStatus(codes.Ok, "deployment cloned")
 
-	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert); err != nil {
+	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert, externalMCPsToUpsert); err != nil {
 		return uuid.Nil, oops.E(oops.CodeInvalid, err, "one or more deployment assets are invalid:\n%s", err.Error()).Log(ctx, logger)
 	}
 

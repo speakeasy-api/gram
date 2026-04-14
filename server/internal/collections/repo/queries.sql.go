@@ -116,33 +116,28 @@ func (q *Queries) CreateOrganizationMcpCollectionRegistry(ctx context.Context, a
 	return i, err
 }
 
-const deleteOrganizationMcpCollection = `-- name: DeleteOrganizationMcpCollection :exec
+const deleteOrganizationMcpCollectionFull = `-- name: DeleteOrganizationMcpCollectionFull :exec
+WITH deleted_registries AS (
+    UPDATE organization_mcp_collection_registries SET deleted_at = clock_timestamp()
+    WHERE collection_id = $1 AND deleted IS FALSE
+), deleted_attachments AS (
+    UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
+    WHERE collection_id = $1 AND deleted IS FALSE
+)
 UPDATE organization_mcp_collections SET deleted_at = clock_timestamp()
-WHERE id = $1 AND deleted IS FALSE
+WHERE
+  organization_mcp_collections.id = $1
+  AND organization_mcp_collections.organization_id = $2
+  AND organization_mcp_collections.deleted IS FALSE
 `
 
-func (q *Queries) DeleteOrganizationMcpCollection(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteOrganizationMcpCollection, id)
-	return err
+type DeleteOrganizationMcpCollectionFullParams struct {
+	CollectionID   uuid.UUID
+	OrganizationID string
 }
 
-const deleteOrganizationMcpCollectionRegistriesByID = `-- name: DeleteOrganizationMcpCollectionRegistriesByID :exec
-UPDATE organization_mcp_collection_registries SET deleted_at = clock_timestamp()
-WHERE collection_id = $1 AND deleted IS FALSE
-`
-
-func (q *Queries) DeleteOrganizationMcpCollectionRegistriesByID(ctx context.Context, collectionID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteOrganizationMcpCollectionRegistriesByID, collectionID)
-	return err
-}
-
-const deleteOrganizationMcpCollectionServerAttachmentsByID = `-- name: DeleteOrganizationMcpCollectionServerAttachmentsByID :exec
-UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
-WHERE collection_id = $1 AND deleted IS FALSE
-`
-
-func (q *Queries) DeleteOrganizationMcpCollectionServerAttachmentsByID(ctx context.Context, collectionID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteOrganizationMcpCollectionServerAttachmentsByID, collectionID)
+func (q *Queries) DeleteOrganizationMcpCollectionFull(ctx context.Context, arg DeleteOrganizationMcpCollectionFullParams) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationMcpCollectionFull, arg.CollectionID, arg.OrganizationID)
 	return err
 }
 
@@ -164,8 +159,16 @@ func (q *Queries) DetachServerFromOrganizationMcpCollection(ctx context.Context,
 const getOrganizationMcpCollectionByID = `-- name: GetOrganizationMcpCollectionByID :one
 SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections
-WHERE id = $1 AND deleted IS FALSE
+WHERE
+  id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
 `
+
+type GetOrganizationMcpCollectionByIDParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
 
 type GetOrganizationMcpCollectionByIDRow struct {
 	ID             uuid.UUID
@@ -178,8 +181,8 @@ type GetOrganizationMcpCollectionByIDRow struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
-func (q *Queries) GetOrganizationMcpCollectionByID(ctx context.Context, id uuid.UUID) (GetOrganizationMcpCollectionByIDRow, error) {
-	row := q.db.QueryRow(ctx, getOrganizationMcpCollectionByID, id)
+func (q *Queries) GetOrganizationMcpCollectionByID(ctx context.Context, arg GetOrganizationMcpCollectionByIDParams) (GetOrganizationMcpCollectionByIDRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationMcpCollectionByID, arg.ID, arg.OrganizationID)
 	var i GetOrganizationMcpCollectionByIDRow
 	err := row.Scan(
 		&i.ID,
@@ -409,15 +412,19 @@ SET name = COALESCE($1, name),
     description = COALESCE($2, description),
     visibility = COALESCE($3, visibility),
     updated_at = clock_timestamp()
-WHERE id = $4 AND deleted IS FALSE
+WHERE
+  id = $4
+  AND organization_id = $5
+  AND deleted IS FALSE
 RETURNING id, organization_id, name, description, slug, visibility, created_at, updated_at
 `
 
 type UpdateOrganizationMcpCollectionParams struct {
-	Name        pgtype.Text
-	Description pgtype.Text
-	Visibility  pgtype.Text
-	ID          uuid.UUID
+	Name           pgtype.Text
+	Description    pgtype.Text
+	Visibility     pgtype.Text
+	ID             uuid.UUID
+	OrganizationID string
 }
 
 type UpdateOrganizationMcpCollectionRow struct {
@@ -437,6 +444,7 @@ func (q *Queries) UpdateOrganizationMcpCollection(ctx context.Context, arg Updat
 		arg.Description,
 		arg.Visibility,
 		arg.ID,
+		arg.OrganizationID,
 	)
 	var i UpdateOrganizationMcpCollectionRow
 	err := row.Scan(

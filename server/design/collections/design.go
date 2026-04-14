@@ -115,7 +115,7 @@ var _ = Service("collections", func() {
 		Result(MCPCollection)
 
 		HTTP(func() {
-			PATCH("/rpc/collections.update")
+			POST("/rpc/collections.update")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
