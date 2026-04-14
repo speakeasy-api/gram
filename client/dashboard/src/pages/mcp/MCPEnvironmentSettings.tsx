@@ -872,10 +872,14 @@ type OAuthSectionProps = {
 };
 
 function OAuthSection({ toolset }: OAuthSectionProps) {
+  const routes = useRoutes();
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isOAuthModalEditMode, setIsOAuthModalEditMode] = useState(false);
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
+
+  const { data: environmentsData } = useListEnvironments();
+  const environments = environmentsData?.environments ?? [];
 
   const isOAuthConnected = !!(
     toolset?.oauthProxyServer || toolset?.externalOauthServer
@@ -893,6 +897,13 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
         ? ("gram" as const)
         : ("proxy" as const)
       : null;
+
+  const proxyEnvironmentSlug =
+    toolset.oauthProxyServer?.oauthProxyProviders?.[0]?.environmentSlug;
+  const proxyEnvironmentName =
+    environments.find((e) => e.slug === proxyEnvironmentSlug)?.name ??
+    proxyEnvironmentSlug ??
+    "unknown";
 
   return (
     <PageSection
@@ -946,11 +957,27 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
             is configured
           </p>
           <p className="text-success-foreground text-sm">
-            {oauthParadigm === "external"
-              ? "Users will authenticate with your external OAuth server before accessing this MCP server."
-              : oauthParadigm === "gram"
-                ? "Users will authenticate with Gram OAuth before accessing this MCP server."
-                : "The attached CLIENT_ID and CLIENT_SECRET environment variables will be used to authenticate with the OAuth provider before users can access this MCP server."}
+            {oauthParadigm === "external" ? (
+              "Users will authenticate with your external OAuth server before accessing this MCP server."
+            ) : oauthParadigm === "gram" ? (
+              "Users will authenticate with Gram OAuth before accessing this MCP server."
+            ) : (
+              <>
+                The CLIENT_ID and CLIENT_SECRET values in the{" "}
+                {proxyEnvironmentSlug ? (
+                  <routes.environments.environment.Link
+                    params={[proxyEnvironmentSlug]}
+                    className="underline"
+                  >
+                    {proxyEnvironmentName}
+                  </routes.environments.environment.Link>
+                ) : (
+                  `"${proxyEnvironmentName}"`
+                )}{" "}
+                environment will be used to authenticate with the OAuth provider
+                before users can access this MCP server.
+              </>
+            )}
           </p>
         </div>
       ) : isOAuthEligible ? (
@@ -1033,3 +1060,5 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
     </PageSection>
   );
 }
+
+function OAuthConnectionSummary() {}

@@ -16,7 +16,6 @@ import {
   useCreateEnvironmentMutation,
   useGetMcpMetadata,
   useListEnvironments,
-  useMcpMetadataSetMutation,
   useUpdateEnvironmentMutation,
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
@@ -194,7 +193,6 @@ function OAuthWizard({
     { throwOnError: false, retry: false },
   );
   const mcpMetadata = mcpMetadataData?.metadata;
-  const setMcpMetadataMutation = useMcpMetadataSetMutation();
 
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
@@ -384,48 +382,26 @@ function OAuthWizard({
             },
             {
               onSuccess: () => {
-                // Chain: attach env first, then create proxy.
-                // Running these in parallel caused the proxy onSuccess
-                // (which closes the modal and invalidates queries) to
-                // fire before the env attachment was persisted, leaving
-                // the page showing "NO ENV ATTACHED".
-                setMcpMetadataMutation.mutate(
-                  {
-                    request: {
-                      setMcpMetadataRequestBody: {
-                        ...mcpMetadata,
-                        toolsetSlug,
-                        defaultEnvironmentId: env.id,
-                        environmentConfigs:
-                          mcpMetadata?.environmentConfigs || [],
+                addOAuthProxyMutation.mutate({
+                  request: {
+                    slug: toolsetSlug,
+                    addOAuthProxyServerRequestBody: {
+                      oauthProxyServer: {
+                        providerType: "custom",
+                        slug: proxyFormData.slug,
+                        audience: proxyFormData.audience || undefined,
+                        authorizationEndpoint:
+                          proxyFormData.authorizationEndpoint,
+                        tokenEndpoint: proxyFormData.tokenEndpoint,
+                        scopesSupported: scopesArray,
+                        tokenEndpointAuthMethodsSupported: [
+                          proxyFormData.tokenAuthMethod,
+                        ],
+                        environmentSlug: env.slug,
                       },
                     },
                   },
-                  {
-                    onSuccess: () => {
-                      addOAuthProxyMutation.mutate({
-                        request: {
-                          slug: toolsetSlug,
-                          addOAuthProxyServerRequestBody: {
-                            oauthProxyServer: {
-                              providerType: "custom",
-                              slug: proxyFormData.slug,
-                              audience: proxyFormData.audience || undefined,
-                              authorizationEndpoint:
-                                proxyFormData.authorizationEndpoint,
-                              tokenEndpoint: proxyFormData.tokenEndpoint,
-                              scopesSupported: scopesArray,
-                              tokenEndpointAuthMethodsSupported: [
-                                proxyFormData.tokenAuthMethod,
-                              ],
-                              environmentSlug: env.slug,
-                            },
-                          },
-                        },
-                      });
-                    },
-                  },
-                );
+                });
               },
               onError: (error) => {
                 console.error("Failed to store OAuth credentials:", error);
@@ -449,11 +425,9 @@ function OAuthWizard({
     toolset.name,
     toolsetSlug,
     session.activeOrganizationId,
-    mcpMetadata,
     environments,
     createEnvironmentMutation,
     updateEnvironmentMutation,
-    setMcpMetadataMutation,
     addOAuthProxyMutation,
   ]);
 
@@ -472,7 +446,6 @@ function OAuthWizard({
   const isProxySubmitting =
     createEnvironmentMutation.isPending ||
     updateEnvironmentMutation.isPending ||
-    setMcpMetadataMutation.isPending ||
     addOAuthProxyMutation.isPending;
 
   return (
