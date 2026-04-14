@@ -4539,7 +4539,7 @@ paths:
         - collections
       x-speakeasy-name-override: listServers
   /rpc/collections.update:
-    patch:
+    post:
       description: Update an MCP collection
       operationId: updateCollection
       parameters:
