@@ -4,12 +4,6 @@ import { HomeOnboarding } from "./HomeOnboarding";
 
 export const LINKED_FROM_PARAM = "from";
 
-export const onboardingStepStorageKeys = {
-  test: "onboarding_playground_completed",
-  curate: "onboarding_toolsets_completed",
-  configure: "onboarding_mcp_config_completed",
-};
-
 export default function Home() {
   const { data } = useListToolsets();
   const hasToolsets = (data?.toolsets?.length ?? 0) > 0;
