@@ -39,49 +39,20 @@ export function InsightsTrigger({ className }: { className?: string }) {
   const { available, isExpanded, setIsExpanded } = useInsightsState();
   if (!available) return null;
   return (
-    <>
-      {/* SVG gradient def for the wand icon stroke — referenced by url(#…)
-          on the Wand2 below. Uses Gram brand-primary reds so the icon
-          reads as "AI/magic" while the surrounding button stays neutral. */}
-      <svg
-        width="0"
-        height="0"
-        className="absolute"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <defs>
-          <linearGradient
-            id="gram-brand-gradient"
-            x1="0%"
-            y1="0%"
-            x2="100%"
-            y2="100%"
-          >
-            <stop offset="0%" stopColor="hsl(334, 54%, 13%)" />
-            <stop offset="50%" stopColor="hsl(4, 67%, 47%)" />
-            <stop offset="100%" stopColor="hsl(23, 96%, 62%)" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <button
-        type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
-        aria-label={isExpanded ? "Close AI Insights" : "Open AI Insights"}
-        aria-pressed={isExpanded}
-        className={cn(
-          "border-border hover:bg-accent hover:text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
-          isExpanded && "bg-accent text-accent-foreground",
-          className,
-        )}
-      >
-        <Wand2
-          className="size-3.5"
-          style={{ stroke: "url(#gram-brand-gradient)" }}
-        />
-        <span className="font-medium">AI Insights</span>
-      </button>
-    </>
+    <button
+      type="button"
+      onClick={() => setIsExpanded(!isExpanded)}
+      aria-label={isExpanded ? "Close AI Insights" : "Open AI Insights"}
+      aria-pressed={isExpanded}
+      className={cn(
+        "border-border hover:bg-accent hover:text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
+        isExpanded && "bg-accent text-accent-foreground",
+        className,
+      )}
+    >
+      <Wand2 className="size-3.5" />
+      <span className="font-medium">AI Insights</span>
+    </button>
   );
 }
 
