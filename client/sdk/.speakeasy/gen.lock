@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: fa645bccd62e7a23a92a02be6cf75c3d
+  docChecksum: 6285d29b0b37b9627128c3b93792a720
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.45
-  configChecksum: 45cd1105be98a6601cd58b3d63690199
+  releaseVersion: 0.32.48
+  configChecksum: 7ddf09ed7b49a8cf9e03b72e8eb4bdf9
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -809,6 +809,10 @@ trackedFiles:
     last_write_checksum: sha1:eaa94fcf4ef23006c97c713b3293908fd83c8fac
   docs/models/operations/creditusagesecurity.md:
     last_write_checksum: sha1:33a0215e6ac9b82eec6ae3968984d4b32fa9658e
+  docs/models/operations/deletechatrequest.md:
+    last_write_checksum: sha1:1ec2fa5d93dd0c6fb74384433b7257eb93e13b88
+  docs/models/operations/deletechatsecurity.md:
+    last_write_checksum: sha1:e00ff76f83492aa61be697a0ec051b7413628b76
   docs/models/operations/deletedomainrequest.md:
     last_write_checksum: sha1:d4b74175139eb90fa5a274d8bbc6803139d3622c
   docs/models/operations/deletedomainsecurity.md:
@@ -1580,7 +1584,7 @@ trackedFiles:
   docs/sdks/auth/README.md:
     last_write_checksum: sha1:18384a8309d0bb0622755466208f0a551404762f
   docs/sdks/chat/README.md:
-    last_write_checksum: sha1:fe53ee320c84036d96386d796b620e680f49b1ca
+    last_write_checksum: sha1:ba31f10b9d2c97033ce9aa2c0bc5abab9658e474
   docs/sdks/chatsessions/README.md:
     last_write_checksum: sha1:5931e949f459441faaa30e05840cbaf1fab82836
   docs/sdks/deployments/README.md:
@@ -1647,11 +1651,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:98f45d8f436879a83c12eac4cf940d881de00b67
+    last_write_checksum: sha1:cad142a1b44d1d0048f86fd2b4fa74f41496e17d
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:497503fda9cedd2ac215ec746560cbc3bca3feec
+    last_write_checksum: sha1:27b9ac0a9889cecaf0bb347ed550bc44c8f78859
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1755,6 +1759,8 @@ trackedFiles:
     id: 64173634dbc1
     last_write_checksum: sha1:e88ed6c9bd3e03d53194e1374f8f94a2e061e21e
     pristine_git_object: f629d618a17d2de626ec5cc8819675b1acd0dec1
+  src/funcs/chatDelete.ts:
+    last_write_checksum: sha1:1b27c84d09d7af61f6f19c01a04dc7f38724eb3c
   src/funcs/chatGenerateTitle.ts:
     id: 3d9ecd60bd94
     last_write_checksum: sha1:a5c2fb0ee636e1060daf3a106602d629c1d7c5c4
@@ -2163,7 +2169,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:8d50b58e72ad7930fc35e99b89bccb59aac2ecda
+    last_write_checksum: sha1:494dfbc4f9f4af57cd1e5ea45e87caef1c796206
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -3157,6 +3163,8 @@ trackedFiles:
     id: 553123ea26e3
     last_write_checksum: sha1:17e374e04f0720acafb5de880f0b4ec96d5cac43
     pristine_git_object: 1f53b334fc0e5e0231ecf7fd7e0c4027b64250fd
+  src/models/operations/deletechat.ts:
+    last_write_checksum: sha1:1ab4fb65e7ba7b6280a9820f6b4548ed181ce68e
   src/models/operations/deletedomain.ts:
     id: c537d03b82f2
     last_write_checksum: sha1:e89139993fecc5c6340559fbe7ffceb08a9db061
@@ -3285,7 +3293,7 @@ trackedFiles:
     last_write_checksum: sha1:4a0ef004b5f7db12dc269786c10dea7f9af79b1d
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:6748f02dfd868a47290684adf1afd9bb798a73bc
+    last_write_checksum: sha1:919857575942c0741d8245d48cbfe1f11de962a5
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -3587,6 +3595,8 @@ trackedFiles:
     last_write_checksum: sha1:17c006329c1f1a121e8384b338f54267bf4da451
   src/react-query/auditLogs.ts:
     last_write_checksum: sha1:d3887c56d7a789561183853d56f545a2f50a7227
+  src/react-query/chatDelete.ts:
+    last_write_checksum: sha1:ed4948abe532c9d58b28f1f0681c2ddcab958779
   src/react-query/chatGenerateTitle.ts:
     id: 7b2ad27d419b
     last_write_checksum: sha1:38971b3a11197701c06bbea6fc52c90093b262c3
@@ -3837,7 +3847,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:2b2d469a4a08a9144c7c05543cce07f5425b2846
+    last_write_checksum: sha1:1c0983ce4cab67c1f4620d33d8b853bbaec45568
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -4283,7 +4293,7 @@ trackedFiles:
     pristine_git_object: 44215c8408f8a7efedc98fd3a186fb20547b0622
   src/sdk/chat.ts:
     id: c56babc22a20
-    last_write_checksum: sha1:f4016f172c2b9c90c0c78c9d85ea99c8f0c4a70d
+    last_write_checksum: sha1:29b8a3c7b5b59220b96a685e18e0eb3ef2402ca5
     pristine_git_object: cf43d8a78da06d7e74a857165809b0f43d02fadf
   src/sdk/chatsessions.ts:
     id: 35b6de66e2dc
@@ -6249,6 +6259,16 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  deleteChat:
+    speakeasy-default-delete-chat:
+      parameters:
+        query:
+          id: "<id>"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

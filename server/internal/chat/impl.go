@@ -790,6 +790,28 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 	return &gen.GenerateTitleResult{Title: title}, nil
 }
 
+func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid chat id").Log(ctx, s.logger)
+	}
+
+	err = s.repo.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{
+		ID:        chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "soft delete chat").Log(ctx, s.logger)
+	}
+
+	return nil
+}
+
 func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbackPayload) (*gen.SubmitFeedbackResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

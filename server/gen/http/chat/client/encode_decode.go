@@ -1230,6 +1230,230 @@ func DecodeListChatsWithResolutionsResponse(decoder func(*http.Response) goahttp
 	}
 }
 
+// BuildDeleteChatRequest instantiates a HTTP request object with method and
+// path set to call the "chat" service "deleteChat" endpoint
+func (c *Client) BuildDeleteChatRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteChatChatPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("chat", "deleteChat", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteChatRequest returns an encoder for requests sent to the chat
+// deleteChat server.
+func EncodeDeleteChatRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*chat.DeleteChatPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("chat", "deleteChat", "*chat.DeleteChatPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDeleteChatResponse returns a decoder for responses returned by the
+// chat deleteChat endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeDeleteChatResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteChatResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteChatUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "deleteChat", err)
+			}
+			err = ValidateDeleteChatUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "deleteChat", err)
+			}
+			return nil, NewDeleteChatUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteChatForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "deleteChat", err)
+			}
+			err = ValidateDeleteChatForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "deleteChat", err)
+			}
+			return nil, NewDeleteChatForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteChatBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "deleteChat", err)
+			}
+			err = ValidateDeleteChatBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "deleteChat", err)
+			}
+			return nil, NewDeleteChatBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteChatNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "deleteChat", err)
+			}
+			err = ValidateDeleteChatNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "deleteChat", err)
+			}
+			return nil, NewDeleteChatNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteChatConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "deleteChat", err)
+			}
+			err = ValidateDeleteChatConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "deleteChat", err)
+			}
+			return nil, NewDeleteChatConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteChatUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "deleteChat", err)
+			}
+			err = ValidateDeleteChatUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "deleteChat", err)
+			}
+			return nil, NewDeleteChatUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteChatInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "deleteChat", err)
+			}
+			err = ValidateDeleteChatInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "deleteChat", err)
+			}
+			return nil, NewDeleteChatInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteChatInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "deleteChat", err)
+				}
+				err = ValidateDeleteChatInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "deleteChat", err)
+				}
+				return nil, NewDeleteChatInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteChatUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "deleteChat", err)
+				}
+				err = ValidateDeleteChatUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "deleteChat", err)
+				}
+				return nil, NewDeleteChatUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "deleteChat", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteChatGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "deleteChat", err)
+			}
+			err = ValidateDeleteChatGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "deleteChat", err)
+			}
+			return nil, NewDeleteChatGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("chat", "deleteChat", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildSubmitFeedbackRequest instantiates a HTTP request object with method
 // and path set to call the "chat" service "submitFeedback" endpoint
 func (c *Client) BuildSubmitFeedbackRequest(ctx context.Context, v any) (*http.Request, error) {

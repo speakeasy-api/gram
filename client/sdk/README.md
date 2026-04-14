@@ -176,6 +176,7 @@ run();
 ### [Chat](docs/sdks/chat/README.md)
 
 * [creditUsage](docs/sdks/chat/README.md#creditusage) - creditUsage chat
+* [delete](docs/sdks/chat/README.md#delete) - deleteChat chat
 * [generateTitle](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 * [list](docs/sdks/chat/README.md#list) - listChats chat
 * [listChatsWithResolutions](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
@@ -409,6 +410,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`authRegister`](docs/sdks/auth/README.md#register) - register auth
 - [`authSwitchScopes`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`chatCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
+- [`chatDelete`](docs/sdks/chat/README.md#delete) - deleteChat chat
 - [`chatGenerateTitle`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`chatList`](docs/sdks/chat/README.md#list) - listChats chat
 - [`chatListChatsWithResolutions`](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
@@ -555,6 +557,7 @@ To learn about this feature and how to get started, check
 - [`useAddOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
+- [`useChatDeleteMutation`](docs/sdks/chat/README.md#delete) - deleteChat chat
 - [`useChatGenerateTitleMutation`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`useChatSessionsRevokeMutation`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions

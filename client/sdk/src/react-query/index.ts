@@ -10,6 +10,7 @@ export * from "./addExternalOAuthServer.js";
 export * from "./addOAuthProxyServer.js";
 export * from "./auditLogFacets.js";
 export * from "./auditLogs.js";
+export * from "./chatDelete.js";
 export * from "./chatGenerateTitle.js";
 export * from "./chatSessionsCreate.js";
 export * from "./chatSessionsRevoke.js";
