@@ -822,3 +822,74 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 	assert.Contains(t, rr.Body.String(), "Server Not Found")
 }
+
+// TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain verifies that a toolset
+// WITHOUT a custom domain can still be loaded via the platform domain when the
+// logged-in user's organization happens to have a custom domain configured. This
+// guards against a regression where resolveDomainIDFromContext returning the
+// org's domain from auth context would prevent the slug-only fallback.
+func TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotNil(t, authCtx.SessionID)
+
+	domainsRepo := customdomains_repo.New(testInstance.conn)
+
+	// Create and activate a custom domain for this organization so that
+	// resolveDomainIDFromContext returns non-nil via the auth context path.
+	domain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "org-has-domain.example.com",
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	_, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+		ID:             domain.ID,
+		Verified:       true,
+		Activated:      true,
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	// Create a toolset WITHOUT linking it to any custom domain.
+	mcpSlug := "no-domain-" + uuid.New().String()[:8]
+	_, err = testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "No Domain Toolset",
+		Slug:                   mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("toolset with no custom domain"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	// Make the toolset public.
+	_, err = testInstance.conn.Exec(ctx,
+		"UPDATE toolsets SET mcp_is_public = true WHERE mcp_slug = $1", mcpSlug)
+	require.NoError(t, err)
+
+	// Build a request through the platform domain (no custom domain context)
+	// but with a valid session token so that auth context is populated.
+	reqCtx := contextvalues.SetSessionTokenInContext(context.Background(), *authCtx.SessionID)
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(reqCtx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err = testInstance.service.ServeInstallPage(rr, req)
+
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, "text/html", rr.Header().Get("Content-Type"))
+}
