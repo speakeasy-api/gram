@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { useListToolsets } from "@gram/client/react-query";
+import { ProjectDashboard } from "@/components/project/ProjectDashboard";
 import { ProjectOnboarding } from "@/components/project/ProjectOnboarding";
 
 export default function Home() {
@@ -13,9 +14,7 @@ export default function Home() {
       </Page.Header>
       <Page.Body>
         {hasToolsets ? (
-          <div>
-            <h2 className="text-lg font-semibold">TBD Dashboard</h2>
-          </div>
+          <ProjectDashboard />
         ) : (
           <ProjectOnboarding toolsets={data?.toolsets} />
         )}
