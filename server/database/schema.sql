@@ -1710,7 +1710,7 @@ CREATE TABLE IF NOT EXISTS plugins (
   CONSTRAINT plugins_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_slug_key
+CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_project_id_slug_key
   ON plugins (organization_id, project_id, slug)
   WHERE deleted IS FALSE;
 

@@ -14,8 +14,8 @@ CREATE TABLE "plugins" (
   CONSTRAINT "plugins_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "plugins_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
--- Create index "plugins_organization_id_slug_key" to table: "plugins"
-CREATE UNIQUE INDEX "plugins_organization_id_slug_key" ON "plugins" ("organization_id", "project_id", "slug") WHERE (deleted IS FALSE);
+-- Create index "plugins_organization_id_project_id_slug_key" to table: "plugins"
+CREATE UNIQUE INDEX "plugins_organization_id_project_id_slug_key" ON "plugins" ("organization_id", "project_id", "slug") WHERE (deleted IS FALSE);
 -- Create "plugin_assignments" table
 CREATE TABLE "plugin_assignments" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
