@@ -235,7 +235,10 @@ export function RBACDevToolbar() {
   }, []);
 
   const invalidate = useCallback(() => {
-    setTimeout(() => queryClient.invalidateQueries(), 0);
+    setTimeout(() => {
+      queryClient.invalidateQueries();
+      window.dispatchEvent(new Event("rbac-override-change"));
+    }, 0);
   }, [queryClient]);
 
   const toggleEnabled = useCallback(() => {
