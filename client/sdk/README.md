@@ -349,6 +349,17 @@ run();
 * [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 * [updateOAuthProxyServer](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
 
+### [Triggers](docs/sdks/triggers/README.md)
+
+* [create](docs/sdks/triggers/README.md#create) - createTriggerInstance triggers
+* [listDefinitions](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
+* [delete](docs/sdks/triggers/README.md#delete) - deleteTriggerInstance triggers
+* [get](docs/sdks/triggers/README.md#get) - getTriggerInstance triggers
+* [list](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers
+* [pause](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
+* [resume](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
+* [update](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
+
 ### [Usage](docs/sdks/usage/README.md)
 
 * [createCheckout](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
@@ -519,6 +530,14 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`toolsetsUpdateOAuthProxyServer`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
 - [`toolsList`](docs/sdks/tools/README.md#list) - listTools tools
+- [`triggersCreate`](docs/sdks/triggers/README.md#create) - createTriggerInstance triggers
+- [`triggersDelete`](docs/sdks/triggers/README.md#delete) - deleteTriggerInstance triggers
+- [`triggersGet`](docs/sdks/triggers/README.md#get) - getTriggerInstance triggers
+- [`triggersList`](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers
+- [`triggersListDefinitions`](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
+- [`triggersPause`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
+- [`triggersResume`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
+- [`triggersUpdate`](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
 - [`usageCreateCheckout`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`usageCreateCustomerSession`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`usageGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
@@ -577,6 +596,7 @@ To learn about this feature and how to get started, check
 - [`useCreateSlackAppMutation`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`useCreateTemplateMutation`](docs/sdks/templates/README.md#create) - createTemplate templates
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
+- [`useCreateTriggerMutation`](docs/sdks/triggers/README.md#create) - createTriggerInstance triggers
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
@@ -587,6 +607,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteTemplateMutation`](docs/sdks/templates/README.md#delete) - deleteTemplate templates
 - [`useDeleteToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletetoolsetlink) - deleteToolsetEnvironmentLink environments
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
+- [`useDeleteTriggerMutation`](docs/sdks/triggers/README.md#delete) - deleteTriggerInstance triggers
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
@@ -648,6 +669,7 @@ To learn about this feature and how to get started, check
 - [`useMcpRegistriesClearCacheMutation`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
+- [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
@@ -658,6 +680,7 @@ To learn about this feature and how to get started, check
 - [`useRemoveOrganizationUserMutation`](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
+- [`useResumeTriggerMutation`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useRevokeInviteMutation`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
 - [`useRole`](docs/sdks/access/README.md#getrole) - getRole access
@@ -681,6 +704,9 @@ To learn about this feature and how to get started, check
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
+- [`useTrigger`](docs/sdks/triggers/README.md#get) - getTriggerInstance triggers
+- [`useTriggerDefinitions`](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
+- [`useTriggers`](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdateMemberRoleMutation`](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
 - [`useUpdateOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
@@ -689,6 +715,7 @@ To learn about this feature and how to get started, check
 - [`useUpdateSlackAppMutation`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
+- [`useUpdateTriggerMutation`](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
 - [`useUploadChatAttachmentMutation`](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 - [`useUploadFunctionsMutation`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`useUploadImageMutation`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets

@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -52,6 +53,8 @@ type Activities struct {
 	validateDeployment            *activities.ValidateDeployment
 	verifyCustomDomain            *activities.VerifyCustomDomain
 	generateToolsetEmbeddings     *activities.GenerateToolsetEmbeddings
+	dispatchTrigger               *activities.DispatchTrigger
+	processScheduledTrigger       *activities.ProcessScheduledTrigger
 	segmentChat                   *resolution_activities.SegmentChat
 	deleteChatResolutions         *resolution_activities.DeleteChatResolutions
 	analyzeSegment                *resolution_activities.AnalyzeSegment
@@ -81,6 +84,7 @@ func NewActivities(
 	mcpRegistryClient *externalmcp.RegistryClient,
 	temporalClient client.Client,
 	telemetryLogger *telemetry.Logger,
+	triggerApp *bgtriggers.App,
 	cacheAdapter cache.Cache,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
@@ -106,6 +110,8 @@ func NewActivities(
 		validateDeployment:            activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 		generateToolsetEmbeddings:     activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
+		dispatchTrigger:               activities.NewDispatchTrigger(triggerApp),
+		processScheduledTrigger:       activities.NewProcessScheduledTrigger(triggerApp),
 		segmentChat:                   resolution_activities.NewSegmentChat(logger, db, chatClient),
 		deleteChatResolutions:         resolution_activities.NewDeleteChatResolutions(db),
 		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
@@ -221,4 +227,12 @@ func (a *Activities) GetUserFeedbackForChat(ctx context.Context, input resolutio
 		return nil, fmt.Errorf("get user feedback for chat: %w", err)
 	}
 	return result, nil
+}
+
+func (a *Activities) DispatchTrigger(ctx context.Context, input activities.DispatchTriggerInput) error {
+	return a.dispatchTrigger.Do(ctx, input)
+}
+
+func (a *Activities) ProcessScheduledTrigger(ctx context.Context, input activities.ProcessScheduledTriggerInput) (*activities.ProcessScheduledTriggerResult, error) {
+	return a.processScheduledTrigger.Do(ctx, input)
 }

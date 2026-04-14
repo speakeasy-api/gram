@@ -24,11 +24,14 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/rag"
+
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -60,9 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/projects"
-	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/templates"
@@ -71,6 +72,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/triggers"
 
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -620,8 +622,14 @@ func newStartCommand() *cli.Command {
 			authorizer := auth.New(logger, db, sessionManager, accessManager)
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
 			externalOAuthService := oauth.NewExternalOAuthService(logger, guardianPolicy, db, cache.NewRedisCacheAdapter(redisClient), authorizer, encryptionClient, externalMcpOAuthConfig)
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, serverURL)
 
-			platformSvc := platformtoolsruntime.NewService(logger, db, telemSvc)
+			platformSvc := platformtoolsruntime.NewService(
+				logger,
+				db,
+				telemSvc,
+				platformtoolsruntime.WithTriggerTools(triggerApp),
+			)
 
 			mcpService := mcp.NewService(
 				logger,
@@ -644,6 +652,7 @@ func newStartCommand() *cli.Command {
 				telemSvc,
 				productFeatures,
 				ragService,
+				triggerApp,
 				temporalEnv,
 				accessManager,
 			)
@@ -725,6 +734,7 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), accessManager))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, accessManager))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, accessManager))
+			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, accessManager, triggerApp))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			oauth.AttachExternalOAuth(mux, externalOAuthService)
@@ -789,6 +799,7 @@ func newStartCommand() *cli.Command {
 						RagService:          ragService,
 						MCPRegistryClient:   mcpRegistryClient,
 						TelemetryLogger:     telemLogger,
+						TriggersApp:         triggerApp,
 						CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
