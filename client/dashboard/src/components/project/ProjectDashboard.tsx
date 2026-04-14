@@ -1,5 +1,8 @@
+import { ChevronRight } from "lucide-react";
+import { Link } from "react-router";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
@@ -129,13 +132,10 @@ export function ProjectDashboard() {
       <div>
         <h2 className="mb-4 text-lg font-semibold">Top Activity (7d)</h2>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <div className="bg-card rounded-lg border p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Top Users</h3>
-              <routes.hooks.Link className="text-muted-foreground hover:text-foreground text-xs no-underline">
-                View all
-              </routes.hooks.Link>
-            </div>
+          <DashboardCard
+            title="Top Users"
+            action={<ViewAllLink to={routes.hooks.href()} />}
+          >
             {isFilterOptionsPending ? (
               <SkeletonList />
             ) : topUsers.length === 0 ? (
@@ -149,15 +149,12 @@ export function ProjectDashboard() {
                 }))}
               />
             )}
-          </div>
+          </DashboardCard>
 
-          <div className="bg-card rounded-lg border p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Top Servers</h3>
-              <routes.hooks.Link className="text-muted-foreground hover:text-foreground text-xs no-underline">
-                View all
-              </routes.hooks.Link>
-            </div>
+          <DashboardCard
+            title="Top Servers"
+            action={<ViewAllLink to={routes.hooks.href()} />}
+          >
             {isHooksPending ? (
               <SkeletonList />
             ) : topServers.length === 0 ? (
@@ -171,7 +168,7 @@ export function ProjectDashboard() {
                 }))}
               />
             )}
-          </div>
+          </DashboardCard>
         </div>
       </div>
 
@@ -179,13 +176,10 @@ export function ProjectDashboard() {
       <div>
         <h2 className="mb-4 text-lg font-semibold">Sessions (7d)</h2>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <div className="bg-card rounded-lg border p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Agent Sessions by User</h3>
-              <routes.chatSessions.Link className="text-muted-foreground hover:text-foreground text-xs no-underline">
-                View all
-              </routes.chatSessions.Link>
-            </div>
+          <DashboardCard
+            title="Agent Sessions by User"
+            action={<ViewAllLink to={routes.chatSessions.href()} />}
+          >
             {isHooksPending ? (
               <SkeletonList />
             ) : topUsersByHooks.length === 0 ? (
@@ -215,15 +209,12 @@ export function ProjectDashboard() {
                 ))}
               </ul>
             )}
-          </div>
+          </DashboardCard>
 
-          <div className="bg-card rounded-lg border p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Most Used LLM Clients</h3>
-              <routes.observability.Link className="text-muted-foreground hover:text-foreground text-xs no-underline">
-                View all
-              </routes.observability.Link>
-            </div>
+          <DashboardCard
+            title="Most Used LLM Clients"
+            action={<ViewAllLink to={routes.observability.href()} />}
+          >
             {isMetricsPending ? (
               <SkeletonList />
             ) : topModels.length === 0 ? (
@@ -237,20 +228,17 @@ export function ProjectDashboard() {
                 }))}
               />
             )}
-          </div>
+          </DashboardCard>
         </div>
       </div>
 
       {/* Row 3: Activity Timeline */}
       <div>
         <h2 className="mb-4 text-lg font-semibold">Recent Activity</h2>
-        <div className="bg-card rounded-lg border p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Audit Log</h3>
-            <orgRoutes.auditLogs.Link className="text-muted-foreground hover:text-foreground text-xs no-underline">
-              View all
-            </orgRoutes.auditLogs.Link>
-          </div>
+        <DashboardCard
+          title="Audit Log"
+          action={<ViewAllLink to={orgRoutes.auditLogs.href()} />}
+        >
           {isAuditLogsPending ? (
             <div className="space-y-3">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -288,9 +276,21 @@ export function ProjectDashboard() {
               ))}
             </ul>
           )}
-        </div>
+        </DashboardCard>
       </div>
     </div>
+  );
+}
+
+function ViewAllLink({ to }: { to: string }) {
+  return (
+    <Link
+      to={to}
+      className="text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs no-underline"
+    >
+      View all
+      <ChevronRight className="size-3" />
+    </Link>
   );
 }
 
@@ -299,7 +299,7 @@ type RankedBarListItem = { key: string; label: string; value: number };
 function RankedBarList({ items }: { items: RankedBarListItem[] }) {
   const max = items[0]?.value ?? 1;
   return (
-    <ul className="space-y-2">
+    <ul className="my-1 space-y-3">
       {items.map((item, i) => (
         <li key={item.key} className="flex items-center gap-3">
           <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
@@ -314,7 +314,7 @@ function RankedBarList({ items }: { items: RankedBarListItem[] }) {
             </div>
             <div className="bg-muted h-1 w-full rounded-full">
               <div
-                className="bg-primary h-1 rounded-full"
+                className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
                 style={{ width: `${(item.value / max) * 100}%` }}
               />
             </div>
