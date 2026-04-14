@@ -95,7 +95,9 @@ export function ProjectDashboard() {
           <Badge.Text>{project.name}</Badge.Text>
         </Badge>
       </Page.Section.Description>
-      <Page.Section.CTA>7-day summary</Page.Section.CTA>
+      <Page.Section.CTA>
+        <p className="text-muted text-xs">Showing data from the last 7 days</p>
+      </Page.Section.CTA>
 
       <Page.Section.Body>
         <div className="space-y-8">
@@ -114,7 +116,7 @@ export function ProjectDashboard() {
               <Skeleton className="h-[100px] rounded-lg" />
             ) : (
               <MetricCard
-                title="Tool Calls (7d)"
+                title="Tool Calls"
                 value={metricsData?.metrics.totalToolCalls ?? 0}
                 icon="wrench"
               />
@@ -123,7 +125,7 @@ export function ProjectDashboard() {
               <Skeleton className="h-[100px] rounded-lg" />
             ) : (
               <MetricCard
-                title="End Users (7d)"
+                title="End Users"
                 value={filterOptionsData?.options.length ?? 0}
                 icon="users"
               />
@@ -132,7 +134,7 @@ export function ProjectDashboard() {
               <Skeleton className="h-[100px] rounded-lg" />
             ) : (
               <MetricCard
-                title="Sessions (7d)"
+                title="Sessions"
                 value={metricsData?.metrics.totalChats ?? 0}
                 icon="message-circle"
               />
@@ -162,7 +164,7 @@ export function ProjectDashboard() {
 
             <DashboardCard
               title="Top Servers"
-              action={<ViewAllLink to={routes.hooks.href()} />}
+              action={<ViewAllLink to={routes.observability.href()} />}
             >
               {isHooksPending ? (
                 <SkeletonList />
@@ -239,7 +241,7 @@ export function ProjectDashboard() {
 
           {/* Row 3: Activity Timeline */}
           <DashboardCard
-            title="Audit Log"
+            title="Activity Timeline"
             action={<ViewAllLink to={orgRoutes.auditLogs.href()} />}
           >
             {isAuditLogsPending ? (
