@@ -69,7 +69,11 @@ export function OrgHomeInner() {
             No projects matching &ldquo;{search}&rdquo;
           </Type>
           <div className="flex justify-center">
-            <RequireScope scope="org:admin" level="component">
+            <RequireScope
+              scope="org:admin"
+              level="component"
+              className="w-full"
+            >
               <button
                 type="button"
                 onClick={() => {
@@ -142,11 +146,11 @@ export function OrgHomeInner() {
               </DotCard>
             </Link>
           ))}
-          <RequireScope scope="org:admin" level="component">
+          <RequireScope scope="org:admin" level="component" className="w-full">
             <button
               type="button"
               onClick={() => setCreateDialogOpen(true)}
-              className="text-left hover:no-underline"
+              className="w-full text-left hover:no-underline"
             >
               <DotCard
                 icon={

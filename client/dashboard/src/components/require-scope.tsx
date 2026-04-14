@@ -1,5 +1,6 @@
 import { Scope } from "@/hooks/useRBAC";
 import { useRBAC } from "@/hooks/useRBAC";
+import { cn } from "@/lib/utils";
 import { Icon } from "@speakeasy-api/moonshine";
 import React from "react";
 import {
@@ -34,6 +35,8 @@ type RequireScopeProps = {
       level: "component";
       /** Tooltip text shown on hover when disabled. */
       reason?: string;
+      /** Extra classes applied to the disabled wrapper div (e.g. "w-full" for block-level children). */
+      className?: string;
     }
 );
 
@@ -70,7 +73,11 @@ export function RequireScope(props: RequireScopeProps) {
       return <>{props.fallback ?? null}</>;
 
     case "component":
-      return <ScopeDisabled reason={props.reason}>{children}</ScopeDisabled>;
+      return (
+        <ScopeDisabled reason={props.reason} className={props.className}>
+          {children}
+        </ScopeDisabled>
+      );
   }
 }
 
@@ -79,19 +86,26 @@ export function RequireScope(props: RequireScopeProps) {
  */
 function ScopeDisabled({
   reason = "You don't have permission to perform this action.",
+  className,
   children,
 }: {
   reason?: string;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="pointer-events-none inline-flex cursor-not-allowed opacity-50 select-none">
+          <div
+            className={cn(
+              "pointer-events-none inline-flex cursor-not-allowed opacity-50 select-none",
+              className,
+            )}
+          >
             {/* Wrapper div that re-enables pointer events for the tooltip to work */}
             <div
-              className="pointer-events-auto"
+              className="pointer-events-auto w-full"
               onClickCapture={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
