@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -23,10 +24,33 @@ type Service struct {
 
 var _ gateway.PlatformExecutor = (*Service)(nil)
 
-func NewService(logger *slog.Logger, _ *pgxpool.Pool, telemetrySvc platformtools.TelemetryService) *Service {
+type Option func(*platformtools.Dependencies)
+
+func WithTriggerTools(app *bgtriggers.App) Option {
+	return func(deps *platformtools.Dependencies) {
+		deps.TriggerApp = app
+	}
+}
+
+func NewService(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	telemetrySvc platformtools.TelemetryService,
+	options ...Option,
+) *Service {
+	deps := platformtools.Dependencies{
+		Logger:           logger,
+		DB:               db,
+		TelemetryService: telemetrySvc,
+		TriggerApp:       nil,
+	}
+	for _, option := range options {
+		option(&deps)
+	}
+
 	return &Service{
 		logger:    logger.With(attr.SlogComponent("platform_tools")),
-		executors: platformtools.BuildExecutors(telemetrySvc),
+		executors: platformtools.BuildExecutors(deps),
 	}
 }
 

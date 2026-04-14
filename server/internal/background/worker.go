@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -55,6 +56,7 @@ type WorkerOptions struct {
 	RagService          *rag.ToolsetVectorStore
 	MCPRegistryClient   *externalmcp.RegistryClient
 	TelemetryLogger     *telemetry.Logger
+	TriggersApp         *bgtriggers.App
 }
 
 func ForDeploymentProcessing(
@@ -86,6 +88,7 @@ func ForDeploymentProcessing(
 		RedisClient:         nil,
 		PosthogClient:       nil,
 		TelemetryLogger:     nil,
+		TriggersApp:         nil,
 		CacheAdapter:        nil,
 	}
 }
@@ -117,6 +120,7 @@ func NewTemporalWorker(
 		RagService:          nil,
 		MCPRegistryClient:   nil,
 		TelemetryLogger:     nil,
+		TriggersApp:         nil,
 		CacheAdapter:        nil,
 	}
 
@@ -141,6 +145,7 @@ func NewTemporalWorker(
 			RagService:          conv.Default(o.RagService, opts.RagService),
 			MCPRegistryClient:   conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
 			TelemetryLogger:     conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
+			TriggersApp:         conv.Default(o.TriggersApp, opts.TriggersApp),
 			CacheAdapter:        conv.Default(o.CacheAdapter, opts.CacheAdapter),
 		}
 	}
@@ -176,6 +181,7 @@ func NewTemporalWorker(
 		opts.MCPRegistryClient,
 		env.Client(),
 		opts.TelemetryLogger,
+		opts.TriggersApp,
 		opts.CacheAdapter,
 	)
 
@@ -203,6 +209,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.DeleteChatResolutions)
 	temporalWorker.RegisterActivity(activities.AnalyzeSegment)
 	temporalWorker.RegisterActivity(activities.GetUserFeedbackForChat)
+	// Trigger related activities
+	temporalWorker.RegisterActivity(activities.DispatchTrigger)
+	temporalWorker.RegisterActivity(activities.ProcessScheduledTrigger)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -217,6 +226,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
 	temporalWorker.RegisterWorkflow(DelayedChatResolutionAnalysisWorkflow)
+	// Trigger workflows
+	temporalWorker.RegisterWorkflow(TriggerCronWorkflow)
+	temporalWorker.RegisterWorkflow(TriggerDispatchWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
