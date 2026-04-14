@@ -90,6 +90,18 @@ func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 
+	enabled, err := m.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	if err != nil {
+		m.logger.WarnContext(ctx, "failed to check RBAC feature flag, skipping grant loading",
+			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			attr.SlogError(err),
+		)
+		return ctx, nil
+	}
+	if !enabled {
+		return ctx, nil
+	}
+
 	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)}
 
 	roleSlug, err := m.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
