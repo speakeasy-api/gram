@@ -188,7 +188,7 @@ INSERT INTO skills_capture_policies (
 )
 VALUES (
     @organization_id
-  , @project_id
+  , sqlc.arg(project_id)::uuid
   , @mode
 )
 ON CONFLICT (organization_id, project_id)
@@ -205,7 +205,7 @@ SET
     deleted_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
-  AND project_id = @project_id
+  AND project_id = sqlc.arg(project_id)::uuid
   AND deleted IS FALSE
 RETURNING *;
 

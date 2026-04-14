@@ -119,7 +119,16 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 		return nil, err
 	}
 	if !captureModeAllowsScope(effectiveMode, payload.Scope) {
-		return nil, oops.E(oops.CodeForbidden, nil, "skill capture is disabled for scope %s", payload.Scope)
+		if effectiveMode == CaptureModeDisabled {
+			return nil, oops.E(oops.CodeForbidden, nil, "skill capture is disabled")
+		}
+		return nil, oops.E(
+			oops.CodeForbidden,
+			nil,
+			"skill capture scope %s is not permitted by effective mode %s",
+			payload.Scope,
+			effectiveMode,
+		)
 	}
 
 	if payload.ContentLength <= 0 {
