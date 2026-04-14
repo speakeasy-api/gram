@@ -320,6 +320,61 @@ func TestService_Capture_ProjectOnlyPolicyRejectsUserScope(t *testing.T) {
 	require.Contains(t, oopsErr.Error(), "not permitted by effective mode")
 }
 
+func TestService_Capture_UserOnlyPolicyAllowsUserScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestSkillsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := ti.skillsRepo.UpsertOrganizationCapturePolicy(ctx, skillsrepo.UpsertOrganizationCapturePolicyParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Mode:           "user_only",
+	})
+	require.NoError(t, err)
+
+	content := []byte("PK\x03\x04skill-zip-content-policy-user-only-allow")
+	sha := sha256.Sum256(content)
+	expectedSHA := hex.EncodeToString(sha[:])
+	payload := newCapturePayload("application/zip", int64(len(content)), expectedSHA)
+	payload.Scope = "user"
+
+	result, err := ti.service.Capture(
+		ctx,
+		payload,
+		io.NopCloser(bytes.NewReader(content)),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Asset)
+}
+
+func TestService_Capture_UserOnlyPolicyRejectsProjectScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestSkillsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := ti.skillsRepo.UpsertOrganizationCapturePolicy(ctx, skillsrepo.UpsertOrganizationCapturePolicyParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Mode:           "user_only",
+	})
+	require.NoError(t, err)
+
+	content := []byte("PK\x03\x04skill-zip-content-policy-user-only-reject")
+	sha := sha256.Sum256(content)
+	expectedSHA := hex.EncodeToString(sha[:])
+	payload := newCapturePayload("application/zip", int64(len(content)), expectedSHA)
+	payload.Scope = "project"
+
+	_, err = ti.service.Capture(ctx, payload, io.NopCloser(bytes.NewReader(content)))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "not permitted by effective mode")
+}
+
 func TestService_Capture_ProjectOverrideTakesPrecedence(t *testing.T) {
 	t.Parallel()
 
