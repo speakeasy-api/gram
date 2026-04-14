@@ -4,25 +4,38 @@ import { stat } from "node:fs/promises";
 import {
   DEFAULT_RESOLUTION_STATUS,
   DISCOVERY_ROOTS_BY_AGENT,
-} from "./constants.mjs";
+  SUPPORTED_AGENTS,
+  type DiscoveryRootName,
+  type ResolutionStatus,
+  type SkillScope,
+  type SupportedAgent,
+} from "./constants.mts";
+import { asNonEmptyString, isJsonObject, type JsonObject } from "./types.mts";
 
-const SKILL_NAME_KEYS = Object.freeze(["skill", "skill_name"]);
+const SKILL_NAME_KEYS = ["skill", "skill_name"] as const;
 
-function normalizeString(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
+export interface DiscoveryRootPath {
+  discoveryRoot: DiscoveryRootName;
+  scope: SkillScope;
+  rootPath: string;
 }
 
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+export interface DiscoverSkillRootOptions {
+  agent?: SupportedAgent | null;
+  projectDir?: string | null;
+  homeDir?: string | null;
 }
 
-function normalizeSkillLookupName(value) {
-  const name = normalizeString(value);
+export interface DiscoverSkillRootResult {
+  resolutionStatus: ResolutionStatus;
+  scope: SkillScope | null;
+  discoveryRoot: DiscoveryRootName | null;
+  skillDir: string | null;
+  skillMdPath: string | null;
+}
+
+function normalizeSkillLookupName(value: any): string | null {
+  const name = asNonEmptyString(value);
   if (!name) {
     return null;
   }
@@ -39,12 +52,12 @@ function normalizeSkillLookupName(value) {
   return name;
 }
 
-function extractSkillNameFromValue(value, depth = 0) {
+function extractSkillNameFromValue(value: any, depth = 0): string | null {
   if (depth > 4 || value == null) {
     return null;
   }
 
-  const direct = normalizeString(value);
+  const direct = asNonEmptyString(value);
   if (direct) {
     if (depth === 0 && (direct.startsWith("{") || direct.startsWith("["))) {
       try {
@@ -67,12 +80,12 @@ function extractSkillNameFromValue(value, depth = 0) {
     return null;
   }
 
-  if (!isRecord(value)) {
+  if (!isJsonObject(value)) {
     return null;
   }
 
   for (const key of SKILL_NAME_KEYS) {
-    const maybeName = normalizeString(value[key]);
+    const maybeName = asNonEmptyString(value[key]);
     if (maybeName) {
       return maybeName;
     }
@@ -88,23 +101,31 @@ function extractSkillNameFromValue(value, depth = 0) {
   return null;
 }
 
-async function pathExistsWithType(targetPath, expectedType) {
+async function pathExistsWithType(
+  targetPath: string,
+  expectedType: "dir" | "file",
+): Promise<boolean> {
   try {
     const fileInfo = await stat(targetPath);
     if (expectedType === "dir") {
       return fileInfo.isDirectory();
     }
-    if (expectedType === "file") {
-      return fileInfo.isFile();
-    }
-    return false;
+    return fileInfo.isFile();
   } catch {
     return false;
   }
 }
 
-export function isSkillToolName(toolName) {
-  const normalized = normalizeString(toolName)?.toLowerCase();
+export function isSupportedAgent(value: any): value is SupportedAgent {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  return SUPPORTED_AGENTS.some((agent) => agent === value);
+}
+
+export function isSkillToolName(toolName: any): boolean {
+  const normalized = asNonEmptyString(toolName)?.toLowerCase();
   if (!normalized) {
     return false;
   }
@@ -112,8 +133,8 @@ export function isSkillToolName(toolName) {
   return normalized === "skill" || normalized.endsWith("__skill");
 }
 
-export function extractSkillName(payload) {
-  if (!isRecord(payload)) {
+export function extractSkillName(payload: any): string | null {
+  if (!isJsonObject(payload)) {
     return null;
   }
 
@@ -124,20 +145,22 @@ export function extractSkillName(payload) {
   return extractSkillNameFromValue(payload.tool_input);
 }
 
-export function listDiscoveryRoots(agent, options = {}) {
+export function listDiscoveryRoots(
+  agent: SupportedAgent | null | undefined,
+  options: DiscoverSkillRootOptions = {},
+): DiscoveryRootPath[] {
   if (!agent || !DISCOVERY_ROOTS_BY_AGENT[agent]) {
     return [];
   }
 
-  const projectDir = normalizeString(options.projectDir)
-    ? path.resolve(options.projectDir)
-    : null;
-  const homeDir = normalizeString(options.homeDir)
-    ? path.resolve(options.homeDir)
-    : null;
+  const rawProjectDir = asNonEmptyString(options.projectDir);
+  const rawHomeDir = asNonEmptyString(options.homeDir);
+
+  const projectDir = rawProjectDir ? path.resolve(rawProjectDir) : null;
+  const homeDir = rawHomeDir ? path.resolve(rawHomeDir) : null;
 
   return DISCOVERY_ROOTS_BY_AGENT[agent]
-    .map((entry) => {
+    .map<DiscoveryRootPath | null>((entry) => {
       const baseDir = entry.scope === "project" ? projectDir : homeDir;
       if (!baseDir) {
         return null;
@@ -149,10 +172,13 @@ export function listDiscoveryRoots(agent, options = {}) {
         rootPath: path.join(baseDir, ...entry.segments),
       };
     })
-    .filter((entry) => entry !== null);
+    .filter((entry): entry is DiscoveryRootPath => entry !== null);
 }
 
-export async function discoverSkillRoot(skillName, options = {}) {
+export async function discoverSkillRoot(
+  skillName: any,
+  options: DiscoverSkillRootOptions = {},
+): Promise<DiscoverSkillRootResult> {
   const lookupName = normalizeSkillLookupName(skillName);
   if (!lookupName) {
     return {
@@ -164,7 +190,7 @@ export async function discoverSkillRoot(skillName, options = {}) {
     };
   }
 
-  const roots = listDiscoveryRoots(options.agent, {
+  const roots = listDiscoveryRoots(options.agent ?? null, {
     projectDir: options.projectDir,
     homeDir: options.homeDir,
   });

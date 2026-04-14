@@ -5,23 +5,33 @@ import {
   DEFAULT_RESOLUTION_STATUS,
   RESOLUTION_STATUSES,
   SUPPORTED_AGENTS,
-} from "./constants.mjs";
+  type CaptureLimits,
+  type DiscoveryRootName,
+  type ResolutionStatus,
+  type SkillScope,
+  type SupportedAgent,
+} from "./constants.mts";
 import {
   discoverSkillRoot,
   extractSkillName,
   isSkillToolName,
+  isSupportedAgent,
   listDiscoveryRoots,
-} from "./discovery.mjs";
+  type DiscoverSkillRootResult,
+} from "./discovery.mts";
 import {
   hasXGramIgnoreFrontmatter,
   stripRegistryManagedFrontmatter,
-} from "./frontmatter.mjs";
+} from "./frontmatter.mts";
 import {
   buildCanonicalArchiveSnapshot,
   buildCaptureUploadRequest,
   computeCanonicalContentSha256,
   createDeterministicZipBuffer,
-} from "./packaging.mjs";
+  type CaptureUploadRequest,
+  type SkillUploadMetadata,
+} from "./packaging.mts";
+import { asNonEmptyString, isJsonObject, type JsonObject } from "./types.mts";
 
 export {
   RESOLUTION_STATUSES,
@@ -40,18 +50,42 @@ export {
   buildCaptureUploadRequest,
 };
 
-function normalizeString(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
+export interface ResolveAgentResult {
+  agent: SupportedAgent | null;
+  source: "argv" | "env" | null;
+  error: string | null;
 }
 
-export function resolveAgent(argv = process.argv.slice(2), env = process.env) {
-  let rawValue = null;
-  let source = null;
+export interface BuildSkillMetadataOptions {
+  resolutionStatus?: ResolutionStatus | null;
+  agent?: SupportedAgent | null;
+  projectDir?: string | null;
+  homeDir?: string | null;
+  serverURL?: string | null;
+  gramKey?: string | null;
+  gramProject?: string | null;
+  limits?: CaptureLimits;
+}
+
+export interface SkillMetadataEnvelope {
+  skills: [SkillUploadMetadata];
+}
+
+export interface BuildSkillMetadataResult {
+  metadata: SkillMetadataEnvelope;
+  uploadRequest: CaptureUploadRequest | null;
+}
+
+function isRecord(value: any): value is JsonObject {
+  return isJsonObject(value);
+}
+
+export function resolveAgent(
+  argv: readonly string[] = process.argv.slice(2),
+  env: NodeJS.ProcessEnv = process.env,
+): ResolveAgentResult {
+  let rawValue: string | null = null;
+  let source: ResolveAgentResult["source"] = null;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -74,7 +108,7 @@ export function resolveAgent(argv = process.argv.slice(2), env = process.env) {
     }
   }
 
-  const normalized = normalizeString(rawValue)?.toLowerCase() ?? null;
+  const normalized = asNonEmptyString(rawValue)?.toLowerCase() ?? null;
 
   if (!normalized) {
     return {
@@ -84,7 +118,7 @@ export function resolveAgent(argv = process.argv.slice(2), env = process.env) {
     };
   }
 
-  if (!SUPPORTED_AGENTS.includes(normalized)) {
+  if (!isSupportedAgent(normalized)) {
     return {
       agent: null,
       source,
@@ -99,16 +133,55 @@ export function resolveAgent(argv = process.argv.slice(2), env = process.env) {
   };
 }
 
-export function resolveResolutionStatus(env = process.env) {
-  const status = normalizeString(env.GRAM_SKILLS_RESOLUTION_STATUS);
-  if (!status) {
+function isResolutionStatus(value: any): value is ResolutionStatus {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  return RESOLUTION_STATUSES.some((status) => status === value);
+}
+
+function asResolutionStatus(value: any): ResolutionStatus | null {
+  const normalized = asNonEmptyString(value);
+  if (!normalized) {
     return null;
   }
 
-  return RESOLUTION_STATUSES.includes(status) ? status : null;
+  return isResolutionStatus(normalized) ? normalized : null;
 }
 
-export async function buildSkillMetadata(payload, options = {}) {
+export function resolveResolutionStatus(
+  env: NodeJS.ProcessEnv = process.env,
+): ResolutionStatus | null {
+  return asResolutionStatus(env.GRAM_SKILLS_RESOLUTION_STATUS);
+}
+
+function buildBaseSkill(
+  skillName: string,
+  resolutionStatus: ResolutionStatus,
+  discovery: DiscoverSkillRootResult,
+): SkillUploadMetadata {
+  const skill: SkillUploadMetadata = {
+    name: skillName,
+    source_type: "local_filesystem",
+    resolution_status: resolutionStatus,
+  };
+
+  if (discovery.scope) {
+    skill.scope = discovery.scope;
+  }
+
+  if (discovery.discoveryRoot) {
+    skill.discovery_root = discovery.discoveryRoot;
+  }
+
+  return skill;
+}
+
+export async function buildSkillMetadata(
+  payload: any,
+  options: BuildSkillMetadataOptions = {},
+): Promise<BuildSkillMetadataResult | null> {
   const skillName = extractSkillName(payload);
   if (!skillName) {
     return null;
@@ -121,10 +194,11 @@ export async function buildSkillMetadata(payload, options = {}) {
   });
 
   const limits = options.limits ?? CAPTURE_LIMITS;
-  const forcedResolutionStatus = normalizeString(options.resolutionStatus);
-  let resolutionStatus = forcedResolutionStatus ?? discovery.resolutionStatus;
-  let contentSha256 = null;
-  let archiveBuffer = null;
+  const forcedResolutionStatus = asResolutionStatus(options.resolutionStatus);
+  let resolutionStatus: ResolutionStatus =
+    forcedResolutionStatus ?? discovery.resolutionStatus;
+  let contentSha256: string | null = null;
+  let archiveBuffer: Buffer | null = null;
 
   if (discovery.resolutionStatus === "resolved" && discovery.skillMdPath) {
     try {
@@ -160,33 +234,21 @@ export async function buildSkillMetadata(payload, options = {}) {
   if (
     resolutionStatus === "resolved" &&
     archiveBuffer &&
-    !normalizeString(options.gramKey)
+    !asNonEmptyString(options.gramKey)
   ) {
     resolutionStatus = "capture_skipped_missing_credentials";
     contentSha256 = null;
     archiveBuffer = null;
   }
 
-  const skill = {
-    name: skillName,
-    source_type: "local_filesystem",
-    resolution_status: resolutionStatus,
-  };
-
-  if (discovery.scope) {
-    skill.scope = discovery.scope;
-  }
-
-  if (discovery.discoveryRoot) {
-    skill.discovery_root = discovery.discoveryRoot;
-  }
+  const skill = buildBaseSkill(skillName, resolutionStatus, discovery);
 
   if (contentSha256) {
     skill.content_sha256 = contentSha256;
     skill.asset_format = "zip";
   }
 
-  const metadata = {
+  const metadata: SkillMetadataEnvelope = {
     skills: [skill],
   };
 
@@ -205,11 +267,10 @@ export async function buildSkillMetadata(payload, options = {}) {
   };
 }
 
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-export async function buildEnrichedHookPayload(payload, options = {}) {
+export async function buildEnrichedHookPayload<TPayload = any>(
+  payload: TPayload,
+  options: BuildSkillMetadataOptions = {},
+): Promise<{ payload: TPayload; uploadRequest: CaptureUploadRequest | null }> {
   if (!isRecord(payload)) {
     return {
       payload,

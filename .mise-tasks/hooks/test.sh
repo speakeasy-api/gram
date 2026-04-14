@@ -8,9 +8,9 @@ set -euo pipefail
 export GRAM_HOOKS_SERVER_URL=$GRAM_SERVER_URL
 
 producer_tests=(
-  "hooks/shared-producer/producer-core.test.mjs"
-  "hooks/shared-producer/upload.test.mjs"
-  "hooks/shared-producer/cache.test.mjs"
+  "hooks/shared-producer/producer-core.test.mts"
+  "hooks/shared-producer/upload.test.mts"
+  "hooks/shared-producer/cache.test.mts"
 )
 
 existing_tests=()

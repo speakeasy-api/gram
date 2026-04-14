@@ -1,4 +1,4 @@
-function parseTruthyYamlValue(rawValue) {
+function parseTruthyYamlValue(rawValue: string): boolean {
   const noComment = rawValue.split("#", 1)[0]?.trim() ?? "";
   const unquoted = noComment
     .replace(/^['"]|['"]$/g, "")
@@ -7,23 +7,29 @@ function parseTruthyYamlValue(rawValue) {
   return unquoted === "true";
 }
 
-function extractFrontmatter(content) {
+function extractFrontmatter(content: string): string | null {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
   return match ? match[1] : null;
 }
 
-function normalizeFrontmatterLine(line) {
+function normalizeFrontmatterLine(line: string): string {
   return line.replace(/\r$/, "");
 }
 
-function isRegistryManagedMetadataLine(trimmedLine) {
+function isRegistryManagedMetadataLine(trimmedLine: string): boolean {
   return (
     /^metadata\.skill_uuid\s*:/i.test(trimmedLine) ||
     /^metadata\.x-gram-[\w-]+\s*:/i.test(trimmedLine)
   );
 }
 
-function splitFrontmatterLine(line) {
+interface ParsedFrontmatterLine {
+  line: string;
+  trimmed: string;
+  indent: number;
+}
+
+function splitFrontmatterLine(line: string): ParsedFrontmatterLine {
   const indent = (line.match(/^\s*/) ?? [""])[0].length;
   return {
     line,
@@ -32,14 +38,14 @@ function splitFrontmatterLine(line) {
   };
 }
 
-function isRegistryManagedMetadataChild(trimmedLine) {
+function isRegistryManagedMetadataChild(trimmedLine: string): boolean {
   return (
     /^x-gram-[\w-]+\s*:/i.test(trimmedLine) ||
     /^skill_uuid\s*:/i.test(trimmedLine)
   );
 }
 
-export function stripRegistryManagedFrontmatter(content) {
+export function stripRegistryManagedFrontmatter(content: string): string {
   const match = content.match(
     /^(---\r?\n)([\s\S]*?)(\r?\n---(?:\r?\n|$))([\s\S]*)$/,
   );
@@ -50,7 +56,7 @@ export function stripRegistryManagedFrontmatter(content) {
   const [, start, rawFrontmatter, end, body] = match;
   const lines = rawFrontmatter.split(/\r?\n/).map(normalizeFrontmatterLine);
 
-  const cleaned = [];
+  const cleaned: string[] = [];
 
   for (let i = 0; i < lines.length; ) {
     const current = splitFrontmatterLine(lines[i]);
@@ -75,7 +81,7 @@ export function stripRegistryManagedFrontmatter(content) {
 
     const metadataIndent = metadataMatch[1].length;
     const inlineValue = metadataMatch[2].trim();
-    const metadataLines = [];
+    const metadataLines: string[] = [];
     let hasNonManagedChild = false;
 
     let j = i + 1;
@@ -117,7 +123,7 @@ export function stripRegistryManagedFrontmatter(content) {
   return `${start}${cleaned.join("\n")}${end}${body}`;
 }
 
-export function hasXGramIgnoreFrontmatter(content) {
+export function hasXGramIgnoreFrontmatter(content: string): boolean {
   const frontmatter = extractFrontmatter(content);
   if (!frontmatter) {
     return false;

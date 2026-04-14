@@ -20,23 +20,33 @@ import {
   resolveAgent,
   resolveResolutionStatus,
   stripRegistryManagedFrontmatter,
-} from "./producer-core.mjs";
+} from "./producer-core.mts";
 
-async function makeTempDir(prefix) {
+async function makeTempDir(prefix: string): Promise<string> {
   return mkdtemp(path.join(os.tmpdir(), prefix));
 }
 
+interface WriteSkillOptions {
+  skillMd?: string;
+  asDir?: boolean;
+}
+
 async function writeSkill(
-  baseDir,
-  relPath,
-  { skillMd = "# skill\n", asDir = true } = {},
-) {
+  baseDir: string,
+  relPath: string,
+  { skillMd = "# skill\n", asDir = true }: WriteSkillOptions = {},
+): Promise<string> {
   const fullDir = path.join(baseDir, relPath);
   await mkdir(fullDir, { recursive: true });
   if (asDir) {
     await writeFile(path.join(fullDir, "SKILL.md"), skillMd, "utf8");
   }
   return fullDir;
+}
+
+function requireValue<T>(value: T | null | undefined, message: string): T {
+  assert.ok(value != null, message);
+  return value as T;
 }
 
 test("isSkillToolName accepts Skill and mcp tool names", () => {
@@ -330,18 +340,24 @@ test("buildSkillMetadata includes hash + asset_format when resolved and hashable
   await writeFile(path.join(skillDir, "a.txt"), "hello\n", "utf8");
 
   const payload = { tool_name: "Skill", tool_input: { skill: "golang" } };
-  const result = await buildSkillMetadata(payload, {
-    agent: "claude",
-    projectDir,
-    homeDir,
-    gramKey: "k",
-    gramProject: "p",
-  });
+  const result = requireValue(
+    await buildSkillMetadata(payload, {
+      agent: "claude",
+      projectDir,
+      homeDir,
+      gramKey: "k",
+      gramProject: "p",
+    }),
+    "expected metadata for resolved skill",
+  );
 
   const skill = result.metadata.skills[0];
   assert.equal(skill.resolution_status, "resolved");
   assert.equal(skill.asset_format, "zip");
-  assert.match(skill.content_sha256, /^[a-f0-9]{64}$/);
+  assert.match(
+    requireValue(skill.content_sha256, "expected content hash"),
+    /^[a-f0-9]{64}$/,
+  );
   assert.equal(result.uploadRequest?.method, "POST");
 });
 
@@ -350,12 +366,15 @@ test("buildSkillMetadata does not force resolved override when discovery is unre
   const homeDir = await makeTempDir("gram-producer-home-");
 
   const payload = { tool_name: "Skill", tool_input: { skill: "missing" } };
-  const result = await buildSkillMetadata(payload, {
-    agent: "claude",
-    projectDir,
-    homeDir,
-    resolutionStatus: "resolved",
-  });
+  const result = requireValue(
+    await buildSkillMetadata(payload, {
+      agent: "claude",
+      projectDir,
+      homeDir,
+      resolutionStatus: "resolved",
+    }),
+    "expected metadata for unresolved skill",
+  );
 
   assert.equal(
     result.metadata.skills[0].resolution_status,
@@ -374,11 +393,14 @@ test("buildSkillMetadata returns skipped_by_author when x-gram-ignore is true", 
   });
 
   const payload = { tool_name: "Skill", tool_input: { skill: "golang" } };
-  const result = await buildSkillMetadata(payload, {
-    agent: "claude",
-    projectDir,
-    homeDir,
-  });
+  const result = requireValue(
+    await buildSkillMetadata(payload, {
+      agent: "claude",
+      projectDir,
+      homeDir,
+    }),
+    "expected metadata for ignored skill",
+  );
 
   assert.equal(
     result.metadata.skills[0].resolution_status,
@@ -398,12 +420,15 @@ test("buildSkillMetadata marks missing credentials before upload", async () => {
   await writeFile(path.join(skillDir, "a.txt"), "hello\n", "utf8");
 
   const payload = { tool_name: "Skill", tool_input: { skill: "golang" } };
-  const result = await buildSkillMetadata(payload, {
-    agent: "claude",
-    projectDir,
-    homeDir,
-    gramProject: "proj",
-  });
+  const result = requireValue(
+    await buildSkillMetadata(payload, {
+      agent: "claude",
+      projectDir,
+      homeDir,
+      gramProject: "proj",
+    }),
+    "expected metadata for missing-credentials path",
+  );
 
   assert.equal(
     result.metadata.skills[0].resolution_status,
@@ -424,15 +449,18 @@ test("buildSkillMetadata maps hash limit failure to capture_skipped_* status", a
   await writeFile(path.join(skillDir, "b.txt"), "y", "utf8");
 
   const payload = { tool_name: "Skill", tool_input: { skill: "golang" } };
-  const result = await buildSkillMetadata(payload, {
-    agent: "claude",
-    projectDir,
-    homeDir,
-    limits: {
-      ...CAPTURE_LIMITS,
-      maxFileCount: 1,
-    },
-  });
+  const result = requireValue(
+    await buildSkillMetadata(payload, {
+      agent: "claude",
+      projectDir,
+      homeDir,
+      limits: {
+        ...CAPTURE_LIMITS,
+        maxFileCount: 1,
+      },
+    }),
+    "expected metadata for limit failure",
+  );
 
   assert.equal(
     result.metadata.skills[0].resolution_status,
@@ -466,8 +494,16 @@ test("buildEnrichedHookPayload preserves existing additional_data", async () => 
     gramProject: "p",
   });
 
-  assert.equal(result.payload.additional_data.trace_hint, "abc");
-  assert.equal(result.payload.additional_data.skills[0].name, "golang");
+  assert.ok(typeof result.payload === "object" && result.payload !== null);
+  const payloadRecord = result.payload as {
+    additional_data?: {
+      trace_hint?: string;
+      skills?: Array<{ name?: string }>;
+    };
+  };
+
+  assert.equal(payloadRecord.additional_data?.trace_hint, "abc");
+  assert.equal(payloadRecord.additional_data?.skills?.[0]?.name, "golang");
 });
 
 test("buildEnrichedHookPayload passthrough on non-record payload", async () => {
@@ -483,28 +519,33 @@ test("createDeterministicZipBuffer creates non-empty zip bytes", async () => {
 
   const zipResult = await createDeterministicZipBuffer(skillDir);
   assert.equal(zipResult.errorStatus, null);
-  assert.ok(zipResult.zipBuffer.length > 0);
-  assert.equal(zipResult.zipBuffer.readUInt32LE(0), 0x04034b50);
+
+  const zipBuffer = requireValue(zipResult.zipBuffer, "expected zip buffer");
+  assert.ok(zipBuffer.length > 0);
+  assert.equal(zipBuffer.readUInt32LE(0), 0x04034b50);
 });
 
 test("buildCaptureUploadRequest shapes skills.capture request", () => {
   const archive = Buffer.from("zip");
-  const req = buildCaptureUploadRequest(
-    {
-      name: "golang",
-      scope: "project",
-      discovery_root: "project_agents",
-      source_type: "local_filesystem",
-      content_sha256: "a".repeat(64),
-      asset_format: "zip",
-      resolution_status: "resolved",
-    },
-    archive,
-    {
-      serverURL: "https://app.getgram.ai",
-      gramKey: "key",
-      gramProject: "proj",
-    },
+  const req = requireValue(
+    buildCaptureUploadRequest(
+      {
+        name: "golang",
+        scope: "project",
+        discovery_root: "project_agents",
+        source_type: "local_filesystem",
+        content_sha256: "a".repeat(64),
+        asset_format: "zip",
+        resolution_status: "resolved",
+      },
+      archive,
+      {
+        serverURL: "https://app.getgram.ai",
+        gramKey: "key",
+        gramProject: "proj",
+      },
+    ),
+    "expected shaped upload request",
   );
 
   assert.equal(req.method, "POST");

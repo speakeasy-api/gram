@@ -2,9 +2,11 @@
 
 import { stderr } from "node:process";
 
-import { runUploadWorkerFromFile } from "./upload.mjs";
+import { runUploadWorkerFromFile } from "./upload.mts";
 
-function parseRequestFileArg(argv = process.argv.slice(2)) {
+function parseRequestFileArg(
+  argv: readonly string[] = process.argv.slice(2),
+): string | null {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--request-file") {
@@ -28,6 +30,6 @@ if (!requestFile) {
 const result = await runUploadWorkerFromFile(requestFile);
 if (!result.ok && !result.skipped) {
   stderr.write(
-    `[gram-skills-producer] upload worker failed: ${result.reason ?? "unknown"}${result.status ? ` status=${result.status}` : ""}\n`,
+    `[gram-skills-producer] upload worker failed: ${result.reason ?? "any"}${"status" in result && result.status ? ` status=${result.status}` : ""}\n`,
   );
 }
