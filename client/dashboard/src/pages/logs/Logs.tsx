@@ -48,7 +48,7 @@ import {
   Settings,
   XIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOrgRoutes } from "@/routes";
 import { Link, useSearchParams } from "react-router";
 import type { ActiveLogFilter } from "./log-filter-types";
@@ -675,6 +675,29 @@ function LogsInnerContent({
 }) {
   const orgRoutes = useOrgRoutes();
 
+  // Enforce a minimum visible duration for the refresh button's in-flight
+  // state. Instant or cached refetches would otherwise flash the spinner for
+  // a few ms and feel uncommunicative.
+  const MIN_REFRESH_MS = 2000;
+  const [refreshStartedAt, setRefreshStartedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (refreshStartedAt === null || isFetching) return;
+    const remaining = Math.max(
+      0,
+      MIN_REFRESH_MS - (Date.now() - refreshStartedAt),
+    );
+    const timeout = setTimeout(() => setRefreshStartedAt(null), remaining);
+    return () => clearTimeout(timeout);
+  }, [isFetching, refreshStartedAt]);
+
+  const isRefreshing = refreshStartedAt !== null;
+
+  const handleRefreshClick = () => {
+    setRefreshStartedAt(Date.now());
+    onRefresh();
+  };
+
   const pageTitle = (
     <div className="flex min-w-0 flex-col gap-1">
       <h1 className="text-xl font-semibold">Logs</h1>
@@ -715,15 +738,16 @@ function LogsInnerContent({
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={onRefresh}
-                        disabled={isFetching}
+                        onClick={handleRefreshClick}
+                        disabled={isRefreshing}
                         aria-label="Refresh logs"
                         className={cn(
                           "min-w-[110px] justify-center transition-all",
-                          isFetching && "ring-primary/30 ring-2 ring-offset-1",
+                          isRefreshing &&
+                            "ring-primary/30 ring-2 ring-offset-1",
                         )}
                       >
-                        {isFetching ? (
+                        {isRefreshing ? (
                           <>
                             <Loader2 className="h-4 w-4 animate-spin" />
                             <span className="text-muted-foreground">
