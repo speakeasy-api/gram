@@ -81,7 +81,7 @@ function RBACManagementSection() {
         <div className="flex gap-2 pt-2">
           {status.rbacEnabled ? (
             <Button
-              variant="destructive"
+              variant="destructive-primary"
               onClick={() => setConfirmAction("disable")}
               disabled={toggleMutation.isPending}
             >
@@ -136,7 +136,9 @@ function RBACManagementSection() {
               Cancel
             </Button>
             <Button
-              variant={confirmAction === "disable" ? "destructive" : undefined}
+              variant={
+                confirmAction === "disable" ? "destructive-primary" : undefined
+              }
               onClick={() => toggleMutation.mutate({})}
               disabled={toggleMutation.isPending}
             >
