@@ -76,12 +76,12 @@ export function ChatLogsFilters({
   };
 
   return (
-    <div className="flex items-center gap-3 flex-1">
+    <div className="flex flex-1 items-center gap-3">
       <SearchBar
         value={localSearch}
         onChange={setLocalSearch}
         placeholder="Search by chat ID, user ID, or title..."
-        className="flex-1 !h-10"
+        className="!h-10 flex-1"
         disabled={disabled}
       />
 
@@ -91,7 +91,7 @@ export function ChatLogsFilters({
         disabled={disabled}
       >
         <SelectTrigger
-          className="w-[150px] !h-10 border-border"
+          className="border-border !h-10 w-[150px]"
           disabled={disabled}
         >
           <SelectValue placeholder="All Statuses" />

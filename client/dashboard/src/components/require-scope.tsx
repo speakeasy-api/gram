@@ -1,5 +1,6 @@
 import { Scope } from "@/hooks/useRBAC";
 import { useRBAC } from "@/hooks/useRBAC";
+import { cn } from "@/lib/utils";
 import { Icon } from "@speakeasy-api/moonshine";
 import React from "react";
 import {
@@ -34,6 +35,8 @@ type RequireScopeProps = {
       level: "component";
       /** Tooltip text shown on hover when disabled. */
       reason?: string;
+      /** Extra classes applied to the disabled wrapper div (e.g. "w-full" for block-level children). */
+      className?: string;
     }
 );
 
@@ -52,7 +55,7 @@ export function RequireScope(props: RequireScopeProps) {
     if (level === "section") return null;
     // For component-level, show disabled state while loading
     return (
-      <div className="opacity-50 pointer-events-none select-none">
+      <div className="pointer-events-none opacity-50 select-none">
         {children}
       </div>
     );
@@ -70,7 +73,11 @@ export function RequireScope(props: RequireScopeProps) {
       return <>{props.fallback ?? null}</>;
 
     case "component":
-      return <ScopeDisabled reason={props.reason}>{children}</ScopeDisabled>;
+      return (
+        <ScopeDisabled reason={props.reason} className={props.className}>
+          {children}
+        </ScopeDisabled>
+      );
   }
 }
 
@@ -79,19 +86,26 @@ export function RequireScope(props: RequireScopeProps) {
  */
 function ScopeDisabled({
   reason = "You don't have permission to perform this action.",
+  className,
   children,
 }: {
   reason?: string;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="opacity-50 pointer-events-none select-none cursor-not-allowed inline-flex">
+          <div
+            className={cn(
+              "pointer-events-none inline-flex cursor-not-allowed opacity-50 select-none",
+              className,
+            )}
+          >
             {/* Wrapper div that re-enables pointer events for the tooltip to work */}
             <div
-              className="pointer-events-auto"
+              className="pointer-events-auto w-full"
               onClickCapture={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -118,13 +132,13 @@ export function Unauthorized({
   description?: string;
 }) {
   return (
-    <div className="flex items-center justify-center h-full w-full min-h-[400px]">
-      <div className="flex flex-col items-center gap-3 max-w-sm text-center">
-        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-muted">
-          <Icon name="lock" className="h-5 w-5 text-muted-foreground" />
+    <div className="flex h-full min-h-[400px] w-full items-center justify-center">
+      <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+        <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
+          <Icon name="lock" className="text-muted-foreground h-5 w-5" />
         </div>
         <h2 className="text-lg font-medium">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
+        <p className="text-muted-foreground text-sm">{description}</p>
       </div>
     </div>
   );

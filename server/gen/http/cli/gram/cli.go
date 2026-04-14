@@ -42,6 +42,7 @@ import (
 	templatesc "github.com/speakeasy-api/gram/server/gen/http/templates/client"
 	toolsc "github.com/speakeasy-api/gram/server/gen/http/tools/client"
 	toolsetsc "github.com/speakeasy-api/gram/server/gen/http/toolsets/client"
+	triggersc "github.com/speakeasy-api/gram/server/gen/http/triggers/client"
 	usagec "github.com/speakeasy-api/gram/server/gen/http/usage/client"
 	variationsc "github.com/speakeasy-api/gram/server/gen/http/variations/client"
 	goahttp "goa.design/goa/v3/http"
@@ -58,7 +59,7 @@ func UsageCommands() []string {
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
-		"chat (list-chats|load-chat|generate-title|credit-usage|list-chats-with-resolutions|submit-feedback)",
+		"chat (list-chats|load-chat|generate-title|credit-usage|list-chats-with-resolutions|delete-chat|submit-feedback)",
 		"chat-sessions (create|revoke)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|delete-domain)",
@@ -82,6 +83,7 @@ func UsageCommands() []string {
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server|updateoauth-proxy-server)",
+		"triggers (list-trigger-definitions|list-trigger-instances|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"usage (get-period-usage|get-usage-tiers|create-customer-session|create-checkout)",
 		"variations (upsert-global|delete-global|list-global)",
 	}
@@ -306,6 +308,11 @@ func ParseEndpoint(
 		chatListChatsWithResolutionsSessionTokenFlag      = chatListChatsWithResolutionsFlags.String("session-token", "", "")
 		chatListChatsWithResolutionsProjectSlugInputFlag  = chatListChatsWithResolutionsFlags.String("project-slug-input", "", "")
 		chatListChatsWithResolutionsChatSessionsTokenFlag = chatListChatsWithResolutionsFlags.String("chat-sessions-token", "", "")
+
+		chatDeleteChatFlags                = flag.NewFlagSet("delete-chat", flag.ExitOnError)
+		chatDeleteChatIDFlag               = chatDeleteChatFlags.String("id", "REQUIRED", "")
+		chatDeleteChatSessionTokenFlag     = chatDeleteChatFlags.String("session-token", "", "")
+		chatDeleteChatProjectSlugInputFlag = chatDeleteChatFlags.String("project-slug-input", "", "")
 
 		chatSubmitFeedbackFlags                 = flag.NewFlagSet("submit-feedback", flag.ExitOnError)
 		chatSubmitFeedbackBodyFlag              = chatSubmitFeedbackFlags.String("body", "REQUIRED", "")
@@ -974,6 +981,46 @@ func ParseEndpoint(
 		toolsetsUpdateOAuthProxyServerApikeyTokenFlag      = toolsetsUpdateOAuthProxyServerFlags.String("apikey-token", "", "")
 		toolsetsUpdateOAuthProxyServerProjectSlugInputFlag = toolsetsUpdateOAuthProxyServerFlags.String("project-slug-input", "", "")
 
+		triggersFlags = flag.NewFlagSet("triggers", flag.ContinueOnError)
+
+		triggersListTriggerDefinitionsFlags                = flag.NewFlagSet("list-trigger-definitions", flag.ExitOnError)
+		triggersListTriggerDefinitionsSessionTokenFlag     = triggersListTriggerDefinitionsFlags.String("session-token", "", "")
+		triggersListTriggerDefinitionsProjectSlugInputFlag = triggersListTriggerDefinitionsFlags.String("project-slug-input", "", "")
+
+		triggersListTriggerInstancesFlags                = flag.NewFlagSet("list-trigger-instances", flag.ExitOnError)
+		triggersListTriggerInstancesSessionTokenFlag     = triggersListTriggerInstancesFlags.String("session-token", "", "")
+		triggersListTriggerInstancesProjectSlugInputFlag = triggersListTriggerInstancesFlags.String("project-slug-input", "", "")
+
+		triggersGetTriggerInstanceFlags                = flag.NewFlagSet("get-trigger-instance", flag.ExitOnError)
+		triggersGetTriggerInstanceIDFlag               = triggersGetTriggerInstanceFlags.String("id", "REQUIRED", "")
+		triggersGetTriggerInstanceSessionTokenFlag     = triggersGetTriggerInstanceFlags.String("session-token", "", "")
+		triggersGetTriggerInstanceProjectSlugInputFlag = triggersGetTriggerInstanceFlags.String("project-slug-input", "", "")
+
+		triggersCreateTriggerInstanceFlags                = flag.NewFlagSet("create-trigger-instance", flag.ExitOnError)
+		triggersCreateTriggerInstanceBodyFlag             = triggersCreateTriggerInstanceFlags.String("body", "REQUIRED", "")
+		triggersCreateTriggerInstanceSessionTokenFlag     = triggersCreateTriggerInstanceFlags.String("session-token", "", "")
+		triggersCreateTriggerInstanceProjectSlugInputFlag = triggersCreateTriggerInstanceFlags.String("project-slug-input", "", "")
+
+		triggersUpdateTriggerInstanceFlags                = flag.NewFlagSet("update-trigger-instance", flag.ExitOnError)
+		triggersUpdateTriggerInstanceBodyFlag             = triggersUpdateTriggerInstanceFlags.String("body", "REQUIRED", "")
+		triggersUpdateTriggerInstanceSessionTokenFlag     = triggersUpdateTriggerInstanceFlags.String("session-token", "", "")
+		triggersUpdateTriggerInstanceProjectSlugInputFlag = triggersUpdateTriggerInstanceFlags.String("project-slug-input", "", "")
+
+		triggersDeleteTriggerInstanceFlags                = flag.NewFlagSet("delete-trigger-instance", flag.ExitOnError)
+		triggersDeleteTriggerInstanceIDFlag               = triggersDeleteTriggerInstanceFlags.String("id", "REQUIRED", "")
+		triggersDeleteTriggerInstanceSessionTokenFlag     = triggersDeleteTriggerInstanceFlags.String("session-token", "", "")
+		triggersDeleteTriggerInstanceProjectSlugInputFlag = triggersDeleteTriggerInstanceFlags.String("project-slug-input", "", "")
+
+		triggersPauseTriggerInstanceFlags                = flag.NewFlagSet("pause-trigger-instance", flag.ExitOnError)
+		triggersPauseTriggerInstanceIDFlag               = triggersPauseTriggerInstanceFlags.String("id", "REQUIRED", "")
+		triggersPauseTriggerInstanceSessionTokenFlag     = triggersPauseTriggerInstanceFlags.String("session-token", "", "")
+		triggersPauseTriggerInstanceProjectSlugInputFlag = triggersPauseTriggerInstanceFlags.String("project-slug-input", "", "")
+
+		triggersResumeTriggerInstanceFlags                = flag.NewFlagSet("resume-trigger-instance", flag.ExitOnError)
+		triggersResumeTriggerInstanceIDFlag               = triggersResumeTriggerInstanceFlags.String("id", "REQUIRED", "")
+		triggersResumeTriggerInstanceSessionTokenFlag     = triggersResumeTriggerInstanceFlags.String("session-token", "", "")
+		triggersResumeTriggerInstanceProjectSlugInputFlag = triggersResumeTriggerInstanceFlags.String("project-slug-input", "", "")
+
 		usageFlags = flag.NewFlagSet("usage", flag.ContinueOnError)
 
 		usageGetPeriodUsageFlags            = flag.NewFlagSet("get-period-usage", flag.ExitOnError)
@@ -1052,6 +1099,7 @@ func ParseEndpoint(
 	chatGenerateTitleFlags.Usage = chatGenerateTitleUsage
 	chatCreditUsageFlags.Usage = chatCreditUsageUsage
 	chatListChatsWithResolutionsFlags.Usage = chatListChatsWithResolutionsUsage
+	chatDeleteChatFlags.Usage = chatDeleteChatUsage
 	chatSubmitFeedbackFlags.Usage = chatSubmitFeedbackUsage
 
 	chatSessionsFlags.Usage = chatSessionsUsage
@@ -1214,6 +1262,16 @@ func ParseEndpoint(
 	toolsetsAddOAuthProxyServerFlags.Usage = toolsetsAddOAuthProxyServerUsage
 	toolsetsUpdateOAuthProxyServerFlags.Usage = toolsetsUpdateOAuthProxyServerUsage
 
+	triggersFlags.Usage = triggersUsage
+	triggersListTriggerDefinitionsFlags.Usage = triggersListTriggerDefinitionsUsage
+	triggersListTriggerInstancesFlags.Usage = triggersListTriggerInstancesUsage
+	triggersGetTriggerInstanceFlags.Usage = triggersGetTriggerInstanceUsage
+	triggersCreateTriggerInstanceFlags.Usage = triggersCreateTriggerInstanceUsage
+	triggersUpdateTriggerInstanceFlags.Usage = triggersUpdateTriggerInstanceUsage
+	triggersDeleteTriggerInstanceFlags.Usage = triggersDeleteTriggerInstanceUsage
+	triggersPauseTriggerInstanceFlags.Usage = triggersPauseTriggerInstanceUsage
+	triggersResumeTriggerInstanceFlags.Usage = triggersResumeTriggerInstanceUsage
+
 	usageFlags.Usage = usageUsage
 	usageGetPeriodUsageFlags.Usage = usageGetPeriodUsageUsage
 	usageGetUsageTiersFlags.Usage = usageGetUsageTiersUsage
@@ -1298,6 +1356,8 @@ func ParseEndpoint(
 			svcf = toolsFlags
 		case "toolsets":
 			svcf = toolsetsFlags
+		case "triggers":
+			svcf = triggersFlags
 		case "usage":
 			svcf = usageFlags
 		case "variations":
@@ -1443,6 +1503,9 @@ func ParseEndpoint(
 
 			case "list-chats-with-resolutions":
 				epf = chatListChatsWithResolutionsFlags
+
+			case "delete-chat":
+				epf = chatDeleteChatFlags
 
 			case "submit-feedback":
 				epf = chatSubmitFeedbackFlags
@@ -1883,6 +1946,34 @@ func ParseEndpoint(
 
 			}
 
+		case "triggers":
+			switch epn {
+			case "list-trigger-definitions":
+				epf = triggersListTriggerDefinitionsFlags
+
+			case "list-trigger-instances":
+				epf = triggersListTriggerInstancesFlags
+
+			case "get-trigger-instance":
+				epf = triggersGetTriggerInstanceFlags
+
+			case "create-trigger-instance":
+				epf = triggersCreateTriggerInstanceFlags
+
+			case "update-trigger-instance":
+				epf = triggersUpdateTriggerInstanceFlags
+
+			case "delete-trigger-instance":
+				epf = triggersDeleteTriggerInstanceFlags
+
+			case "pause-trigger-instance":
+				epf = triggersPauseTriggerInstanceFlags
+
+			case "resume-trigger-instance":
+				epf = triggersResumeTriggerInstanceFlags
+
+			}
+
 		case "usage":
 			switch epn {
 			case "get-period-usage":
@@ -2071,6 +2162,9 @@ func ParseEndpoint(
 			case "list-chats-with-resolutions":
 				endpoint = c.ListChatsWithResolutions()
 				data, err = chatc.BuildListChatsWithResolutionsPayload(*chatListChatsWithResolutionsSearchFlag, *chatListChatsWithResolutionsExternalUserIDFlag, *chatListChatsWithResolutionsResolutionStatusFlag, *chatListChatsWithResolutionsFromFlag, *chatListChatsWithResolutionsToFlag, *chatListChatsWithResolutionsLimitFlag, *chatListChatsWithResolutionsOffsetFlag, *chatListChatsWithResolutionsSortByFlag, *chatListChatsWithResolutionsSortOrderFlag, *chatListChatsWithResolutionsSessionTokenFlag, *chatListChatsWithResolutionsProjectSlugInputFlag, *chatListChatsWithResolutionsChatSessionsTokenFlag)
+			case "delete-chat":
+				endpoint = c.DeleteChat()
+				data, err = chatc.BuildDeleteChatPayload(*chatDeleteChatIDFlag, *chatDeleteChatSessionTokenFlag, *chatDeleteChatProjectSlugInputFlag)
 			case "submit-feedback":
 				endpoint = c.SubmitFeedback()
 				data, err = chatc.BuildSubmitFeedbackPayload(*chatSubmitFeedbackBodyFlag, *chatSubmitFeedbackSessionTokenFlag, *chatSubmitFeedbackProjectSlugInputFlag, *chatSubmitFeedbackChatSessionsTokenFlag)
@@ -2508,6 +2602,34 @@ func ParseEndpoint(
 			case "updateoauth-proxy-server":
 				endpoint = c.UpdateOAuthProxyServer()
 				data, err = toolsetsc.BuildUpdateOAuthProxyServerPayload(*toolsetsUpdateOAuthProxyServerBodyFlag, *toolsetsUpdateOAuthProxyServerSlugFlag, *toolsetsUpdateOAuthProxyServerSessionTokenFlag, *toolsetsUpdateOAuthProxyServerApikeyTokenFlag, *toolsetsUpdateOAuthProxyServerProjectSlugInputFlag)
+			}
+		case "triggers":
+			c := triggersc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-trigger-definitions":
+				endpoint = c.ListTriggerDefinitions()
+				data, err = triggersc.BuildListTriggerDefinitionsPayload(*triggersListTriggerDefinitionsSessionTokenFlag, *triggersListTriggerDefinitionsProjectSlugInputFlag)
+			case "list-trigger-instances":
+				endpoint = c.ListTriggerInstances()
+				data, err = triggersc.BuildListTriggerInstancesPayload(*triggersListTriggerInstancesSessionTokenFlag, *triggersListTriggerInstancesProjectSlugInputFlag)
+			case "get-trigger-instance":
+				endpoint = c.GetTriggerInstance()
+				data, err = triggersc.BuildGetTriggerInstancePayload(*triggersGetTriggerInstanceIDFlag, *triggersGetTriggerInstanceSessionTokenFlag, *triggersGetTriggerInstanceProjectSlugInputFlag)
+			case "create-trigger-instance":
+				endpoint = c.CreateTriggerInstance()
+				data, err = triggersc.BuildCreateTriggerInstancePayload(*triggersCreateTriggerInstanceBodyFlag, *triggersCreateTriggerInstanceSessionTokenFlag, *triggersCreateTriggerInstanceProjectSlugInputFlag)
+			case "update-trigger-instance":
+				endpoint = c.UpdateTriggerInstance()
+				data, err = triggersc.BuildUpdateTriggerInstancePayload(*triggersUpdateTriggerInstanceBodyFlag, *triggersUpdateTriggerInstanceSessionTokenFlag, *triggersUpdateTriggerInstanceProjectSlugInputFlag)
+			case "delete-trigger-instance":
+				endpoint = c.DeleteTriggerInstance()
+				data, err = triggersc.BuildDeleteTriggerInstancePayload(*triggersDeleteTriggerInstanceIDFlag, *triggersDeleteTriggerInstanceSessionTokenFlag, *triggersDeleteTriggerInstanceProjectSlugInputFlag)
+			case "pause-trigger-instance":
+				endpoint = c.PauseTriggerInstance()
+				data, err = triggersc.BuildPauseTriggerInstancePayload(*triggersPauseTriggerInstanceIDFlag, *triggersPauseTriggerInstanceSessionTokenFlag, *triggersPauseTriggerInstanceProjectSlugInputFlag)
+			case "resume-trigger-instance":
+				endpoint = c.ResumeTriggerInstance()
+				data, err = triggersc.BuildResumeTriggerInstancePayload(*triggersResumeTriggerInstanceIDFlag, *triggersResumeTriggerInstanceSessionTokenFlag, *triggersResumeTriggerInstanceProjectSlugInputFlag)
 			}
 		case "usage":
 			c := usagec.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3300,6 +3422,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    generate-title: Generate a title for a chat based on its messages`)
 	fmt.Fprintln(os.Stderr, `    credit-usage: Get the total number of chat credits and usage for the current billing period`)
 	fmt.Fprintln(os.Stderr, `    list-chats-with-resolutions: List all chats for a project with their resolutions`)
+	fmt.Fprintln(os.Stderr, `    delete-chat: Soft-delete a chat by its ID`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -3431,6 +3554,28 @@ func chatListChatsWithResolutionsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats-with-resolutions --search \"abc123\" --external-user-id \"abc123\" --resolution-status \"abc123\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+}
+
+func chatDeleteChatUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat delete-chat", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a chat by its ID`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat delete-chat --id \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func chatSubmitFeedbackUsage() {
@@ -6387,6 +6532,195 @@ func toolsetsUpdateOAuthProxyServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets updateoauth-proxy-server --body '{\n      \"oauth_proxy_server\": {\n         \"audience\": \"abc123\",\n         \"authorization_endpoint\": \"abc123\",\n         \"environment_slug\": \"aaa\",\n         \"scopes_supported\": [\n            \"abc123\"\n         ],\n         \"token_endpoint\": \"abc123\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ]\n      }\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// triggersUsage displays the usage of the triggers command and its subcommands.
+func triggersUsage() {
+	fmt.Fprintln(os.Stderr, `Manage project trigger instances and static trigger definitions.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] triggers COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-trigger-definitions: List static trigger definitions available to a project.`)
+	fmt.Fprintln(os.Stderr, `    list-trigger-instances: List trigger instances for the current project.`)
+	fmt.Fprintln(os.Stderr, `    get-trigger-instance: Get a trigger instance by ID.`)
+	fmt.Fprintln(os.Stderr, `    create-trigger-instance: Create a trigger instance.`)
+	fmt.Fprintln(os.Stderr, `    update-trigger-instance: Update a trigger instance.`)
+	fmt.Fprintln(os.Stderr, `    delete-trigger-instance: Delete a trigger instance.`)
+	fmt.Fprintln(os.Stderr, `    pause-trigger-instance: Pause a trigger instance.`)
+	fmt.Fprintln(os.Stderr, `    resume-trigger-instance: Resume a trigger instance.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s triggers COMMAND --help\n", os.Args[0])
+}
+func triggersListTriggerDefinitionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] triggers list-trigger-definitions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List static trigger definitions available to a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers list-trigger-definitions --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func triggersListTriggerInstancesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] triggers list-trigger-instances", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List trigger instances for the current project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers list-trigger-instances --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func triggersGetTriggerInstanceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] triggers get-trigger-instance", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a trigger instance by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers get-trigger-instance --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func triggersCreateTriggerInstanceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] triggers create-trigger-instance", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a trigger instance.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers create-trigger-instance --body '{\n      \"config\": {\n         \"abc123\": \"abc123\"\n      },\n      \"definition_slug\": \"abc123\",\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"target_display\": \"abc123\",\n      \"target_kind\": \"noop\",\n      \"target_ref\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func triggersUpdateTriggerInstanceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] triggers update-trigger-instance", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update a trigger instance.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers update-trigger-instance --body '{\n      \"config\": {\n         \"abc123\": \"abc123\"\n      },\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"target_display\": \"abc123\",\n      \"target_kind\": \"noop\",\n      \"target_ref\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func triggersDeleteTriggerInstanceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] triggers delete-trigger-instance", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a trigger instance.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers delete-trigger-instance --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func triggersPauseTriggerInstanceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] triggers pause-trigger-instance", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Pause a trigger instance.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers pause-trigger-instance --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func triggersResumeTriggerInstanceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] triggers resume-trigger-instance", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Resume a trigger instance.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers resume-trigger-instance --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // usageUsage displays the usage of the usage command and its subcommands.

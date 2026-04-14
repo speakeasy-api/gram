@@ -56,8 +56,8 @@ export function FeatureRequestModal({
       <Dialog.Content className="sm:max-w-md">
         <Dialog.Header className="text-center">
           {Icon && (
-            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-muted">
-              <Icon className="h-10 w-10 text-muted-foreground" />
+            <div className="bg-muted mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full">
+              <Icon className="text-muted-foreground h-10 w-10" />
             </div>
           )}
           <Dialog.Title className="text-center">{title}</Dialog.Title>

@@ -91,7 +91,7 @@ type CloneDeploymentExternalMCPsParams struct {
 type CloneDeploymentExternalMCPsRow struct {
 	ID                      uuid.UUID
 	DeploymentID            uuid.UUID
-	RegistryID              uuid.UUID
+	RegistryID              uuid.NullUUID
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
@@ -1514,7 +1514,7 @@ ORDER BY created_at ASC
 type ListDeploymentExternalMCPsRow struct {
 	ID                      uuid.UUID
 	DeploymentID            uuid.UUID
-	RegistryID              uuid.UUID
+	RegistryID              uuid.NullUUID
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
@@ -1754,7 +1754,7 @@ RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier,
 
 type UpsertDeploymentExternalMCPParams struct {
 	DeploymentID            uuid.UUID
-	RegistryID              uuid.UUID
+	RegistryID              uuid.NullUUID
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string
@@ -1764,7 +1764,7 @@ type UpsertDeploymentExternalMCPParams struct {
 type UpsertDeploymentExternalMCPRow struct {
 	ID                      uuid.UUID
 	DeploymentID            uuid.UUID
-	RegistryID              uuid.UUID
+	RegistryID              uuid.NullUUID
 	Name                    string
 	Slug                    string
 	RegistryServerSpecifier string

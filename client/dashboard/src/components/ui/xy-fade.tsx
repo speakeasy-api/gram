@@ -41,7 +41,7 @@ export function XYFade({
       {/* Top fade overlay */}
       {direction === "vertical" || direction === "both" ? (
         <div
-          className="absolute top-0 left-0 right-0 z-10 pointer-events-none"
+          className="pointer-events-none absolute top-0 right-0 left-0 z-10"
           style={fadeStyle}
         />
       ) : null}
@@ -49,7 +49,7 @@ export function XYFade({
       {/* Bottom fade overlay */}
       {direction === "vertical" || direction === "both" ? (
         <div
-          className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none"
+          className="pointer-events-none absolute right-0 bottom-0 left-0 z-10"
           style={bottomFadeStyle}
         />
       ) : null}
@@ -57,7 +57,7 @@ export function XYFade({
       {/* Left fade overlay */}
       {direction === "horizontal" || direction === "both" ? (
         <div
-          className="absolute top-0 bottom-0 left-0 z-10 pointer-events-none"
+          className="pointer-events-none absolute top-0 bottom-0 left-0 z-10"
           style={horizontalFadeStyle}
         />
       ) : null}
@@ -65,13 +65,13 @@ export function XYFade({
       {/* Right fade overlay */}
       {direction === "horizontal" || direction === "both" ? (
         <div
-          className="absolute top-0 bottom-0 right-0 z-10 pointer-events-none"
+          className="pointer-events-none absolute top-0 right-0 bottom-0 z-10"
           style={horizontalBottomFadeStyle}
         />
       ) : null}
 
       {/* Content - centered */}
-      <div className="relative z-0 flex items-center justify-center min-h-full">
+      <div className="relative z-0 flex min-h-full items-center justify-center">
         {children}
       </div>
     </div>

@@ -48,20 +48,20 @@ export function SlackAppsRoot() {
 
 function SlackAppsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-8 rounded-xl border border-dashed bg-muted/20">
-      <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-        <Icon name="bot" className="w-6 h-6 text-muted-foreground" />
+    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <Icon name="bot" className="text-muted-foreground h-6 w-6" />
       </div>
       <Type variant="subheading" className="mb-1">
         No assistants yet
       </Type>
-      <Type small muted className="text-center mb-4 max-w-md">
+      <Type small muted className="mb-4 max-w-md text-center">
         Create an assistant to let your team interact with Gram toolsets
         directly.
       </Type>
       <Button onClick={onCreate}>
         <Button.LeftIcon>
-          <Icon name="plus" className="w-4 h-4" />
+          <Icon name="plus" className="h-4 w-4" />
         </Button.LeftIcon>
         <Button.Text>Create new Assistant</Button.Text>
       </Button>
@@ -76,9 +76,9 @@ function SlackAppCard({ app }: { app: SlackAppResult }) {
       params={[app.id]}
       className="no-underline hover:no-underline"
     >
-      <div className="rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50">
-        <div className="flex items-start justify-between mb-2">
-          <Type className="font-semibold truncate">{app.name}</Type>
+      <div className="bg-card hover:bg-muted/50 rounded-lg border p-4 transition-colors">
+        <div className="mb-2 flex items-start justify-between">
+          <Type className="truncate font-semibold">{app.name}</Type>
           <StatusBadge
             status={app.status}
             installCount={app.slackTeamId ? 1 : 0}
@@ -192,12 +192,12 @@ function CreateSlackAppDialog({
             </Type>
             <CompactUpload
               onUpload={handleIconUpload}
-              className="w-24 h-24"
+              className="h-24 w-24"
               renderFilePreview={() =>
                 iconAssetId ? (
                   <AssetImage
                     assetId={iconAssetId}
-                    className="w-16 h-16 rounded-lg"
+                    className="h-16 w-16 rounded-lg"
                   />
                 ) : undefined
               }
@@ -213,7 +213,7 @@ function CreateSlackAppDialog({
                 No toolsets available. Create a toolset first.
               </Type>
             ) : (
-              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+              <div className="grid max-h-60 grid-cols-2 gap-2 overflow-y-auto">
                 {toolsets.map((ts) => {
                   const selected = selectedToolsetIds.has(ts.id);
                   return (
@@ -239,10 +239,10 @@ function CreateSlackAppDialog({
                         {selected && <Icon name="check" className="h-3 w-3" />}
                       </div>
                       <div className="min-w-0">
-                        <Type className="font-medium truncate block">
+                        <Type className="block truncate font-medium">
                           {ts.name || ts.slug}
                         </Type>
-                        <Type muted small className="truncate block">
+                        <Type muted small className="block truncate">
                           {ts.slug}
                           {ts.tools
                             ? ` \u00B7 ${ts.tools.length} tool${ts.tools.length !== 1 ? "s" : ""}`
@@ -302,7 +302,7 @@ export default function SlackAppsIndex() {
               {apps.length > 0 && (
                 <Button onClick={() => setDialogOpen(true)}>
                   <Button.LeftIcon>
-                    <Icon name="plus" className="w-4 h-4" />
+                    <Icon name="plus" className="h-4 w-4" />
                   </Button.LeftIcon>
                   <Button.Text>Create new Assistant</Button.Text>
                 </Button>
@@ -313,13 +313,13 @@ export default function SlackAppsIndex() {
                 <Stack align="center" justify="center" className="py-16">
                   <Icon
                     name="loader-circle"
-                    className="w-6 h-6 animate-spin text-muted-foreground"
+                    className="text-muted-foreground h-6 w-6 animate-spin"
                   />
                 </Stack>
               ) : apps.length === 0 ? (
                 <SlackAppsEmptyState onCreate={() => setDialogOpen(true)} />
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {apps.map((app) => (
                     <SlackAppCard key={app.id} app={app} />
                   ))}

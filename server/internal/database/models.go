@@ -264,17 +264,18 @@ type EnvironmentEntry struct {
 }
 
 type ExternalMcpAttachment struct {
-	ID                      uuid.UUID
-	DeploymentID            uuid.UUID
-	RegistryID              uuid.UUID
-	Name                    string
-	Slug                    string
-	RegistryServerSpecifier string
-	SelectedRemotes         []string
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
-	DeletedAt               pgtype.Timestamptz
-	Deleted                 bool
+	ID                                  uuid.UUID
+	DeploymentID                        uuid.UUID
+	RegistryID                          uuid.NullUUID
+	OrganizationMcpCollectionRegistryID uuid.NullUUID
+	Name                                string
+	Slug                                string
+	RegistryServerSpecifier             string
+	SelectedRemotes                     []string
+	CreatedAt                           pgtype.Timestamptz
+	UpdatedAt                           pgtype.Timestamptz
+	DeletedAt                           pgtype.Timestamptz
+	Deleted                             bool
 }
 
 type ExternalMcpToolDefinition struct {

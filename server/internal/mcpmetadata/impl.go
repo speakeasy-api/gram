@@ -1066,13 +1066,21 @@ func (s *Service) resolveDomainIDFromContext(ctx context.Context) *uuid.UUID {
 func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, error) {
 	var toolset toolsets_repo.Toolset
 	var toolsetErr error
+	isCustomDomainRequest := customdomains.FromContext(ctx) != nil
 	domainID := s.resolveDomainIDFromContext(ctx)
 	if domainID != nil {
 		toolset, toolsetErr = s.toolsetRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
 			McpSlug:        conv.ToPGText(mcpSlug),
 			CustomDomainID: uuid.NullUUID{UUID: *domainID, Valid: true},
 		})
-	} else {
+	}
+
+	// Fall back to slug-only lookup when the request did not arrive through a
+	// custom domain. This keeps platform-domain install pages working when the
+	// logged-in user's org happens to have a custom domain configured, while
+	// still preventing cross-domain toolset leakage for actual custom-domain
+	// requests.
+	if domainID == nil || (!isCustomDomainRequest && toolsetErr != nil) {
 		toolset, toolsetErr = s.toolsetRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	}
 

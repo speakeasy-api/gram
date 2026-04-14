@@ -23,8 +23,8 @@ export function GettingStartedInstructions() {
       {commands.map((item, index) => (
         <Stack key={index} gap={2}>
           <Stack direction="horizontal" gap={3} align="center">
-            <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0">
-              <Type small className="font-medium text-muted-foreground">
+            <div className="bg-muted flex h-6 w-6 shrink-0 items-center justify-center rounded-full">
+              <Type small className="text-muted-foreground font-medium">
                 {index + 1}
               </Type>
             </div>
@@ -32,7 +32,7 @@ export function GettingStartedInstructions() {
           </Stack>
           <CodeBlock
             language="bash"
-            className="!border-0 !bg-muted/50 !rounded-lg"
+            className="!bg-muted/50 !rounded-lg !border-0"
           >
             {item.command}
           </CodeBlock>

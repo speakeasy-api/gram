@@ -3043,6 +3043,98 @@ paths:
       x-speakeasy-name-override: creditUsage
       x-speakeasy-react-hook:
         name: GetCreditUsage
+  /rpc/chat.delete:
+    delete:
+      description: Soft-delete a chat by its ID
+      operationId: deleteChat
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the chat to delete
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the chat to delete
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: deleteChat chat
+      tags:
+        - chat
+      x-speakeasy-name-override: delete
   /rpc/chat.generateTitle:
     post:
       description: Generate a title for a chat based on its messages
@@ -14956,6 +15048,770 @@ paths:
       x-speakeasy-name-override: updateOAuthProxyServer
       x-speakeasy-react-hook:
         name: UpdateOAuthProxyServer
+  /rpc/triggers.create:
+    post:
+      description: Create a trigger instance.
+      operationId: createTriggerInstance
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTriggerInstanceForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerInstance'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: createTriggerInstance triggers
+      tags:
+        - triggers
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateTrigger
+  /rpc/triggers.definitions.list:
+    get:
+      description: List static trigger definitions available to a project.
+      operationId: listTriggerDefinitions
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListTriggerDefinitionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listTriggerDefinitions triggers
+      tags:
+        - triggers
+      x-speakeasy-name-override: listDefinitions
+      x-speakeasy-react-hook:
+        name: TriggerDefinitions
+  /rpc/triggers.delete:
+    delete:
+      description: Delete a trigger instance.
+      operationId: deleteTriggerInstance
+      parameters:
+        - allowEmptyValue: true
+          description: The trigger instance ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The trigger instance ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: deleteTriggerInstance triggers
+      tags:
+        - triggers
+      x-speakeasy-name-override: delete
+      x-speakeasy-react-hook:
+        name: DeleteTrigger
+  /rpc/triggers.get:
+    get:
+      description: Get a trigger instance by ID.
+      operationId: getTriggerInstance
+      parameters:
+        - allowEmptyValue: true
+          description: The trigger instance ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The trigger instance ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerInstance'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getTriggerInstance triggers
+      tags:
+        - triggers
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: Trigger
+  /rpc/triggers.list:
+    get:
+      description: List trigger instances for the current project.
+      operationId: listTriggerInstances
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListTriggerInstancesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listTriggerInstances triggers
+      tags:
+        - triggers
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: Triggers
+  /rpc/triggers.pause:
+    post:
+      description: Pause a trigger instance.
+      operationId: pauseTriggerInstance
+      parameters:
+        - allowEmptyValue: true
+          description: The trigger instance ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The trigger instance ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerInstance'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: pauseTriggerInstance triggers
+      tags:
+        - triggers
+      x-speakeasy-name-override: pause
+      x-speakeasy-react-hook:
+        name: PauseTrigger
+  /rpc/triggers.resume:
+    post:
+      description: Resume a trigger instance.
+      operationId: resumeTriggerInstance
+      parameters:
+        - allowEmptyValue: true
+          description: The trigger instance ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The trigger instance ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerInstance'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: resumeTriggerInstance triggers
+      tags:
+        - triggers
+      x-speakeasy-name-override: resume
+      x-speakeasy-react-hook:
+        name: ResumeTrigger
+  /rpc/triggers.update:
+    post:
+      description: Update a trigger instance.
+      operationId: updateTriggerInstance
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTriggerInstanceForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerInstance'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: updateTriggerInstance triggers
+      tags:
+        - triggers
+      x-speakeasy-name-override: update
+      x-speakeasy-react-hook:
+        name: UpdateTrigger
   /rpc/usage.createCheckout:
     post:
       description: Create a checkout link for upgrading to the business plan
@@ -16984,6 +17840,48 @@ components:
           description: List of tool URNs to include in the toolset
       required:
         - name
+    CreateTriggerInstanceForm:
+      type: object
+      properties:
+        config:
+          type: object
+          description: The trigger config payload.
+          additionalProperties: true
+        definition_slug:
+          type: string
+          description: The trigger definition slug.
+        environment_id:
+          type: string
+          description: The linked environment ID.
+          format: uuid
+        name:
+          type: string
+          description: The trigger instance name.
+        status:
+          type: string
+          description: Optional initial status.
+          enum:
+            - active
+            - paused
+        target_display:
+          type: string
+          description: The user-facing target display value.
+        target_kind:
+          type: string
+          description: The trigger target kind.
+          enum:
+            - assistant
+            - noop
+        target_ref:
+          type: string
+          description: The opaque target reference.
+      required:
+        - definition_slug
+        - name
+        - target_kind
+        - target_ref
+        - target_display
+        - config
     CreditUsageResponseBody:
       type: object
       properties:
@@ -19301,6 +20199,40 @@ components:
           description: The list of resources
       required:
         - resources
+    ListRoleGrant:
+      type: object
+      properties:
+        resources:
+          type: array
+          items:
+            type: string
+          description: Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
+        scope:
+          type: string
+          description: The scope slug this grant applies to.
+          enum:
+            - org:read
+            - org:admin
+            - build:read
+            - build:write
+            - mcp:read
+            - mcp:write
+            - mcp:connect
+        sub_scopes:
+          type: array
+          items:
+            type: string
+            enum:
+              - org:read
+              - org:admin
+              - build:read
+              - build:write
+              - mcp:read
+              - mcp:write
+              - mcp:connect
+          description: The inherited scopes the primary scope grants.
+      required:
+        - scope
     ListRolesResult:
       type: object
       properties:
@@ -19354,13 +20286,33 @@ components:
           description: The list of toolsets
       required:
         - toolsets
+    ListTriggerDefinitionsResult:
+      type: object
+      properties:
+        definitions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TriggerDefinition'
+          description: The available trigger definitions.
+      required:
+        - definitions
+    ListTriggerInstancesResult:
+      type: object
+      properties:
+        triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/TriggerInstance'
+          description: The trigger instances for the current project.
+      required:
+        - triggers
     ListUserGrantsResult:
       type: object
       properties:
         grants:
           type: array
           items:
-            $ref: '#/components/schemas/RoleGrant'
+            $ref: '#/components/schemas/ListRoleGrant'
           description: The user's effective grants in this organization.
       required:
         - grants
@@ -22439,6 +23391,118 @@ components:
         - id
         - toolset_id
         - environment_id
+    TriggerDefinition:
+      type: object
+      properties:
+        config_schema:
+          type: string
+          description: JSON schema describing the trigger config.
+          format: json
+        description:
+          type: string
+          description: Description of the trigger definition.
+        env_requirements:
+          type: array
+          items:
+            $ref: '#/components/schemas/TriggerEnvRequirement'
+          description: Environment variables required by this trigger definition.
+        kind:
+          type: string
+          description: The ingress kind for the trigger definition.
+          enum:
+            - webhook
+            - schedule
+        slug:
+          type: string
+          description: The trigger definition slug.
+        title:
+          type: string
+          description: The trigger definition title.
+      required:
+        - slug
+        - title
+        - description
+        - kind
+        - config_schema
+        - env_requirements
+    TriggerEnvRequirement:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Description of the variable.
+        name:
+          type: string
+          description: The environment variable name.
+        required:
+          type: boolean
+          description: Whether the variable is required.
+      required:
+        - name
+        - required
+    TriggerInstance:
+      type: object
+      properties:
+        config:
+          type: object
+          description: The trigger config payload.
+          additionalProperties: true
+        created_at:
+          type: string
+          description: Creation timestamp.
+          format: date-time
+        definition_slug:
+          type: string
+          description: The trigger definition slug.
+        environment_id:
+          type: string
+          description: The linked environment ID.
+          format: uuid
+        id:
+          type: string
+          description: The trigger instance ID.
+          format: uuid
+        name:
+          type: string
+          description: The trigger instance name.
+        project_id:
+          type: string
+          description: The project ID owning the trigger instance.
+          format: uuid
+        status:
+          type: string
+          description: The trigger instance status.
+          enum:
+            - active
+            - paused
+        target_display:
+          type: string
+          description: The user-facing target display value.
+        target_kind:
+          type: string
+          description: The target kind for the trigger instance.
+        target_ref:
+          type: string
+          description: The opaque target reference.
+        updated_at:
+          type: string
+          description: Last update timestamp.
+          format: date-time
+        webhook_url:
+          type: string
+          description: Webhook URL for webhook-backed triggers.
+      required:
+        - id
+        - project_id
+        - definition_slug
+        - name
+        - target_kind
+        - target_ref
+        - target_display
+        - config
+        - status
+        - created_at
+        - updated_at
     UpdateEnvironmentForm:
       type: object
       properties:
@@ -22829,6 +23893,44 @@ components:
           items:
             type: string
           description: List of tool URNs to include in the toolset
+    UpdateTriggerInstanceForm:
+      type: object
+      properties:
+        config:
+          type: object
+          description: The trigger config payload.
+          additionalProperties: true
+        environment_id:
+          type: string
+          description: The linked environment ID.
+          format: uuid
+        id:
+          type: string
+          description: The trigger instance ID.
+          format: uuid
+        name:
+          type: string
+          description: The trigger instance name.
+        status:
+          type: string
+          description: The trigger status.
+          enum:
+            - active
+            - paused
+        target_display:
+          type: string
+          description: The user-facing target display value.
+        target_kind:
+          type: string
+          description: The trigger target kind.
+          enum:
+            - assistant
+            - noop
+        target_ref:
+          type: string
+          description: The opaque target reference.
+      required:
+        - id
     UploadChatAttachmentForm:
       type: object
       properties:
@@ -23246,6 +24348,8 @@ tags:
     description: Dashboard API for interacting with tools.
   - name: toolsets
     description: Managed toolsets for gram AI consumers.
+  - name: triggers
+    description: Manage project trigger instances and static trigger definitions.
   - name: usage
     description: Read usage for gram.
   - name: variations

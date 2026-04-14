@@ -48,7 +48,11 @@ import { parseFilters, serializeFilters } from "./log-filter-url";
 import { LogDetailSheet } from "./LogDetailSheet";
 import { LogFilterBar } from "./LogFilterBar";
 import { TraceRow } from "./TraceRow";
-import { useAttributeLogsQuery } from "./use-attribute-logs-query";
+import { TriggerLogRow } from "./TriggerLogRow";
+import {
+  useAttributeLogsQuery,
+  type TraceSummary,
+} from "./use-attribute-logs-query";
 
 // Valid date range presets
 const validPresets: DateRangePreset[] = [
@@ -118,28 +122,28 @@ function MCPServerFilter({
 
   return (
     <div
-      className={`flex items-center gap-2 ${disabled ? "opacity-50 pointer-events-none" : ""}`}
+      className={`flex items-center gap-2 ${disabled ? "pointer-events-none opacity-50" : ""}`}
     >
-      <div className="flex items-center h-[42px] rounded-md p-1 border border-border">
-        <div className="flex items-center gap-1.5 h-8 px-3">
-          <McpIcon className="size-3.5 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">Server</span>
+      <div className="border-border flex h-[42px] items-center rounded-md border p-1">
+        <div className="flex h-8 items-center gap-1.5 px-3">
+          <McpIcon className="text-muted-foreground size-3.5" />
+          <span className="text-foreground text-sm font-medium">Server</span>
         </div>
-        <div className="w-px h-6 bg-border/50 mx-1" />
+        <div className="bg-border/50 mx-1 h-6 w-px" />
         <Popover open={!disabled && open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <button
               disabled={disabled || isLoading}
-              className={`h-8 min-w-[140px] flex items-center justify-between gap-2 text-sm px-2 rounded transition-colors ${
+              className={`flex h-8 min-w-[140px] items-center justify-between gap-2 rounded px-2 text-sm transition-colors ${
                 disabled || isLoading
-                  ? "opacity-40 cursor-not-allowed"
+                  ? "cursor-not-allowed opacity-40"
                   : "hover:bg-muted/50"
               }`}
             >
-              <span className="truncate max-w-[120px]">
+              <span className="max-w-[120px] truncate">
                 {isLoading ? "Loading..." : displayLabel}
               </span>
-              <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+              <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-[220px] p-0" align="end">
@@ -656,9 +660,9 @@ function LogsInnerContent({
   const orgRoutes = useOrgRoutes();
 
   const pageTitle = (
-    <div className="flex flex-col gap-1 min-w-0">
+    <div className="flex min-w-0 flex-col gap-1">
       <h1 className="text-xl font-semibold">Logs</h1>
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         Browse raw tool call traces and telemetry data
       </p>
     </div>
@@ -666,7 +670,7 @@ function LogsInnerContent({
 
   return (
     <>
-      <div className="h-full overflow-hidden flex flex-col">
+      <div className="flex h-full flex-col overflow-hidden">
         <Page>
           <Page.Header>
             <Page.Header.Breadcrumbs fullWidth />
@@ -674,9 +678,9 @@ function LogsInnerContent({
           {isLogsDisabled ? (
             <Page.Body fullWidth className="space-y-6">
               {pageTitle}
-              <div className="flex-1 relative">
+              <div className="relative flex-1">
                 <div
-                  className="pointer-events-none select-none h-full"
+                  className="pointer-events-none h-full select-none"
                   aria-hidden="true"
                 >
                   <ObservabilitySkeleton />
@@ -686,10 +690,10 @@ function LogsInnerContent({
             </Page.Body>
           ) : (
             <Page.Body fullWidth noPadding overflowHidden>
-              <div className="flex flex-col flex-1 min-h-0 w-full">
+              <div className="flex min-h-0 w-full flex-1 flex-col">
                 {/* Header section */}
-                <div className="px-8 py-4 shrink-0">
-                  <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="shrink-0 px-8 py-4">
+                  <div className="mb-4 flex items-start justify-between gap-4">
                     {pageTitle}
                     <Button variant="outline" size="sm" asChild>
                       <Link to={orgRoutes.logs.href()}>
@@ -699,7 +703,7 @@ function LogsInnerContent({
                     </Button>
                   </div>
                   {/* Filter and Search Row */}
-                  <div className="flex items-center gap-4 flex-wrap">
+                  <div className="flex flex-wrap items-center gap-4">
                     <MCPServerFilter
                       selectedServer={selectedServer}
                       onServerChange={onServerChange}
@@ -732,27 +736,27 @@ function LogsInnerContent({
                 </div>
 
                 {/* Content section - full width */}
-                <div className="flex-1 overflow-hidden min-h-0 border-t">
-                  <div className="h-full flex flex-col bg-background">
+                <div className="min-h-0 flex-1 overflow-hidden border-t">
+                  <div className="bg-background flex h-full flex-col">
                     {/* Loading indicator */}
                     {isFetching && allTraces.length > 0 && (
-                      <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-20">
-                        <div className="h-full bg-primary animate-pulse" />
+                      <div className="bg-primary/20 absolute top-0 right-0 left-0 z-20 h-1">
+                        <div className="bg-primary h-full animate-pulse" />
                       </div>
                     )}
 
                     {/* Header */}
-                    <div className="flex items-center gap-3 px-8 py-2.5 bg-muted/30 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">
-                      <div className="shrink-0 w-[150px]">Timestamp</div>
-                      <div className="shrink-0 w-5" />
+                    <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-8 py-2.5 text-xs font-medium tracking-wide uppercase">
+                      <div className="w-[150px] shrink-0">Timestamp</div>
+                      <div className="w-5 shrink-0" />
                       <div className="flex-1">Source / Tool</div>
-                      <div className="shrink-0 w-16 text-right">Status</div>
+                      <div className="w-16 shrink-0 text-right">Status</div>
                     </div>
 
                     {/* Scrollable trace list */}
                     <div
                       ref={containerRef}
-                      className="overflow-y-auto flex-1"
+                      className="flex-1 overflow-y-auto"
                       onScroll={handleScroll}
                     >
                       <TraceListContent
@@ -769,7 +773,7 @@ function LogsInnerContent({
 
                     {/* Footer */}
                     {allTraces.length > 0 && (
-                      <div className="flex items-center gap-4 px-8 py-3 bg-muted/30 border-t text-sm text-muted-foreground shrink-0">
+                      <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-4 border-t px-8 py-3 text-sm">
                         <span>
                           {allTraces.length}{" "}
                           {allTraces.length === 1 ? "trace" : "traces"}
@@ -835,18 +839,26 @@ function TraceListContent({
 
   return (
     <>
-      {allTraces.map((trace) => (
-        <TraceRow
-          key={trace.traceId}
-          trace={trace}
-          isExpanded={expandedTraceId === trace.traceId}
-          onToggle={() => onToggleExpand(trace.traceId)}
-          onLogClick={onLogClick}
-        />
-      ))}
+      {allTraces.map((trace) =>
+        (trace as TraceSummary).eventSource === "trigger" ? (
+          <TriggerLogRow
+            key={trace.traceId}
+            trace={trace as TraceSummary}
+            onLogClick={onLogClick}
+          />
+        ) : (
+          <TraceRow
+            key={trace.traceId}
+            trace={trace}
+            isExpanded={expandedTraceId === trace.traceId}
+            onToggle={() => onToggleExpand(trace.traceId)}
+            onLogClick={onLogClick}
+          />
+        ),
+      )}
 
       {isFetchingNextPage && (
-        <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground border-t">
+        <div className="text-muted-foreground flex items-center justify-center gap-2 border-t py-4">
           <Icon name="loader-circle" className="size-4 animate-spin" />
           <span className="text-sm">Loading more traces...</span>
         </div>
@@ -858,11 +870,11 @@ function TraceListContent({
 function LogsError({ error }: { error: Error }) {
   return (
     <div className="flex flex-col items-center gap-3 py-12">
-      <div className="size-12 rounded-full bg-destructive/10 flex items-center justify-center">
-        <XIcon className="size-6 text-destructive" />
+      <div className="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
+        <XIcon className="text-destructive size-6" />
       </div>
-      <span className="font-medium text-foreground">Error loading traces</span>
-      <span className="text-sm text-muted-foreground max-w-sm text-center">
+      <span className="text-foreground font-medium">Error loading traces</span>
+      <span className="text-muted-foreground max-w-sm text-center text-sm">
         {error.message}
       </span>
     </div>
@@ -871,7 +883,7 @@ function LogsError({ error }: { error: Error }) {
 
 function LogsLoading() {
   return (
-    <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+    <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
       <Icon name="loader-circle" className="size-5 animate-spin" />
       <span>Loading traces...</span>
     </div>
@@ -882,13 +894,13 @@ function LogsEmptyState({ hasActiveFilters }: { hasActiveFilters: boolean }) {
   return (
     <div className="py-12 text-center">
       <div className="flex flex-col items-center gap-3">
-        <div className="size-12 rounded-full bg-muted flex items-center justify-center">
-          <Icon name="inbox" className="size-6 text-muted-foreground" />
+        <div className="bg-muted flex size-12 items-center justify-center rounded-full">
+          <Icon name="inbox" className="text-muted-foreground size-6" />
         </div>
-        <span className="font-medium text-foreground">
+        <span className="text-foreground font-medium">
           {hasActiveFilters ? "No matching traces" : "No traces found"}
         </span>
-        <span className="text-sm text-muted-foreground max-w-sm">
+        <span className="text-muted-foreground max-w-sm text-sm">
           {hasActiveFilters
             ? "Try adjusting your search or filters"
             : "Traces will appear here when tool calls are made"}

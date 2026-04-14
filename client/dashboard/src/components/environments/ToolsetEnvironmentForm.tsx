@@ -40,14 +40,14 @@ function ActionBar({
     <div className="flex items-center justify-between pt-4">
       {error && (
         <div
-          className="flex items-center gap-2 text-sm text-destructive"
+          className="text-destructive flex items-center gap-2 text-sm"
           role="alert"
         >
           <AlertCircle className="h-4 w-4" aria-hidden="true" />
           {error}
         </div>
       )}
-      <div className="flex items-center gap-3 ml-auto">
+      <div className="ml-auto flex items-center gap-3">
         <Button
           type="button"
           variant="tertiary"
@@ -118,16 +118,16 @@ export function ToolsetEnvironmentForm({
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <h2 className="text-heading-xs">Environment Variables</h2>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             Configure required API credentials for this toolset to use in the
             Gram dashboard
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             View the MCP page for options on how to provide relevant credentials
             to an MCP server
           </p>
         </div>
-        <div className="flex-shrink-0 flex items-center gap-2">
+        <div className="flex flex-shrink-0 items-center gap-2">
           <EnvironmentSelector
             selectedEnvironment={
               attachedEnvForm.selectedEnvironment?.slug ?? ""
@@ -143,7 +143,7 @@ export function ToolsetEnvironmentForm({
               onClick={() => attachedEnvForm.onEnvironmentSelectorChange("")}
               aria-label="Clear environment"
             >
-              <X className="h-4 w-4 mr-1" aria-hidden="true" />
+              <X className="mr-1 h-4 w-4" aria-hidden="true" />
               Clear
             </Button>
           )}
@@ -151,8 +151,8 @@ export function ToolsetEnvironmentForm({
       </div>
 
       {!attachedEnvForm.selectedEnvironment && (
-        <div className="flex flex-col items-center justify-center py-12 px-4 border border-dashed rounded-lg">
-          <p className="text-sm text-muted-foreground mb-4">
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed px-4 py-12">
+          <p className="text-muted-foreground mb-4 text-sm">
             No currently attached environment. Choose one:
           </p>
           <div className="flex items-center gap-2">
@@ -170,7 +170,7 @@ export function ToolsetEnvironmentForm({
               onClick={() => routes.environments.goTo()}
               aria-label="Add new environment"
             >
-              <Plus className="h-4 w-4 mr-1" aria-hidden="true" />
+              <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
               Add New
             </Button>
           </div>
@@ -201,9 +201,9 @@ export function ToolsetEnvironmentForm({
       <Collapsible
         open={isAdvancedOpen}
         onOpenChange={setIsAdvancedOpen}
-        className="pt-4 border-t"
+        className="border-t pt-4"
       >
-        <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover:text-foreground transition-colors">
+        <CollapsibleTrigger className="hover:text-foreground flex items-center gap-2 text-sm font-medium transition-colors">
           <ChevronDown
             className={`h-4 w-4 transition-transform ${isAdvancedOpen ? "" : "-rotate-90"}`}
             aria-hidden="true"
@@ -212,7 +212,7 @@ export function ToolsetEnvironmentForm({
         </CollapsibleTrigger>
 
         <CollapsibleContent>
-          <div className="mt-4 p-4 border rounded-lg space-y-4">
+          <div className="mt-4 space-y-4 rounded-lg border p-4">
             <div className="flex items-center gap-2">
               <h3 className="text-base font-medium">
                 Attach Selected Environment
@@ -224,19 +224,19 @@ export function ToolsetEnvironmentForm({
               )}
             </div>
 
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Attaching an environment at the toolset level will automatically
               apply these environment variables to all users of tools from this
               toolset. This can be useful when the toolset requires
               configuration that should remain hidden to users.
             </p>
 
-            <div className="flex items-start gap-2 px-4 py-3 bg-warning/10 border border-warning/20 rounded-md">
+            <div className="bg-warning/10 border-warning/20 flex items-start gap-2 rounded-md border px-4 py-3">
               <TriangleAlert
-                className="h-4 w-4 text-warning flex-shrink-0 mt-0.5"
+                className="text-warning mt-0.5 h-4 w-4 flex-shrink-0"
                 aria-hidden="true"
               />
-              <p className="text-sm text-warning">
+              <p className="text-warning text-sm">
                 Environments attached here will apply to all users in both
                 public and private servers
               </p>

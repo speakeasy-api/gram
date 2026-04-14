@@ -7,23 +7,23 @@ interface FullPageErrorProps {
 
 export function FullPageError({ error }: FullPageErrorProps) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background p-8">
+    <main className="bg-background flex min-h-screen items-center justify-center p-8">
       <Stack gap={6} align="center" className="max-w-md text-center">
         <GramLogo variant="vertical" />
 
         <Stack gap={3} align="center">
           <Stack direction="horizontal" gap={2} align="center">
-            <Icon name="circle-alert" className="h-5 w-5 text-destructive" />
+            <Icon name="circle-alert" className="text-destructive h-5 w-5" />
             <h2 className="text-lg font-medium">Something went wrong</h2>
           </Stack>
 
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             An unexpected error occurred. Try reloading the page or contact
             support if the problem persists.
           </p>
 
-          <div className="w-full rounded-md bg-muted p-3">
-            <p className="text-xs font-mono text-muted-foreground break-all">
+          <div className="bg-muted w-full rounded-md p-3">
+            <p className="text-muted-foreground font-mono text-xs break-all">
               {error.message}
             </p>
           </div>

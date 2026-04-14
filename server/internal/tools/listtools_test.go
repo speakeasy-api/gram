@@ -162,8 +162,10 @@ func TestToolsService_ListTools_EmptyList(t *testing.T) {
 	})
 	require.NoError(t, err, "should not error when no tools exist")
 	require.NotNil(t, result.Tools, "tools should not be nil")
-	require.Len(t, result.Tools, 1, "platform tools should still be listed when no project tools exist")
-	require.NotNil(t, result.Tools[0].PlatformToolDefinition, "default tool should be a platform tool")
+	require.Len(t, result.Tools, len(platformtools.ListPlatformTools()), "platform tools should still be listed when no project tools exist")
+	for _, tool := range result.Tools {
+		require.NotNil(t, tool.PlatformToolDefinition, "tools should all be platform tools when no project tools exist")
+	}
 	require.Nil(t, result.NextCursor, "next cursor should be nil for empty results")
 }
 

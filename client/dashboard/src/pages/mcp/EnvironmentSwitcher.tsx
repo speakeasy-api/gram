@@ -91,7 +91,7 @@ export function EnvironmentSwitcher({
             key={env.slug}
             onClick={() => onEnvironmentSelect(env.slug)}
             className={cn(
-              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors relative",
+              "relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors",
               isSelected
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground",
@@ -100,14 +100,14 @@ export function EnvironmentSwitcher({
             {isAttachedEnv && (
               <div
                 className={cn(
-                  "w-2 h-2 rounded-full",
+                  "h-2 w-2 rounded-full",
                   envHasAllRequired ? "bg-green-500" : "bg-yellow-500",
                 )}
               />
             )}
             {getEnvironmentDisplayName(env)}
             {isSelected && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+              <div className="bg-primary absolute right-0 bottom-0 left-0 h-0.5" />
             )}
           </button>
         );
@@ -119,8 +119,8 @@ export function EnvironmentSwitcher({
         {hasAnyUserEdits ? (
           <>
             {/* Unsaved changes indicator */}
-            <span className="text-xs text-amber-600 font-medium flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            <span className="flex items-center gap-1.5 text-xs font-medium text-amber-600">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
               Unsaved changes
             </span>
 
@@ -143,7 +143,7 @@ export function EnvironmentSwitcher({
             {/* When no edits - show contextual actions */}
             {!hasExistingConfigs && !hasAllRequired ? (
               // Initial setup: prompt to fill required fields
-              <span className="text-xs text-muted-foreground">
+              <span className="text-muted-foreground text-xs">
                 Fill in required values to save
               </span>
             ) : isViewingNonAttached ? (
@@ -167,7 +167,7 @@ export function EnvironmentSwitcher({
                     size="xs"
                   >
                     <Button.LeftIcon>
-                      <Plus className="w-3.5 h-3.5" />
+                      <Plus className="h-3.5 w-3.5" />
                     </Button.LeftIcon>
                     <Button.Text>New Environment</Button.Text>
                   </Button>
@@ -179,7 +179,7 @@ export function EnvironmentSwitcher({
                     size="xs"
                   >
                     <Button.LeftIcon>
-                      <Unlink className="w-3.5 h-3.5" />
+                      <Unlink className="h-3.5 w-3.5" />
                     </Button.LeftIcon>
                     <Button.Text>Detach</Button.Text>
                   </Button>

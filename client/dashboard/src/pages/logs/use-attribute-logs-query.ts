@@ -24,34 +24,56 @@ function getNestedAttr(attrs: Record<string, unknown>, path: string): unknown {
 /**
  * Groups raw TelemetryLogRecord[] by traceId into ToolCallSummary-shaped objects.
  */
+export type TraceSummary = ToolCallSummary & {
+  log?: TelemetryLogRecord;
+  triggerEventId?: string;
+};
+
+function getGroupKey(log: TelemetryLogRecord): string | undefined {
+  const eventSource = getNestedAttr(log.attributes, "gram.event.source");
+  if (typeof eventSource === "string" && eventSource === "trigger") {
+    const triggerEventId = getNestedAttr(
+      log.attributes,
+      "gram.trigger.event_id",
+    );
+    if (typeof triggerEventId === "string" && triggerEventId.length > 0) {
+      return `trigger:${triggerEventId}`;
+    }
+    return `trigger-log:${log.id}`;
+  }
+
+  return log.traceId || undefined;
+}
+
 export function logsToTraceSummaries(
   logs: TelemetryLogRecord[],
-): ToolCallSummary[] {
+): TraceSummary[] {
   const groups = new Map<
     string,
     { logs: TelemetryLogRecord[]; minTime: string }
   >();
 
   for (const log of logs) {
-    const traceId = log.traceId;
-    if (!traceId) continue;
+    const groupKey = getGroupKey(log);
+    if (!groupKey) continue;
 
-    const existing = groups.get(traceId);
+    const existing = groups.get(groupKey);
     if (existing) {
       existing.logs.push(log);
       if (BigInt(log.timeUnixNano) < BigInt(existing.minTime)) {
         existing.minTime = log.timeUnixNano;
       }
     } else {
-      groups.set(traceId, { logs: [log], minTime: log.timeUnixNano });
+      groups.set(groupKey, { logs: [log], minTime: log.timeUnixNano });
     }
   }
 
-  const summaries: ToolCallSummary[] = [];
+  const summaries: TraceSummary[] = [];
   for (const [traceId, group] of groups) {
-    // Derive gramUrn from first log's attributes
     let gramUrn = "";
     let httpStatusCode: number | undefined;
+    let eventSource: string | undefined;
+    let triggerEventId: string | undefined;
 
     for (const log of group.logs) {
       if (!gramUrn) {
@@ -62,7 +84,22 @@ export function logsToTraceSummaries(
         const code = getNestedAttr(log.attributes, "http.response.status_code");
         if (typeof code === "number") httpStatusCode = code;
       }
-      if (gramUrn && httpStatusCode !== undefined) break;
+      if (!eventSource) {
+        const src = getNestedAttr(log.attributes, "gram.event.source");
+        if (typeof src === "string") eventSource = src;
+      }
+      if (!triggerEventId) {
+        const eventId = getNestedAttr(log.attributes, "gram.trigger.event_id");
+        if (typeof eventId === "string") triggerEventId = eventId;
+      }
+      if (
+        gramUrn &&
+        httpStatusCode !== undefined &&
+        eventSource &&
+        (eventSource !== "trigger" || triggerEventId)
+      ) {
+        break;
+      }
     }
 
     summaries.push({
@@ -71,6 +108,9 @@ export function logsToTraceSummaries(
       startTimeUnixNano: group.minTime,
       logCount: group.logs.length,
       ...(httpStatusCode !== undefined ? { httpStatusCode } : {}),
+      ...(eventSource ? { eventSource } : {}),
+      ...(triggerEventId ? { triggerEventId } : {}),
+      ...(eventSource === "trigger" ? { log: group.logs[0] } : {}),
     });
   }
 
@@ -144,7 +184,7 @@ export function useAttributeLogsQuery({
               {
                 path: "gram.event.source",
                 operator: "in",
-                values: ["tool_call", "function"],
+                values: ["tool_call", "function", "trigger"],
               },
               ...toSdkFilters(logFilters),
               ...extraFilters,

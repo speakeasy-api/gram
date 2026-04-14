@@ -18,7 +18,7 @@ export const Block = ({
 
   return (
     <Stack
-      className={cn("p-1 rounded-md w-full", className)}
+      className={cn("w-full rounded-md p-1", className)}
       align={labelRHS ? "stretch" : "start"}
     >
       <Stack
@@ -31,7 +31,7 @@ export const Block = ({
           align="center"
           justify="space-between"
           className={cn(
-            "px-2 pt-1 rounded-sm rounded-b-none",
+            "rounded-sm rounded-b-none px-2 pt-1",
             blockBackground,
             labelRHS && "w-full",
           )}
@@ -49,7 +49,7 @@ export const Block = ({
           )}
         </Stack>
         {error && !labelRHS && (
-          <Type small italic className="pt-1 text-destructive! w-full z-1">
+          <Type small italic className="text-destructive! z-1 w-full pt-1">
             {error}
           </Type>
         )}
@@ -57,7 +57,7 @@ export const Block = ({
 
       <div
         className={cn(
-          "h-full w-full p-1 rounded-md rounded-tl-none",
+          "h-full w-full rounded-md rounded-tl-none p-1",
           blockBackground,
           labelRHS && "rounded-tr-none",
         )}
@@ -78,7 +78,7 @@ export const BlockInner = ({
   return (
     <div
       className={cn(
-        "bg-card dark:bg-background rounded-sm p-2 border-1 border-stone-300 dark:border-stone-700",
+        "bg-card dark:bg-background rounded-sm border-1 border-stone-300 p-2 dark:border-stone-700",
         className,
       )}
     >

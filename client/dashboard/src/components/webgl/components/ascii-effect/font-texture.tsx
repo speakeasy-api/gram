@@ -87,7 +87,7 @@ export function FontTexture() {
   return (
     <div
       ref={(n) => setContainer(n)}
-      className="fixed top-0 left-0 pointer-events-none hidden"
+      className="pointer-events-none fixed top-0 left-0 hidden"
     >
       <canvas
         className="h-full w-full"

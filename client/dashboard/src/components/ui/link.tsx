@@ -17,7 +17,7 @@ export function Link({
     content = (
       <Stack direction="horizontal" gap={1} align="center">
         {content}
-        <ExternalLinkIcon className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+        <ExternalLinkIcon className="text-muted-foreground group-hover:text-foreground h-4 w-4" />
       </Stack>
     );
   }

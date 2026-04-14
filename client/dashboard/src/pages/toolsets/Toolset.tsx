@@ -169,7 +169,7 @@ function AddToToolsetDialog({
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">Select Toolset</label>
             <select
-              className="w-full px-3 py-2 border border-neutral-200 rounded-md"
+              className="w-full rounded-md border border-neutral-200 px-3 py-2"
               value={selectedToolsetSlug}
               onChange={(e) => setSelectedToolsetSlug(e.target.value)}
             >
@@ -588,7 +588,7 @@ export function ToolsetView({
       selectedValues={selectedGroups}
       setSelectedValues={setSelectedGroups}
       placeholder="Filter tools"
-      className="w-fit mb-4 capitalize"
+      className="mb-4 w-fit capitalize"
     />
   );
 
@@ -622,7 +622,7 @@ export function ToolsetView({
       <Tabs
         value={activeTab}
         onValueChange={(value) => handleTabChange(value as ToolsetTabs)}
-        className="h-full relative"
+        className="relative h-full"
       >
         <TabsList className="mb-4">
           {isExternalMcpProxy ? (
@@ -732,7 +732,7 @@ export function ToolsetView({
           onSubmit: handleCreateToolsetSubmit,
           validate: (value) => value.length > 0 && value.length <= 40,
           hint: (value) => (
-            <div className="flex justify-between w-full">
+            <div className="flex w-full justify-between">
               <p className="text-destructive">
                 {value.length > 40 && "Must be 40 characters or less"}
               </p>

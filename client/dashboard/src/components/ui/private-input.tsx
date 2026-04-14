@@ -38,7 +38,7 @@ export function PrivateInput({
         type="button"
         tabIndex={-1}
         onClick={() => setIsVisible(!isVisible)}
-        className="absolute right-2 top-[6px] flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+        className="text-muted-foreground hover:text-foreground absolute top-[6px] right-2 flex items-center justify-center transition-colors"
         disabled={disabled || readOnly}
       >
         {isVisible ? (

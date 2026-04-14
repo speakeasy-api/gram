@@ -20,8 +20,8 @@ function PageHeaderComponent({
         className,
       )}
     >
-      <div className="flex w-full items-center px-3 gap-3">
-        <SidebarTrigger className="-ml-1 mx-0 px-0" />
+      <div className="flex w-full items-center gap-3 px-3">
+        <SidebarTrigger className="mx-0 -ml-1 px-0" />
         <Separator
           orientation="vertical"
           className="data-[orientation=vertical]:h-4"
@@ -43,7 +43,7 @@ function PageHeaderTitle({
     // 1270 carefully chosen to make the header line up with the max width of the page content
     <Heading
       variant="h4"
-      className={cn("ml-1 max-w-[1270px] w-full mx-auto", className)}
+      className={cn("mx-auto ml-1 w-full max-w-[1270px]", className)}
     >
       {children}
     </Heading>

@@ -75,7 +75,7 @@ export const AssetsTabContent = () => {
             </Type>
           </Stack>
 
-          <ul className="flex flex-col gap-4 flex-wrap">
+          <ul className="flex flex-col flex-wrap gap-4">
             {errAll.map((asset) => {
               return (
                 <li key={asset.id}>
@@ -93,7 +93,7 @@ export const AssetsTabContent = () => {
             Functions
           </Heading>
 
-          <ul className="flex flex-col gap-4 flex-wrap">
+          <ul className="flex flex-col flex-wrap gap-4">
             {okFunctions.map((asset) => {
               return (
                 <li key={asset.id}>
@@ -110,7 +110,7 @@ export const AssetsTabContent = () => {
           <Heading variant="h2" className="mb-6">
             OpenAPI
           </Heading>
-          <ul className="flex flex-col gap-4 flex-wrap">
+          <ul className="flex flex-col flex-wrap gap-4">
             {okOpenAPI.map((asset) => {
               return (
                 <li key={asset.id}>
@@ -136,25 +136,25 @@ const AssetItem = ({ asset }: AssetItemProps) => {
     icon = <SquareFunctionIcon strokeWidth={1} className="size-12 min-w-12" />;
   }
   let type = (
-    <span className="text-xs text-muted leading-5">OpenAPI Document</span>
+    <span className="text-muted text-xs leading-5">OpenAPI Document</span>
   );
   if (asset.type === "function") {
     type = (
-      <span className="text-xs text-muted leading-5 font-mono">
+      <span className="text-muted font-mono text-xs leading-5">
         {asset.runtime}
       </span>
     );
   }
 
   return (
-    <MiniCard className="w-full max-w-full bg-surface-secondary-default border-neutral-softest p-6">
+    <MiniCard className="bg-surface-secondary-default border-neutral-softest w-full max-w-full p-6">
       <MiniCard.Title>
-        <div className="flex gap-4 w-full items-center">
+        <div className="flex w-full items-center gap-4">
           {icon}
           <div className="flex flex-col">
             <span className="text-base leading-7">{asset.name}</span>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted leading-5">{type}</span>
+              <span className="text-muted text-xs leading-5">{type}</span>
               {asset.report.toolCount === 0 && <AssetErrorBadge />}
             </div>
           </div>
@@ -179,7 +179,7 @@ const AssetErrorBadge = () => {
       <TooltipTrigger>
         <Badge
           variant="destructive"
-          className="px-0.5 py-1 leading-2 items-center flex text-xs"
+          className="flex items-center px-0.5 py-1 text-xs leading-2"
         >
           Error
         </Badge>

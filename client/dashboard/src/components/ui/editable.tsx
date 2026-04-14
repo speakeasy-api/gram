@@ -18,7 +18,7 @@ export function Editable({
 
   return (
     <div
-      className={cn("relative group cursor-pointer", className)}
+      className={cn("group relative cursor-pointer", className)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => !disabled && onClick?.()}
@@ -36,7 +36,7 @@ export function Editable({
             </Type>
           ) : (
             <>
-              <Pencil className="w-4 h-4 text-muted-foreground mr-1" />
+              <Pencil className="text-muted-foreground mr-1 h-4 w-4" />
               <Type
                 className={cn(
                   "font-medium text-inherit",

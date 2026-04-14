@@ -29,21 +29,21 @@ export function MultiSearch({
       direction="horizontal"
       gap={2}
       className={cn(
-        "min-h-[42px] border border-border rounded-md px-3 py-2",
-        disabled && "opacity-50 cursor-not-allowed",
+        "border-border min-h-[42px] rounded-md border px-3 py-2",
+        disabled && "cursor-not-allowed opacity-50",
         className,
       )}
       align="center"
     >
-      <SearchIcon className="size-4 opacity-50 shrink-0" />
+      <SearchIcon className="size-4 shrink-0 opacity-50" />
 
       {/* Filter chips */}
       {chips.length > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex flex-wrap items-center gap-1.5">
           {chips.map((chip) => (
             <div
               key={chip.value}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 text-xs"
+              className="bg-primary/10 text-primary border-primary/20 inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs"
             >
               <span className="font-medium">{chip.display}</span>
               {onRemoveChip && !disabled && (
@@ -66,14 +66,14 @@ export function MultiSearch({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="flex-1 bg-transparent outline-none min-w-0 disabled:cursor-not-allowed"
+        className="min-w-0 flex-1 bg-transparent outline-none disabled:cursor-not-allowed"
       />
 
       {/* Clear button */}
       {value && !disabled && (
         <button
           onClick={() => onChange("")}
-          className="opacity-50 hover:opacity-100 transition-opacity shrink-0"
+          className="shrink-0 opacity-50 transition-opacity hover:opacity-100"
           aria-label="Clear search"
         >
           <X className="size-4" />

@@ -15,7 +15,7 @@ const CardComponent = ({
     <div
       data-slot="card"
       className={cn(
-        "bg-card text-card-foreground flex flex-col gap-5 rounded-xl border p-4 group/card",
+        "bg-card text-card-foreground group/card flex flex-col gap-5 rounded-xl border p-4",
         size === "sm" && "gap-4 py-4",
         className,
       )}
@@ -49,7 +49,7 @@ function CardTitle({
       variant="h4"
       data-slot="card-title"
       className={cn(
-        "leading-none [a:has([data-slot=card]):hover_&]:underline normal-case", // Underline the title when the card is hovered, if the card is a link
+        "leading-none normal-case [a:has([data-slot=card]):hover_&]:underline", // Underline the title when the card is hovered, if the card is a link
         className,
       )}
       {...props}
@@ -77,7 +77,7 @@ function CardInfo({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-info"
       className={cn(
-        "gap-2 flex justify-start ml-auto",
+        "ml-auto flex justify-start gap-2",
         "group-hover/card:has([data-slot=card-action]):opacity-0", // Only hide info when card has an action and is hovered
         className,
       )}
@@ -101,7 +101,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "mt-auto flex items-center justify-between [.border-t]:pt-6 w-full",
+        "mt-auto flex w-full items-center justify-between [.border-t]:pt-6",
         className,
       )}
       {...props}
@@ -157,7 +157,7 @@ export function Cards({
       <Grid
         columns={1}
         className={cn(
-          "grid-cols-1 gap-x-8 gap-y-4 mb-8",
+          "mb-8 grid-cols-1 gap-x-8 gap-y-4",
           !noGrid &&
             "@lg/cards:grid-cols-2 @3xl/cards:grid-cols-4 @7xl/cards:grid-cols-6",
           className,

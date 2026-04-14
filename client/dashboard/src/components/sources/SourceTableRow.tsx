@@ -84,14 +84,14 @@ export function SourceTableRow({
         <img
           src={asset.iconUrl}
           alt={asset.name}
-          className="w-6 h-6 object-contain"
+          className="h-6 w-6 object-contain"
         />
       );
     }
     if (asset.type === "externalmcp") {
-      return <Network className="w-5 h-5 text-muted-foreground" />;
+      return <Network className="text-muted-foreground h-5 w-5" />;
     }
-    return <FileCode className="w-5 h-5 text-muted-foreground" />;
+    return <FileCode className="text-muted-foreground h-5 w-5" />;
   })();
 
   return (
@@ -104,7 +104,7 @@ export function SourceTableRow({
         <Type
           variant="subheading"
           as="div"
-          className="truncate text-sm group-hover:text-primary transition-colors"
+          className="group-hover:text-primary truncate text-sm transition-colors"
           title={asset.name}
         >
           {asset.name}
@@ -140,7 +140,7 @@ export function SourceTableRow({
       {/* Health */}
       <td className="px-3 py-3">
         {causingFailure && (
-          <div className="flex items-center gap-1.5 text-destructive">
+          <div className="text-destructive flex items-center gap-1.5">
             <CircleAlertIcon className="size-3.5" />
             <Type small className="text-destructive">
               Error

@@ -7,21 +7,28 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/logs"
+	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-type toolFactory func(telemetry logs.TelemetryService) core.PlatformToolExecutor
+type toolFactory func(deps Dependencies) core.PlatformToolExecutor
 
 var registry = []toolFactory{
-	func(telemetrySvc TelemetryService) PlatformToolExecutor {
-		return logs.NewSearchLogsTool(telemetrySvc)
+	func(deps Dependencies) PlatformToolExecutor {
+		return logs.NewSearchLogsTool(deps.TelemetryService)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformtriggers.NewListTriggersTool(deps.DB, deps.TriggerApp)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformtriggers.NewConfigureTriggerTool(deps.DB, deps.TriggerApp)
 	},
 }
 
-func BuildExecutors(telemetrySvc TelemetryService) map[string]PlatformToolExecutor {
+func BuildExecutors(deps Dependencies) map[string]PlatformToolExecutor {
 	executors := make(map[string]PlatformToolExecutor, len(registry))
 	for _, factory := range registry {
-		executor := factory(telemetrySvc)
+		executor := factory(deps)
 		executors[executor.Descriptor().ToolURN().String()] = executor
 	}
 	return executors
@@ -29,8 +36,14 @@ func BuildExecutors(telemetrySvc TelemetryService) map[string]PlatformToolExecut
 
 func ListPlatformTools() []ToolDescriptor {
 	tools := make([]ToolDescriptor, 0, len(registry))
+	deps := Dependencies{
+		Logger:           nil,
+		DB:               nil,
+		TelemetryService: nil,
+		TriggerApp:       nil,
+	}
 	for _, factory := range registry {
-		tools = append(tools, factory(nil).Descriptor())
+		tools = append(tools, factory(deps).Descriptor())
 	}
 	return tools
 }

@@ -149,7 +149,7 @@ func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg Del
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1
+SELECT id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1 AND deleted IS FALSE
 `
 
 func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
@@ -202,7 +202,7 @@ SELECT
         '[]'::json
     ) as resolutions
 FROM chats c
-WHERE c.id = $1
+WHERE c.id = $1 AND c.deleted IS FALSE
 `
 
 type GetChatWithResolutionsRow struct {
@@ -433,6 +433,7 @@ SELECT
     , (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_timestamp
 FROM chats c
 WHERE c.project_id = $1
+  AND c.deleted IS FALSE
 ORDER BY c.updated_at DESC
 `
 
@@ -601,6 +602,7 @@ SELECT
     , (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_timestamp
 FROM chats c
 WHERE c.project_id = $1 AND c.external_user_id = $2
+  AND c.deleted IS FALSE
 ORDER BY c.updated_at DESC
 `
 
@@ -680,6 +682,7 @@ SELECT
     , (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_timestamp
 FROM chats c
 WHERE c.project_id = $1 AND c.user_id = $2
+  AND c.deleted IS FALSE
 ORDER BY c.updated_at DESC
 `
 
@@ -946,6 +949,24 @@ func (q *Queries) ListUserFeedbackForChat(ctx context.Context, chatID uuid.UUID)
 		return nil, err
 	}
 	return items, nil
+}
+
+const softDeleteChat = `-- name: SoftDeleteChat :exec
+UPDATE chats
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type SoftDeleteChatParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SoftDeleteChat(ctx context.Context, arg SoftDeleteChatParams) error {
+	_, err := q.db.Exec(ctx, softDeleteChat, arg.ID, arg.ProjectID)
+	return err
 }
 
 const updateChatTitle = `-- name: UpdateChatTitle :exec

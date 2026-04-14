@@ -24,7 +24,7 @@ export function DeleteButton({
       tooltip={tooltip}
       onClick={onClick}
     >
-      <Trash2Icon className="w-4 h-4" />
+      <Trash2Icon className="h-4 w-4" />
     </Button>
   );
 }

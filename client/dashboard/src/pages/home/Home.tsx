@@ -95,12 +95,12 @@ export default function Home() {
             >
               <h2 className="text-lg font-semibold">MCP Servers</h2>
               <routes.mcp.Link>
-                <span className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1">
-                  View all <ArrowRight className="w-4 h-4" />
+                <span className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm">
+                  View all <ArrowRight className="h-4 w-4" />
                 </span>
               </routes.mcp.Link>
             </Stack>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {isToolsetsLoading &&
                 [...Array(4)].map((_, i) => (
                   <Skeleton key={i} className="h-[120px] rounded-xl" />
@@ -113,18 +113,18 @@ export default function Home() {
           </div>
         )}
 
-        <h2 className="text-lg font-semibold mb-4">Quick actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
-            <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
+        <h2 className="mb-4 text-lg font-semibold">Quick actions</h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="bg-background relative flex flex-col gap-3 overflow-hidden rounded-lg border p-4 pb-5">
+            <div className="bg-gradient-primary absolute inset-x-0 bottom-0 h-[3px]" />
             <div className="flex flex-row items-start gap-2">
               <MessageCircleIcon
-                className="h-[18px] w-[18px] mt-0.5 shrink-0"
+                className="mt-0.5 h-[18px] w-[18px] shrink-0"
                 strokeWidth={1.5}
               />
               <div className="flex flex-col gap-1">
                 <h3 className="font-medium">Deploy chat</h3>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   Embed an AI chat interface on your website with tool access
                 </p>
               </div>
@@ -144,16 +144,16 @@ export default function Home() {
               </routes.elements.Link>
             </div>
           </div>
-          <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
-            <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
+          <div className="bg-background relative flex flex-col gap-3 overflow-hidden rounded-lg border p-4 pb-5">
+            <div className="bg-gradient-primary absolute inset-x-0 bottom-0 h-[3px]" />
             <div className="flex flex-row items-start gap-2">
               <BlocksIcon
-                className="h-[18px] w-[18px] mt-0.5 shrink-0"
+                className="mt-0.5 h-[18px] w-[18px] shrink-0"
                 strokeWidth={1.5}
               />
               <div className="flex flex-col gap-1">
                 <h3 className="font-medium">Connect to popular tools</h3>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   Browse and connect pre-built integrations from our catalog
                 </p>
               </div>
@@ -166,16 +166,16 @@ export default function Home() {
               </routes.catalog.Link>
             </div>
           </div>
-          <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
-            <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
+          <div className="bg-background relative flex flex-col gap-3 overflow-hidden rounded-lg border p-4 pb-5">
+            <div className="bg-gradient-primary absolute inset-x-0 bottom-0 h-[3px]" />
             <div className="flex flex-row items-start gap-2">
               <ServerIcon
-                className="h-[18px] w-[18px] mt-0.5 shrink-0"
+                className="mt-0.5 h-[18px] w-[18px] shrink-0"
                 strokeWidth={1.5}
               />
               <div className="flex flex-col gap-1">
                 <h3 className="font-medium">Connect to existing APIs</h3>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   Create and deploy custom MCP servers from your APIs
                 </p>
               </div>
@@ -189,16 +189,16 @@ export default function Home() {
             </div>
           </div>
           {isFunctionsEnabled && (
-            <div className="relative flex flex-col gap-3 rounded-lg border bg-background p-4 pb-5 overflow-hidden">
-              <div className="absolute bottom-0 inset-x-0 h-[3px] bg-gradient-primary" />
+            <div className="bg-background relative flex flex-col gap-3 overflow-hidden rounded-lg border p-4 pb-5">
+              <div className="bg-gradient-primary absolute inset-x-0 bottom-0 h-[3px]" />
               <div className="flex flex-row items-start gap-2">
                 <Code
-                  className="h-[18px] w-[18px] mt-0.5 shrink-0"
+                  className="mt-0.5 h-[18px] w-[18px] shrink-0"
                   strokeWidth={1.5}
                 />
                 <div className="flex flex-col gap-1">
                   <h3 className="font-medium">Build and host custom tools</h3>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     Write and deploy custom functions as MCP servers
                   </p>
                 </div>
@@ -227,12 +227,12 @@ export default function Home() {
                 Featured Third-Party Servers
               </h2>
               <routes.catalog.Link>
-                <span className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1">
-                  Browse all <ArrowRight className="w-4 h-4" />
+                <span className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm">
+                  Browse all <ArrowRight className="h-4 w-4" />
                 </span>
               </routes.catalog.Link>
             </Stack>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               {isLoading &&
                 [...Array(6)].map((_, i) => (
                   <Skeleton key={i} className="h-[140px] rounded-xl" />
@@ -276,17 +276,17 @@ function FeaturedServerCard({
 
   return (
     <Link to={detailHref}>
-      <div className="group flex flex-col gap-4 rounded-xl border bg-card p-5 hover:border-primary/50 hover:shadow-md transition-all h-full">
+      <div className="group bg-card hover:border-primary/50 flex h-full flex-col gap-4 rounded-xl border p-5 transition-all hover:shadow-md">
         <Stack direction="horizontal" gap={3}>
-          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
+          <div className="bg-primary/10 group-hover:bg-primary/15 flex h-12 w-12 shrink-0 items-center justify-center rounded-lg transition-colors">
             {server.iconUrl ? (
               <img
                 src={server.iconUrl}
                 alt={displayName}
-                className="w-8 h-8 rounded"
+                className="h-8 w-8 rounded"
               />
             ) : (
-              <ServerIcon className="w-6 h-6 text-muted-foreground" />
+              <ServerIcon className="text-muted-foreground h-6 w-6" />
             )}
           </div>
           <Stack gap={1} className="min-w-0">
@@ -319,7 +319,7 @@ function FeaturedServerCard({
             {isAdded ? (
               <Button variant="secondary" size="sm">
                 <Button.LeftIcon>
-                  <CheckCircle className="w-3.5 h-3.5" />
+                  <CheckCircle className="h-3.5 w-3.5" />
                 </Button.LeftIcon>
                 <Button.Text>Added</Button.Text>
               </Button>

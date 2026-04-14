@@ -49,7 +49,7 @@ export function SettingsDangerZone() {
 
   return (
     <>
-      <div className="border border-destructive/30 rounded-lg p-6">
+      <div className="border-destructive/30 rounded-lg border p-6">
         <Type variant="subheading" className="text-destructive mb-1">
           Danger Zone
         </Type>
@@ -88,7 +88,7 @@ export function SettingsDangerZone() {
           <div className="space-y-4 py-4">
             <Type variant="body">
               Are you sure you want to delete the project{" "}
-              <code className="font-mono font-bold px-1 py-0.5 bg-muted rounded">
+              <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
                 {project.name}
               </code>
               ? This action cannot be undone.

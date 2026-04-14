@@ -99,7 +99,7 @@ export function CommandBar({
     <AnimatePresence>
       {selectedCount > 0 && (
         <motion.div
-          className="z-50 fixed bottom-14"
+          className="fixed bottom-14 z-50"
           style={{ left: leftPosition, x: "-50%" }}
           initial={{ opacity: 0, scale: 0.8, y: 40 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -113,7 +113,7 @@ export function CommandBar({
           <div
             ref={barRef}
             data-command-bar
-            className="relative rounded-2xl overflow-hidden border border-primary/20 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.25),0_0_40px_rgba(59,130,246,0.2),0_0_80px_rgba(59,130,246,0.1)] dark:shadow-none"
+            className="border-primary/20 relative overflow-hidden rounded-2xl border shadow-[0_8px_32px_rgba(0,0,0,0.25),0_0_40px_rgba(59,130,246,0.2),0_0_80px_rgba(59,130,246,0.1)] dark:border-white/10 dark:shadow-none"
           >
             {/* Glass effect layer - blur + distortion */}
             <div
@@ -123,22 +123,22 @@ export function CommandBar({
             {/* Tint layer - opaque enough for text readability */}
             <div className="absolute inset-0 bg-white/80 dark:bg-black/70" />
             {/* Shine layer - light mode only */}
-            <div className="absolute inset-0 dark:hidden shadow-[inset_2px_2px_1px_0_rgba(255,255,255,0.5),inset_-1px_-1px_1px_1px_rgba(255,255,255,0.3)]" />
+            <div className="absolute inset-0 shadow-[inset_2px_2px_1px_0_rgba(255,255,255,0.5),inset_-1px_-1px_1px_1px_rgba(255,255,255,0.3)] dark:hidden" />
             {/* Content layer */}
-            <div className="relative z-10 px-4 py-3 flex items-center gap-4">
+            <div className="relative z-10 flex items-center gap-4 px-4 py-3">
               {/* Clear button */}
               <SimpleTooltip tooltip="Clear selection">
                 <button
                   onClick={onClear}
-                  className="p-1.5 rounded-full text-black/50 hover:text-black hover:bg-black/10 dark:text-white/50 dark:hover:text-white dark:hover:bg-white/10 transition-colors"
+                  className="rounded-full p-1.5 text-black/50 transition-colors hover:bg-black/10 hover:text-black dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
                   aria-label="Clear selection"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="h-4 w-4" />
                 </button>
               </SimpleTooltip>
 
               {/* Divider */}
-              <div className="w-px h-5 bg-black/20 dark:bg-white/20" />
+              <div className="h-5 w-px bg-black/20 dark:bg-white/20" />
 
               {/* Count */}
               <Type small className="font-medium text-black dark:text-white">
@@ -147,14 +147,14 @@ export function CommandBar({
               </Type>
 
               {/* Divider */}
-              <div className="w-px h-5 bg-black/20 dark:bg-white/20" />
+              <div className="h-5 w-px bg-black/20 dark:bg-white/20" />
 
               {/* Add button - min-w to prevent layout shift */}
               <button
                 onClick={onAdd}
-                className="flex items-center justify-center gap-1.5 min-w-[5.5rem] px-3 py-1.5 rounded-full text-sm font-medium bg-foreground text-background hover:bg-foreground/90 transition-colors"
+                className="bg-foreground text-background hover:bg-foreground/90 flex min-w-[5.5rem] items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="h-3.5 w-3.5" />
                 Add to project
               </button>
             </div>

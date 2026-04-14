@@ -24,6 +24,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Trash2, UserPlus, Users, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { RequireScope } from "@/components/require-scope";
 
 function getMemberColors(id: string) {
   let hash = 2166136261;
@@ -45,6 +46,21 @@ function getMemberColors(id: string) {
 }
 
 export default function Team() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Title>Team</Page.Header.Title>
+      </Page.Header>
+      <Page.Body>
+        <RequireScope scope="org:admin" level="page">
+          <TeamInner />
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
+}
+
+export function TeamInner() {
   const organization = useOrganization();
   const user = useUser();
   const queryClient = useQueryClient();
@@ -163,11 +179,11 @@ export default function Team() {
             <img
               src={member.photoUrl}
               alt={member.name}
-              className="w-8 h-8 rounded-full"
+              className="h-8 w-8 rounded-full"
             />
           ) : (
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium text-white"
               style={{
                 backgroundImage: `linear-gradient(${getMemberColors(member.id).angle}deg, ${getMemberColors(member.id).from}, ${getMemberColors(member.id).to})`,
               }}
@@ -210,17 +226,19 @@ export default function Team() {
       width: "80px",
       render: (member) =>
         member.email !== user.email ? (
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => setMemberToRemove(member)}
-            className="hover:text-destructive"
-          >
-            <Button.LeftIcon>
-              <Trash2 className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text className="sr-only">Remove member</Button.Text>
-          </Button>
+          <RequireScope scope="org:admin" level="component">
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={() => setMemberToRemove(member)}
+              className="hover:text-destructive"
+            >
+              <Button.LeftIcon>
+                <Trash2 className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text className="sr-only">Remove member</Button.Text>
+            </Button>
+          </RequireScope>
         ) : (
           <Type variant="body" className="text-muted-foreground text-sm">
             You
@@ -244,7 +262,7 @@ export default function Team() {
             className={isExpired ? "opacity-50" : ""}
           >
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white shrink-0"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
               style={{
                 backgroundImage: `linear-gradient(${getMemberColors(invite.email).angle}deg, ${getMemberColors(invite.email).from}, ${getMemberColors(invite.email).to})`,
               }}
@@ -300,209 +318,208 @@ export default function Team() {
       header: "",
       width: "80px",
       render: (invite) => (
-        <Button
-          variant="tertiary"
-          size="sm"
-          onClick={() => setInviteToCancel(invite)}
-          className="hover:text-destructive"
-        >
-          <Button.LeftIcon>
-            <X className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text className="sr-only">Revoke invite</Button.Text>
-        </Button>
+        <RequireScope scope="org:admin" level="component">
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={() => setInviteToCancel(invite)}
+            className="hover:text-destructive"
+          >
+            <Button.LeftIcon>
+              <X className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text className="sr-only">Revoke invite</Button.Text>
+          </Button>
+        </RequireScope>
       ),
     },
   ];
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Stack direction="vertical" gap={8}>
-          {/* Members Section */}
-          <div>
-            <Stack
-              direction="horizontal"
-              justify="space-between"
-              align="center"
-              className="mb-4"
-            >
-              <Stack direction="vertical" gap={1}>
-                <Heading variant="h4">Team Members</Heading>
-                <Type variant="body" className="text-muted-foreground">
-                  Manage who has access to {organization.name}
-                </Type>
-              </Stack>
+    <>
+      <Stack direction="vertical" gap={8}>
+        {/* Members Section */}
+        <div>
+          <Stack
+            direction="horizontal"
+            justify="space-between"
+            align="center"
+            className="mb-4"
+          >
+            <Stack direction="vertical" gap={1}>
+              <Heading variant="h4">Team Members</Heading>
+              <Type variant="body" className="text-muted-foreground">
+                Manage who has access to {organization.name}
+              </Type>
+            </Stack>
+            <RequireScope scope="org:admin" level="component">
               <Button onClick={() => setIsInviteDialogOpen(true)}>
                 <Button.LeftIcon>
                   <UserPlus className="h-4 w-4" />
                 </Button.LeftIcon>
                 <Button.Text>Invite Member</Button.Text>
               </Button>
+            </RequireScope>
+          </Stack>
+
+          <Table
+            columns={memberColumns}
+            data={members}
+            rowKey={(row) => row.userId}
+            className="min-h-fit"
+            noResultsMessage={
+              <Stack
+                gap={2}
+                className="bg-background h-full p-8"
+                align="center"
+                justify="center"
+              >
+                <Users className="text-muted-foreground h-12 w-12" />
+                <Type variant="body" className="text-muted-foreground">
+                  No team members yet
+                </Type>
+              </Stack>
+            }
+          />
+        </div>
+
+        {/* Pending Invites Section */}
+        {invites.length > 0 && (
+          <div>
+            <Stack direction="vertical" gap={1} className="mb-4">
+              <Heading variant="h4">Pending Invites</Heading>
+              <Type variant="body" className="text-muted-foreground">
+                Invitations that haven't been accepted yet
+              </Type>
             </Stack>
 
             <Table
-              columns={memberColumns}
-              data={members}
-              rowKey={(row) => row.userId}
+              columns={inviteColumns}
+              data={invites}
+              rowKey={(row) => row.id}
               className="min-h-fit"
-              noResultsMessage={
-                <Stack
-                  gap={2}
-                  className="h-full p-8 bg-background"
-                  align="center"
-                  justify="center"
-                >
-                  <Users className="h-12 w-12 text-muted-foreground" />
-                  <Type variant="body" className="text-muted-foreground">
-                    No team members yet
-                  </Type>
-                </Stack>
-              }
             />
           </div>
+        )}
+      </Stack>
 
-          {/* Pending Invites Section */}
-          {invites.length > 0 && (
-            <div>
-              <Stack direction="vertical" gap={1} className="mb-4">
-                <Heading variant="h4">Pending Invites</Heading>
-                <Type variant="body" className="text-muted-foreground">
-                  Invitations that haven't been accepted yet
-                </Type>
-              </Stack>
-
-              <Table
-                columns={inviteColumns}
-                data={invites}
-                rowKey={(row) => row.id}
-                className="min-h-fit"
-              />
+      {/* Invite Dialog */}
+      <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Invite Team Member</Dialog.Title>
+          </Dialog.Header>
+          <form className="space-y-4 py-4" onSubmit={handleInvite}>
+            <Type variant="body" className="text-muted-foreground">
+              Enter the email address of the person you'd like to invite to{" "}
+              <span className="text-foreground font-medium">
+                {organization.name}
+              </span>
+              .
+            </Type>
+            <InputField
+              label="Email address"
+              name="email"
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="colleague@company.com"
+              required
+              autoFocus
+              autoCapitalize="off"
+              autoComplete="off"
+              autoCorrect="off"
+            />
+            <div className="flex justify-end space-x-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setIsInviteDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={inviteMutation.isPending || !inviteEmail.trim()}
+              >
+                {inviteMutation.isPending ? "Sending..." : "Send Invite"}
+              </Button>
             </div>
-          )}
-        </Stack>
+          </form>
+        </Dialog.Content>
+      </Dialog>
 
-        {/* Invite Dialog */}
-        <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Invite Team Member</Dialog.Title>
-            </Dialog.Header>
-            <form className="space-y-4 py-4" onSubmit={handleInvite}>
-              <Type variant="body" className="text-muted-foreground">
-                Enter the email address of the person you'd like to invite to{" "}
-                <span className="font-medium text-foreground">
-                  {organization.name}
-                </span>
-                .
-              </Type>
-              <InputField
-                label="Email address"
-                name="email"
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="colleague@company.com"
-                required
-                autoFocus
-                autoCapitalize="off"
-                autoComplete="off"
-                autoCorrect="off"
-              />
-              <div className="flex justify-end space-x-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setIsInviteDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={inviteMutation.isPending || !inviteEmail.trim()}
-                >
-                  {inviteMutation.isPending ? "Sending..." : "Send Invite"}
-                </Button>
-              </div>
-            </form>
-          </Dialog.Content>
-        </Dialog>
-
-        {/* Remove Member Dialog */}
-        <Dialog
-          open={!!memberToRemove}
-          onOpenChange={(open) => !open && setMemberToRemove(null)}
-        >
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Remove Team Member</Dialog.Title>
-            </Dialog.Header>
-            <div className="space-y-4 py-4">
-              <Type variant="body">
-                Are you sure you want to remove{" "}
-                <span className="font-bold">{memberToRemove?.name}</span> from{" "}
-                {organization.name}? They will lose access to all projects and
-                resources.
-              </Type>
-              <div className="flex justify-end space-x-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => setMemberToRemove(null)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive-primary"
-                  onClick={handleRemoveMember}
-                  disabled={removeMemberMutation.isPending}
-                >
-                  {removeMemberMutation.isPending
-                    ? "Removing..."
-                    : "Remove Member"}
-                </Button>
-              </div>
+      {/* Remove Member Dialog */}
+      <Dialog
+        open={!!memberToRemove}
+        onOpenChange={(open) => !open && setMemberToRemove(null)}
+      >
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Remove Team Member</Dialog.Title>
+          </Dialog.Header>
+          <div className="space-y-4 py-4">
+            <Type variant="body">
+              Are you sure you want to remove{" "}
+              <span className="font-bold">{memberToRemove?.name}</span> from{" "}
+              {organization.name}? They will lose access to all projects and
+              resources.
+            </Type>
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="secondary"
+                onClick={() => setMemberToRemove(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive-primary"
+                onClick={handleRemoveMember}
+                disabled={removeMemberMutation.isPending}
+              >
+                {removeMemberMutation.isPending
+                  ? "Removing..."
+                  : "Remove Member"}
+              </Button>
             </div>
-          </Dialog.Content>
-        </Dialog>
+          </div>
+        </Dialog.Content>
+      </Dialog>
 
-        {/* Cancel Invite Dialog */}
-        <Dialog
-          open={!!inviteToCancel}
-          onOpenChange={(open) => !open && setInviteToCancel(null)}
-        >
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Cancel Invite</Dialog.Title>
-            </Dialog.Header>
-            <div className="space-y-4 py-4">
-              <Type variant="body">
-                Are you sure you want to cancel the invite to{" "}
-                <span className="font-bold">{inviteToCancel?.email}</span>?
-              </Type>
-              <div className="flex justify-end space-x-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => setInviteToCancel(null)}
-                >
-                  Keep Invite
-                </Button>
-                <Button
-                  variant="destructive-primary"
-                  onClick={handleRevokeInvite}
-                  disabled={revokeInviteMutation.isPending}
-                >
-                  {revokeInviteMutation.isPending
-                    ? "Revoking..."
-                    : "Revoke Invite"}
-                </Button>
-              </div>
+      {/* Cancel Invite Dialog */}
+      <Dialog
+        open={!!inviteToCancel}
+        onOpenChange={(open) => !open && setInviteToCancel(null)}
+      >
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Cancel Invite</Dialog.Title>
+          </Dialog.Header>
+          <div className="space-y-4 py-4">
+            <Type variant="body">
+              Are you sure you want to cancel the invite to{" "}
+              <span className="font-bold">{inviteToCancel?.email}</span>?
+            </Type>
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="secondary"
+                onClick={() => setInviteToCancel(null)}
+              >
+                Keep Invite
+              </Button>
+              <Button
+                variant="destructive-primary"
+                onClick={handleRevokeInvite}
+                disabled={revokeInviteMutation.isPending}
+              >
+                {revokeInviteMutation.isPending
+                  ? "Revoking..."
+                  : "Revoke Invite"}
+              </Button>
             </div>
-          </Dialog.Content>
-        </Dialog>
-      </Page.Body>
-    </Page>
+          </div>
+        </Dialog.Content>
+      </Dialog>
+    </>
   );
 }

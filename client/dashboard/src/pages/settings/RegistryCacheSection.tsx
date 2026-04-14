@@ -35,7 +35,7 @@ export function RegistryCacheSection() {
       </Type>
 
       {isLoading && (
-        <div className="flex items-center gap-2 text-muted-foreground">
+        <div className="text-muted-foreground flex items-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin" />
           <Type muted small>
             Loading registries…

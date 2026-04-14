@@ -103,7 +103,7 @@ export function OnboardingWizard() {
 
   return (
     <Stack direction={"horizontal"} className="h-[100vh] w-full">
-      <div className="w-1/2 h-full border-r-1 ">
+      <div className="h-full w-1/2 border-r-1 ">
         <LHS
           currentStep={currentStep}
           setCurrentStep={setCurrentStep}
@@ -117,7 +117,7 @@ export function OnboardingWizard() {
           routes={routes}
         />
       </div>
-      <div className="w-1/2 h-full bg-background overflow-hidden">
+      <div className="bg-background h-full w-1/2 overflow-hidden">
         <AnimatedRightSide
           currentStep={currentStep}
           toolsetName={toolsetName}
@@ -143,13 +143,13 @@ const Step = ({
     <Stack direction={"horizontal"} gap={2} align={"center"}>
       <span
         className={cn(
-          "rounded-lg bg-muted h-8 w-8 flex items-center justify-center border border-border",
+          "bg-muted border-border flex h-8 w-8 items-center justify-center rounded-lg border",
           completed &&
             "bg-success text-success-foreground border-success-softest",
           !active && !completed && "border-neutral-softest",
         )}
       >
-        {completed ? <Check className="w-4 h-4" /> : icon}
+        {completed ? <Check className="h-4 w-4" /> : icon}
       </span>
       <span className={cn(!active && "text-muted-foreground", "text-body-sm")}>
         {text}
@@ -172,9 +172,9 @@ export const ChoiceCard = ({
   return (
     <button
       onClick={onClick}
-      className="p-5 bg-secondary rounded-lg hover:bg-accent transition-colors text-left group flex flex-col items-start relative shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)]"
+      className="bg-secondary hover:bg-accent group relative flex flex-col items-start rounded-lg p-5 text-left shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)] transition-colors"
     >
-      <Icon className="w-6 h-6 text-primary mb-2 shrink-0" strokeWidth={1.5} />
+      <Icon className="text-primary mb-2 h-6 w-6 shrink-0" strokeWidth={1.5} />
       <div className="flex flex-col gap-1">
         <Type className="text-heading-sm">{title}</Type>
         <Type small className="text-muted">
@@ -250,16 +250,16 @@ const LHS = ({
     );
 
   return (
-    <div className="h-full flex flex-col relative bg-card">
+    <div className="bg-card relative flex h-full flex-col">
       {/* Fixed Header */}
       <Stack align={"center"}>
         <Stack
           direction={"horizontal"}
           align={"center"}
           justify={"space-between"}
-          className="w-full border-b h-16 px-6 mb-8"
+          className="mb-8 h-16 w-full border-b px-6"
         >
-          <Link className="hover:bg-accent p-2 rounded-md" to="/">
+          <Link className="hover:bg-accent rounded-md p-2" to="/">
             <GramLogo className="w-25" />
           </Link>
           <a href="https://docs.getgram.ai/" target="_blank">
@@ -272,21 +272,21 @@ const LHS = ({
           <Stack direction={"horizontal"} gap={6} align={"center"}>
             <Step
               text={selectedPath === "cli" ? "Setup CLI" : "Upload OpenAPI"}
-              icon={<Upload className="w-4 h-4" />}
+              icon={<Upload className="h-4 w-4" />}
               active={currentStep === "upload" || currentStep === "cli-setup"}
               completed={currentStep === "toolset" || currentStep === "mcp"}
             />
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            <ChevronRight className="text-muted-foreground h-4 w-4" />
             <Step
               text="Create Toolset"
-              icon={<Wrench className="w-4 h-4" />}
+              icon={<Wrench className="h-4 w-4" />}
               active={currentStep === "toolset"}
               completed={currentStep === "mcp"}
             />
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            <ChevronRight className="text-muted-foreground h-4 w-4" />
             <Step
               text="Configure MCP"
-              icon={<ServerCog className="w-4 h-4" />}
+              icon={<ServerCog className="h-4 w-4" />}
               active={currentStep === "mcp"}
             />
           </Stack>
@@ -295,23 +295,23 @@ const LHS = ({
 
       {/* Content - absolutely positioned within left container */}
       <div
-        className="absolute inset-x-0 bottom-16 pointer-events-none"
+        className="pointer-events-none absolute inset-x-0 bottom-16"
         style={{
           top: isNotChoiceStep ? "160px" : "64px",
         }}
       >
         {/* Blur gradient at top (when scrolled) */}
         {showTopBlur && (
-          <div className="absolute inset-x-0 top-0 h-16 bg-linear-to-b from-card to-transparent pointer-events-none z-20" />
+          <div className="from-card pointer-events-none absolute inset-x-0 top-0 z-20 h-16 bg-linear-to-b to-transparent" />
         )}
 
         {/* Scrollable content */}
         <div
           ref={contentScrollRef}
           onScroll={handleScroll}
-          className="h-full overflow-y-auto px-16 flex items-center justify-center"
+          className="flex h-full items-center justify-center overflow-y-auto px-16"
         >
-          <Stack className="w-full max-w-3xl gap-8 pointer-events-auto z-10 my-auto">
+          <Stack className="pointer-events-auto z-10 my-auto w-full max-w-3xl gap-8">
             {currentStep === "initial-choice" && (
               <InitialChoiceStep
                 setCurrentStep={setCurrentStep}
@@ -356,7 +356,7 @@ const LHS = ({
 
         {/* Blur gradient at bottom (when not at bottom) */}
         {showBottomBlur && (
-          <div className="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-card to-transparent pointer-events-none z-20" />
+          <div className="from-card pointer-events-none absolute inset-x-0 bottom-0 z-20 h-16 bg-linear-to-t to-transparent" />
         )}
       </div>
 
@@ -365,11 +365,11 @@ const LHS = ({
         direction={"horizontal"}
         justify={"space-between"}
         align={"center"}
-        className="px-6 h-16 mt-auto"
+        className="mt-auto h-16 px-6"
       >
         {lowerLeft}
         <a href="https://x.com/speakeasydev" target="_blank">
-          <TwitterIcon className="w-4 h-4 fill-muted-foreground" />
+          <TwitterIcon className="fill-muted-foreground h-4 w-4" />
         </a>
       </Stack>
     </div>
@@ -488,7 +488,7 @@ const ChoiceStep = ({
           Choose how you want to create your tools
         </span>
       </Stack>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <ChoiceCard
           onClick={() => handleChoice("openapi")}
           icon={FileCode}
@@ -566,7 +566,7 @@ const CliSetupStep = ({
           <a
             href="https://www.speakeasy.com/docs/gram/getting-started/typescript"
             target="_blank"
-            className="text-primary underline cursor-pointer"
+            className="text-primary cursor-pointer underline"
           >
             docs
           </a>{" "}
@@ -644,7 +644,7 @@ const CliSetupStep = ({
         doesn't, click{" "}
         <span
           onClick={handleContinue}
-          className="text-primary underline cursor-pointer"
+          className="text-primary cursor-pointer underline"
         >
           here
         </span>{" "}
@@ -681,7 +681,7 @@ export const UploadedDocument = ({
     <Expandable defaultExpanded={defaultExpanded}>
       <Expandable.Trigger>
         <Stack direction={"horizontal"} gap={2} align={"center"}>
-          <FileJson2 className="w-4 h-4 text-muted-foreground/70" />
+          <FileJson2 className="text-muted-foreground/70 h-4 w-4" />
           <Type small mono>
             {file.name}
           </Type>
@@ -691,7 +691,7 @@ export const UploadedDocument = ({
             className="size-6 opacity-50 hover:opacity-100"
           >
             <Button.LeftIcon>
-              <X className="w-4 h-4" />
+              <X className="h-4 w-4" />
             </Button.LeftIcon>
             <Button.Text className="sr-only">Remove file</Button.Text>
           </Button>
@@ -699,7 +699,7 @@ export const UploadedDocument = ({
       </Expandable.Trigger>
       <Expandable.Content className="text-xs">
         {fileText?.length ? (
-          <pre className="whitespace-pre-wrap break-all">{fileText}</pre>
+          <pre className="break-all whitespace-pre-wrap">{fileText}</pre>
         ) : (
           <SkeletonParagraph lines={12} />
         )}
@@ -738,7 +738,7 @@ const UploadStep = ({
     <Stack gap={4}>
       <Stack gap={1}>
         <Stack direction={"horizontal"} gap={1} align={"center"}>
-          <CircleCheckIcon className="w-4 h-4 text-success-foreground" />
+          <CircleCheckIcon className="text-success-foreground h-4 w-4" />
           <Type small className="font-normal">
             OpenAPI Document
           </Type>
@@ -1077,25 +1077,25 @@ const AnimatedRightSide = ({
   }, [setCanvasZIndex, setShowAsciiStars]);
 
   return (
-    <div className="w-full h-full bg-background flex items-center justify-center relative overflow-hidden">
+    <div className="bg-background relative flex h-full w-full items-center justify-center overflow-hidden">
       {/* ASCII shader decorations in corners */}
       {/* Top right corner */}
-      <div className="absolute top-0 right-0 w-[300px] h-[300px] opacity-30 pointer-events-none -z-10">
-        <AsciiVideo videoSrc="/webgl/stars.mp4" className="w-full h-full" />
+      <div className="pointer-events-none absolute top-0 right-0 -z-10 h-[300px] w-[300px] opacity-30">
+        <AsciiVideo videoSrc="/webgl/stars.mp4" className="h-full w-full" />
       </div>
 
       {/* Bottom left corner - flipped both ways */}
-      <div className="absolute bottom-0 left-0 w-[300px] h-[300px] opacity-30 pointer-events-none -z-10">
+      <div className="pointer-events-none absolute bottom-0 left-0 -z-10 h-[300px] w-[300px] opacity-30">
         <AsciiVideo
           videoSrc="/webgl/stars.mp4"
           flipX={true}
           flipY={true}
-          className="w-full h-full"
+          className="h-full w-full"
         />
       </div>
 
       {/* Content layer */}
-      <div className="relative z-10 w-full h-full flex items-center justify-center">
+      <div className="relative z-10 flex h-full w-full items-center justify-center">
         <AnimatePresence mode="wait">
           {currentStep === "cli-setup" ? (
             <TerminalAnimationWithLogs key="terminal" />
@@ -1114,13 +1114,13 @@ const AnimatedRightSide = ({
 
 const DefaultLogo = () => (
   <motion.div
-    className="w-32 h-32 bg-card rounded-lg border flex items-center justify-center"
+    className="bg-card flex h-32 w-32 items-center justify-center rounded-lg border"
     exit={{
       y: [0, -20, -8],
       transition: { duration: 0.5, times: [0, 0.4, 1], ease: "easeInOut" },
     }}
   >
-    <motion.span className="font-thin text-foreground text-6xl select-none">
+    <motion.span className="text-foreground text-6xl font-thin select-none">
       <GramLogo className="w-18" variant="icon" />
     </motion.span>
   </motion.div>
@@ -1405,7 +1405,7 @@ export default gram;`;
   }
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center scale-[0.65] lg:scale-75 xl:scale-90">
+    <div className="relative flex h-full w-full scale-[0.65] items-center justify-center lg:scale-75 xl:scale-90">
       {/* Terminal Window - positioned bottom-left */}
       <motion.div
         drag
@@ -1423,18 +1423,18 @@ export default gram;`;
         }}
         onDragEnd={() => setIsDraggingWindow(false)}
         className={cn(
-          "absolute w-[550px] bg-card border rounded-lg overflow-hidden cursor-pointer",
+          "bg-card absolute w-[550px] cursor-pointer overflow-hidden rounded-lg border",
           focusedWindow === "terminal" ? "z-20 shadow-xl" : "z-10 shadow-sm",
         )}
         style={{ x: terminalX, y: terminalY }}
         onClick={() => handleWindowClick("terminal")}
       >
         {/* Terminal header */}
-        <div className="bg-muted border-b px-4 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing">
+        <div className="bg-muted flex cursor-grab items-center justify-between border-b px-4 py-2 active:cursor-grabbing">
           <div className="flex gap-1.5">
             <div
               className={cn(
-                "w-3 h-3 rounded-full",
+                "h-3 w-3 rounded-full",
                 focusedWindow === "terminal"
                   ? "bg-red-500/80"
                   : "bg-muted-foreground/30",
@@ -1442,7 +1442,7 @@ export default gram;`;
             />
             <div
               className={cn(
-                "w-3 h-3 rounded-full",
+                "h-3 w-3 rounded-full",
                 focusedWindow === "terminal"
                   ? "bg-yellow-500/80"
                   : "bg-muted-foreground/30",
@@ -1450,7 +1450,7 @@ export default gram;`;
             />
             <div
               className={cn(
-                "w-3 h-3 rounded-full",
+                "h-3 w-3 rounded-full",
                 focusedWindow === "terminal"
                   ? "bg-green-500/80"
                   : "bg-muted-foreground/30",
@@ -1469,7 +1469,7 @@ export default gram;`;
         {/* Terminal content */}
         <div
           ref={terminalContentRef}
-          className="p-4 font-mono text-sm space-y-1 h-[350px] overflow-y-auto"
+          className="h-[350px] space-y-1 overflow-y-auto p-4 font-mono text-sm"
         >
           {logs.map((log) => {
             const shouldShowLoading = log.loading;
@@ -1513,17 +1513,17 @@ export default gram;`;
         onDragEnd={() => setIsDraggingWindow(false)}
         style={{ x: editorX, y: editorY }}
         className={cn(
-          "absolute w-[550px] bg-card border rounded-lg overflow-hidden cursor-pointer",
+          "bg-card absolute w-[550px] cursor-pointer overflow-hidden rounded-lg border",
           focusedWindow === "editor" ? "z-30 shadow-xl" : "z-10 shadow-sm",
         )}
         onClick={() => handleWindowClick("editor")}
       >
         {/* Editor header */}
-        <div className="bg-muted border-b px-4 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing">
+        <div className="bg-muted flex cursor-grab items-center justify-between border-b px-4 py-2 active:cursor-grabbing">
           <div className="flex gap-1.5">
             <div
               className={cn(
-                "w-3 h-3 rounded-full",
+                "h-3 w-3 rounded-full",
                 focusedWindow === "editor"
                   ? "bg-red-500/80"
                   : "bg-muted-foreground/30",
@@ -1531,7 +1531,7 @@ export default gram;`;
             />
             <div
               className={cn(
-                "w-3 h-3 rounded-full",
+                "h-3 w-3 rounded-full",
                 focusedWindow === "editor"
                   ? "bg-yellow-500/80"
                   : "bg-muted-foreground/30",
@@ -1539,7 +1539,7 @@ export default gram;`;
             />
             <div
               className={cn(
-                "w-3 h-3 rounded-full",
+                "h-3 w-3 rounded-full",
                 focusedWindow === "editor"
                   ? "bg-green-500/80"
                   : "bg-muted-foreground/30",
@@ -1559,7 +1559,7 @@ export default gram;`;
         <CodeBlock
           language="typescript"
           copyable={false}
-          className="!p-0 !rounded-none !border-none"
+          className="!rounded-none !border-none !p-0"
           preClassName="!bg-transparent h-[350px] overflow-y-auto p-4 whitespace-pre-wrap"
         >
           {editorCode}
@@ -1574,7 +1574,7 @@ export default gram;`;
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             transition={{ duration: 0.2 }}
-            className="absolute bottom-8 right-8 z-50"
+            className="absolute right-8 bottom-8 z-50"
           >
             <Button
               variant="secondary"
@@ -1582,7 +1582,7 @@ export default gram;`;
               onClick={handleReset}
               className="gap-2"
             >
-              <RefreshCcw className="w-4 h-4" />
+              <RefreshCcw className="h-4 w-4" />
               Reset
             </Button>
           </motion.div>
@@ -1611,7 +1611,7 @@ const ToolsetAnimation = ({
         }}
         className="w-70 pl-1"
       >
-        <h3 className="text-lg font-medium text-foreground mb-1">
+        <h3 className="text-foreground mb-1 text-lg font-medium">
           {toolsetName || "my-toolset"}
         </h3>
       </motion.div>
@@ -1619,12 +1619,12 @@ const ToolsetAnimation = ({
       {/* Main logo that morphs from the default logo */}
       <motion.div
         layoutId="main-container"
-        className="w-70 h-12 bg-card rounded-lg border  flex items-center px-4"
+        className="bg-card flex h-12 w-70 items-center  rounded-lg border px-4"
         transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
       >
         <motion.div
           layoutId="main-icon"
-          className="w-6 h-6 bg-background rounded flex items-center justify-center flex-shrink-0"
+          className="bg-background flex h-6 w-6 flex-shrink-0 items-center justify-center rounded"
           transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
         >
           <motion.div
@@ -1637,7 +1637,7 @@ const ToolsetAnimation = ({
               bounce: 0.3,
             }}
           >
-            <Wrench className="w-3 h-3 text-muted-foreground" />
+            <Wrench className="text-muted-foreground h-3 w-3" />
           </motion.div>
         </motion.div>
         <motion.div
@@ -1651,7 +1651,7 @@ const ToolsetAnimation = ({
           }}
           className="ml-3 flex-1"
         >
-          <div className="h-3 bg-muted rounded w-full" />
+          <div className="bg-muted h-3 w-full rounded" />
         </motion.div>
       </motion.div>
 
@@ -1666,12 +1666,12 @@ const ToolsetAnimation = ({
             duration: 0.5,
             bounce: 0.2,
           }}
-          className="w-70 h-12 bg-card rounded-lg border flex items-center px-4"
+          className="bg-card flex h-12 w-70 items-center rounded-lg border px-4"
         >
-          <div className="w-6 h-6 bg-background rounded flex items-center justify-center">
-            <Wrench className="w-3 h-3 text-muted-foreground" />
+          <div className="bg-background flex h-6 w-6 items-center justify-center rounded">
+            <Wrench className="text-muted-foreground h-3 w-3" />
           </div>
-          <div className="ml-3 h-3 bg-muted rounded w-full" />
+          <div className="bg-muted ml-3 h-3 w-full rounded" />
         </motion.div>
 
         <motion.div
@@ -1683,12 +1683,12 @@ const ToolsetAnimation = ({
             duration: 0.5,
             bounce: 0.2,
           }}
-          className="w-70 h-12 bg-card rounded-lg border  flex items-center px-4"
+          className="bg-card flex h-12 w-70 items-center  rounded-lg border px-4"
         >
-          <div className="w-6 h-6 bg-background rounded flex items-center justify-center">
-            <Wrench className="w-3 h-3 text-muted-foreground" />
+          <div className="bg-background flex h-6 w-6 items-center justify-center rounded">
+            <Wrench className="text-muted-foreground h-3 w-3" />
           </div>
-          <div className="ml-3 h-3 bg-muted rounded w-full" />
+          <div className="bg-muted ml-3 h-3 w-full rounded" />
         </motion.div>
       </AnimatePresence>
     </div>
@@ -1707,12 +1707,12 @@ const McpAnimation = ({ mcpSlug }: { mcpSlug: string | undefined }) => {
         {/* First tool transforms into server rack unit */}
         <motion.div
           layoutId="main-container"
-          className="w-48 h-10 bg-card rounded-lg border  flex items-center px-4"
+          className="bg-card flex h-10 w-48 items-center  rounded-lg border px-4"
           transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
         >
           <motion.div
             layoutId="main-icon"
-            className="flex items-center justify-center flex-shrink-0"
+            className="flex flex-shrink-0 items-center justify-center"
             transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
           >
             <motion.div
@@ -1724,7 +1724,7 @@ const McpAnimation = ({ mcpSlug }: { mcpSlug: string | undefined }) => {
                 duration: 0.4,
                 bounce: 0.3,
               }}
-              className="w-3 h-3 bg-muted-foreground rounded-full"
+              className="bg-muted-foreground h-3 w-3 rounded-full"
             />
           </motion.div>
         </motion.div>
@@ -1739,9 +1739,9 @@ const McpAnimation = ({ mcpSlug }: { mcpSlug: string | undefined }) => {
             duration: 0.5,
             bounce: 0.2,
           }}
-          className="w-48 h-10 bg-card rounded-lg border  flex items-center px-4"
+          className="bg-card flex h-10 w-48 items-center  rounded-lg border px-4"
         >
-          <div className="w-3 h-3 bg-muted-foreground rounded-full" />
+          <div className="bg-muted-foreground h-3 w-3 rounded-full" />
         </motion.div>
       </div>
 
@@ -1757,8 +1757,8 @@ const McpAnimation = ({ mcpSlug }: { mcpSlug: string | undefined }) => {
         }}
         className="text-center"
       >
-        <div className="bg-background border rounded-md px-3 py-2">
-          <p className="text-sm font-mono text-muted-foreground">{slug}</p>
+        <div className="bg-background rounded-md border px-3 py-2">
+          <p className="text-muted-foreground font-mono text-sm">{slug}</p>
         </div>
       </motion.div>
     </div>

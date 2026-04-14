@@ -151,7 +151,7 @@ export function ManageToolsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="min-w-3xl max-h-[80vh] flex flex-col">
+      <Dialog.Content className="flex max-h-[80vh] min-w-3xl flex-col">
         <Dialog.Header>
           <Dialog.Title>
             {mode === "add" ? "Add tools" : "Manage tools"}
@@ -164,7 +164,7 @@ export function ManageToolsDialog({
           </Dialog.Description>
         </Dialog.Header>
 
-        <div className="flex flex-col gap-4 flex-1 min-h-0">
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
           {/* Mode toggle + Filters */}
           <div className="flex gap-2">
             <Select
@@ -205,11 +205,11 @@ export function ManageToolsDialog({
           {/* Tool list with selection mode */}
           <div className="flex-1 overflow-auto">
             {isLoading ? (
-              <div className="text-center py-8 text-neutral-500">
+              <div className="py-8 text-center text-neutral-500">
                 Loading tools...
               </div>
             ) : filteredTools.length === 0 ? (
-              <div className="text-center py-8 text-neutral-500">
+              <div className="py-8 text-center text-neutral-500">
                 {noResultsMessage}
               </div>
             ) : (

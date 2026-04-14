@@ -19,7 +19,7 @@ export function PromptCard({
   return (
     <div
       className={cn(
-        "relative rounded-full px-6 py-2 shadow-sm bg-white w-64 flex-shrink-0 border border-[#D1D1D1]",
+        "relative w-64 flex-shrink-0 rounded-full border border-[#D1D1D1] bg-white px-6 py-2 shadow-sm",
         "transition-all duration-300 ease-in-out",
         className,
       )}
@@ -27,9 +27,9 @@ export function PromptCard({
       {...props}
     >
       {/* Content */}
-      <div className="relative z-10 flex items-center gap-2 text-sm md:text-base truncate">
+      <div className="relative z-10 flex items-center gap-2 truncate text-sm md:text-base">
         <span className="font-semibold whitespace-nowrap">@{service}</span>
-        <span className="text-gray-700 truncate">{prompt}</span>
+        <span className="truncate text-gray-700">{prompt}</span>
       </div>
     </div>
   );

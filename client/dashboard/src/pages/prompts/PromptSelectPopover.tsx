@@ -42,7 +42,7 @@ export function PromptSelectPopover({
                 <CommandItem
                   key={prompt.name}
                   value={prompt.name}
-                  className="cursor-pointer min-w-fit"
+                  className="min-w-fit cursor-pointer"
                   onSelect={() => {
                     onSelect(prompt);
                     setOpen(false);

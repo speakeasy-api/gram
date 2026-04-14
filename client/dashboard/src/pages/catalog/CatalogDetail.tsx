@@ -119,7 +119,7 @@ export default function CatalogDetail() {
           />
         </Page.Header>
         <Page.Body>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <Skeleton className="h-[400px] rounded-xl" />
             </div>
@@ -145,7 +145,7 @@ export default function CatalogDetail() {
         <Page.Body>
           <Card>
             <Card.Content className="py-12 text-center">
-              <ServerIcon className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <ServerIcon className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
               <Type variant="subheading">Server not found</Type>
               <Type muted className="mt-2">
                 The requested MCP server could not be found in the catalog.
@@ -175,23 +175,23 @@ export default function CatalogDetail() {
         />
       </Page.Header>
       <Page.Body>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
           {/* Left Column - Server Details */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="space-y-6 lg:col-span-2">
             {/* Header */}
             <div className="flex items-start gap-6">
-              <div className="w-24 h-24 rounded-xl bg-primary/5 dark:bg-neutral-800 flex items-center justify-center shrink-0">
+              <div className="bg-primary/5 flex h-24 w-24 shrink-0 items-center justify-center rounded-xl dark:bg-neutral-800">
                 {server.iconUrl ? (
                   <img
                     src={server.iconUrl}
                     alt={displayName}
-                    className="w-16 h-16 rounded-lg object-contain"
+                    className="h-16 w-16 rounded-lg object-contain"
                   />
                 ) : (
-                  <ServerIcon className="w-12 h-12 text-muted-foreground" />
+                  <ServerIcon className="text-muted-foreground h-12 w-12" />
                 )}
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0 flex-1">
                 <Stack
                   direction="horizontal"
                   gap={3}
@@ -230,19 +230,19 @@ export default function CatalogDetail() {
                     >
                       {removeServerMutation.isPending ? (
                         <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="h-4 w-4 animate-spin" />
                           <Button.Text>Removing...</Button.Text>
                         </>
                       ) : (
                         <>
-                          <Minus className="w-4 h-4" />
+                          <Minus className="h-4 w-4" />
                           <Button.Text>Remove</Button.Text>
                         </>
                       )}
                     </Button>
                   ) : (
                     <Button size="md" onClick={() => setShowAddDialog(true)}>
-                      <Plus className="w-4 h-4" />
+                      <Plus className="h-4 w-4" />
                       <Button.Text>Add</Button.Text>
                     </Button>
                   )}
@@ -256,7 +256,7 @@ export default function CatalogDetail() {
                 <Card.Title>About</Card.Title>
               </Card.Header>
               <Card.Content>
-                <Type className="whitespace-pre-wrap leading-relaxed">
+                <Type className="leading-relaxed whitespace-pre-wrap">
                   {server.description || "No description available."}
                 </Type>
               </Card.Content>
@@ -368,12 +368,12 @@ export default function CatalogDetail() {
                         }
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-primary hover:underline"
+                        className="text-primary flex items-center gap-1 hover:underline"
                       >
-                        <Type className="text-right truncate max-w-[150px]">
+                        <Type className="max-w-[150px] truncate text-right">
                           {versionMeta.source}
                         </Type>
-                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        <ExternalLink className="h-3 w-3 shrink-0" />
                       </a>
                     </div>
                   )}
@@ -394,11 +394,11 @@ export default function CatalogDetail() {
                     </Type>
                     <Type className="text-right">{server.registryId}</Type>
                   </div>
-                  <div className="flex justify-between items-center gap-4">
+                  <div className="flex items-center justify-between gap-4">
                     <Type small muted>
                       Specifier
                     </Type>
-                    <Type className="font-mono text-xs text-right break-all">
+                    <Type className="text-right font-mono text-xs break-all">
                       {server.registrySpecifier}
                     </Type>
                   </div>
@@ -452,10 +452,10 @@ function ToolCard({ tool }: { tool: Tool }) {
     tool.description && tool.description.length > firstSentence.length;
 
   return (
-    <div className="flex flex-col gap-1 p-3 rounded-lg bg-muted/50 overflow-hidden">
+    <div className="bg-muted/50 flex flex-col gap-1 overflow-hidden rounded-lg p-3">
       <button
         onClick={() => hasMoreContent && setIsExpanded(!isExpanded)}
-        className={`flex flex-col gap-1 text-left w-full ${hasMoreContent ? "cursor-pointer" : "cursor-default"}`}
+        className={`flex w-full flex-col gap-1 text-left ${hasMoreContent ? "cursor-pointer" : "cursor-default"}`}
       >
         <Stack
           direction="horizontal"
@@ -496,7 +496,7 @@ function ToolCard({ tool }: { tool: Tool }) {
               animate={{ rotate: isExpanded ? 180 : 0 }}
               transition={{ duration: 0.2 }}
             >
-              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              <ChevronDown className="text-muted-foreground h-4 w-4" />
             </motion.div>
           )}
         </Stack>
@@ -525,10 +525,10 @@ function ToolCard({ tool }: { tool: Tool }) {
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="mt-2 pt-2 border-t">
+            <div className="mt-2 border-t pt-2">
               <Type
                 small
-                className="whitespace-pre-wrap prose prose-sm max-w-none"
+                className="prose prose-sm max-w-none whitespace-pre-wrap"
               >
                 {tool.description}
               </Type>
@@ -550,7 +550,7 @@ function ToolsSection({ tools }: { tools: Tool[] }) {
       <Card.Header>
         <Card.Title>
           <Stack direction="horizontal" gap={2} align="center">
-            <Wrench className="w-4 h-4" />
+            <Wrench className="h-4 w-4" />
             Available Tools ({tools.length})
           </Stack>
         </Card.Title>
@@ -564,16 +564,16 @@ function ToolsSection({ tools }: { tools: Tool[] }) {
         {hasMore && (
           <button
             onClick={() => setShowAll(!showAll)}
-            className="mt-4 w-full flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="text-muted-foreground hover:text-foreground mt-4 flex w-full items-center justify-center gap-1 text-sm transition-colors"
           >
             {showAll ? (
               <>
-                Show less <ChevronUp className="w-4 h-4" />
+                Show less <ChevronUp className="h-4 w-4" />
               </>
             ) : (
               <>
                 Show {tools.length - INITIAL_TOOLS_SHOWN} more tools{" "}
-                <ChevronDown className="w-4 h-4" />
+                <ChevronDown className="h-4 w-4" />
               </>
             )}
           </button>

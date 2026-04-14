@@ -7,11 +7,27 @@ import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
+import { RequireScope } from "@/components/require-scope";
 import { ArrowRight, Plus } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 export default function OrgHome() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Title>Home</Page.Header.Title>
+      </Page.Header>
+      <Page.Body>
+        <RequireScope scope={["build:read", "org:admin"]} level="page">
+          <OrgHomeInner />
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
+}
+
+export function OrgHomeInner() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
   const client = useSdkClient();
@@ -32,44 +48,45 @@ export default function OrgHome() {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Title>Home</Page.Header.Title>
-      </Page.Header>
-      <Page.Body>
-        <Heading variant="h4" className="mb-1">
-          Projects
-        </Heading>
-        <Type small muted className="mb-4">
-          Projects organize your MCP servers, tools, deployments, and
-          integrations into separate workspaces. Use them to isolate different
-          products or environments within your organization.
-        </Type>
-        <SearchBar
-          value={search}
-          onChange={setSearch}
-          placeholder="Search projects..."
-          className="mb-4"
-        />
-        {projects.length === 0 && search ? (
-          <div className="space-y-8 pt-6">
-            <Type muted className="text-center">
-              No projects matching &ldquo;{search}&rdquo;
-            </Type>
-            <div className="flex justify-center">
+    <>
+      <Heading variant="h4" className="mb-1">
+        Projects
+      </Heading>
+      <Type small muted className="mb-4">
+        Projects organize your MCP servers, tools, deployments, and integrations
+        into separate workspaces. Use them to isolate different products or
+        environments within your organization.
+      </Type>
+      <SearchBar
+        value={search}
+        onChange={setSearch}
+        placeholder="Search projects..."
+        className="mb-4"
+      />
+      {projects.length === 0 && search ? (
+        <div className="space-y-8 pt-6">
+          <Type muted className="text-center">
+            No projects matching &ldquo;{search}&rdquo;
+          </Type>
+          <div className="flex justify-center">
+            <RequireScope
+              scope="org:admin"
+              level="component"
+              className="w-full"
+            >
               <button
                 type="button"
                 onClick={() => {
                   setNewProjectName(search);
                   setCreateDialogOpen(true);
                 }}
-                className="text-left hover:no-underline w-full max-w-md"
+                className="w-full max-w-md text-left hover:no-underline"
               >
                 <DotCard
                   icon={
-                    <Plus className="h-10 w-10 text-muted-foreground group-hover:text-primary transition-colors" />
+                    <Plus className="text-muted-foreground group-hover:text-primary h-10 w-10 transition-colors" />
                   }
-                  className="border-dashed !border-foreground/10 hover:!border-foreground/20"
+                  className="!border-foreground/10 hover:!border-foreground/20 border-dashed"
                 >
                   <Type
                     variant="subheading"
@@ -82,62 +99,64 @@ export default function OrgHome() {
                     Create a new project with this name
                   </Type>
 
-                  <div className="flex items-center justify-end mt-auto pt-2">
-                    <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
+                  <div className="mt-auto flex items-center justify-end pt-2">
+                    <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
                       <span>Create</span>
-                      <Plus className="w-3.5 h-3.5" />
+                      <Plus className="h-3.5 w-3.5" />
                     </div>
                   </div>
                 </DotCard>
               </button>
-            </div>
+            </RequireScope>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            {projects.map((project) => (
-              <Link
-                key={project.id}
-                to={`/${orgSlug}/projects/${project.slug}`}
-                className="hover:no-underline"
-              >
-                <DotCard
-                  icon={
-                    <ProjectAvatar
-                      project={project}
-                      className="h-10 w-10 rounded-md"
-                    />
-                  }
-                >
-                  <Type
-                    variant="subheading"
-                    as="div"
-                    className="truncate text-md group-hover:text-primary transition-colors"
-                  >
-                    {project.name}
-                  </Type>
-                  <Type small muted className="truncate mb-3">
-                    {project.slug}
-                  </Type>
-
-                  <div className="flex items-center justify-end mt-auto pt-2">
-                    <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
-                      <span>Open</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                </DotCard>
-              </Link>
-            ))}
-            <button
-              type="button"
-              onClick={() => setCreateDialogOpen(true)}
-              className="text-left hover:no-underline"
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {projects.map((project) => (
+            <Link
+              key={project.id}
+              to={`/${orgSlug}/projects/${project.slug}`}
+              className="hover:no-underline"
             >
               <DotCard
                 icon={
-                  <Plus className="h-10 w-10 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <ProjectAvatar
+                    project={project}
+                    className="h-10 w-10 rounded-md"
+                  />
                 }
-                className="border-dashed !border-foreground/10 hover:!border-foreground/20"
+              >
+                <Type
+                  variant="subheading"
+                  as="div"
+                  className="text-md group-hover:text-primary truncate transition-colors"
+                >
+                  {project.name}
+                </Type>
+                <Type small muted className="mb-3 truncate">
+                  {project.slug}
+                </Type>
+
+                <div className="mt-auto flex items-center justify-end pt-2">
+                  <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
+                    <span>Open</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </div>
+                </div>
+              </DotCard>
+            </Link>
+          ))}
+          <RequireScope scope="org:admin" level="component" className="w-full">
+            <button
+              type="button"
+              onClick={() => setCreateDialogOpen(true)}
+              className="w-full text-left hover:no-underline"
+            >
+              <DotCard
+                icon={
+                  <Plus className="text-muted-foreground group-hover:text-primary h-10 w-10 transition-colors" />
+                }
+                className="!border-foreground/10 hover:!border-foreground/20 border-dashed"
               >
                 <Type
                   variant="subheading"
@@ -150,44 +169,44 @@ export default function OrgHome() {
                   Create a new project for your organization
                 </Type>
 
-                <div className="flex items-center justify-end mt-auto pt-2">
-                  <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
+                <div className="mt-auto flex items-center justify-end pt-2">
+                  <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
                     <span>Create</span>
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="h-3.5 w-3.5" />
                   </div>
                 </div>
               </DotCard>
             </button>
-          </div>
-        )}
-        {createDialogOpen && (
-          <InputDialog
-            open={createDialogOpen}
-            onOpenChange={setCreateDialogOpen}
-            title="Create New Project"
-            description="Create a new project to organize your MCP servers, tools, and integrations."
-            submitButtonText="Create Project"
-            onSubmit={async () => {
-              const result = await client.projects.create({
-                createProjectRequestBody: {
-                  name: newProjectName,
-                  organizationId: organization.id,
-                },
-              });
-              setNewProjectName("");
-              navigate(`/${orgSlug}/projects/${result.project.slug}`);
-            }}
-            inputs={[
-              {
-                label: "Name",
-                value: newProjectName,
-                onChange: setNewProjectName,
-                placeholder: "My Project",
+          </RequireScope>
+        </div>
+      )}
+      {createDialogOpen && (
+        <InputDialog
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          title="Create New Project"
+          description="Create a new project to organize your MCP servers, tools, and integrations."
+          submitButtonText="Create Project"
+          onSubmit={async () => {
+            const result = await client.projects.create({
+              createProjectRequestBody: {
+                name: newProjectName,
+                organizationId: organization.id,
               },
-            ]}
-          />
-        )}
-      </Page.Body>
-    </Page>
+            });
+            setNewProjectName("");
+            navigate(`/${orgSlug}/projects/${result.project.slug}`);
+          }}
+          inputs={[
+            {
+              label: "Name",
+              value: newProjectName,
+              onChange: setNewProjectName,
+              placeholder: "My Project",
+            },
+          ]}
+        />
+      )}
+    </>
   );
 }

@@ -13,12 +13,12 @@ export function ExternalMCPServerCard({ toolset }: ExternalMCPServerCardProps) {
   const routes = useRoutes();
 
   return (
-    <div className="rounded-lg border bg-card p-6">
-      <Type as="h2" className="text-lg font-semibold mb-4">
+    <div className="bg-card rounded-lg border p-6">
+      <Type as="h2" className="mb-4 text-lg font-semibold">
         MCP Server
       </Type>
 
-      <Type className="text-sm text-muted-foreground mb-4">
+      <Type className="text-muted-foreground mb-4 text-sm">
         This external MCP source is exposed through a single MCP server. Changes
         to the source will be reflected in this server.
       </Type>
@@ -26,24 +26,24 @@ export function ExternalMCPServerCard({ toolset }: ExternalMCPServerCardProps) {
       {/* MCP Server Card - Clickable */}
       <routes.mcp.details.Link
         params={[toolset.slug]}
-        className="block rounded-md border  hover:bg-surface-secondary transition-colors cursor-pointer hover:no-underline"
+        className="hover:bg-surface-secondary block cursor-pointer  rounded-md border transition-colors hover:no-underline"
       >
         <div className="p-4">
           {/* Header Section */}
-          <div className="flex justify-between gap-3 items-center">
+          <div className="flex items-center justify-between gap-3">
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <Type className="font-semibold text-base">{toolset.name}</Type>
+              <div className="mb-1 flex items-center gap-2">
+                <Type className="text-base font-semibold">{toolset.name}</Type>
                 <McpEnabledBadge enabled={!!toolset.mcpEnabled} />
                 <McpPublicBadge isPublic={!!toolset.mcpIsPublic} />
               </div>
               {toolset.description && (
-                <Type className="text-sm text-muted-foreground">
+                <Type className="text-muted-foreground text-sm">
                   {toolset.description}
                 </Type>
               )}
             </div>
-            <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+            <ChevronRight className="text-muted-foreground h-5 w-5 shrink-0" />
           </div>
         </div>
       </routes.mcp.details.Link>
@@ -53,12 +53,12 @@ export function ExternalMCPServerCard({ toolset }: ExternalMCPServerCardProps) {
 
 export function ExternalMCPServerCardLoading() {
   return (
-    <div className="rounded-lg border bg-card p-6">
-      <Type as="h2" className="text-lg font-semibold mb-4">
+    <div className="bg-card rounded-lg border p-6">
+      <Type as="h2" className="mb-4 text-lg font-semibold">
         MCP Server
       </Type>
-      <div className="text-center py-8 text-muted-foreground">
-        <Server className="h-12 w-12 mx-auto mb-3 opacity-50 animate-pulse" />
+      <div className="text-muted-foreground py-8 text-center">
+        <Server className="mx-auto mb-3 h-12 w-12 animate-pulse opacity-50" />
         <Type>Loading MCP server information...</Type>
       </div>
     </div>

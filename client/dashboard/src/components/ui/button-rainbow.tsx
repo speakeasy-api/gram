@@ -37,12 +37,12 @@ export const ButtonRainbow = ({
         disabled={inProgress}
         className={cn(
           "relative inline-flex items-center justify-center gap-2 px-4 py-2",
-          "font-mono text-sm uppercase text-foreground",
-          "rounded-md cursor-pointer",
+          "text-foreground font-mono text-sm uppercase",
+          "cursor-pointer rounded-md",
           "transition-all outline-none",
-          "w-full rounded-[7px] bg-background border-0",
+          "bg-background w-full rounded-[7px] border-0",
           "hover:bg-background/95",
-          "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-neutral-500",
+          "focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2",
         )}
       >
         {children}

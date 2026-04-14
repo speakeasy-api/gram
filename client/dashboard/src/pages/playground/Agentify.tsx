@@ -292,13 +292,13 @@ export const AgentifyButton = ({
           </Dialog.Header>
           <Stack gap={4}>
             <Stack gap={1}>
-              <Heading variant="h5" className="normal-case font-medium">
+              <Heading variant="h5" className="font-medium normal-case">
                 What language should the agent be written in?
               </Heading>
               <SdkLanguageDropdown lang={lang} setLang={setLang} />
             </Stack>
             <Stack gap={1}>
-              <Heading variant="h5" className="normal-case font-medium">
+              <Heading variant="h5" className="font-medium normal-case">
                 {prompt
                   ? "What should the agent do?"
                   : "Distilling chat history..."}

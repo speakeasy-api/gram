@@ -1,0 +1,592 @@
+package triggers
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"path"
+	"reflect"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/ext"
+	gjsonschema "github.com/google/jsonschema-go/jsonschema"
+	"github.com/google/uuid"
+	"github.com/robfig/cron"
+	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
+
+	gramjsonschema "github.com/speakeasy-api/gram/server/internal/jsonschema"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
+)
+
+type Config interface {
+	Filter(event any) (bool, error)
+}
+
+type Kind string
+
+const (
+	KindWebhook  Kind = "webhook"
+	KindSchedule Kind = "schedule"
+)
+
+type EnvRequirement struct {
+	Name        string
+	Description string
+	Required    bool
+}
+
+type Definition struct {
+	Slug                 string
+	Title                string
+	Description          string
+	Kind                 Kind
+	ConfigSchema         []byte
+	CompiledConfigSchema *jsonschema.Schema
+	EnvRequirements      []EnvRequirement
+	EventType            reflect.Type
+	DecodeConfig         func(raw map[string]any) (Config, error)
+	AuthenticateWebhook  func(body []byte, headers http.Header, env map[string]string, config Config) error
+	HandleWebhook        func(body []byte, headers http.Header, config Config) (*WebhookIngressResult, error)
+	BuildScheduledEvent  func(instance triggerrepo.TriggerInstance, config Config, firedAt time.Time) (*EventEnvelope, error)
+	ExtractSchedule      func(config Config) (string, error)
+}
+
+type WebhookIngressResult struct {
+	Response *WebhookResponse
+	Event    *EventEnvelope
+	Task     *Task
+}
+
+type WebhookResponse struct {
+	Status      int
+	ContentType string
+	Body        []byte
+}
+
+type EventEnvelope struct {
+	EventID           string
+	CorrelationID     string
+	TriggerInstanceID string
+	DefinitionSlug    string
+	Event             any
+	RawPayload        []byte
+	ReceivedAt        time.Time
+}
+
+type Task struct {
+	TriggerInstanceID string
+	DefinitionSlug    string
+	TargetKind        string
+	TargetRef         string
+	TargetDisplay     string
+	EventID           string
+	CorrelationID     string
+	RawPayload        []byte
+}
+
+type slackTriggerConfig struct {
+	FilterExpr string   `json:"filter,omitempty"`
+	EventTypes []string `json:"event_types,omitempty"`
+
+	// compiledFilter is set during DecodeConfig when FilterExpr is non-empty.
+	compiledFilter cel.Program
+}
+
+func (c slackTriggerConfig) Filter(event any) (bool, error) {
+	slackEvent, ok := event.(slackTriggerEvent)
+	if !ok {
+		return false, fmt.Errorf("expected slackTriggerEvent, got %T", event)
+	}
+
+	// Event-type matching.
+	allowed := c.EventTypes
+	if len(allowed) == 0 {
+		allowed = supportedSlackEventTypes
+	}
+	if slackEvent.EventType == "" {
+		return false, nil
+	}
+	if !slices.Contains(allowed, slackEvent.EventType) {
+		return false, nil
+	}
+
+	// CEL filter evaluation.
+	if c.compiledFilter == nil {
+		return true, nil
+	}
+	out, _, err := c.compiledFilter.Eval(map[string]any{"event": event})
+	if err != nil {
+		return false, fmt.Errorf("evaluate filter: %w", err)
+	}
+	val, ok := out.Value().(bool)
+	if !ok {
+		return false, fmt.Errorf("filter result was %T, want bool", out.Value())
+	}
+	return val, nil
+}
+
+type cronTriggerConfig struct {
+	Schedule string `json:"schedule"`
+}
+
+func (c cronTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
+
+type slackEventRequest struct {
+	Type      string                `json:"type"`
+	Challenge string                `json:"challenge,omitempty"`
+	TeamID    string                `json:"team_id,omitempty"`
+	EventID   string                `json:"event_id,omitempty"`
+	EventTime int64                 `json:"event_time,omitempty"`
+	Event     slackEventRequestBody `json:"event"`
+}
+
+type slackEventRequestBody struct {
+	Type     string `json:"type"`
+	Subtype  string `json:"subtype,omitempty"`
+	Text     string `json:"text,omitempty"`
+	User     string `json:"user,omitempty"`
+	Channel  string `json:"channel,omitempty"`
+	ThreadTs string `json:"thread_ts,omitempty"`
+	Ts       string `json:"ts,omitempty"`
+}
+
+type slackTriggerEvent struct {
+	EnvelopeType string `json:"envelope_type" cel:"envelope_type"`
+	EventType    string `json:"event_type" cel:"event_type"`
+	Subtype      string `json:"subtype,omitempty" cel:"subtype"`
+	TeamID       string `json:"team_id,omitempty" cel:"team_id"`
+	ChannelID    string `json:"channel_id,omitempty" cel:"channel_id"`
+	ThreadID     string `json:"thread_id,omitempty" cel:"thread_id"`
+	UserID       string `json:"user_id,omitempty" cel:"user_id"`
+	Text         string `json:"text,omitempty" cel:"text"`
+	Timestamp    string `json:"timestamp,omitempty" cel:"timestamp"`
+}
+
+type cronTriggerEvent struct {
+	Schedule          string `json:"schedule" cel:"schedule"`
+	FiredAt           string `json:"fired_at" cel:"fired_at"`
+	TriggerInstanceID string `json:"trigger_instance_id" cel:"trigger_instance_id"`
+}
+
+var supportedSlackEventTypes = []string{
+	"app_home_opened",
+	"app_mention",
+	"app_uninstalled",
+	"channel_archive",
+	"channel_created",
+	"channel_deleted",
+	"channel_id_changed",
+	"channel_left",
+	"channel_rename",
+	"channel_unarchive",
+	"emoji_changed",
+	"file_change",
+	"file_created",
+	"file_deleted",
+	"file_public",
+	"file_shared",
+	"file_unshared",
+	"group_archive",
+	"group_close",
+	"group_deleted",
+	"group_left",
+	"group_open",
+	"group_rename",
+	"group_unarchive",
+	"im_close",
+	"im_created",
+	"im_open",
+	"link_shared",
+	"member_joined_channel",
+	"member_left_channel",
+	"message",
+	"pin_added",
+	"pin_removed",
+	"reaction_added",
+	"reaction_removed",
+	"team_join",
+	"tokens_revoked",
+	"user_change",
+}
+
+var registry = map[string]Definition{
+	"slack": newSlackDefinition(),
+	"cron":  newCronDefinition(),
+}
+
+func List() []Definition {
+	definitions := make([]Definition, 0, len(registry))
+	for _, definition := range registry {
+		definitions = append(definitions, definition)
+	}
+	slices.SortFunc(definitions, func(a, b Definition) int {
+		return strings.Compare(a.Slug, b.Slug)
+	})
+	return definitions
+}
+
+func GetDefinition(slug string) (Definition, bool) {
+	definition, ok := registry[slug]
+	return definition, ok
+}
+
+func compileCELFilter(eventType reflect.Type, expression string) (cel.Program, error) {
+	if strings.TrimSpace(expression) == "" {
+		return nil, nil
+	}
+
+	env, err := newCELEnv(eventType)
+	if err != nil {
+		return nil, fmt.Errorf("create CEL env: %w", err)
+	}
+
+	ast, issues := env.Compile(expression)
+	if issues != nil && issues.Err() != nil {
+		return nil, fmt.Errorf("compile filter: %w", issues.Err())
+	}
+	if ast.OutputType() != cel.BoolType {
+		return nil, fmt.Errorf("filter must evaluate to bool")
+	}
+
+	prog, err := env.Program(ast)
+	if err != nil {
+		return nil, fmt.Errorf("build filter program: %w", err)
+	}
+
+	return prog, nil
+}
+
+func newSlackDefinition() Definition {
+	schema := buildInputSchema[slackTriggerConfig](
+		withArrayItemsEnum("event_types", toAnySlice(supportedSlackEventTypes)...),
+	)
+	compiled := mustCompileSchema(schema)
+	return Definition{
+		Slug:                 "slack",
+		Title:                "Slack",
+		Description:          "Receive Slack Events API callbacks and map them to Gram trigger events.",
+		Kind:                 KindWebhook,
+		ConfigSchema:         schema,
+		CompiledConfigSchema: compiled,
+		EnvRequirements: []EnvRequirement{
+			{
+				Name:        "SLACK_SIGNING_SECRET",
+				Description: "Slack signing secret used to verify webhook signatures.",
+				Required:    true,
+			},
+		},
+		EventType: reflect.TypeFor[slackTriggerEvent](),
+		DecodeConfig: func(raw map[string]any) (Config, error) {
+			cfg, err := decodeConfig[slackTriggerConfig](raw, compiled)
+			if err != nil {
+				return nil, err
+			}
+			for _, eventType := range cfg.EventTypes {
+				if !slices.Contains(supportedSlackEventTypes, eventType) {
+					return nil, fmt.Errorf("unsupported slack event type %q", eventType)
+				}
+			}
+			prog, err := compileCELFilter(reflect.TypeFor[slackTriggerEvent](), cfg.FilterExpr)
+			if err != nil {
+				return nil, err
+			}
+			cfg.compiledFilter = prog
+			return cfg, nil
+		},
+		AuthenticateWebhook: func(body []byte, headers http.Header, env map[string]string, config Config) error {
+			ciEnv := toolconfig.CIEnvFrom(env)
+			signingSecret := ciEnv.Get("SLACK_SIGNING_SECRET")
+			if signingSecret == "" {
+				return fmt.Errorf("missing SLACK_SIGNING_SECRET")
+			}
+			if err := validateSlackSignature(body, headers, signingSecret); err != nil {
+				return err
+			}
+			return nil
+		},
+		HandleWebhook: func(body []byte, headers http.Header, config Config) (*WebhookIngressResult, error) {
+
+			var req slackEventRequest
+			if err := json.Unmarshal(body, &req); err != nil {
+				return nil, fmt.Errorf("decode slack payload: %w", err)
+			}
+			if req.Type == "url_verification" && req.Challenge != "" {
+				return &WebhookIngressResult{
+					Response: &WebhookResponse{
+						Status:      http.StatusOK,
+						ContentType: "text/plain",
+						Body:        []byte(req.Challenge),
+					},
+					Event: nil,
+					Task:  nil,
+				}, nil
+			}
+
+			threadID := req.Event.ThreadTs
+			if threadID == "" {
+				threadID = req.Event.Ts
+			}
+
+			eventID := req.EventID
+			if eventID == "" {
+				eventID = uuid.NewSHA1(uuid.NameSpaceURL, body).String()
+			}
+
+			normalizedEvent := slackTriggerEvent{
+				EnvelopeType: req.Type,
+				EventType:    req.Event.Type,
+				Subtype:      req.Event.Subtype,
+				TeamID:       req.TeamID,
+				ChannelID:    req.Event.Channel,
+				ThreadID:     threadID,
+				UserID:       req.Event.User,
+				Text:         req.Event.Text,
+				Timestamp:    req.Event.Ts,
+			}
+
+			correlationID := req.Event.Channel
+			if req.Event.Channel != "" && threadID != "" {
+				correlationID = req.Event.Channel + ":" + threadID
+			}
+			if correlationID == "" {
+				correlationID = req.TeamID
+			}
+
+			return &WebhookIngressResult{
+				Response: nil,
+				Event: &EventEnvelope{
+					EventID:           eventID,
+					CorrelationID:     correlationID,
+					TriggerInstanceID: "",
+					DefinitionSlug:    "slack",
+					Event:             normalizedEvent,
+					RawPayload:        body,
+					ReceivedAt:        time.Now().UTC(),
+				},
+				Task: nil,
+			}, nil
+		},
+		BuildScheduledEvent: nil,
+		ExtractSchedule:     nil,
+	}
+}
+
+func newCronDefinition() Definition {
+	schema := buildInputSchema[cronTriggerConfig]()
+	compiled := mustCompileSchema(schema)
+	return Definition{
+		Slug:                 "cron",
+		Title:                "Cron",
+		Description:          "Run a trigger on a Temporal-backed cron schedule.",
+		Kind:                 KindSchedule,
+		ConfigSchema:         schema,
+		CompiledConfigSchema: compiled,
+		EnvRequirements:      []EnvRequirement{},
+		EventType:            reflect.TypeFor[cronTriggerEvent](),
+		DecodeConfig: func(raw map[string]any) (Config, error) {
+			cfg, err := decodeConfig[cronTriggerConfig](raw, compiled)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := cron.ParseStandard(cfg.Schedule); err != nil {
+				return nil, fmt.Errorf("parse schedule: %w", err)
+			}
+			return cfg, nil
+		},
+		AuthenticateWebhook: nil,
+		HandleWebhook:       nil,
+		BuildScheduledEvent: func(instance triggerrepo.TriggerInstance, config Config, firedAt time.Time) (*EventEnvelope, error) {
+			cfg, ok := config.(cronTriggerConfig)
+			if !ok {
+				return nil, fmt.Errorf("invalid cron config")
+			}
+			event := cronTriggerEvent{
+				Schedule:          cfg.Schedule,
+				FiredAt:           firedAt.UTC().Format(time.RFC3339Nano),
+				TriggerInstanceID: instance.ID.String(),
+			}
+			rawPayload, err := json.Marshal(event)
+			if err != nil {
+				return nil, fmt.Errorf("marshal cron event: %w", err)
+			}
+			return &EventEnvelope{
+				EventID:           uuid.NewSHA1(uuid.NameSpaceURL, []byte(instance.ID.String()+":"+event.FiredAt)).String(),
+				CorrelationID:     instance.ID.String(),
+				TriggerInstanceID: instance.ID.String(),
+				DefinitionSlug:    instance.DefinitionSlug,
+				Event:             event,
+				RawPayload:        rawPayload,
+				ReceivedAt:        firedAt.UTC(),
+			}, nil
+		},
+		ExtractSchedule: func(config Config) (string, error) {
+			cfg, ok := config.(cronTriggerConfig)
+			if !ok {
+				return "", fmt.Errorf("invalid cron config")
+			}
+			return cfg.Schedule, nil
+		},
+	}
+}
+
+type inputSchemaConfig struct {
+	forOptions       *gjsonschema.ForOptions
+	propertyMutators map[string][]func(*gjsonschema.Schema)
+}
+
+type inputSchemaOption func(*inputSchemaConfig)
+
+func buildInputSchema[T any](options ...inputSchemaOption) []byte {
+	config := &inputSchemaConfig{
+		forOptions: &gjsonschema.ForOptions{
+			IgnoreInvalidTypes: false,
+			TypeSchemas:        map[reflect.Type]*gjsonschema.Schema{},
+		},
+		propertyMutators: map[string][]func(*gjsonschema.Schema){},
+	}
+
+	for _, option := range options {
+		option(config)
+	}
+
+	schema, err := gjsonschema.For[T](config.forOptions)
+	if err != nil {
+		panic(fmt.Errorf("build input schema: %w", err))
+	}
+
+	for propertyName, mutators := range config.propertyMutators {
+		prop := schema.Properties[propertyName]
+		if prop == nil {
+			continue
+		}
+		for _, mutate := range mutators {
+			mutate(prop)
+		}
+	}
+
+	bs, err := json.Marshal(schema)
+	if err != nil {
+		panic(fmt.Errorf("marshal schema: %w", err))
+	}
+	return bs
+}
+
+func withArrayItemsEnum(propertyName string, values ...any) inputSchemaOption {
+	return func(config *inputSchemaConfig) {
+		config.propertyMutators[propertyName] = append(config.propertyMutators[propertyName], func(prop *gjsonschema.Schema) {
+			if prop.Items == nil {
+				prop.Items = new(gjsonschema.Schema)
+			}
+			prop.Items.Enum = values
+		})
+	}
+}
+
+func validateSlackSignature(body []byte, headers http.Header, signingSecret string) error {
+	timestamp := headers.Get("X-Slack-Request-Timestamp")
+	signature := headers.Get("X-Slack-Signature")
+	if timestamp == "" || signature == "" {
+		return fmt.Errorf("missing slack signature headers")
+	}
+
+	seconds, err := parseUnixTimestamp(timestamp)
+	if err != nil {
+		return fmt.Errorf("parse slack timestamp: %w", err)
+	}
+	now := time.Now().Unix()
+	if absInt64(now-seconds) > 300 {
+		return fmt.Errorf("slack timestamp too far from current time")
+	}
+
+	base := "v0:" + timestamp + ":" + string(body)
+	mac := hmac.New(sha256.New, []byte(signingSecret))
+	if _, err := io.WriteString(mac, base); err != nil {
+		return fmt.Errorf("hash slack signature: %w", err)
+	}
+	expected := "v0=" + hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(expected), []byte(signature)) {
+		return fmt.Errorf("slack signature mismatch")
+	}
+	return nil
+}
+
+func parseUnixTimestamp(value string) (int64, error) {
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse int: %w", err)
+	}
+	return parsed, nil
+}
+
+func absInt64(value int64) int64 {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
+
+func newCELEnv(eventType reflect.Type) (*cel.Env, error) {
+	if eventType.Kind() == reflect.Pointer {
+		eventType = eventType.Elem()
+	}
+
+	env, err := cel.NewEnv(
+		ext.NativeTypes(eventType, ext.ParseStructTags(true)),
+		cel.Variable("event", cel.ObjectType(celTypeName(eventType))),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create CEL env: %w", err)
+	}
+	return env, nil
+}
+
+func celTypeName(t reflect.Type) string {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return path.Base(t.PkgPath()) + "." + t.Name()
+}
+
+func toAnySlice(ss []string) []any {
+	out := make([]any, len(ss))
+	for i, s := range ss {
+		out[i] = s
+	}
+	return out
+}
+
+func mustCompileSchema(schema []byte) *jsonschema.Schema {
+	compiled, err := gramjsonschema.CompileSchema(schema)
+	if err != nil {
+		panic(fmt.Errorf("compile trigger schema: %w", err))
+	}
+	return compiled
+}
+
+func decodeConfig[T Config](raw map[string]any, schema *jsonschema.Schema) (T, error) {
+	var zero T
+	if raw == nil {
+		raw = map[string]any{}
+	}
+	if err := gramjsonschema.ValidateAgainstSchema(schema, raw); err != nil {
+		return zero, fmt.Errorf("validate config: %w", err)
+	}
+	bs, err := json.Marshal(raw)
+	if err != nil {
+		return zero, fmt.Errorf("marshal config: %w", err)
+	}
+	var cfg T
+	if err := json.Unmarshal(bs, &cfg); err != nil {
+		return zero, fmt.Errorf("decode config: %w", err)
+	}
+	return cfg, nil
+}

@@ -8,7 +8,7 @@ interface ResolutionBadgesProps {
 export function ResolutionBadges({ resolutions }: ResolutionBadgesProps) {
   if (resolutions.length === 0) {
     return (
-      <div className="text-xs text-muted-foreground italic">
+      <div className="text-muted-foreground text-xs italic">
         Chat in progress...
       </div>
     );

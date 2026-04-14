@@ -57,7 +57,7 @@ export default function CustomTools() {
       <Page.Section.CTA>
         <Button onClick={onNewCustomTool}>
           <Button.LeftIcon>
-            <Plus className="w-4 h-4" />
+            <Plus className="h-4 w-4" />
           </Button.LeftIcon>
           <Button.Text>New Custom Tool</Button.Text>
         </Button>
