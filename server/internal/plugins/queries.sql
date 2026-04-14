@@ -37,6 +37,14 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: SoftDeletePluginServers :exec
+-- Soft-deletes all servers belonging to a plugin.
+UPDATE plugin_servers
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE plugin_id = @plugin_id
+  AND deleted IS FALSE;
+
 -- name: DeletePlugin :exec
 UPDATE plugins
 SET deleted_at = clock_timestamp(),

@@ -212,12 +212,17 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
 	}
 
+	slug := generateSlug(payload.Slug)
+	if slug != payload.Slug {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid slug: must contain only lowercase alphanumeric characters and hyphens")
+	}
+
 	plugin, err := s.repo.UpdatePlugin(ctx, repo.UpdatePluginParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      *ac.ProjectID,
 		Name:           payload.Name,
-		Slug:           payload.Slug,
+		Slug:           slug,
 		Description:    conv.PtrToPGText(payload.Description),
 	})
 	if err != nil {
@@ -257,6 +262,10 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 	pluginID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
+	}
+
+	if err := s.repo.SoftDeletePluginServers(ctx, pluginID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "soft-delete plugin servers").Log(ctx, s.logger)
 	}
 
 	if err := s.repo.DeletePlugin(ctx, repo.DeletePluginParams{
@@ -324,6 +333,20 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	}
 	if payload.ExternalURL != nil {
 		params.ExternalUrl = conv.PtrToPGText(payload.ExternalURL)
+	}
+
+	sourceCount := 0
+	if payload.ToolsetID != nil {
+		sourceCount++
+	}
+	if payload.RegistryID != nil {
+		sourceCount++
+	}
+	if payload.ExternalURL != nil {
+		sourceCount++
+	}
+	if sourceCount != 1 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "exactly one of toolset_id, registry_id, or external_url must be provided")
 	}
 
 	row, err := s.repo.AddPluginServer(ctx, params)

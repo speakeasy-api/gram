@@ -447,6 +447,20 @@ func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServer
 	return err
 }
 
+const softDeletePluginServers = `-- name: SoftDeletePluginServers :exec
+UPDATE plugin_servers
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE plugin_id = $1
+  AND deleted IS FALSE
+`
+
+// Soft-deletes all servers belonging to a plugin.
+func (q *Queries) SoftDeletePluginServers(ctx context.Context, pluginID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeletePluginServers, pluginID)
+	return err
+}
+
 const updatePlugin = `-- name: UpdatePlugin :one
 UPDATE plugins
 SET name = $1,
