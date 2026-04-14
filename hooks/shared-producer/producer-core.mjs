@@ -17,6 +17,7 @@ import {
   stripRegistryManagedFrontmatter,
 } from "./frontmatter.mjs";
 import {
+  buildCanonicalArchiveSnapshot,
   buildCaptureUploadRequest,
   computeCanonicalContentSha256,
   createDeterministicZipBuffer,
@@ -33,6 +34,7 @@ export {
   discoverSkillRoot,
   hasXGramIgnoreFrontmatter,
   stripRegistryManagedFrontmatter,
+  buildCanonicalArchiveSnapshot,
   computeCanonicalContentSha256,
   createDeterministicZipBuffer,
   buildCaptureUploadRequest,
@@ -85,7 +87,7 @@ export function resolveAgent(argv = process.argv.slice(2), env = process.env) {
   if (!SUPPORTED_AGENTS.includes(normalized)) {
     return {
       agent: null,
-      source: "argv_or_env",
+      source,
       error: `unsupported agent '${normalized}' (expected one of: ${SUPPORTED_AGENTS.join(", ")})`,
     };
   }
@@ -119,15 +121,12 @@ export async function buildSkillMetadata(payload, options = {}) {
   });
 
   const limits = options.limits ?? CAPTURE_LIMITS;
-  let resolutionStatus = options.resolutionStatus ?? discovery.resolutionStatus;
+  const forcedResolutionStatus = normalizeString(options.resolutionStatus);
+  let resolutionStatus = forcedResolutionStatus ?? discovery.resolutionStatus;
   let contentSha256 = null;
   let archiveBuffer = null;
 
-  if (
-    !options.resolutionStatus &&
-    discovery.resolutionStatus === "resolved" &&
-    discovery.skillMdPath
-  ) {
+  if (discovery.resolutionStatus === "resolved" && discovery.skillMdPath) {
     try {
       const skillMdContent = await readFile(discovery.skillMdPath, "utf8");
       if (hasXGramIgnoreFrontmatter(skillMdContent)) {
@@ -138,27 +137,34 @@ export async function buildSkillMetadata(payload, options = {}) {
     }
 
     if (resolutionStatus === "resolved" && discovery.skillDir) {
-      const hashResult = await computeCanonicalContentSha256(
+      const snapshot = await buildCanonicalArchiveSnapshot(
         discovery.skillDir,
         limits,
       );
-      if (hashResult.errorStatus) {
-        resolutionStatus = hashResult.errorStatus;
+      if (snapshot.errorStatus) {
+        resolutionStatus = snapshot.errorStatus;
       } else {
-        contentSha256 = hashResult.contentSha256;
-
-        const zipResult = await createDeterministicZipBuffer(
-          discovery.skillDir,
-          limits,
-        );
-        if (zipResult.errorStatus) {
-          resolutionStatus = zipResult.errorStatus;
-          contentSha256 = null;
-        } else {
-          archiveBuffer = zipResult.zipBuffer;
-        }
+        contentSha256 = snapshot.contentSha256;
+        archiveBuffer = snapshot.zipBuffer;
       }
     }
+  }
+
+  if (
+    discovery.resolutionStatus !== "resolved" &&
+    forcedResolutionStatus === "resolved"
+  ) {
+    resolutionStatus = discovery.resolutionStatus;
+  }
+
+  if (
+    resolutionStatus === "resolved" &&
+    archiveBuffer &&
+    !normalizeString(options.gramKey)
+  ) {
+    resolutionStatus = "capture_skipped_missing_credentials";
+    contentSha256 = null;
+    archiveBuffer = null;
   }
 
   const skill = {

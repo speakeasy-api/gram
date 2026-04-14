@@ -23,6 +23,22 @@ function isRegistryManagedMetadataLine(trimmedLine) {
   );
 }
 
+function splitFrontmatterLine(line) {
+  const indent = (line.match(/^\s*/) ?? [""])[0].length;
+  return {
+    line,
+    trimmed: line.trim(),
+    indent,
+  };
+}
+
+function isRegistryManagedMetadataChild(trimmedLine) {
+  return (
+    /^x-gram-[\w-]+\s*:/i.test(trimmedLine) ||
+    /^skill_uuid\s*:/i.test(trimmedLine)
+  );
+}
+
 export function stripRegistryManagedFrontmatter(content) {
   const match = content.match(
     /^(---\r?\n)([\s\S]*?)(\r?\n---(?:\r?\n|$))([\s\S]*)$/,
@@ -35,45 +51,67 @@ export function stripRegistryManagedFrontmatter(content) {
   const lines = rawFrontmatter.split(/\r?\n/).map(normalizeFrontmatterLine);
 
   const cleaned = [];
-  let inMetadataBlock = false;
-  let metadataIndent = 0;
 
-  for (const rawLine of lines) {
-    const line = rawLine;
-    const trimmed = line.trim();
-    const indent = (line.match(/^\s*/) ?? [""])[0].length;
+  for (let i = 0; i < lines.length; ) {
+    const current = splitFrontmatterLine(lines[i]);
 
-    if (!trimmed) {
-      if (!inMetadataBlock) {
-        cleaned.push(line);
-      }
+    if (!current.trimmed) {
+      cleaned.push(current.line);
+      i += 1;
       continue;
     }
 
-    if (isRegistryManagedMetadataLine(trimmed)) {
+    if (isRegistryManagedMetadataLine(current.trimmed)) {
+      i += 1;
       continue;
     }
 
-    const metadataMatch = line.match(/^(\s*)metadata\s*:\s*(.*)$/i);
-    if (metadataMatch) {
-      inMetadataBlock = true;
-      metadataIndent = metadataMatch[1].length;
-      cleaned.push(line);
+    const metadataMatch = current.line.match(/^(\s*)metadata\s*:\s*(.*)$/i);
+    if (!metadataMatch) {
+      cleaned.push(current.line);
+      i += 1;
       continue;
     }
 
-    if (inMetadataBlock) {
-      if (indent <= metadataIndent) {
-        inMetadataBlock = false;
-      } else if (
-        /^x-gram-[\w-]+\s*:/i.test(trimmed) ||
-        /^skill_uuid\s*:/i.test(trimmed)
-      ) {
+    const metadataIndent = metadataMatch[1].length;
+    const inlineValue = metadataMatch[2].trim();
+    const metadataLines = [];
+    let hasNonManagedChild = false;
+
+    let j = i + 1;
+    while (j < lines.length) {
+      const next = splitFrontmatterLine(lines[j]);
+      if (!next.trimmed) {
+        metadataLines.push(next.line);
+        j += 1;
         continue;
       }
+
+      if (next.indent <= metadataIndent) {
+        break;
+      }
+
+      if (isRegistryManagedMetadataChild(next.trimmed)) {
+        j += 1;
+        continue;
+      }
+
+      hasNonManagedChild = true;
+      metadataLines.push(next.line);
+      j += 1;
     }
 
-    cleaned.push(line);
+    const keepInlineMetadata =
+      inlineValue.length > 0 && !isRegistryManagedMetadataChild(inlineValue);
+
+    if (hasNonManagedChild || keepInlineMetadata) {
+      cleaned.push(current.line);
+      if (hasNonManagedChild) {
+        cleaned.push(...metadataLines);
+      }
+    }
+
+    i = j;
   }
 
   return `${start}${cleaned.join("\n")}${end}${body}`;

@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile, unlink, writeFile } from "node:fs/promises";
@@ -71,15 +72,19 @@ export async function executeUploadRequest(uploadRequest, options = {}) {
 }
 
 function requestToSerializable(uploadRequest) {
+  const headers = { ...uploadRequest.headers };
+  delete headers["Gram-Key"];
+  delete headers["Gram-Project"];
+
   return {
     method: uploadRequest.method,
     url: uploadRequest.url,
-    headers: uploadRequest.headers,
+    headers,
     bodyBase64: uploadRequest.body.toString("base64"),
   };
 }
 
-export function requestFromSerializable(serialized) {
+export function requestFromSerializable(serialized, options = {}) {
   if (!isRecord(serialized)) {
     return null;
   }
@@ -93,10 +98,21 @@ export function requestFromSerializable(serialized) {
     return null;
   }
 
+  const headers = { ...serialized.headers };
+  if (typeof options.gramKey === "string" && options.gramKey.length > 0) {
+    headers["Gram-Key"] = options.gramKey;
+  }
+  if (
+    typeof options.gramProject === "string" &&
+    options.gramProject.length > 0
+  ) {
+    headers["Gram-Project"] = options.gramProject;
+  }
+
   return {
     method: serialized.method,
     url: serialized.url,
-    headers: serialized.headers,
+    headers,
     body: Buffer.from(serialized.bodyBase64, "base64"),
   };
 }
@@ -117,7 +133,10 @@ export async function runUploadWorkerFromFile(requestPath, options = {}) {
   try {
     const raw = await readFile(requestPath, "utf8");
     const serialized = JSON.parse(raw);
-    const request = requestFromSerializable(serialized);
+    const request = requestFromSerializable(serialized, {
+      gramKey: options.gramKey ?? process.env.GRAM_KEY,
+      gramProject: options.gramProject ?? process.env.GRAM_PROJECT_SLUG,
+    });
     if (!request) {
       return { ok: false, skipped: true, reason: "invalid_upload_request" };
     }
@@ -138,9 +157,9 @@ export async function spawnDetachedUploadWorker(uploadRequest, options = {}) {
   const requestFile = await writeWorkerRequestFile(uploadRequest);
 
   const nodeBin = options.nodeBin ?? process.execPath;
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
   const workerPath =
-    options.workerPath ??
-    path.join(import.meta.dirname, "producer-upload-worker.mjs");
+    options.workerPath ?? path.join(moduleDir, "producer-upload-worker.mjs");
 
   try {
     const child = spawn(nodeBin, [workerPath, "--request-file", requestFile], {

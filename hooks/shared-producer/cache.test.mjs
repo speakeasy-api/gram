@@ -81,7 +81,7 @@ test("shouldSuppressUpload expires after ttl", async () => {
   assert.equal(suppressed, false);
 });
 
-test("shouldSuppressUpload returns false when hash missing", async () => {
+test("shouldSuppressUpload returns false when identity is incomplete", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "gram-cache-test-"));
   const cachePath = path.join(dir, "skills-upload-cache.json");
 
@@ -92,12 +92,41 @@ test("shouldSuppressUpload returns false when hash missing", async () => {
     canonicalContentSha256: null,
   });
 
-  const suppressed = await shouldSuppressUpload({
+  const missingHash = await shouldSuppressUpload({
     cachePath,
     project: "proj",
     skillName: "golang",
     canonicalContentSha256: null,
   });
+  assert.equal(missingHash, false);
 
-  assert.equal(suppressed, false);
+  await markUploadSeen({
+    cachePath,
+    project: null,
+    skillName: "golang",
+    canonicalContentSha256: "sha",
+  });
+
+  const missingProject = await shouldSuppressUpload({
+    cachePath,
+    project: null,
+    skillName: "golang",
+    canonicalContentSha256: "sha",
+  });
+  assert.equal(missingProject, false);
+
+  await markUploadSeen({
+    cachePath,
+    project: "proj",
+    skillName: "",
+    canonicalContentSha256: "sha",
+  });
+
+  const missingSkill = await shouldSuppressUpload({
+    cachePath,
+    project: "proj",
+    skillName: "",
+    canonicalContentSha256: "sha",
+  });
+  assert.equal(missingSkill, false);
 });

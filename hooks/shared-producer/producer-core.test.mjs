@@ -83,6 +83,7 @@ test("resolveAgent supports space-separated --agent value", () => {
 test("resolveAgent returns error for unsupported agent", () => {
   const result = resolveAgent(["--agent=other"], {});
   assert.equal(result.agent, null);
+  assert.equal(result.source, "argv");
   assert.match(result.error ?? "", /unsupported agent/);
 });
 
@@ -244,6 +245,12 @@ test("stripRegistryManagedFrontmatter removes metadata.skill_uuid and metadata.x
   assert.equal(cleaned.includes("author: keep"), true);
 });
 
+test("stripRegistryManagedFrontmatter removes empty metadata block after stripping", () => {
+  const src = `---\nmetadata:\n  skill_uuid: abc\n  x-gram-ignore: true\n---\n# skill\n`;
+  const cleaned = stripRegistryManagedFrontmatter(src);
+  assert.equal(cleaned.includes("metadata:"), false);
+});
+
 test("computeCanonicalContentSha256 is stable across CRLF/LF and key order", async () => {
   const dirA = await makeTempDir("gram-producer-hash-a-");
   const dirB = await makeTempDir("gram-producer-hash-b-");
@@ -338,6 +345,26 @@ test("buildSkillMetadata includes hash + asset_format when resolved and hashable
   assert.equal(result.uploadRequest?.method, "POST");
 });
 
+test("buildSkillMetadata does not force resolved override when discovery is unresolved", async () => {
+  const projectDir = await makeTempDir("gram-producer-project-");
+  const homeDir = await makeTempDir("gram-producer-home-");
+
+  const payload = { tool_name: "Skill", tool_input: { skill: "missing" } };
+  const result = await buildSkillMetadata(payload, {
+    agent: "claude",
+    projectDir,
+    homeDir,
+    resolutionStatus: "resolved",
+  });
+
+  assert.equal(
+    result.metadata.skills[0].resolution_status,
+    "unresolved_name_only",
+  );
+  assert.equal("content_sha256" in result.metadata.skills[0], false);
+  assert.equal(result.uploadRequest, null);
+});
+
 test("buildSkillMetadata returns skipped_by_author when x-gram-ignore is true", async () => {
   const projectDir = await makeTempDir("gram-producer-project-");
   const homeDir = await makeTempDir("gram-producer-home-");
@@ -356,6 +383,31 @@ test("buildSkillMetadata returns skipped_by_author when x-gram-ignore is true", 
   assert.equal(
     result.metadata.skills[0].resolution_status,
     "skipped_by_author",
+  );
+  assert.equal("content_sha256" in result.metadata.skills[0], false);
+  assert.equal(result.uploadRequest, null);
+});
+
+test("buildSkillMetadata marks missing credentials before upload", async () => {
+  const projectDir = await makeTempDir("gram-producer-project-");
+  const homeDir = await makeTempDir("gram-producer-home-");
+
+  const skillDir = await writeSkill(projectDir, ".agents/skills/golang", {
+    skillMd: "# skill\n",
+  });
+  await writeFile(path.join(skillDir, "a.txt"), "hello\n", "utf8");
+
+  const payload = { tool_name: "Skill", tool_input: { skill: "golang" } };
+  const result = await buildSkillMetadata(payload, {
+    agent: "claude",
+    projectDir,
+    homeDir,
+    gramProject: "proj",
+  });
+
+  assert.equal(
+    result.metadata.skills[0].resolution_status,
+    "capture_skipped_missing_credentials",
   );
   assert.equal("content_sha256" in result.metadata.skills[0], false);
   assert.equal(result.uploadRequest, null);

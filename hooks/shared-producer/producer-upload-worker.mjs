@@ -25,4 +25,9 @@ if (!requestFile) {
   process.exit(1);
 }
 
-await runUploadWorkerFromFile(requestFile);
+const result = await runUploadWorkerFromFile(requestFile);
+if (!result.ok && !result.skipped) {
+  stderr.write(
+    `[gram-skills-producer] upload worker failed: ${result.reason ?? "unknown"}${result.status ? ` status=${result.status}` : ""}\n`,
+  );
+}
