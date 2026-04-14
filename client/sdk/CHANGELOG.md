@@ -4,6 +4,14 @@
 
 ### Minor Changes
 
+- 98d322b: Add support for triggers across Gram.
+
+  This introduces webhook and scheduled triggers end to end, including server APIs, worker execution for trigger dispatch and cron processing, SDK support, and dashboard UI for managing trigger definitions and instances.
+
+## 0.33.0
+
+### Minor Changes
+
 - b328938: Add static platform tools to tool discovery and the built-in MCP logs server.
 
 ### Patch Changes
