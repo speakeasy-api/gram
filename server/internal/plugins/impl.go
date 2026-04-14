@@ -353,10 +353,10 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		}
 		params.RegistryID = uuid.NullUUID{UUID: id, Valid: true}
 	}
-	if payload.RegistryServerSpecifier != nil {
+	if payload.RegistryServerSpecifier != nil && *payload.RegistryServerSpecifier != "" {
 		params.RegistryServerSpecifier = conv.PtrToPGText(payload.RegistryServerSpecifier)
 	}
-	if payload.ExternalURL != nil {
+	if payload.ExternalURL != nil && *payload.ExternalURL != "" {
 		params.ExternalUrl = conv.PtrToPGText(payload.ExternalURL)
 	}
 
