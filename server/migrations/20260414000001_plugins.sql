@@ -46,8 +46,8 @@ CREATE TABLE "plugin_servers" (
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
   CONSTRAINT "plugin_servers_plugin_id_fkey" FOREIGN KEY ("plugin_id") REFERENCES "plugins" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "plugin_servers_registry_id_fkey" FOREIGN KEY ("registry_id") REFERENCES "mcp_registries" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
-  CONSTRAINT "plugin_servers_toolset_id_fkey" FOREIGN KEY ("toolset_id") REFERENCES "toolsets" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "plugin_servers_registry_id_fkey" FOREIGN KEY ("registry_id") REFERENCES "mcp_registries" ("id") ON UPDATE NO ACTION ON DELETE RESTRICT,
+  CONSTRAINT "plugin_servers_toolset_id_fkey" FOREIGN KEY ("toolset_id") REFERENCES "toolsets" ("id") ON UPDATE NO ACTION ON DELETE RESTRICT,
   CONSTRAINT "plugin_servers_policy_check" CHECK (policy = ANY (ARRAY['required'::text, 'optional'::text])),
   CONSTRAINT "plugin_servers_source_check" CHECK (((((toolset_id IS NOT NULL))::integer + ((registry_id IS NOT NULL))::integer) + ((external_url IS NOT NULL))::integer) = 1)
 );

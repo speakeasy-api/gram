@@ -1736,8 +1736,8 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
 
   CONSTRAINT plugin_servers_pkey PRIMARY KEY (id),
   CONSTRAINT plugin_servers_plugin_id_fkey FOREIGN KEY (plugin_id) REFERENCES plugins (id) ON DELETE CASCADE,
-  CONSTRAINT plugin_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE SET NULL,
-  CONSTRAINT plugin_servers_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries (id) ON DELETE SET NULL,
+  CONSTRAINT plugin_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
+  CONSTRAINT plugin_servers_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries (id) ON DELETE RESTRICT,
   CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional')),
   CONSTRAINT plugin_servers_source_check CHECK (
     (toolset_id IS NOT NULL)::int + (registry_id IS NOT NULL)::int + (external_url IS NOT NULL)::int = 1
