@@ -674,6 +674,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug string) GenerateConfig {
 	cfg := GenerateConfig{
 		OrgName:   orgSlug,
+		OrgEmail:  "",
 		ServerURL: s.serverURL,
 	}
 	if orgName, err := s.repo.GetOrganizationName(ctx, orgID); err == nil {
