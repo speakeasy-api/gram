@@ -89,7 +89,7 @@ export default function Plugins() {
       width: "2fr",
       render: (p) => (
         <Link to={routes.plugins.detail.href(p.id)}>
-          <Type variant="body" className="hover:underline cursor-pointer">
+          <Type variant="body" className="cursor-pointer hover:underline">
             {p.name}
           </Type>
         </Link>
@@ -140,13 +140,13 @@ export default function Plugins() {
       </Page.Header>
       <Page.Body>
         {(data?.plugins ?? []).length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-4">
-            <div className="max-w-md w-full text-center space-y-6">
+          <div className="flex flex-col items-center justify-center px-4 py-16">
+            <div className="w-full max-w-md space-y-6 text-center">
               <div className="flex flex-col items-center gap-4">
-                <div className="size-16 rounded-full bg-muted flex items-center justify-center">
+                <div className="bg-muted flex size-16 items-center justify-center rounded-full">
                   <Icon
                     name="puzzle"
-                    className="size-8 text-muted-foreground"
+                    className="text-muted-foreground size-8"
                   />
                 </div>
                 <div>

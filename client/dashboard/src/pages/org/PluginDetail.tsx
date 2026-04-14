@@ -227,7 +227,7 @@ export default function PluginDetail() {
           noResultsMessage={
             <Stack
               gap={2}
-              className="h-full p-4 bg-background"
+              className="bg-background h-full p-4"
               align="center"
               justify="center"
             >
@@ -307,7 +307,7 @@ export default function PluginDetail() {
                 Add an MCP server to this plugin bundle.
               </Dialog.Description>
             </Dialog.Header>
-            <div className="flex gap-2 mb-4">
+            <div className="mb-4 flex gap-2">
               <Button
                 size="sm"
                 variant={
@@ -336,7 +336,7 @@ export default function PluginDetail() {
                   {toolsets.length > 0 ? (
                     <select
                       name="toolsetId"
-                      className="border rounded-md px-3 py-2 text-sm bg-background"
+                      className="bg-background rounded-md border px-3 py-2 text-sm"
                       required
                     >
                       <option value="">Select a toolset</option>
