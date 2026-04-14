@@ -32,7 +32,7 @@ export default function Billing() {
         <Page.Header.Title>Billing</Page.Header.Title>
       </Page.Header>
       <Page.Body>
-        <RequireScope scope="org:admin" level="page">
+        <RequireScope scope={["org:read", "org:admin"]} level="page">
           <BillingInner />
         </RequireScope>
       </Page.Body>
