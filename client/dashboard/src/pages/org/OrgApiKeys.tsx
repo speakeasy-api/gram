@@ -20,8 +20,26 @@ import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy } from "lucide-react";
 import { useMemo, useState } from "react";
+import { RequireScope } from "@/components/require-scope";
 
 export default function OrgApiKeys() {
+  // We need an outer component wrapping the inner as the key fetching request
+  // will return a forbidden error if the user does not have the org:admin scope
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Title>API Keys</Page.Header.Title>
+      </Page.Header>
+      <Page.Body>
+        <RequireScope scope="org:admin" level="page">
+          <OrgApiKeysInner />
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
+}
+
+export function OrgApiKeysInner() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<Key | null>(null);
@@ -167,51 +185,50 @@ export default function OrgApiKeys() {
   ];
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Title>API Keys</Page.Header.Title>
-      </Page.Header>
-      <Page.Body>
-        <Heading variant="h4" className="mb-2">
-          API Keys
-        </Heading>
-        <Type muted small className="mb-6">
-          Create and manage API keys to authenticate programmatic access to Gram
-          services, including deployments, toolset management, and MCP server
-          connections.
-        </Type>
-        <Stack
-          direction="horizontal"
-          justify="space-between"
-          align="center"
-          className="mb-4"
-        >
-          <SearchBar
-            value={apiKeySearch}
-            onChange={setApiKeySearch}
-            placeholder="Search by key name"
-            className="w-64"
-          />
+    <>
+      <Heading variant="h4" className="mb-2">
+        API Keys
+      </Heading>
+      <Type muted small className="mb-6">
+        Create and manage API keys to authenticate programmatic access to Gram
+        services, including deployments, toolset management, and MCP server
+        connections.
+      </Type>
+      <Stack
+        direction="horizontal"
+        justify="space-between"
+        align="center"
+        className="mb-4"
+      >
+        <SearchBar
+          value={apiKeySearch}
+          onChange={setApiKeySearch}
+          placeholder="Search by key name"
+          className="w-64"
+        />
+        <RequireScope scope="org:admin" level="component">
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             New API Key
           </Button>
-        </Stack>
-        <Table
-          columns={apiKeyColumns}
-          data={filteredKeys}
-          rowKey={(row) => row.id}
-          className="max-h-[500px] overflow-y-auto"
-          noResultsMessage={
-            <Stack
-              gap={2}
-              className="bg-background h-full p-4"
-              align="center"
-              justify="center"
-            >
-              <Type variant="body">
-                {apiKeySearch ? "No matching API keys" : "No API keys yet"}
-              </Type>
-              {!apiKeySearch && (
+        </RequireScope>
+      </Stack>
+      <Table
+        columns={apiKeyColumns}
+        data={filteredKeys}
+        rowKey={(row) => row.id}
+        className="max-h-[500px] overflow-y-auto"
+        noResultsMessage={
+          <Stack
+            gap={2}
+            className="bg-background h-full gap-4 p-4 py-6"
+            align="center"
+            justify="center"
+          >
+            <Type variant="body">
+              {apiKeySearch ? "No matching API keys" : "No API keys yet"}
+            </Type>
+            {!apiKeySearch && (
+              <RequireScope scope="org:admin" level="component">
                 <Button
                   size="sm"
                   variant="secondary"
@@ -222,148 +239,140 @@ export default function OrgApiKeys() {
                   </Button.LeftIcon>
                   <Button.Text>Create Key</Button.Text>
                 </Button>
-              )}
-            </Stack>
-          }
-        />
-
-        <Dialog
-          open={isCreateDialogOpen}
-          onOpenChange={handleCloseCreateDialog}
-        >
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>
-                {newlyCreatedKey ? "API Key Created" : "Create New API Key"}
-              </Dialog.Title>
-            </Dialog.Header>
-            {newlyCreatedKey ? (
-              <div className="space-y-4 py-4">
-                <div className="text-foreground rounded-lg border border-yellow-500/50 bg-yellow-600/50 p-4 text-sm">
-                  You will not be able to see this token value again once you
-                  close this dialog. Copy it now and store it securely.
-                </div>
-                <div className="bg-muted flex items-center space-x-2 rounded-md p-3">
-                  <code className="flex-1 break-all">
-                    {newlyCreatedKey.key}
-                  </code>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    onClick={handleCopyToken}
-                    className="shrink-0"
-                  >
-                    {isCopied ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-                <div className="flex justify-end">
-                  <Button onClick={handleCloseCreateDialog}>Close</Button>
-                </div>
-              </div>
-            ) : (
-              <form className="space-y-4 py-4" onSubmit={handleCreateKey}>
-                <InputField
-                  label="Key name"
-                  name="name"
-                  required
-                  autoFocus
-                  autoCapitalize="off"
-                  autoComplete="off"
-                  autoCorrect="off"
-                />
-
-                <AnyField
-                  label="Scope"
-                  optionality="hidden"
-                  render={() => {
-                    return (
-                      <RadioGroup name="scope" defaultValue="consumer">
-                        <div className="flex items-center gap-3">
-                          <RadioGroupItem value="consumer" id="r1" />
-                          <Label className="leading-normal" htmlFor="r1">
-                            Consumer: can query/modify toolsets, read data and
-                            access MCP servers.
-                          </Label>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <RadioGroupItem value="producer" id="r2" />
-                          <Label className="leading-normal" htmlFor="r2">
-                            Producer: can upload OpenAPI documents, trigger
-                            deployments, query/modify toolsets, read data and
-                            access MCP servers.
-                          </Label>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <RadioGroupItem value="chat" id="r3" />
-                          <Label className="leading-normal" htmlFor="r3">
-                            Chat: can use the chat API to interact with models.
-                          </Label>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <RadioGroupItem value="hooks" id="r4" />
-                          <Label className="leading-normal" htmlFor="r4">
-                            Hooks: can send hook events and OTEL logs from agent
-                            integrations.
-                          </Label>
-                        </div>
-                      </RadioGroup>
-                    );
-                  }}
-                />
-                <div className="flex justify-end space-x-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={handleCloseCreateDialog}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={createKeyMutation.isPending}>
-                    Create
-                  </Button>
-                </div>
-              </form>
+              </RequireScope>
             )}
-          </Dialog.Content>
-        </Dialog>
+          </Stack>
+        }
+      />
 
-        <Dialog
-          open={!!keyToRevoke}
-          onOpenChange={(open) => !open && setKeyToRevoke(null)}
-        >
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Revoke API Key</Dialog.Title>
-            </Dialog.Header>
+      <Dialog open={isCreateDialogOpen} onOpenChange={handleCloseCreateDialog}>
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>
+              {newlyCreatedKey ? "API Key Created" : "Create New API Key"}
+            </Dialog.Title>
+          </Dialog.Header>
+          {newlyCreatedKey ? (
             <div className="space-y-4 py-4">
-              <Type variant="body">
-                Are you sure you want to revoke the API key{" "}
-                <span className="font-bold italic">{keyToRevoke?.name}</span>?
-                This action cannot be undone.
-              </Type>
+              <div className="text-foreground rounded-lg border border-yellow-500/50 bg-yellow-600/50 p-4 text-sm">
+                You will not be able to see this token value again once you
+                close this dialog. Copy it now and store it securely.
+              </div>
+              <div className="bg-muted flex items-center space-x-2 rounded-md p-3">
+                <code className="flex-1 break-all">{newlyCreatedKey.key}</code>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={handleCopyToken}
+                  className="shrink-0"
+                >
+                  {isCopied ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={handleCloseCreateDialog}>Close</Button>
+              </div>
+            </div>
+          ) : (
+            <form className="space-y-4 py-4" onSubmit={handleCreateKey}>
+              <InputField
+                label="Key name"
+                name="name"
+                required
+                autoFocus
+                autoCapitalize="off"
+                autoComplete="off"
+                autoCorrect="off"
+              />
+
+              <AnyField
+                label="Scope"
+                optionality="hidden"
+                render={() => {
+                  return (
+                    <RadioGroup name="scope" defaultValue="consumer">
+                      <div className="flex items-center gap-3">
+                        <RadioGroupItem value="consumer" id="r1" />
+                        <Label className="leading-normal" htmlFor="r1">
+                          Consumer: can query/modify toolsets, read data and
+                          access MCP servers.
+                        </Label>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <RadioGroupItem value="producer" id="r2" />
+                        <Label className="leading-normal" htmlFor="r2">
+                          Producer: can upload OpenAPI documents, trigger
+                          deployments, query/modify toolsets, read data and
+                          access MCP servers.
+                        </Label>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <RadioGroupItem value="chat" id="r3" />
+                        <Label className="leading-normal" htmlFor="r3">
+                          Chat: can use the chat API to interact with models.
+                        </Label>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <RadioGroupItem value="hooks" id="r4" />
+                        <Label className="leading-normal" htmlFor="r4">
+                          Hooks: can send hook events and OTEL logs from agent
+                          integrations.
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  );
+                }}
+              />
               <div className="flex justify-end space-x-2">
                 <Button
+                  type="button"
                   variant="secondary"
-                  onClick={() => setKeyToRevoke(null)}
+                  onClick={handleCloseCreateDialog}
                 >
                   Cancel
                 </Button>
-                <Button
-                  variant="destructive-primary"
-                  onClick={handleRevokeKey}
-                  disabled={revokeKeyMutation.isPending}
-                >
-                  Revoke Key
+                <Button type="submit" disabled={createKeyMutation.isPending}>
+                  Create
                 </Button>
               </div>
+            </form>
+          )}
+        </Dialog.Content>
+      </Dialog>
+
+      <Dialog
+        open={!!keyToRevoke}
+        onOpenChange={(open) => !open && setKeyToRevoke(null)}
+      >
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Revoke API Key</Dialog.Title>
+          </Dialog.Header>
+          <div className="space-y-4 py-4">
+            <Type variant="body">
+              Are you sure you want to revoke the API key{" "}
+              <span className="font-bold italic">{keyToRevoke?.name}</span>?
+              This action cannot be undone.
+            </Type>
+            <div className="flex justify-end space-x-2">
+              <Button variant="secondary" onClick={() => setKeyToRevoke(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive-primary"
+                onClick={handleRevokeKey}
+                disabled={revokeKeyMutation.isPending}
+              >
+                Revoke Key
+              </Button>
             </div>
-          </Dialog.Content>
-        </Dialog>
-      </Page.Body>
-    </Page>
+          </div>
+        </Dialog.Content>
+      </Dialog>
+    </>
   );
 }

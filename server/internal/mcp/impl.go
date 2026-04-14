@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -136,6 +137,7 @@ func NewService(
 	telemSvc *tm.Service,
 	features *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
+	triggerApp *bgtriggers.App,
 	temporal *temporal.Environment,
 	accessLoader auth.AccessLoader,
 ) *Service {
@@ -143,7 +145,12 @@ func NewService(
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 	logger = logger.With(attr.SlogComponent("mcp"))
 
-	platformSvc := platformtoolsruntime.NewService(logger, db, telemSvc)
+	platformSvc := platformtoolsruntime.NewService(
+		logger,
+		db,
+		telemSvc,
+		platformtoolsruntime.WithTriggerTools(triggerApp),
+	)
 
 	return &Service{
 		logger:          logger,

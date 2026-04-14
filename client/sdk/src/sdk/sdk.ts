@@ -29,6 +29,7 @@ import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
 import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
+import { Triggers } from "./triggers.js";
 import { Usage } from "./usage.js";
 import { Variations } from "./variations.js";
 
@@ -161,6 +162,11 @@ export class Gram extends ClientSDK {
   private _toolsets?: Toolsets;
   get toolsets(): Toolsets {
     return (this._toolsets ??= new Toolsets(this._options));
+  }
+
+  private _triggers?: Triggers;
+  get triggers(): Triggers {
+    return (this._triggers ??= new Triggers(this._options));
   }
 
   private _usage?: Usage;

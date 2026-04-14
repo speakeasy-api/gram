@@ -56,7 +56,11 @@ import { parseFilters, serializeFilters } from "./log-filter-url";
 import { LogDetailSheet } from "./LogDetailSheet";
 import { LogFilterBar } from "./LogFilterBar";
 import { TraceRow } from "./TraceRow";
-import { useAttributeLogsQuery } from "./use-attribute-logs-query";
+import { TriggerLogRow } from "./TriggerLogRow";
+import {
+  useAttributeLogsQuery,
+  type TraceSummary,
+} from "./use-attribute-logs-query";
 
 // Valid date range presets
 const validPresets: DateRangePreset[] = [
@@ -900,15 +904,23 @@ function TraceListContent({
 
   return (
     <>
-      {allTraces.map((trace) => (
-        <TraceRow
-          key={trace.traceId}
-          trace={trace}
-          isExpanded={expandedTraceId === trace.traceId}
-          onToggle={onToggleExpand}
-          onLogClick={onLogClick}
-        />
-      ))}
+      {allTraces.map((trace) =>
+        (trace as TraceSummary).eventSource === "trigger" ? (
+          <TriggerLogRow
+            key={trace.traceId}
+            trace={trace as TraceSummary}
+            onLogClick={onLogClick}
+          />
+        ) : (
+          <TraceRow
+            key={trace.traceId}
+            trace={trace}
+            isExpanded={expandedTraceId === trace.traceId}
+            onToggle={onToggleExpand}
+            onLogClick={onLogClick}
+          />
+        ),
+      )}
 
       {isFetchingNextPage && (
         <div className="text-muted-foreground flex items-center justify-center gap-2 border-t py-4">

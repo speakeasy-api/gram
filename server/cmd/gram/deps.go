@@ -38,10 +38,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
@@ -646,4 +648,43 @@ func newTelemetryLogger(
 	}
 
 	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled), shutdown
+}
+
+func newTriggersApp(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	enc *encryption.Client,
+	temporalEnv *temporal.Environment,
+	telemetryLogger *telemetry.Logger,
+	serverURL *url.URL,
+) *bgtriggers.App {
+	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
+	return bgtriggers.NewApp(
+		logger,
+		db,
+		temporalEnv,
+		envEntries,
+		bgtriggers.NewTriggerDeliveryLogger(func(ctx context.Context, entry bgtriggers.TriggerDeliveryLog) {
+			if telemetryLogger == nil {
+				return
+			}
+
+			entry.Attributes[attr.EventSourceKey] = string(telemetry.EventSourceTrigger)
+			telemetryLogger.Log(ctx, telemetry.LogParams{
+				Timestamp: entry.Timestamp,
+				ToolInfo: telemetry.ToolInfo{
+					ID:             entry.Instance.ID.String(),
+					URN:            "urn:uuid:" + entry.Instance.ID.String(),
+					Name:           "trigger:" + entry.Instance.DefinitionSlug,
+					ProjectID:      entry.Instance.ProjectID.String(),
+					DeploymentID:   "",
+					FunctionID:     nil,
+					OrganizationID: entry.Instance.OrganizationID,
+				},
+				Attributes: entry.Attributes,
+			})
+		}),
+		serverURL,
+		bgtriggers.NewNoopDispatcher(logger),
+	)
 }
