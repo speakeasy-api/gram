@@ -40,7 +40,14 @@ import {
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, RefreshCw, Settings, XIcon } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Loader2,
+  RefreshCw,
+  Settings,
+  XIcon,
+} from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useOrgRoutes } from "@/routes";
 import { Link, useSearchParams } from "react-router";
@@ -711,14 +718,24 @@ function LogsInnerContent({
                         onClick={onRefresh}
                         disabled={isFetching}
                         aria-label="Refresh logs"
+                        className={cn(
+                          "min-w-[110px] justify-center transition-all",
+                          isFetching && "ring-primary/30 ring-2 ring-offset-1",
+                        )}
                       >
-                        <RefreshCw
-                          className={cn(
-                            "h-4 w-4",
-                            isFetching && "animate-spin",
-                          )}
-                        />
-                        Refresh
+                        {isFetching ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span className="text-muted-foreground">
+                              Refreshing…
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-4 w-4" />
+                            Refresh
+                          </>
+                        )}
                       </Button>
                       <Button variant="outline" size="sm" asChild>
                         <Link to={orgRoutes.logs.href()}>
