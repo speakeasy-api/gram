@@ -1696,8 +1696,8 @@ CREATE TABLE IF NOT EXISTS plugins (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
-  name TEXT NOT NULL,
-  slug TEXT NOT NULL,
+  name TEXT NOT NULL CHECK (name <> ''),
+  slug TEXT NOT NULL CHECK (slug <> ''),
   description TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1723,8 +1723,8 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   toolset_id uuid,
   registry_id uuid,
   registry_server_specifier TEXT,
-  external_url TEXT,
-  display_name TEXT NOT NULL,
+  external_url TEXT CHECK (external_url IS NULL OR external_url <> ''),
+  display_name TEXT NOT NULL CHECK (display_name <> ''),
   policy TEXT NOT NULL DEFAULT 'required',
   sort_order INT NOT NULL DEFAULT 0,
 
