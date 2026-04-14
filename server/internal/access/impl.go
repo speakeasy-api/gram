@@ -9,6 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"database/sql"
+
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -960,6 +964,11 @@ func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) erro
 		OrganizationID: ac.ActiveOrganizationID,
 		FeatureName:    string(productfeatures.FeatureRBAC),
 	}); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			// Already enabled — unique constraint on (org, feature) WHERE deleted IS FALSE.
+			return nil
+		}
 		return oops.E(oops.CodeUnexpected, err, "enable RBAC feature flag").Log(ctx, logger)
 	}
 
@@ -978,6 +987,10 @@ func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) er
 		OrganizationID: ac.ActiveOrganizationID,
 		FeatureName:    string(productfeatures.FeatureRBAC),
 	}); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Already disabled — no active feature row to soft-delete.
+			return nil
+		}
 		return oops.E(oops.CodeUnexpected, err, "disable RBAC feature flag").Log(ctx, logger)
 	}
 
