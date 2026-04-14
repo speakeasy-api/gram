@@ -91,6 +91,15 @@ func FromPGText[T ~string](t pgtype.Text) *T {
 	return &val
 }
 
+// FromPGTextOrEmpty converts a pgtype.Text to a string value. If the Text is
+// not valid, it returns the zero value for T (empty string).
+func FromPGTextOrEmpty[T ~string](t pgtype.Text) T {
+	if !t.Valid {
+		return T("")
+	}
+	return T(t.String)
+}
+
 // ToPGText converts a string to a pgtype.Text with Valid set to true regardless
 // of whether the input is an empty string or not.
 func ToPGText(t string) pgtype.Text {

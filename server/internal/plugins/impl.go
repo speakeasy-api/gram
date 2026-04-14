@@ -523,7 +523,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 		pluginInfo = &PluginInfo{
 			Name:        dbPlugin.Name,
 			Slug:        dbPlugin.Slug,
-			Description: pgTextToString(dbPlugin.Description),
+			Description: conv.FromPGTextOrEmpty[string](dbPlugin.Description),
 			Servers:     nil,
 		}
 	}
@@ -577,7 +577,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 				info: PluginInfo{
 					Name:        r.PluginName,
 					Slug:        r.PluginSlug,
-					Description: pgTextToString(r.PluginDescription),
+					Description: conv.FromPGTextOrEmpty[string](r.PluginDescription),
 					Servers:     nil,
 				},
 				servers: nil,
@@ -587,9 +587,9 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 
 		mcpURL, useGramAuth := ResolveServerMCPURL(
 			s.serverURL,
-			pgTextToPtr(r.ToolsetMcpSlug),
-			pgTextToPtr(r.RegistryServerSpecifier),
-			pgTextToPtr(r.ExternalUrl),
+			conv.FromPGText[string](r.ToolsetMcpSlug),
+			conv.FromPGText[string](r.RegistryServerSpecifier),
+			conv.FromPGText[string](r.ExternalUrl),
 		)
 		if mcpURL != "" {
 			pb.servers = append(pb.servers, PluginServerInfo{
@@ -716,18 +716,4 @@ func formatTime(t pgtype.Timestamptz) string {
 		return ""
 	}
 	return t.Time.UTC().Format(time.RFC3339)
-}
-
-func pgTextToString(t pgtype.Text) string {
-	if !t.Valid {
-		return ""
-	}
-	return t.String
-}
-
-func pgTextToPtr(t pgtype.Text) *string {
-	if !t.Valid {
-		return nil
-	}
-	return &t.String
 }
