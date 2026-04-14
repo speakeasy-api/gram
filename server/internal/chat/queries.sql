@@ -424,28 +424,6 @@ GROUP BY COALESCE(NULLIF(c.external_user_id, ''), c.user_id), CASE WHEN c.extern
 ORDER BY message_count DESC
 LIMIT @result_limit;
 
--- name: GetRecentChatSessions :many
-SELECT
-  c.id as chat_id,
-  c.user_id,
-  c.external_user_id,
-  c.title,
-  c.created_at,
-  c.updated_at,
-  (SELECT m2.source FROM chat_messages m2 WHERE m2.chat_id = c.id AND m2.source IS NOT NULL ORDER BY m2.created_at DESC LIMIT 1) as source,
-  COUNT(m.id)::integer as message_count,
-  SUM(m.total_tokens)::bigint as total_tokens,
-  MAX(m.created_at) as last_message_at
-FROM chats c
-LEFT JOIN chat_messages m ON m.chat_id = c.id
-WHERE c.project_id = @project_id
-  AND c.deleted IS FALSE
-  AND c.updated_at >= @time_start
-  AND c.updated_at <= @time_end
-GROUP BY c.id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at
-ORDER BY c.updated_at DESC
-LIMIT @result_limit;
-
 -- name: GetLLMClientBreakdownByMessages :many
 SELECT
   COALESCE(m.source, 'unknown') as client_name,

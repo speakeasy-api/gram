@@ -1715,6 +1715,7 @@ func (q *Queries) GetTopUsers(ctx context.Context, arg GetTopUsersParams) ([]Top
 		Where("if(external_user_id != '', external_user_id, user_id) != ''").
 		GroupBy("user_id", "user_type").
 		OrderBy("activity_count DESC").
+		//nolint:gosec // Limit is bounded by API validation
 		Limit(uint64(arg.Limit))
 
 	if arg.ExternalUserID != "" {
@@ -1781,6 +1782,7 @@ func (q *Queries) GetTopServers(ctx context.Context, arg GetTopServersParams) ([
 		Where("start_time_unix_nano <= ?", arg.TimeEnd).
 		GroupBy("server_name").
 		OrderBy("tool_call_count DESC").
+		//nolint:gosec // Limit is bounded by API validation
 		Limit(uint64(arg.Limit))
 
 	// Note: trace_summaries doesn't have external_user_id/api_key_id, so we can't filter by those
@@ -1811,82 +1813,6 @@ func (q *Queries) GetTopServers(ctx context.Context, arg GetTopServersParams) ([
 	}
 
 	return servers, nil
-}
-
-// GetRecentSessionsParams contains parameters for getting recent sessions.
-type GetRecentSessionsParams struct {
-	GramProjectID  string
-	TimeStart      int64
-	TimeEnd        int64
-	ExternalUserID string // Optional filter
-	APIKeyID       string // Optional filter
-	ToolsetSlug    string // Optional filter
-	Limit          int
-}
-
-// GetRecentSessions retrieves most recently updated chat sessions.
-//
-//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) GetRecentSessions(ctx context.Context, arg GetRecentSessionsParams) ([]ChatSummary, error) {
-	sb := sq.Select(
-		"gram_chat_id",
-		"min(time_unix_nano) as start_time_unix_nano",
-		"max(time_unix_nano) as end_time_unix_nano",
-		"count(*) as log_count",
-		"countIf(startsWith(gram_urn, 'tools:')) as tool_call_count",
-		"countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') as message_count",
-		"toFloat64(max(time_unix_nano) - min(time_unix_nano)) / 1000000000.0 as duration_seconds",
-		"if(countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) > 0, 'error', 'success') as status",
-		"anyIf(toString(attributes.user.id), toString(attributes.user.id) != '') as user_id",
-		"anyIf(toString(attributes.gen_ai.response.model), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND toString(attributes.gen_ai.response.model) != '') as model",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') as total_input_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') as total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') as total_tokens",
-	).
-		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("gram_chat_id != ''").
-		GroupBy("gram_chat_id").
-		OrderBy("end_time_unix_nano DESC").
-		Limit(uint64(arg.Limit))
-
-	if arg.ExternalUserID != "" {
-		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
-	}
-	if arg.APIKeyID != "" {
-		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
-	}
-	if arg.ToolsetSlug != "" {
-		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
-	}
-
-	query, args, err := sb.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building recent sessions query: %w", err)
-	}
-
-	rows, err := q.conn.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var sessions []ChatSummary
-	for rows.Next() {
-		var session ChatSummary
-		if err = rows.ScanStruct(&session); err != nil {
-			return nil, fmt.Errorf("error scanning row: %w", err)
-		}
-		sessions = append(sessions, session)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return sessions, nil
 }
 
 // GetLLMClientBreakdownParams contains parameters for getting LLM client breakdown.

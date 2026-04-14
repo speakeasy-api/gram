@@ -931,10 +931,10 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	comparisonEnd := timeStart
 
 	// Convert timestamps for PostgreSQL queries
-	timeStartPG := pgtype.Timestamptz{Time: time.Unix(0, timeStart), Valid: true}
-	timeEndPG := pgtype.Timestamptz{Time: time.Unix(0, timeEnd), Valid: true}
-	comparisonStartPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonStart), Valid: true}
-	comparisonEndPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonEnd), Valid: true}
+	timeStartPG := pgtype.Timestamptz{Time: time.Unix(0, timeStart), Valid: true, InfinityModifier: pgtype.Finite}
+	timeEndPG := pgtype.Timestamptz{Time: time.Unix(0, timeEnd), Valid: true, InfinityModifier: pgtype.Finite}
+	comparisonStartPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonStart), Valid: true, InfinityModifier: pgtype.Finite}
+	comparisonEndPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonEnd), Valid: true, InfinityModifier: pgtype.Finite}
 
 	// Determine metrics mode: Check if there are chat sessions in PostgreSQL
 	sessionCount, err := s.chatRepo.GetChatSessionCount(ctx, chatRepo.GetChatSessionCountParams{
@@ -1294,18 +1294,36 @@ func toTopUsers(users []repo.TopUser) []*telem_gen.TopUser {
 }
 
 // applyServerNameOverrides applies display name overrides to server names.
+// Merges entries with the same display name after applying overrides and re-sorts by count.
 func applyServerNameOverrides(servers []repo.TopServer, overrideMap map[string]string) []repo.TopServer {
 	if len(overrideMap) == 0 {
 		return servers
 	}
 
-	result := make([]repo.TopServer, len(servers))
-	for i, s := range servers {
-		result[i] = s
-		if displayName, ok := overrideMap[s.ServerName]; ok {
-			result[i].ServerName = displayName
+	// Apply overrides and aggregate counts by display name
+	counts := make(map[string]uint64)
+	for _, s := range servers {
+		displayName := s.ServerName
+		if override, ok := overrideMap[s.ServerName]; ok {
+			displayName = override
 		}
+		counts[displayName] += s.ToolCallCount
 	}
+
+	// Convert back to slice
+	result := make([]repo.TopServer, 0, len(counts))
+	for name, count := range counts {
+		result = append(result, repo.TopServer{
+			ServerName:    name,
+			ToolCallCount: count,
+		})
+	}
+
+	// Re-sort by ToolCallCount descending
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ToolCallCount > result[j].ToolCallCount
+	})
+
 	return result
 }
 
