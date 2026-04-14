@@ -1,6 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { useListToolsets } from "@gram/client/react-query";
-import { HomeOnboarding } from "./HomeOnboarding";
+import { ProjectOnboarding } from "@/components/project/ProjectOnboarding";
 
 export default function Home() {
   const { data } = useListToolsets();
@@ -17,7 +17,7 @@ export default function Home() {
             <h2 className="text-lg font-semibold">TBD Dashboard</h2>
           </div>
         ) : (
-          <HomeOnboarding toolsets={data?.toolsets} />
+          <ProjectOnboarding toolsets={data?.toolsets} />
         )}
       </Page.Body>
     </Page>

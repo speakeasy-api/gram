@@ -5,11 +5,11 @@ import { Button } from "@speakeasy-api/moonshine";
 import { BlocksIcon, Code, MessageCircleIcon, ServerIcon } from "lucide-react";
 import { useMemo } from "react";
 
-export type HomeOnboardingProps = {
+export type ProjectOnboardingProps = {
   toolsets: ListToolsetsQueryData["toolsets"] | undefined;
 };
 
-export function HomeOnboarding({ toolsets }: HomeOnboardingProps) {
+export function ProjectOnboarding({ toolsets }: ProjectOnboardingProps) {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
