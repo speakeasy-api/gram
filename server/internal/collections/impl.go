@@ -3,14 +3,17 @@ package collections
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"path"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -28,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -37,6 +41,7 @@ type Service struct {
 	db        *pgxpool.Pool
 	repo      *repo.Queries
 	toolsets  *toolsetsRepo.Queries
+	orgRepo   *orgRepo.Queries
 	auth      *auth.Auth
 	sessions  *sessions.Manager
 	serverURL *url.URL
@@ -54,6 +59,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		db:        db,
 		repo:      repo.New(db),
 		toolsets:  toolsetsRepo.New(db),
+		orgRepo:   orgRepo.New(db),
 		auth:      auth.New(logger, db, sessions, accessLoader),
 		sessions:  sessions,
 		serverURL: serverURL,
@@ -143,6 +149,19 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	orgSlug := authCtx.OrganizationSlug
+	if orgSlug == "" {
+		orgMeta, err := s.orgRepo.GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error accessing organization metadata").Log(ctx, s.logger)
+		}
+		orgSlug = orgMeta.Slug
+	}
+
+	if err := s.ensureDefaultRegistryCollection(ctx, authCtx.ActiveOrganizationID, orgSlug); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error ensuring default registry collection").Log(ctx, s.logger)
 	}
 
 	collections, err := s.repo.ListOrganizationMcpCollections(ctx, authCtx.ActiveOrganizationID)
@@ -412,6 +431,83 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 	}
 
 	return &gen.ListServersResult{Servers: servers}, nil
+}
+
+func (s *Service) ensureDefaultRegistryCollection(ctx context.Context, organizationID, organizationSlug string) error {
+	const (
+		defaultCollectionName = "Registry"
+		defaultCollectionSlug = "registry"
+		defaultVisibility     = "private"
+	)
+
+	collection, err := s.repo.GetOrganizationMcpCollectionBySlugAndOrg(ctx, repo.GetOrganizationMcpCollectionBySlugAndOrgParams{
+		Slug:           defaultCollectionSlug,
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeUnexpected, err, "error getting default registry collection").Log(ctx, s.logger)
+		}
+
+		created, createErr := s.repo.CreateOrganizationMcpCollection(ctx, repo.CreateOrganizationMcpCollectionParams{
+			OrganizationID: organizationID,
+			Name:           defaultCollectionName,
+			Description:    pgtype.Text{String: "", Valid: false},
+			Slug:           defaultCollectionSlug,
+			Visibility:     defaultVisibility,
+		})
+		if createErr != nil {
+			if !isUniqueViolation(createErr) {
+				return oops.E(oops.CodeUnexpected, createErr, "error creating default registry collection").Log(ctx, s.logger)
+			}
+
+			collection, err = s.repo.GetOrganizationMcpCollectionBySlugAndOrg(ctx, repo.GetOrganizationMcpCollectionBySlugAndOrgParams{
+				Slug:           defaultCollectionSlug,
+				OrganizationID: organizationID,
+			})
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, createErr, "error creating default registry collection").Log(ctx, s.logger)
+			}
+		} else {
+			collection = repo.GetOrganizationMcpCollectionBySlugAndOrgRow(created)
+		}
+	}
+
+	if _, err := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, collection.ID); err == nil {
+		return nil
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, err, "error getting default registry namespace").Log(ctx, s.logger)
+	}
+
+	namespace := defaultRegistryNamespace(organizationSlug, organizationID)
+	_, err = s.repo.CreateOrganizationMcpCollectionRegistry(ctx, repo.CreateOrganizationMcpCollectionRegistryParams{
+		CollectionID: collection.ID,
+		Namespace:    namespace,
+	})
+	if err != nil {
+		if isUniqueViolation(err) {
+			if _, getErr := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, collection.ID); getErr == nil {
+				return nil
+			}
+		}
+		return oops.E(oops.CodeUnexpected, err, "error creating default registry namespace").Log(ctx, s.logger)
+	}
+
+	return nil
+}
+
+func defaultRegistryNamespace(organizationSlug, organizationID string) string {
+	suffix := strings.ToLower(strings.TrimSpace(organizationSlug))
+	if suffix == "" {
+		suffix = strings.ReplaceAll(strings.ToLower(organizationID), "-", "")
+	}
+
+	return fmt.Sprintf("com.speakeasy.%s.registry", suffix)
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
 
 func toMCPCollection(c repo.CreateOrganizationMcpCollectionRow, namespace string) *types.MCPCollection {

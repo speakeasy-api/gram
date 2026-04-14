@@ -1,4 +1,4 @@
-import { NavButton } from "@/components/nav-menu";
+import { NavButton, NavMenu } from "@/components/nav-menu";
 import { RequireScope } from "@/components/require-scope";
 import {
   Sidebar,

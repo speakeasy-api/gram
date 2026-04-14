@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	collectionsRepo "github.com/speakeasy-api/gram/server/internal/collections/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -317,23 +316,6 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 		mockAuthServer: mockServer,
 		authConfigs:    authConfigs,
 	}
-}
-
-func assertDefaultRegistryCollection(t *testing.T, instance *testInstance, organizationID, organizationSlug string) {
-	t.Helper()
-
-	repo := collectionsRepo.New(instance.conn)
-	collection, err := repo.GetOrganizationMcpCollectionBySlugAndOrg(t.Context(), collectionsRepo.GetOrganizationMcpCollectionBySlugAndOrgParams{
-		Slug:           "registry",
-		OrganizationID: organizationID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, "Registry", collection.Name)
-	require.Equal(t, "private", collection.Visibility)
-
-	registry, err := repo.GetOrganizationMcpCollectionRegistryByID(t.Context(), collection.ID)
-	require.NoError(t, err)
-	require.Equal(t, fmt.Sprintf("com.speakeasy.%s.registry", organizationSlug), registry.Namespace)
 }
 
 // Helper function to create a default mock user info

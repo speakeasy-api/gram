@@ -63,13 +63,6 @@ func TestService_SwitchScopes(t *testing.T) {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok, "auth context should be set after callback")
 		require.Equal(t, newOrgID, authCtx.ActiveOrganizationID, "incorrect active organization id after switch")
-
-		assertDefaultRegistryCollection(
-			t,
-			instance,
-			userInfo.Organizations[1].ID,
-			userInfo.Organizations[1].Slug,
-		)
 	})
 
 	t.Run("switch to organization not in user's organizations", func(t *testing.T) {

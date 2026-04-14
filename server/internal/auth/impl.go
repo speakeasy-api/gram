@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
-	collectionsRepo "github.com/speakeasy-api/gram/server/internal/collections/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -58,10 +56,9 @@ type Service struct {
 	db              *pgxpool.Pool
 	sessions        *sessions.Manager
 	cfg             AuthConfigurations
-	projectsRepo    *projectsRepo.Queries
-	envRepo         *envRepo.Queries
-	orgRepo         *orgRepo.Queries
-	collectionsRepo *collectionsRepo.Queries
+	projectsRepo *projectsRepo.Queries
+	envRepo      *envRepo.Queries
+	orgRepo      *orgRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -81,10 +78,9 @@ func NewService(
 		db:              db,
 		sessions:        sessions,
 		cfg:             cfg,
-		projectsRepo:    projectsRepo.New(db),
-		envRepo:         envRepo.New(db),
-		orgRepo:         orgRepo.New(db),
-		collectionsRepo: collectionsRepo.New(db),
+		projectsRepo: projectsRepo.New(db),
+		envRepo:      envRepo.New(db),
+		orgRepo:      orgRepo.New(db),
 	}
 }
 
@@ -190,10 +186,6 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information"))
 	}
 
-	if err := s.ensureDefaultRegistryCollection(ctx, activeOrg.ID, activeOrg.Slug); err != nil {
-		return redirectWithError(authErrInit, err)
-	}
-
 	session.ActiveOrganizationID = activeOrg.ID
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		return redirectWithError(authErrInit, err)
@@ -261,9 +253,6 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 				Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
-			}
-			if err := s.ensureDefaultRegistryCollection(ctx, org.ID, org.Slug); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "error creating default registry collection").Log(ctx, s.logger)
 			}
 			break
 		}
@@ -505,78 +494,6 @@ func (s *Service) createDefaultProject(ctx context.Context, organizationID strin
 	}
 
 	return project, nil
-}
-
-func (s *Service) ensureDefaultRegistryCollection(ctx context.Context, organizationID, organizationSlug string) error {
-	const (
-		defaultCollectionName = "Registry"
-		defaultCollectionSlug = "registry"
-		defaultVisibility     = "private"
-	)
-
-	collection, err := s.collectionsRepo.GetOrganizationMcpCollectionBySlugAndOrg(ctx, collectionsRepo.GetOrganizationMcpCollectionBySlugAndOrgParams{
-		Slug:           defaultCollectionSlug,
-		OrganizationID: organizationID,
-	})
-	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnexpected, err, "error getting default registry collection").Log(ctx, s.logger)
-		}
-
-		created, createErr := s.collectionsRepo.CreateOrganizationMcpCollection(ctx, collectionsRepo.CreateOrganizationMcpCollectionParams{
-			OrganizationID: organizationID,
-			Name:           defaultCollectionName,
-			Description:    pgtype.Text{String: "", Valid: false},
-			Slug:           defaultCollectionSlug,
-			Visibility:     defaultVisibility,
-		})
-		if createErr != nil {
-			if !isUniqueViolation(createErr) {
-				return oops.E(oops.CodeUnexpected, createErr, "error creating default registry collection").Log(ctx, s.logger)
-			}
-
-			collection, err = s.collectionsRepo.GetOrganizationMcpCollectionBySlugAndOrg(ctx, collectionsRepo.GetOrganizationMcpCollectionBySlugAndOrgParams{
-				Slug:           defaultCollectionSlug,
-				OrganizationID: organizationID,
-			})
-			if err != nil {
-				return oops.E(oops.CodeUnexpected, createErr, "error creating default registry collection").Log(ctx, s.logger)
-			}
-		} else {
-			collection = collectionsRepo.GetOrganizationMcpCollectionBySlugAndOrgRow(created)
-		}
-	}
-
-	if _, err := s.collectionsRepo.GetOrganizationMcpCollectionRegistryByID(ctx, collection.ID); err == nil {
-		return nil
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		return oops.E(oops.CodeUnexpected, err, "error getting default registry namespace").Log(ctx, s.logger)
-	}
-
-	namespace := defaultRegistryNamespace(organizationSlug, organizationID)
-	_, err = s.collectionsRepo.CreateOrganizationMcpCollectionRegistry(ctx, collectionsRepo.CreateOrganizationMcpCollectionRegistryParams{
-		CollectionID: collection.ID,
-		Namespace:    namespace,
-	})
-	if err != nil {
-		if isUniqueViolation(err) {
-			if _, getErr := s.collectionsRepo.GetOrganizationMcpCollectionRegistryByID(ctx, collection.ID); getErr == nil {
-				return nil
-			}
-		}
-		return oops.E(oops.CodeUnexpected, err, "error creating default registry namespace").Log(ctx, s.logger)
-	}
-
-	return nil
-}
-
-func defaultRegistryNamespace(organizationSlug, organizationID string) string {
-	suffix := strings.ToLower(strings.TrimSpace(organizationSlug))
-	if suffix == "" {
-		suffix = strings.ReplaceAll(strings.ToLower(organizationID), "-", "")
-	}
-
-	return fmt.Sprintf("com.speakeasy.%s.registry", suffix)
 }
 
 func isUniqueViolation(err error) bool {
