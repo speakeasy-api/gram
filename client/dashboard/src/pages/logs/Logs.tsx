@@ -781,13 +781,6 @@ function LogsInnerContent({
                 {/* Content section - full width */}
                 <div className="min-h-0 flex-1 overflow-hidden border-t">
                   <div className="bg-background flex h-full flex-col">
-                    {/* Loading indicator */}
-                    {isFetching && allTraces.length > 0 && (
-                      <div className="bg-primary/20 absolute top-0 right-0 left-0 z-20 h-1">
-                        <div className="bg-primary h-full animate-pulse" />
-                      </div>
-                    )}
-
                     {/* Header */}
                     <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-8 py-2.5 text-xs font-medium tracking-wide uppercase">
                       <div className="w-1.5 shrink-0" />
