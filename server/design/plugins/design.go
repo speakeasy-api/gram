@@ -7,151 +7,6 @@ import (
 	"github.com/speakeasy-api/gram/server/design/shared"
 )
 
-// PluginServerModel represents an MCP server included in a plugin.
-var PluginServerModel = Type("PluginServer", func() {
-	Required("id", "display_name", "policy", "sort_order", "created_at")
-
-	Attribute("id", String, func() {
-		Description("Unique plugin server identifier.")
-		Format(FormatUUID)
-	})
-	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID, if this server is a first-party toolset.")
-		Format(FormatUUID)
-	})
-	Attribute("registry_id", String, func() {
-		Description("MCP registry ID, if this server is from a catalog.")
-		Format(FormatUUID)
-	})
-	Attribute("registry_server_specifier", String, "Registry server specifier (e.g. io.modelcontextprotocol.anonymous/exa).")
-	Attribute("external_url", String, "External MCP server URL.")
-	Attribute("display_name", String, "Display name shown in generated plugin config.")
-	Attribute("policy", String, func() {
-		Description("Whether this server is required or optional.")
-		Enum("required", "optional")
-	})
-	Attribute("sort_order", Int32, "Ordering within the plugin.")
-	Attribute("created_at", String, func() {
-		Format(FormatDateTime)
-	})
-})
-
-// PluginAssignmentModel represents a role or user assignment for a plugin.
-var PluginAssignmentModel = Type("PluginAssignment", func() {
-	Required("id", "principal_urn", "created_at")
-
-	Attribute("id", String, func() {
-		Description("Unique assignment identifier.")
-		Format(FormatUUID)
-	})
-	Attribute("principal_urn", String, "Principal URN (e.g. role:engineering, user:id, or *).")
-	Attribute("created_at", String, func() {
-		Format(FormatDateTime)
-	})
-})
-
-// PluginModel is the full plugin representation.
-var PluginModel = Type("Plugin", func() {
-	Required("id", "name", "slug", "created_at", "updated_at")
-
-	Attribute("id", String, func() {
-		Description("Unique plugin identifier.")
-		Format(FormatUUID)
-	})
-	Attribute("name", String, "Display name.")
-	Attribute("slug", String, "URL-safe identifier, unique per org.")
-	Attribute("description", String, "Optional description.")
-	Attribute("server_count", Int64, "Number of active servers in this plugin.")
-	Attribute("assignment_count", Int64, "Number of role/user assignments.")
-	Attribute("servers", ArrayOf(PluginServerModel), "Servers included in this plugin.")
-	Attribute("assignments", ArrayOf(PluginAssignmentModel), "Role/user assignments.")
-	Attribute("created_at", String, func() {
-		Format(FormatDateTime)
-	})
-	Attribute("updated_at", String, func() {
-		Format(FormatDateTime)
-	})
-})
-
-// --- Forms ---
-
-var CreatePluginForm = Type("CreatePluginForm", func() {
-	Required("name")
-
-	Attribute("name", String, "Display name for the plugin.")
-	Attribute("description", String, "Optional description.")
-})
-
-var UpdatePluginForm = Type("UpdatePluginForm", func() {
-	Required("id", "name", "slug")
-
-	Attribute("id", String, func() {
-		Format(FormatUUID)
-	})
-	Attribute("name", String, "Updated display name.")
-	Attribute("slug", String, "Updated slug.")
-	Attribute("description", String, "Updated description.")
-})
-
-var AddPluginServerForm = Type("AddPluginServerForm", func() {
-	Required("plugin_id", "display_name")
-
-	Attribute("plugin_id", String, func() {
-		Format(FormatUUID)
-	})
-	Attribute("toolset_id", String, func() {
-		Format(FormatUUID)
-	})
-	Attribute("registry_id", String, func() {
-		Format(FormatUUID)
-	})
-	Attribute("registry_server_specifier", String)
-	Attribute("external_url", String)
-	Attribute("display_name", String, "Display name for the server.")
-	Attribute("policy", String, func() {
-		Enum("required", "optional")
-		Default("required")
-	})
-	Attribute("sort_order", Int32, func() {
-		Default(0)
-	})
-})
-
-var UpdatePluginServerForm = Type("UpdatePluginServerForm", func() {
-	Required("id", "plugin_id", "display_name")
-
-	Attribute("id", String, func() {
-		Format(FormatUUID)
-	})
-	Attribute("plugin_id", String, func() {
-		Format(FormatUUID)
-	})
-	Attribute("display_name", String)
-	Attribute("policy", String, func() {
-		Enum("required", "optional")
-		Default("required")
-	})
-	Attribute("sort_order", Int32, func() {
-		Default(0)
-	})
-})
-
-var SetPluginAssignmentsForm = Type("SetPluginAssignmentsForm", func() {
-	Required("plugin_id", "principal_urns")
-
-	Attribute("plugin_id", String, func() {
-		Format(FormatUUID)
-	})
-	Attribute("principal_urns", ArrayOf(String), "List of principal URNs to assign.")
-})
-
-// --- Results ---
-
-var ListPluginsResult = Type("ListPluginsResult", func() {
-	Required("plugins")
-	Attribute("plugins", ArrayOf(PluginModel), "The plugins in the organization.")
-})
-
 // --- Service ---
 
 var _ = Service("plugins", func() {
@@ -420,4 +275,151 @@ var _ = Service("plugins", func() {
 		Meta("openapi:operationId", "downloadPluginPackage")
 		Meta("openapi:extension:x-speakeasy-name-override", "downloadPluginPackage")
 	})
+})
+
+// --- Models ---
+
+// PluginServerModel represents an MCP server included in a plugin.
+var PluginServerModel = Type("PluginServer", func() {
+	Required("id", "display_name", "policy", "sort_order", "created_at")
+
+	Attribute("id", String, func() {
+		Description("Unique plugin server identifier.")
+		Format(FormatUUID)
+	})
+	Attribute("toolset_id", String, func() {
+		Description("Gram toolset ID, if this server is a first-party toolset.")
+		Format(FormatUUID)
+	})
+	Attribute("registry_id", String, func() {
+		Description("MCP registry ID, if this server is from a catalog.")
+		Format(FormatUUID)
+	})
+	Attribute("registry_server_specifier", String, "Registry server specifier (e.g. io.modelcontextprotocol.anonymous/exa).")
+	Attribute("external_url", String, "External MCP server URL.")
+	Attribute("display_name", String, "Display name shown in generated plugin config.")
+	Attribute("policy", String, func() {
+		Description("Whether this server is required or optional.")
+		Enum("required", "optional")
+	})
+	Attribute("sort_order", Int32, "Ordering within the plugin.")
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+// PluginAssignmentModel represents a role or user assignment for a plugin.
+var PluginAssignmentModel = Type("PluginAssignment", func() {
+	Required("id", "principal_urn", "created_at")
+
+	Attribute("id", String, func() {
+		Description("Unique assignment identifier.")
+		Format(FormatUUID)
+	})
+	Attribute("principal_urn", String, "Principal URN (e.g. role:engineering, user:id, or *).")
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+// PluginModel is the full plugin representation.
+var PluginModel = Type("Plugin", func() {
+	Required("id", "name", "slug", "created_at", "updated_at")
+
+	Attribute("id", String, func() {
+		Description("Unique plugin identifier.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Display name.")
+	Attribute("slug", String, "URL-safe identifier, unique per org.")
+	Attribute("description", String, "Optional description.")
+	Attribute("server_count", Int64, "Number of active servers in this plugin.")
+	Attribute("assignment_count", Int64, "Number of role/user assignments.")
+	Attribute("servers", ArrayOf(PluginServerModel), "Servers included in this plugin.")
+	Attribute("assignments", ArrayOf(PluginAssignmentModel), "Role/user assignments.")
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+// --- Forms ---
+
+var CreatePluginForm = Type("CreatePluginForm", func() {
+	Required("name")
+
+	Attribute("name", String, "Display name for the plugin.")
+	Attribute("description", String, "Optional description.")
+})
+
+var UpdatePluginForm = Type("UpdatePluginForm", func() {
+	Required("id", "name", "slug")
+
+	Attribute("id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Updated display name.")
+	Attribute("slug", String, "Updated slug.")
+	Attribute("description", String, "Updated description.")
+})
+
+var AddPluginServerForm = Type("AddPluginServerForm", func() {
+	Required("plugin_id", "display_name")
+
+	Attribute("plugin_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("toolset_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("registry_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("registry_server_specifier", String)
+	Attribute("external_url", String)
+	Attribute("display_name", String, "Display name for the server.")
+	Attribute("policy", String, func() {
+		Enum("required", "optional")
+		Default("required")
+	})
+	Attribute("sort_order", Int32, func() {
+		Default(0)
+	})
+})
+
+var UpdatePluginServerForm = Type("UpdatePluginServerForm", func() {
+	Required("id", "plugin_id", "display_name")
+
+	Attribute("id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("plugin_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("display_name", String)
+	Attribute("policy", String, func() {
+		Enum("required", "optional")
+		Default("required")
+	})
+	Attribute("sort_order", Int32, func() {
+		Default(0)
+	})
+})
+
+var SetPluginAssignmentsForm = Type("SetPluginAssignmentsForm", func() {
+	Required("plugin_id", "principal_urns")
+
+	Attribute("plugin_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("principal_urns", ArrayOf(String), "List of principal URNs to assign.")
+})
+
+// --- Results ---
+
+var ListPluginsResult = Type("ListPluginsResult", func() {
+	Required("plugins")
+	Attribute("plugins", ArrayOf(PluginModel), "The plugins in the organization.")
 })
