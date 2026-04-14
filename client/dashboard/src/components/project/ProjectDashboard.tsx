@@ -86,198 +86,186 @@ export function ProjectDashboard() {
   return (
     <div className="space-y-8">
       {/* Row 0: KPI Cards */}
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Overview</h2>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          {isPeriodUsagePending ? (
-            <Skeleton className="h-[100px] rounded-lg" />
-          ) : (
-            <MetricCard
-              title="Active Servers"
-              value={periodUsage?.actualEnabledServerCount ?? 0}
-              icon="server"
-            />
-          )}
-          {isMetricsPending ? (
-            <Skeleton className="h-[100px] rounded-lg" />
-          ) : (
-            <MetricCard
-              title="Tool Calls (7d)"
-              value={metricsData?.metrics.totalToolCalls ?? 0}
-              icon="wrench"
-            />
-          )}
-          {isFilterOptionsPending ? (
-            <Skeleton className="h-[100px] rounded-lg" />
-          ) : (
-            <MetricCard
-              title="End Users (7d)"
-              value={filterOptionsData?.options.length ?? 0}
-              icon="users"
-            />
-          )}
-          {isMetricsPending ? (
-            <Skeleton className="h-[100px] rounded-lg" />
-          ) : (
-            <MetricCard
-              title="Sessions (7d)"
-              value={metricsData?.metrics.totalChats ?? 0}
-              icon="message-circle"
-            />
-          )}
-        </div>
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        {isPeriodUsagePending ? (
+          <Skeleton className="h-[100px] rounded-lg" />
+        ) : (
+          <MetricCard
+            title="Active Servers"
+            value={periodUsage?.actualEnabledServerCount ?? 0}
+            icon="server"
+          />
+        )}
+        {isMetricsPending ? (
+          <Skeleton className="h-[100px] rounded-lg" />
+        ) : (
+          <MetricCard
+            title="Tool Calls (7d)"
+            value={metricsData?.metrics.totalToolCalls ?? 0}
+            icon="wrench"
+          />
+        )}
+        {isFilterOptionsPending ? (
+          <Skeleton className="h-[100px] rounded-lg" />
+        ) : (
+          <MetricCard
+            title="End Users (7d)"
+            value={filterOptionsData?.options.length ?? 0}
+            icon="users"
+          />
+        )}
+        {isMetricsPending ? (
+          <Skeleton className="h-[100px] rounded-lg" />
+        ) : (
+          <MetricCard
+            title="Sessions (7d)"
+            value={metricsData?.metrics.totalChats ?? 0}
+            icon="message-circle"
+          />
+        )}
       </div>
 
       {/* Row 1: Top Activity */}
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Top Activity (7d)</h2>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <DashboardCard
-            title="Top Users"
-            action={<ViewAllLink to={routes.hooks.href()} />}
-          >
-            {isFilterOptionsPending ? (
-              <SkeletonList />
-            ) : topUsers.length === 0 ? (
-              <EmptyState message="No user activity recorded" />
-            ) : (
-              <RankedBarList
-                items={topUsers.map((u) => ({
-                  key: u.id,
-                  label: u.label,
-                  value: u.count,
-                }))}
-              />
-            )}
-          </DashboardCard>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <DashboardCard
+          title="Top Users"
+          action={<ViewAllLink to={routes.hooks.href()} />}
+        >
+          {isFilterOptionsPending ? (
+            <SkeletonList />
+          ) : topUsers.length === 0 ? (
+            <EmptyState message="No user activity recorded" />
+          ) : (
+            <RankedBarList
+              items={topUsers.map((u) => ({
+                key: u.id,
+                label: u.label,
+                value: u.count,
+              }))}
+            />
+          )}
+        </DashboardCard>
 
-          <DashboardCard
-            title="Top Servers"
-            action={<ViewAllLink to={routes.hooks.href()} />}
-          >
-            {isHooksPending ? (
-              <SkeletonList />
-            ) : topServers.length === 0 ? (
-              <EmptyState message="No server activity recorded" />
-            ) : (
-              <RankedBarList
-                items={topServers.map((s) => ({
-                  key: s.serverName,
-                  label: s.serverName,
-                  value: s.eventCount,
-                }))}
-              />
-            )}
-          </DashboardCard>
-        </div>
+        <DashboardCard
+          title="Top Servers"
+          action={<ViewAllLink to={routes.hooks.href()} />}
+        >
+          {isHooksPending ? (
+            <SkeletonList />
+          ) : topServers.length === 0 ? (
+            <EmptyState message="No server activity recorded" />
+          ) : (
+            <RankedBarList
+              items={topServers.map((s) => ({
+                key: s.serverName,
+                label: s.serverName,
+                value: s.eventCount,
+              }))}
+            />
+          )}
+        </DashboardCard>
       </div>
 
       {/* Row 2: Sessions */}
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Sessions (7d)</h2>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <DashboardCard
-            title="Agent Sessions by User"
-            action={<ViewAllLink to={routes.chatSessions.href()} />}
-          >
-            {isHooksPending ? (
-              <SkeletonList />
-            ) : topUsersByHooks.length === 0 ? (
-              <EmptyState message="No session activity recorded" />
-            ) : (
-              <ul className="divide-border divide-y">
-                {topUsersByHooks.map((user) => (
-                  <li
-                    key={user.userEmail}
-                    className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
-                  >
-                    <Avatar className="size-8 shrink-0">
-                      <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
-                        {emailInitials(user.userEmail)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {user.userEmail}
-                      </p>
-                      <p className="text-muted-foreground text-xs">
-                        {user.eventCount.toLocaleString()} calls &middot;{" "}
-                        {user.uniqueTools} tools
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </DashboardCard>
-
-          <DashboardCard
-            title="Most Used LLM Clients"
-            action={<ViewAllLink to={routes.observability.href()} />}
-          >
-            {isMetricsPending ? (
-              <SkeletonList />
-            ) : topModels.length === 0 ? (
-              <EmptyState message="No LLM activity recorded" />
-            ) : (
-              <RankedBarList
-                items={topModels.map((m) => ({
-                  key: m.name,
-                  label: m.name,
-                  value: m.count,
-                }))}
-              />
-            )}
-          </DashboardCard>
-        </div>
-      </div>
-
-      {/* Row 3: Activity Timeline */}
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Recent Activity</h2>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <DashboardCard
-          title="Audit Log"
-          action={<ViewAllLink to={orgRoutes.auditLogs.href()} />}
+          title="Agent Sessions by User"
+          action={<ViewAllLink to={routes.chatSessions.href()} />}
         >
-          {isAuditLogsPending ? (
-            <div className="space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
-              ))}
-            </div>
-          ) : recentLogs.length === 0 ? (
-            <EmptyState message="No recent activity" />
+          {isHooksPending ? (
+            <SkeletonList />
+          ) : topUsersByHooks.length === 0 ? (
+            <EmptyState message="No session activity recorded" />
           ) : (
             <ul className="divide-border divide-y">
-              {recentLogs.map((log) => (
+              {topUsersByHooks.map((user) => (
                 <li
-                  key={log.id}
-                  className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
+                  key={user.userEmail}
+                  className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
                 >
-                  <div className="bg-muted-foreground/30 mt-2 h-1.5 w-1.5 shrink-0 rounded-full" />
-                  <p className="min-w-0 flex-1 text-sm">
-                    <span className="font-medium">
-                      {log.actorDisplayName ?? log.actorSlug ?? "Unknown"}
-                    </span>{" "}
-                    <span className="text-muted-foreground">{log.action}</span>
-                    {log.subjectDisplayName && (
-                      <>
-                        {" "}
-                        <span className="font-medium">
-                          {log.subjectDisplayName}
-                        </span>
-                      </>
-                    )}
-                  </p>
-                  <time className="text-muted-foreground shrink-0 text-xs">
-                    {formatDistanceToNow(log.createdAt, { addSuffix: true })}
-                  </time>
+                  <Avatar className="size-8 shrink-0">
+                    <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                      {emailInitials(user.userEmail)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {user.userEmail}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {user.eventCount.toLocaleString()} calls &middot;{" "}
+                      {user.uniqueTools} tools
+                    </p>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
         </DashboardCard>
+
+        <DashboardCard
+          title="Most Used LLM Clients"
+          action={<ViewAllLink to={routes.observability.href()} />}
+        >
+          {isMetricsPending ? (
+            <SkeletonList />
+          ) : topModels.length === 0 ? (
+            <EmptyState message="No LLM activity recorded" />
+          ) : (
+            <RankedBarList
+              items={topModels.map((m) => ({
+                key: m.name,
+                label: m.name,
+                value: m.count,
+              }))}
+            />
+          )}
+        </DashboardCard>
       </div>
+
+      {/* Row 3: Activity Timeline */}
+      <DashboardCard
+        title="Audit Log"
+        action={<ViewAllLink to={orgRoutes.auditLogs.href()} />}
+      >
+        {isAuditLogsPending ? (
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
+          </div>
+        ) : recentLogs.length === 0 ? (
+          <EmptyState message="No recent activity" />
+        ) : (
+          <ul className="divide-border divide-y">
+            {recentLogs.map((log) => (
+              <li
+                key={log.id}
+                className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
+              >
+                <div className="bg-muted-foreground/30 mt-2 h-1.5 w-1.5 shrink-0 rounded-full" />
+                <p className="min-w-0 flex-1 text-sm">
+                  <span className="font-medium">
+                    {log.actorDisplayName ?? log.actorSlug ?? "Unknown"}
+                  </span>{" "}
+                  <span className="text-muted-foreground">{log.action}</span>
+                  {log.subjectDisplayName && (
+                    <>
+                      {" "}
+                      <span className="font-medium">
+                        {log.subjectDisplayName}
+                      </span>
+                    </>
+                  )}
+                </p>
+                <time className="text-muted-foreground shrink-0 text-xs">
+                  {formatDistanceToNow(log.createdAt, { addSuffix: true })}
+                </time>
+              </li>
+            ))}
+          </ul>
+        )}
+      </DashboardCard>
     </div>
   );
 }
