@@ -59,24 +59,6 @@ func (q *Queries) DeleteOrganizationUserRelationship(ctx context.Context, arg De
 	return err
 }
 
-const getOrganizationIDByWorkosID = `-- name: GetOrganizationIDByWorkosID :one
-SELECT id
-FROM organization_metadata
-WHERE workos_id = $1
-  AND id != $1
-LIMIT 1
-`
-
-// Returns the internal organization ID for a given WorkOS org ID, excluding
-// phantom rows where id = workos_id (which occur when the provider returns the
-// WorkOS ID as the org ID directly).
-func (q *Queries) GetOrganizationIDByWorkosID(ctx context.Context, workosID pgtype.Text) (string, error) {
-	row := q.db.QueryRow(ctx, getOrganizationIDByWorkosID, workosID)
-	var id string
-	err := row.Scan(&id)
-	return id, err
-}
-
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
 SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 FROM organization_metadata

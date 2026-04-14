@@ -40,16 +40,6 @@ FROM organization_metadata
 WHERE workos_id = @workos_id
 LIMIT 1;
 
--- name: GetOrganizationIDByWorkosID :one
--- Returns the internal organization ID for a given WorkOS org ID, excluding
--- phantom rows where id = workos_id (which occur when the provider returns the
--- WorkOS ID as the org ID directly).
-SELECT id
-FROM organization_metadata
-WHERE workos_id = @workos_id
-  AND id != @workos_id
-LIMIT 1;
-
 -- name: UpsertOrganizationUserRelationship :one
 INSERT INTO organization_user_relationships (
     organization_id,
