@@ -284,6 +284,10 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.E(oops.CodeUnexpected, err, "soft-delete plugin servers").Log(ctx, s.logger)
 	}
 
+	if _, err := txRepo.RemoveAllPluginAssignments(ctx, pluginID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove plugin assignments").Log(ctx, s.logger)
+	}
+
 	if err := txRepo.DeletePlugin(ctx, repo.DeletePluginParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
