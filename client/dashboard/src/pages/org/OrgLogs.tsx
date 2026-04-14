@@ -11,6 +11,21 @@ import { useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 
 export default function OrgLogs() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Title>Logging & Telemetry</Page.Header.Title>
+      </Page.Header>
+      <Page.Body>
+        <RequireScope scope={["org:read", "org:admin"]} level="page">
+          <OrgLogsInner />
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
+}
+
+export function OrgLogsInner() {
   const { data: featuresData, isLoading: featuresLoading } = useFeaturesGet();
   const [logsEnabled, setLogsEnabled] = useState<boolean | null>(null);
   const [toolIoLogsEnabled, setToolIoLogsEnabled] = useState<boolean | null>(
@@ -89,124 +104,104 @@ export default function OrgLogs() {
   };
 
   return (
-    <RequireScope scope={["org:read", "org:admin"]} level="page">
-      <Page>
-        <Page.Header>
-          <Page.Header.Title>Logging & Telemetry</Page.Header.Title>
-        </Page.Header>
-        <Page.Body>
-          <Heading variant="h4" className="mb-2">
-            Logs
-          </Heading>
-          <Type muted small className="mb-6">
-            Configure logging and telemetry settings for your MCP servers. When
-            enabled, tool calls and traces are recorded for debugging and
-            analytics.
-          </Type>
-          <div className="rounded-lg border border-border bg-card p-4">
-            <Stack gap={4}>
-              <Stack
-                direction="horizontal"
-                justify="space-between"
-                align="center"
-              >
-                <Stack gap={1}>
-                  <Stack direction="horizontal" align="center" gap={2}>
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <Type variant="body" className="font-medium">
-                      Enable Logs
-                    </Type>
-                  </Stack>
-                  <Type
-                    variant="body"
-                    className="text-muted-foreground text-sm ml-6"
-                  >
-                    Record tool call traces and telemetry data
-                  </Type>
-                </Stack>
-                {!featuresLoading && (
-                  <RequireScope scope="org:admin" level="component">
-                    <Switch
-                      checked={effectiveLogsEnabled}
-                      onCheckedChange={handleSetLogs}
-                      disabled={isMutatingLogs}
-                      aria-label="Enable logs"
-                    />
-                  </RequireScope>
-                )}
+    <>
+      <Heading variant="h4" className="mb-2">
+        Logs
+      </Heading>
+      <Type muted small className="mb-6">
+        Configure logging and telemetry settings for your MCP servers. When
+        enabled, tool calls and traces are recorded for debugging and analytics.
+      </Type>
+      <div className="border-border bg-card rounded-lg border p-4">
+        <Stack gap={4}>
+          <Stack direction="horizontal" justify="space-between" align="center">
+            <Stack gap={1}>
+              <Stack direction="horizontal" align="center" gap={2}>
+                <FileText className="text-muted-foreground h-4 w-4" />
+                <Type variant="body" className="font-medium">
+                  Enable Logs
+                </Type>
               </Stack>
-
-              <div className="border-t border-border" />
-
-              <Stack
-                direction="horizontal"
-                justify="space-between"
-                align="center"
+              <Type
+                variant="body"
+                className="text-muted-foreground ml-6 text-sm"
               >
-                <Stack gap={1}>
-                  <Stack direction="horizontal" align="center" gap={2}>
-                    <Eye className="h-4 w-4 text-muted-foreground" />
-                    <Type variant="body" className="font-medium">
-                      Record Tool I/O
-                    </Type>
-                  </Stack>
-                  <Type
-                    variant="body"
-                    className="text-muted-foreground text-sm ml-6"
-                  >
-                    Store tool inputs and outputs. May expose sensitive data in
-                    logs.
-                  </Type>
-                </Stack>
-                {!featuresLoading && (
-                  <RequireScope scope="org:admin" level="component">
-                    <Switch
-                      checked={effectiveToolIoLogsEnabled}
-                      onCheckedChange={handleSetToolIoLogs}
-                      disabled={isMutatingLogs || !effectiveLogsEnabled}
-                      aria-label="Record tool inputs and outputs"
-                    />
-                  </RequireScope>
-                )}
-              </Stack>
-
-              <div className="border-t border-border" />
-
-              <Stack
-                direction="horizontal"
-                justify="space-between"
-                align="center"
-              >
-                <Stack gap={1}>
-                  <Stack direction="horizontal" align="center" gap={2}>
-                    <Monitor className="h-4 w-4 text-muted-foreground" />
-                    <Type variant="body" className="font-medium">
-                      Claude Code Session Capture
-                    </Type>
-                  </Stack>
-                  <Type
-                    variant="body"
-                    className="text-muted-foreground text-sm ml-6"
-                  >
-                    Capture user prompts and assistant responses from Claude
-                    Code sessions. Sessions appear in the Agent Sessions tab.
-                  </Type>
-                </Stack>
-                {!featuresLoading && (
-                  <RequireScope scope="org:admin" level="component">
-                    <Switch
-                      checked={effectiveSessionCaptureEnabled}
-                      onCheckedChange={handleSetSessionCapture}
-                      disabled={isMutatingLogs || !effectiveLogsEnabled}
-                      aria-label="Enable Claude Code session capture"
-                    />
-                  </RequireScope>
-                )}
-              </Stack>
+                Record tool call traces and telemetry data
+              </Type>
             </Stack>
-          </div>
-        </Page.Body>
-      </Page>
-    </RequireScope>
+            {!featuresLoading && (
+              <RequireScope scope="org:admin" level="component">
+                <Switch
+                  checked={effectiveLogsEnabled}
+                  onCheckedChange={handleSetLogs}
+                  disabled={isMutatingLogs}
+                  aria-label="Enable logs"
+                />
+              </RequireScope>
+            )}
+          </Stack>
+
+          <div className="border-border border-t" />
+
+          <Stack direction="horizontal" justify="space-between" align="center">
+            <Stack gap={1}>
+              <Stack direction="horizontal" align="center" gap={2}>
+                <Eye className="text-muted-foreground h-4 w-4" />
+                <Type variant="body" className="font-medium">
+                  Record Tool I/O
+                </Type>
+              </Stack>
+              <Type
+                variant="body"
+                className="text-muted-foreground ml-6 text-sm"
+              >
+                Store tool inputs and outputs. May expose sensitive data in
+                logs.
+              </Type>
+            </Stack>
+            {!featuresLoading && (
+              <RequireScope scope="org:admin" level="component">
+                <Switch
+                  checked={effectiveToolIoLogsEnabled}
+                  onCheckedChange={handleSetToolIoLogs}
+                  disabled={isMutatingLogs || !effectiveLogsEnabled}
+                  aria-label="Record tool inputs and outputs"
+                />
+              </RequireScope>
+            )}
+          </Stack>
+
+          <div className="border-border border-t" />
+
+          <Stack direction="horizontal" justify="space-between" align="center">
+            <Stack gap={1}>
+              <Stack direction="horizontal" align="center" gap={2}>
+                <Monitor className="text-muted-foreground h-4 w-4" />
+                <Type variant="body" className="font-medium">
+                  Claude Code Session Capture
+                </Type>
+              </Stack>
+              <Type
+                variant="body"
+                className="text-muted-foreground ml-6 text-sm"
+              >
+                Capture user prompts and assistant responses from Claude Code
+                sessions. Sessions appear in the Agent Sessions tab.
+              </Type>
+            </Stack>
+            {!featuresLoading && (
+              <RequireScope scope="org:admin" level="component">
+                <Switch
+                  checked={effectiveSessionCaptureEnabled}
+                  onCheckedChange={handleSetSessionCapture}
+                  disabled={isMutatingLogs || !effectiveLogsEnabled}
+                  aria-label="Enable Claude Code session capture"
+                />
+              </RequireScope>
+            )}
+          </Stack>
+        </Stack>
+      </div>
+    </>
   );
 }

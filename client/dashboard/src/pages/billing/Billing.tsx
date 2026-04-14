@@ -26,22 +26,31 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 
 export default function Billing() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Title>Billing</Page.Header.Title>
+      </Page.Header>
+      <Page.Body>
+        <RequireScope scope="org:admin" level="page">
+          <BillingInner />
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
+}
+
+export function BillingInner() {
   const productTier = useProductTier();
 
   return (
-    <RequireScope scope={["org:read", "org:admin"]} level="page">
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <UsageSection />
-          {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
-          {(productTier === "base_PAID" ||
-            productTier === "__deprecated__pro") && <UsageTiers />}
-        </Page.Body>
-      </Page>
-    </RequireScope>
+    <>
+      <UsageSection />
+      {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
+      {(productTier === "base_PAID" || productTier === "__deprecated__pro") && (
+        <UsageTiers />
+      )}
+    </>
   );
 }
 

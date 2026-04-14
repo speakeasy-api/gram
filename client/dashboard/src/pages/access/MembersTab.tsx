@@ -97,7 +97,7 @@ export function MembersTab() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
+      <div className="mb-1 flex items-center justify-between">
         <div>
           <Heading variant="h4">Team Members</Heading>
           <Type muted small className="mt-1">
@@ -118,7 +118,7 @@ export function MembersTab() {
           className="mt-4 rounded-b-none"
         />
       )}
-      <div className="flex justify-center border border-t-0 border-border rounded-b-lg py-3">
+      <div className="border-border flex justify-center rounded-b-lg border border-t-0 py-3">
         <RequireScope scope="org:admin" level="component">
           <Button variant="tertiary" size="sm">
             <Button.Text>Manage Team</Button.Text>
