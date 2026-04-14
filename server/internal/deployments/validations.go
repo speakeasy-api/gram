@@ -49,14 +49,14 @@ func requireOrElse(acc error, node string, prop string, condition bool, err erro
 	if !condition {
 		return errors.Join(acc, fmt.Errorf("%s/%s: %w", node, prop, err))
 	}
-	return nil
+	return acc
 }
 
 func requireFieldsOrElse(acc error, node string, props []string, condition bool, err error) error {
 	if !condition {
 		return errors.Join(acc, fmt.Errorf("%s/{%s}: %w", node, strings.Join(props, ","), err))
 	}
-	return nil
+	return acc
 }
 
 func validateUpserts(
