@@ -485,28 +485,31 @@ function LogsContent() {
   );
 
   // Handle scroll for infinite loading
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const container = e.currentTarget;
-    const scrollTop = container.scrollTop;
-    const scrollHeight = container.scrollHeight;
-    const clientHeight = container.clientHeight;
-    const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const container = e.currentTarget;
+      const scrollTop = container.scrollTop;
+      const scrollHeight = container.scrollHeight;
+      const clientHeight = container.clientHeight;
+      const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
 
-    if (isFetchingNextPage || isFetching) return;
-    if (!hasNextPage) return;
+      if (isFetchingNextPage || isFetching) return;
+      if (!hasNextPage) return;
 
-    if (distanceFromBottom < 200) {
-      fetchNextPage();
-    }
-  };
+      if (distanceFromBottom < 200) {
+        fetchNextPage();
+      }
+    },
+    [fetchNextPage, hasNextPage, isFetching, isFetchingNextPage],
+  );
 
-  const toggleExpand = (traceId: string) => {
+  const toggleExpand = useCallback((traceId: string) => {
     setExpandedTraceId((prev) => (prev === traceId ? null : traceId));
-  };
+  }, []);
 
-  const handleLogClick = (log: TelemetryLogRecord) => {
+  const handleLogClick = useCallback((log: TelemetryLogRecord) => {
     setSelectedLog(log);
-  };
+  }, []);
 
   const isLoading = isFetching && allTraces.length === 0;
   const hasActiveFilters =
@@ -743,6 +746,7 @@ function LogsInnerContent({
 
                     {/* Header */}
                     <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-8 py-2.5 text-xs font-medium tracking-wide uppercase">
+                      <div className="w-1.5 shrink-0" />
                       <div className="w-[150px] shrink-0">Timestamp</div>
                       <div className="w-5 shrink-0" />
                       <div className="flex-1">Source / Tool</div>
@@ -840,7 +844,7 @@ function TraceListContent({
           key={trace.traceId}
           trace={trace}
           isExpanded={expandedTraceId === trace.traceId}
-          onToggle={() => onToggleExpand(trace.traceId)}
+          onToggle={onToggleExpand}
           onLogClick={onLogClick}
         />
       ))}
