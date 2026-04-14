@@ -6,30 +6,66 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"time"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 type FeatureChecker interface {
 	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
-type Manager struct {
-	logger   *slog.Logger
-	db       accessrepo.DBTX
-	features FeatureChecker
+// MembershipFetcher retrieves a WorkOS membership for a user+org pair.
+type MembershipFetcher interface {
+	GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*workos.Member, error)
 }
 
-func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker) *Manager {
+// roleSlugCache is the Redis cache entry for a resolved role slug.
+// Key is org-first so DeleteByPrefix on "role-slug:{orgID}:" invalidates the whole org.
+type roleSlugCache struct {
+	UserID string
+	OrgID  string
+	Slug   string
+}
+
+var _ cache.CacheableObject[roleSlugCache] = (*roleSlugCache)(nil)
+
+func (r roleSlugCache) CacheKey() string {
+	return "role-slug:" + r.OrgID + ":" + r.UserID
+}
+
+func (r roleSlugCache) TTL() time.Duration {
+	return 5 * time.Minute
+}
+
+func (r roleSlugCache) AdditionalCacheKeys() []string {
+	return nil
+}
+
+type Manager struct {
+	logger     *slog.Logger
+	db         accessrepo.DBTX
+	features   FeatureChecker
+	membership MembershipFetcher
+	roleCache  cache.TypedCacheObject[roleSlugCache]
+}
+
+func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker, membership MembershipFetcher, roleCache cache.Cache) *Manager {
 	return &Manager{
-		logger:   logger.With(attr.SlogComponent("access")),
-		db:       db,
-		features: features,
+		logger:     logger.With(attr.SlogComponent("access")),
+		db:         db,
+		features:   features,
+		membership: membership,
+		roleCache:  cache.NewTypedObjectCache[roleSlugCache](logger.With(attr.SlogCacheNamespace("access-role-slug")), roleCache, cache.SuffixNone),
 	}
 }
 
@@ -55,7 +91,19 @@ func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
 	}
 
 	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)}
-	// TODO: once we have role mapping we need to also add grants for roles here.
+
+	roleSlug, err := m.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	if err != nil {
+		m.logger.ErrorContext(
+			ctx,
+			"failed to resolve role for access grants",
+			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			attr.SlogUserID(authCtx.UserID),
+			attr.SlogError(err),
+		)
+	} else if roleSlug != "" {
+		principals = append(principals, urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug))
+	}
 
 	grants, err := LoadGrants(ctx, m.db, authCtx.ActiveOrganizationID, principals)
 	if err != nil {
@@ -70,6 +118,66 @@ func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
 	}
 
 	return GrantsToContext(ctx, grants), nil
+}
+
+func (m *Manager) resolveRoleSlug(ctx context.Context, userID, orgID string) (string, error) {
+	cacheKey := roleSlugCache{UserID: userID, OrgID: orgID, Slug: ""}.CacheKey()
+	if cached, err := m.roleCache.Get(ctx, cacheKey); err == nil {
+		return cached.Slug, nil
+	}
+
+	user, err := usersrepo.New(m.db).GetUser(ctx, userID)
+	if err != nil || !user.WorkosID.Valid || user.WorkosID.String == "" {
+		return "", nil
+	}
+
+	org, err := orgrepo.New(m.db).GetOrganizationMetadata(ctx, orgID)
+	if err != nil || !org.WorkosID.Valid || org.WorkosID.String == "" {
+		return "", nil
+	}
+
+	member, err := m.membership.GetOrgMembership(ctx, user.WorkosID.String, org.WorkosID.String)
+	if err != nil {
+		return "", fmt.Errorf("get org membership: %w", err)
+	}
+	if member == nil {
+		return "", nil
+	}
+
+	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: member.RoleSlug}
+	if err := m.roleCache.Store(ctx, entry); err != nil {
+		m.logger.WarnContext(ctx, "failed to cache role slug",
+			attr.SlogUserID(userID),
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+
+	return member.RoleSlug, nil
+}
+
+// InvalidateRoleCache removes the cached role slug for a single user. Call
+// this after updating a specific member's role via UpdateMemberRole.
+func (m *Manager) InvalidateRoleCache(ctx context.Context, userID, orgID string) {
+	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: ""}
+	if err := m.roleCache.Delete(ctx, entry); err != nil {
+		m.logger.WarnContext(ctx, "failed to invalidate cached role slug",
+			attr.SlogUserID(userID),
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+}
+
+// InvalidateAllRoleCaches removes all cached role slugs for an org. Call this
+// after bulk role reassignments where individual user IDs aren't tracked.
+func (m *Manager) InvalidateAllRoleCaches(ctx context.Context, orgID string) {
+	if err := m.roleCache.DeleteByPrefix(ctx, "role-slug:"+orgID+":"); err != nil {
+		m.logger.WarnContext(ctx, "failed to invalidate cached role slugs for org",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
 }
 
 func (m *Manager) Require(ctx context.Context, checks ...Check) error {

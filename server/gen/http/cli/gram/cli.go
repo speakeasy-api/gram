@@ -54,7 +54,7 @@ import (
 func UsageCommands() []string {
 	return []string{
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role|get-rbac-status|enable-rbac|disable-rbac)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
@@ -153,6 +153,15 @@ func ParseEndpoint(
 		accessUpdateMemberRoleBodyFlag         = accessUpdateMemberRoleFlags.String("body", "REQUIRED", "")
 		accessUpdateMemberRoleApikeyTokenFlag  = accessUpdateMemberRoleFlags.String("apikey-token", "", "")
 		accessUpdateMemberRoleSessionTokenFlag = accessUpdateMemberRoleFlags.String("session-token", "", "")
+
+		accessGetRBACStatusFlags            = flag.NewFlagSet("get-rbac-status", flag.ExitOnError)
+		accessGetRBACStatusSessionTokenFlag = accessGetRBACStatusFlags.String("session-token", "", "")
+
+		accessEnableRBACFlags            = flag.NewFlagSet("enable-rbac", flag.ExitOnError)
+		accessEnableRBACSessionTokenFlag = accessEnableRBACFlags.String("session-token", "", "")
+
+		accessDisableRBACFlags            = flag.NewFlagSet("disable-rbac", flag.ExitOnError)
+		accessDisableRBACSessionTokenFlag = accessDisableRBACFlags.String("session-token", "", "")
 
 		assetsFlags = flag.NewFlagSet("assets", flag.ContinueOnError)
 
@@ -1017,6 +1026,9 @@ func ParseEndpoint(
 	accessListMembersFlags.Usage = accessListMembersUsage
 	accessListGrantsFlags.Usage = accessListGrantsUsage
 	accessUpdateMemberRoleFlags.Usage = accessUpdateMemberRoleUsage
+	accessGetRBACStatusFlags.Usage = accessGetRBACStatusUsage
+	accessEnableRBACFlags.Usage = accessEnableRBACUsage
+	accessDisableRBACFlags.Usage = accessDisableRBACUsage
 
 	assetsFlags.Usage = assetsUsage
 	assetsServeImageFlags.Usage = assetsServeImageUsage
@@ -1350,6 +1362,15 @@ func ParseEndpoint(
 
 			case "update-member-role":
 				epf = accessUpdateMemberRoleFlags
+
+			case "get-rbac-status":
+				epf = accessGetRBACStatusFlags
+
+			case "enable-rbac":
+				epf = accessEnableRBACFlags
+
+			case "disable-rbac":
+				epf = accessDisableRBACFlags
 
 			}
 
@@ -1966,6 +1987,15 @@ func ParseEndpoint(
 			case "update-member-role":
 				endpoint = c.UpdateMemberRole()
 				data, err = accessc.BuildUpdateMemberRolePayload(*accessUpdateMemberRoleBodyFlag, *accessUpdateMemberRoleApikeyTokenFlag, *accessUpdateMemberRoleSessionTokenFlag)
+			case "get-rbac-status":
+				endpoint = c.GetRBACStatus()
+				data, err = accessc.BuildGetRBACStatusPayload(*accessGetRBACStatusSessionTokenFlag)
+			case "enable-rbac":
+				endpoint = c.EnableRBAC()
+				data, err = accessc.BuildEnableRBACPayload(*accessEnableRBACSessionTokenFlag)
+			case "disable-rbac":
+				endpoint = c.DisableRBAC()
+				data, err = accessc.BuildDisableRBACPayload(*accessDisableRBACSessionTokenFlag)
 			}
 		case "assets":
 			c := assetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2584,6 +2614,9 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
 	fmt.Fprintln(os.Stderr, `    update-member-role: Change a team member's role assignment.`)
+	fmt.Fprintln(os.Stderr, `    get-rbac-status: Returns whether RBAC is currently enabled for the current organization.`)
+	fmt.Fprintln(os.Stderr, `    enable-rbac: Enable RBAC for the current organization. Seeds default grants for system roles.`)
+	fmt.Fprintln(os.Stderr, `    disable-rbac: Disable RBAC enforcement for the current organization.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s access COMMAND --help\n", os.Args[0])
@@ -2776,6 +2809,60 @@ func accessUpdateMemberRoleUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-member-role --body '{\n      \"role_id\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessGetRBACStatusUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access get-rbac-status", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns whether RBAC is currently enabled for the current organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access get-rbac-status --session-token \"abc123\"")
+}
+
+func accessEnableRBACUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access enable-rbac", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Enable RBAC for the current organization. Seeds default grants for system roles.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access enable-rbac --session-token \"abc123\"")
+}
+
+func accessDisableRBACUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access disable-rbac", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Disable RBAC enforcement for the current organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access disable-rbac --session-token \"abc123\"")
 }
 
 // assetsUsage displays the usage of the assets command and its subcommands.

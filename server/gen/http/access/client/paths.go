@@ -51,3 +51,18 @@ func ListGrantsAccessPath() string {
 func UpdateMemberRoleAccessPath() string {
 	return "/rpc/access.updateMemberRole"
 }
+
+// GetRBACStatusAccessPath returns the URL path to the access service getRBACStatus HTTP endpoint.
+func GetRBACStatusAccessPath() string {
+	return "/rpc/access.getRBACStatus"
+}
+
+// EnableRBACAccessPath returns the URL path to the access service enableRBAC HTTP endpoint.
+func EnableRBACAccessPath() string {
+	return "/rpc/access.enableRBAC"
+}
+
+// DisableRBACAccessPath returns the URL path to the access service disableRBAC HTTP endpoint.
+func DisableRBACAccessPath() string {
+	return "/rpc/access.disableRBAC"
+}

@@ -29,7 +29,7 @@ func (s stubFeatureChecker) IsFeatureEnabled(_ context.Context, _ string, _ prod
 func TestManagerRequire_requiresAuthContext(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, nil, nil)
 
 	err := manager.Require(t.Context(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnauthorized)
@@ -38,7 +38,7 @@ func TestManagerRequire_requiresAuthContext(t *testing.T) {
 func TestManagerRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, nil, nil)
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	require.NoError(t, err)
@@ -47,7 +47,7 @@ func TestManagerRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
 func TestManagerRequire_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, nil, nil)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: nil})
 
 	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
@@ -57,7 +57,7 @@ func TestManagerRequire_mapsDeniedToForbidden(t *testing.T) {
 func TestManagerRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, nil, nil)
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnexpected)
@@ -67,7 +67,7 @@ func TestManagerRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 func TestManagerRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{err: errors.New("boom")})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{err: errors.New("boom")}, nil, nil)
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnexpected)
@@ -76,7 +76,7 @@ func TestManagerRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 func TestManagerRequireAny_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, nil, nil)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: []Grant{{Scope: ScopeMCPConnect, Resource: "tool_a"}}})
 
 	err := manager.RequireAny(ctx,
@@ -89,7 +89,7 @@ func TestManagerRequireAny_mapsDeniedToForbidden(t *testing.T) {
 func TestManagerFilter_returnsAllowedSubset(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, nil, nil)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: []Grant{{Scope: ScopeBuildRead, Resource: "proj_123"}}})
 
 	resourceIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
@@ -100,7 +100,7 @@ func TestManagerFilter_returnsAllowedSubset(t *testing.T) {
 func TestManagerRequire_rejectsInvalidCheck(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, nil, nil)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: []Grant{{Scope: ScopeBuildRead, Resource: WildcardResource}}})
 
 	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: ""})
@@ -111,7 +111,7 @@ func TestManagerRequire_rejectsInvalidCheck(t *testing.T) {
 func TestManagerRequire_requiresChecks(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, nil, nil)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: []Grant{{Scope: ScopeBuildRead, Resource: WildcardResource}}})
 
 	err := manager.Require(ctx)
@@ -122,7 +122,7 @@ func TestManagerRequire_requiresChecks(t *testing.T) {
 func TestManagerRequire_skipsForAPIKeyAuth(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, nil, nil)
 	sessionID := "session_123"
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org_123",
@@ -147,7 +147,7 @@ func TestManagerRequire_skipsForAPIKeyAuth(t *testing.T) {
 func TestManagerFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, nil, nil)
 	sessionID := "session_123"
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org_123",
@@ -202,4 +202,9 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 func testLogger(t *testing.T) *slog.Logger {
 	t.Helper()
 	return slog.New(slog.DiscardHandler)
+}
+
+type noopFeatureCacheWriter struct{}
+
+func (noopFeatureCacheWriter) UpdateFeatureCache(_ context.Context, _ string, _ productfeatures.Feature, _ bool) {
 }

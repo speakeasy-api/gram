@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -82,7 +83,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	roles := newMockRoleProvider(t)
 
-	svc := NewService(logger, tracerProvider, conn, sessionManager, roles, NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	svc := NewService(logger, tracerProvider, conn, sessionManager, roles, NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache), noopFeatureCacheWriter{})
 
 	return ctx, &testInstance{
 		service: svc,

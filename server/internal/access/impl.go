@@ -26,6 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	pfRepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -47,30 +49,39 @@ type RoleProvider interface {
 	UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*workos.Member, error)
 	GetUser(ctx context.Context, userID string) (*workos.User, error)
 	ListOrgUsers(ctx context.Context, orgID string) (map[string]workos.User, error)
+	GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*workos.Member, error)
+}
+
+// FeatureCacheWriter updates the Redis cache entry for a feature flag after a
+// direct DB write, keeping the cache consistent with the authoritative state.
+type FeatureCacheWriter interface {
+	UpdateFeatureCache(ctx context.Context, organizationID string, feature productfeatures.Feature, enabled bool)
 }
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	access *Manager
-	roles  RoleProvider
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	auth         *auth.Auth
+	access       *Manager
+	roles        RoleProvider
+	featureCache FeatureCacheWriter
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, roles RoleProvider, accessManager *Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, roles RoleProvider, accessManager *Manager, featureCache FeatureCacheWriter) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, accessManager),
-		access: accessManager,
-		roles:  roles,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		logger:       logger,
+		db:           db,
+		auth:         auth.New(logger, db, sessions, accessManager),
+		access:       accessManager,
+		roles:        roles,
+		featureCache: featureCache,
 	}
 }
 
@@ -257,6 +268,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 
 			assignedCount++
 		}
+		s.access.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
 	}
 
 	createdRole, err := buildRole(ctx, logger, s.db, ac.ActiveOrganizationID, *wr, assignedCount)
@@ -363,6 +375,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 				return nil, oops.E(oops.CodeUnexpected, err, "assign members to updated role").Log(ctx, logger)
 			}
 		}
+		s.access.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
 	}
 
 	members, err := s.roles.ListMembers(ctx, workosOrgID)
@@ -699,6 +712,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update member role in workos").Log(ctx, logger)
 	}
+	s.access.InvalidateRoleCache(ctx, payload.UserID, ac.ActiveOrganizationID)
 
 	users, err := s.roles.ListOrgUsers(ctx, workosOrgID)
 	if err != nil {
@@ -912,6 +926,91 @@ func connectedUser(ctx context.Context, db *pgxpool.Pool, organizationID string,
 	}
 
 	return user, nil
+}
+
+func (s *Service) GetRBACStatus(ctx context.Context, _ *gen.GetRBACStatusPayload) (*gen.RBACStatus, error) {
+	ac, err := s.requireSuperAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	enabled, err := pfRepo.New(s.db).IsFeatureEnabled(ctx, pfRepo.IsFeatureEnabledParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureRBAC),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature flag").Log(ctx, s.logger)
+	}
+
+	return &gen.RBACStatus{RbacEnabled: enabled}, nil
+}
+
+func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) error {
+	ac, err := s.requireSuperAdmin(ctx)
+	if err != nil {
+		return err
+	}
+	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
+
+	if err := SeedSystemRoleGrants(ctx, s.logger, s.db, ac.ActiveOrganizationID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "seed system role grants").Log(ctx, logger)
+	}
+
+	if _, err := pfRepo.New(s.db).EnableFeature(ctx, pfRepo.EnableFeatureParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureRBAC),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enable RBAC feature flag").Log(ctx, logger)
+	}
+
+	s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, true)
+	return nil
+}
+
+func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) error {
+	ac, err := s.requireSuperAdmin(ctx)
+	if err != nil {
+		return err
+	}
+	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
+
+	if _, err := pfRepo.New(s.db).DeleteFeature(ctx, pfRepo.DeleteFeatureParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureRBAC),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "disable RBAC feature flag").Log(ctx, logger)
+	}
+
+	s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, false)
+	return nil
+}
+
+// requireSuperAdmin returns the auth context and an error if the caller is not
+// a Speakeasy employee. Mirrors the exact condition used by the super-admin
+// impersonation feature in auth/impl.go: email domain OR admin DB flag.
+// Email is read from the auth context (session cache). Admin is read from the
+// DB because AuthContext does not carry it; the DB value is synced from the
+// Speakeasy provider on every login so it matches the session cache.
+func (s *Service) requireSuperAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	email := ""
+	if ac.Email != nil {
+		email = *ac.Email
+	}
+	if strings.HasSuffix(email, "@speakeasy.com") || strings.HasSuffix(email, "@speakeasyapi.dev") {
+		return ac, nil
+	}
+	user, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get user for admin check").Log(ctx, s.logger)
+	}
+	if !user.Admin {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	return ac, nil
 }
 
 func slugify(name string) (string, error) {
