@@ -15,13 +15,12 @@ import (
 const archiveSkill = `-- name: ArchiveSkill :one
 UPDATE skills
 SET
-    state = 'archived'
-  , deleted_at = clock_timestamp()
+    deleted_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE project_id = $1
   AND id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, state, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
 `
 
 type ArchiveSkillParams struct {
@@ -40,7 +39,6 @@ func (q *Queries) ArchiveSkill(ctx context.Context, arg ArchiveSkillParams) (Ski
 		&i.Slug,
 		&i.Description,
 		&i.SkillUuid,
-		&i.State,
 		&i.ActiveVersionID,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
@@ -59,7 +57,6 @@ INSERT INTO skills (
   , slug
   , description
   , skill_uuid
-  , state
   , active_version_id
   , created_by_user_id
 )
@@ -72,9 +69,8 @@ VALUES (
   , $6
   , $7
   , $8
-  , $9
 )
-RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, state, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateSkillParams struct {
@@ -84,7 +80,6 @@ type CreateSkillParams struct {
 	Slug            string
 	Description     pgtype.Text
 	SkillUuid       pgtype.Text
-	State           string
 	ActiveVersionID uuid.NullUUID
 	CreatedByUserID string
 }
@@ -97,7 +92,6 @@ func (q *Queries) CreateSkill(ctx context.Context, arg CreateSkillParams) (Skill
 		arg.Slug,
 		arg.Description,
 		arg.SkillUuid,
-		arg.State,
 		arg.ActiveVersionID,
 		arg.CreatedByUserID,
 	)
@@ -110,7 +104,6 @@ func (q *Queries) CreateSkill(ctx context.Context, arg CreateSkillParams) (Skill
 		&i.Slug,
 		&i.Description,
 		&i.SkillUuid,
-		&i.State,
 		&i.ActiveVersionID,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
@@ -214,7 +207,7 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 }
 
 const getSkill = `-- name: GetSkill :one
-SELECT id, organization_id, project_id, name, slug, description, skill_uuid, state, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
 FROM skills
 WHERE project_id = $1
   AND id = $2
@@ -237,7 +230,6 @@ func (q *Queries) GetSkill(ctx context.Context, arg GetSkillParams) (Skill, erro
 		&i.Slug,
 		&i.Description,
 		&i.SkillUuid,
-		&i.State,
 		&i.ActiveVersionID,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
@@ -249,7 +241,7 @@ func (q *Queries) GetSkill(ctx context.Context, arg GetSkillParams) (Skill, erro
 }
 
 const getSkillBySkillUUID = `-- name: GetSkillBySkillUUID :one
-SELECT id, organization_id, project_id, name, slug, description, skill_uuid, state, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
 FROM skills
 WHERE project_id = $1
   AND skill_uuid = $2
@@ -272,7 +264,6 @@ func (q *Queries) GetSkillBySkillUUID(ctx context.Context, arg GetSkillBySkillUU
 		&i.Slug,
 		&i.Description,
 		&i.SkillUuid,
-		&i.State,
 		&i.ActiveVersionID,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
@@ -284,7 +275,7 @@ func (q *Queries) GetSkillBySkillUUID(ctx context.Context, arg GetSkillBySkillUU
 }
 
 const getSkillBySlug = `-- name: GetSkillBySlug :one
-SELECT id, organization_id, project_id, name, slug, description, skill_uuid, state, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
 FROM skills
 WHERE project_id = $1
   AND slug = $2
@@ -307,7 +298,6 @@ func (q *Queries) GetSkillBySlug(ctx context.Context, arg GetSkillBySlugParams) 
 		&i.Slug,
 		&i.Description,
 		&i.SkillUuid,
-		&i.State,
 		&i.ActiveVersionID,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
@@ -443,7 +433,7 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 }
 
 const listSkills = `-- name: ListSkills :many
-SELECT id, organization_id, project_id, name, slug, description, skill_uuid, state, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
 FROM skills
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -467,7 +457,6 @@ func (q *Queries) ListSkills(ctx context.Context, projectID uuid.UUID) ([]Skill,
 			&i.Slug,
 			&i.Description,
 			&i.SkillUuid,
-			&i.State,
 			&i.ActiveVersionID,
 			&i.CreatedByUserID,
 			&i.CreatedAt,
@@ -499,7 +488,7 @@ WHERE skills.project_id = $2
     WHERE sv.id = $1
       AND sv.skill_id = skills.id
   )
-RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, state, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
 `
 
 type SetSkillActiveVersionParams struct {
@@ -519,7 +508,6 @@ func (q *Queries) SetSkillActiveVersion(ctx context.Context, arg SetSkillActiveV
 		&i.Slug,
 		&i.Description,
 		&i.SkillUuid,
-		&i.State,
 		&i.ActiveVersionID,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
@@ -537,13 +525,12 @@ SET
   , slug = coalesce($2, slug)
   , description = coalesce($3, description)
   , skill_uuid = coalesce($4, skill_uuid)
-  , state = coalesce($5, state)
-  , active_version_id = coalesce($6, active_version_id)
+  , active_version_id = coalesce($5, active_version_id)
   , updated_at = clock_timestamp()
-WHERE project_id = $7
-  AND id = $8
+WHERE project_id = $6
+  AND id = $7
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, state, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateSkillParams struct {
@@ -551,7 +538,6 @@ type UpdateSkillParams struct {
 	Slug            pgtype.Text
 	Description     pgtype.Text
 	SkillUuid       pgtype.Text
-	State           pgtype.Text
 	ActiveVersionID uuid.NullUUID
 	ProjectID       uuid.UUID
 	ID              uuid.UUID
@@ -563,7 +549,6 @@ func (q *Queries) UpdateSkill(ctx context.Context, arg UpdateSkillParams) (Skill
 		arg.Slug,
 		arg.Description,
 		arg.SkillUuid,
-		arg.State,
 		arg.ActiveVersionID,
 		arg.ProjectID,
 		arg.ID,
@@ -577,7 +562,6 @@ func (q *Queries) UpdateSkill(ctx context.Context, arg UpdateSkillParams) (Skill
 		&i.Slug,
 		&i.Description,
 		&i.SkillUuid,
-		&i.State,
 		&i.ActiveVersionID,
 		&i.CreatedByUserID,
 		&i.CreatedAt,

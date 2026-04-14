@@ -782,7 +782,6 @@ type Skill struct {
 	Slug            string
 	Description     pgtype.Text
 	SkillUuid       pgtype.Text
-	State           string
 	ActiveVersionID uuid.NullUUID
 	CreatedByUserID string
 	CreatedAt       pgtype.Timestamptz
