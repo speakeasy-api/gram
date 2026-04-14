@@ -1,3 +1,4 @@
+import { EditServerNameDialog } from "./EditServerNameDialog";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsSidebar } from "@/components/insights-sidebar";
@@ -1081,6 +1082,7 @@ function HookTraceRow({
   onLogClick: (log: TelemetryLogRecord) => void;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }) {
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const timestamp = new Date(
     Number(BigInt(trace.startTimeUnixNano) / 1_000_000n),
   );
@@ -1110,11 +1112,23 @@ function HookTraceRow({
     return serverNameMappings.rawToDisplay.get(serverName) ?? serverName;
   }, [serverName, serverNameMappings.rawToDisplay]);
 
+  const editDialogProps = useMemo(() => {
+    if (!serverName) return null;
+    const overrides =
+      serverNameMappings.displayToOverrides.get(displayServerName ?? "") ?? [];
+    const hasOverride = overrides.some((o) => o.rawServerName === serverName);
+    return {
+      serverName: displayServerName ?? serverName,
+      groupedOverrides: overrides,
+      unmappedRawName: hasOverride ? null : serverName,
+    };
+  }, [serverName, displayServerName, serverNameMappings.displayToOverrides]);
+
   const serverNameBadge = useMemo(() => {
     // For skills, show [Skill] badge
     if (toolName === "Skill" && skillName) {
       return (
-        <span className="shrink-0 truncate rounded-md border border-purple-500/20 bg-purple-500/10 px-2 py-1 font-mono text-xs font-medium text-purple-600 dark:text-purple-400">
+        <span className="shrink-0 truncate rounded-xs bg-purple-500/10 px-2 py-1 font-mono text-xs font-medium text-purple-600 dark:text-purple-400">
           Skill
         </span>
       );
@@ -1124,10 +1138,10 @@ function HookTraceRow({
     return (
       <span
         className={cn(
-          "shrink-0 truncate rounded-md px-2 py-1 font-mono text-xs",
+          "shrink-0 truncate rounded-xs px-2 py-1 font-mono text-xs",
           isLocal
             ? "bg-muted/50 text-muted-foreground"
-            : "bg-primary/10 text-primary border-primary/20 border font-medium",
+            : "bg-primary/10 text-primary font-medium",
         )}
       >
         {displayServerName || "local"}
@@ -1159,9 +1173,14 @@ function HookTraceRow({
   return (
     <div className="border-border/50 border-b last:border-b-0">
       {/* Parent trace row */}
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onToggle}
-        className="hover:bg-muted/50 flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") onToggle();
+        }}
+        className="hover:bg-muted/50 flex w-full cursor-pointer items-center gap-3 px-5 py-2.5 text-left transition-colors"
       >
         {/* Timestamp */}
         <div className="text-muted-foreground w-[150px] shrink-0 font-mono text-sm">
@@ -1178,7 +1197,21 @@ function HookTraceRow({
 
         {/* Server badge + Tool name */}
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          {serverNameBadge}
+          <div className="group/server relative flex shrink-0 items-center">
+            {serverNameBadge}
+            {serverName && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditDialogOpen(true);
+                }}
+                className="text-muted-foreground hover:text-foreground bg-card hover:bg-muted border-border invisible absolute -right-6 size-6 rounded border p-1 shadow-sm transition-colors group-hover/server:visible"
+                aria-label="Edit display name"
+              >
+                <Icon name="pencil" className="size-3" />
+              </button>
+            )}
+          </div>
           <span className="truncate font-mono text-sm">
             {toolName === "Skill" && skillName
               ? skillName
@@ -1221,7 +1254,7 @@ function HookTraceRow({
             {statusConfig.label}
           </div>
         </div>
-      </button>
+      </div>
 
       {/* Expanded child logs */}
       {isExpanded && (
@@ -1231,6 +1264,20 @@ function HookTraceRow({
           isExpanded={isExpanded}
           onLogClick={onLogClick}
           parentTimestamp={trace.startTimeUnixNano}
+        />
+      )}
+
+      {editDialogProps && (
+        <EditServerNameDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          serverName={editDialogProps.serverName}
+          groupedOverrides={editDialogProps.groupedOverrides}
+          unmappedRawName={editDialogProps.unmappedRawName}
+          upsert={serverNameMappings.upsert}
+          remove={serverNameMappings.remove}
+          isUpserting={serverNameMappings.isUpserting}
+          isDeleting={serverNameMappings.isDeleting}
         />
       )}
     </div>
@@ -1282,8 +1329,6 @@ function StackedBarChart({
   datasets: StackedBarDataset[];
   handleFilter?: (datasetLabel: string, rowLabel: string) => void;
 }) {
-  if (labels.length === 0) return null;
-
   const barHeight = 24;
   const spacerHeight = 8;
   const containerHeight = Math.max(
@@ -1339,6 +1384,8 @@ function StackedBarChart({
     }),
     [datasets, labels, handleFilter],
   );
+
+  if (labels.length === 0) return null;
 
   return (
     <div className="border-border bg-card space-y-4 rounded-lg border p-4">
