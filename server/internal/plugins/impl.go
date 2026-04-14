@@ -376,6 +376,10 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 
 	row, err := s.repo.AddPluginServer(ctx, params)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, nil, "a server with this display name already exists in the plugin")
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "add plugin server").Log(ctx, s.logger)
 	}
 

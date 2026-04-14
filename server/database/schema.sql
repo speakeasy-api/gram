@@ -1744,6 +1744,10 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   )
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_display_name_key
+  ON plugin_servers (plugin_id, display_name)
+  WHERE deleted IS FALSE;
+
 -- Controls who receives a plugin. Reuses the RBAC principal URN pattern
 -- (role:slug, user:id, or * for all org members).
 CREATE TABLE IF NOT EXISTS plugin_assignments (
