@@ -20,8 +20,7 @@ const (
 )
 
 // scopeExpansions maps a required scope to the higher-privilege scopes that also satisfy it.
-// Scopes with no higher-privilege implication (admin tiers and mcp:connect) map to nil.
-// mcp:connect is a distinct capability — it is not implied by mcp:write.
+// Scopes with no higher-privilege implication (admin tiers) map to nil.
 var scopeExpansions = map[Scope][]Scope{
 	ScopeRoot:       nil,
 	ScopeOrgRead:    {ScopeOrgAdmin},
@@ -30,7 +29,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeBuildWrite: nil,
 	ScopeMCPRead:    {ScopeMCPWrite},
 	ScopeMCPWrite:   nil,
-	ScopeMCPConnect: nil,
+	ScopeMCPConnect: {ScopeMCPRead, ScopeMCPWrite},
 }
 
 // scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege
