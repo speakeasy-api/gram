@@ -28,6 +28,11 @@ function PageHeaderComponent({
           className="data-[orientation=vertical]:h-4"
         />
         {children}
+        {/* Insights trigger is pinned to the far right of the bar,
+            outside the breadcrumb's max-width container so it lands at
+            the true right edge on wide viewports. Self-hides when no
+            InsightsSidebar ancestor exists. */}
+        <InsightsTrigger className="ml-auto shrink-0" />
       </div>
     </header>
   );
@@ -123,31 +128,28 @@ function PageHeaderBreadcrumbs({
 
   return (
     <PageHeader.Title className={cn(fullWidth ? "max-w-full" : "", className)}>
-      <div className="ml-auto flex items-center gap-3 normal-case">
-        <div className="flex items-center gap-2">
-          {visibleElements.map((elem, index) => (
-            <React.Fragment key={elem.url}>
-              {elem.isCurrentPage ? (
-                <span>{elem.display}</span>
-              ) : (
-                <Link
-                  to={
-                    projectSlug
-                      ? `/${orgSlug}/projects/${projectSlug}${elem.url}`
-                      : `/${orgSlug}${elem.url}`
-                  }
-                  className="text-muted-foreground hover:text-foreground trans"
-                >
-                  {elem.display}
-                </Link>
-              )}
-              {index < visibleElements.length - 1 && (
-                <span className="text-muted-foreground"> / </span>
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-        <InsightsTrigger />
+      <div className="ml-auto flex items-center gap-2 normal-case">
+        {visibleElements.map((elem, index) => (
+          <React.Fragment key={elem.url}>
+            {elem.isCurrentPage ? (
+              <span>{elem.display}</span>
+            ) : (
+              <Link
+                to={
+                  projectSlug
+                    ? `/${orgSlug}/projects/${projectSlug}${elem.url}`
+                    : `/${orgSlug}${elem.url}`
+                }
+                className="text-muted-foreground hover:text-foreground trans"
+              >
+                {elem.display}
+              </Link>
+            )}
+            {index < visibleElements.length - 1 && (
+              <span className="text-muted-foreground"> / </span>
+            )}
+          </React.Fragment>
+        ))}
       </div>
     </PageHeader.Title>
   );
