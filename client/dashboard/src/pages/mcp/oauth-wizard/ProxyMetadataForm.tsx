@@ -3,8 +3,25 @@ import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
 import { Type } from "@/components/ui/type";
 import { Button, Stack } from "@speakeasy-api/moonshine";
+import { useCallback } from "react";
 
 import type { DiscoveredOAuth, WizardDispatch, WizardState } from "./types";
+
+export interface ProxyMetadataSubmitData {
+  audience: string;
+  authorizationEndpoint: string;
+  tokenEndpoint: string;
+  scopesSupported: string[];
+  tokenEndpointAuthMethodsSupported: string[];
+  environmentSlug: string;
+}
+
+function parseScopes(scopes: string): string[] {
+  return scopes
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
 
 export function ProxyMetadataForm({
   state,
@@ -12,7 +29,6 @@ export function ProxyMetadataForm({
   discoveredOAuth,
   editMode,
   isEditPending,
-  onNext,
   onEditSubmit,
   onClose,
 }: {
@@ -21,10 +37,53 @@ export function ProxyMetadataForm({
   discoveredOAuth: DiscoveredOAuth | null;
   editMode: boolean;
   isEditPending: boolean;
-  onNext: () => void;
-  onEditSubmit: () => void;
+  onEditSubmit: (data: ProxyMetadataSubmitData) => void;
   onClose: () => void;
 }) {
+  const validate = useCallback((): boolean => {
+    dispatch({ type: "SET_ERROR", error: null });
+
+    if (!state.slug.trim()) {
+      dispatch({
+        type: "SET_ERROR",
+        error: "Please provide a slug for the OAuth proxy server",
+      });
+      return false;
+    }
+    if (!state.authorizationEndpoint.trim()) {
+      dispatch({
+        type: "SET_ERROR",
+        error: "Authorization endpoint is required",
+      });
+      return false;
+    }
+    if (!state.tokenEndpoint.trim()) {
+      dispatch({ type: "SET_ERROR", error: "Token endpoint is required" });
+      return false;
+    }
+    if (parseScopes(state.scopes).length === 0) {
+      dispatch({ type: "SET_ERROR", error: "At least one scope is required" });
+      return false;
+    }
+    return true;
+  }, [state, dispatch]);
+
+  const handleNext = useCallback(() => {
+    if (!validate()) return;
+    dispatch({ type: "PROXY_NEXT" });
+  }, [validate, dispatch]);
+
+  const handleEditSubmit = useCallback(() => {
+    if (!validate()) return;
+    onEditSubmit({
+      audience: state.audience,
+      authorizationEndpoint: state.authorizationEndpoint,
+      tokenEndpoint: state.tokenEndpoint,
+      scopesSupported: parseScopes(state.scopes),
+      tokenEndpointAuthMethodsSupported: [state.tokenAuthMethod],
+      environmentSlug: state.environmentSlug,
+    });
+  }, [validate, state, onEditSubmit]);
   return (
     <>
       <div className="max-h-[60vh] space-y-4 overflow-auto">
@@ -205,7 +264,7 @@ export function ProxyMetadataForm({
         </Button>
         <div className="ml-auto">
           <Button
-            onClick={editMode ? onEditSubmit : onNext}
+            onClick={editMode ? handleEditSubmit : handleNext}
             disabled={
               (editMode && isEditPending) ||
               !state.slug.trim() ||

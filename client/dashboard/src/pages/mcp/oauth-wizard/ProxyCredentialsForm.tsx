@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { AlertTriangle } from "lucide-react";
-import React from "react";
+import React, { useCallback } from "react";
 
 import type { WizardDispatch, WizardState } from "./types";
 
@@ -18,10 +18,23 @@ export function ProxyCredentialsForm({
   state: Extract<WizardState, { step: "oauth_proxy_client_credentials_form" }>;
   dispatch: WizardDispatch;
   isSubmitting: boolean;
-  onSubmit: () => void;
+  onSubmit: (data: { clientId: string; clientSecret: string }) => void;
   attachedEnvironmentName: string | null;
   environmentsLink: React.ReactNode;
 }) {
+  const handleSubmit = useCallback(() => {
+    dispatch({ type: "SET_ERROR", error: null });
+
+    if (!state.clientId.trim() || !state.clientSecret.trim()) {
+      dispatch({
+        type: "SET_ERROR",
+        error: "Client ID and Client Secret are required",
+      });
+      return;
+    }
+
+    onSubmit({ clientId: state.clientId, clientSecret: state.clientSecret });
+  }, [state.clientId, state.clientSecret, dispatch, onSubmit]);
   return (
     <>
       <div className="max-h-[60vh] space-y-4 overflow-auto">
@@ -93,7 +106,7 @@ export function ProxyCredentialsForm({
         </Button>
         <div className="ml-auto">
           <Button
-            onClick={onSubmit}
+            onClick={handleSubmit}
             disabled={
               isSubmitting ||
               !state.clientId.trim() ||

@@ -21,11 +21,11 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
-import { toast } from "sonner";
 
 import { ExternalOAuthForm } from "./ExternalOAuthForm";
 import { PathSelection } from "./PathSelection";
 import { ProxyCredentialsForm } from "./ProxyCredentialsForm";
+import type { ProxyMetadataSubmitData } from "./ProxyMetadataForm";
 import { ProxyMetadataForm } from "./ProxyMetadataForm";
 import { ResultStep } from "./ResultStep";
 import { INITIAL_STATE, wizardReducer } from "./reducer";
@@ -233,234 +233,151 @@ function OAuthWizard({
 
   // --- Submit handlers ---
 
-  const handleExternalSubmit = useCallback(() => {
-    if (state.step !== "external_oauth_server_metadata_form") return;
-
-    let parsedMetadata;
-    try {
-      parsedMetadata = JSON.parse(state.metadataJson);
-    } catch {
-      dispatch({
-        type: "UPDATE_FIELD",
-        field: "jsonError",
-        value: "Invalid JSON format",
-      });
-      return;
-    }
-
-    if (!state.slug.trim()) {
-      toast.error("Please provide a slug for the OAuth server");
-      return;
-    }
-
-    const requiredEndpoints = [
-      "authorization_endpoint",
-      "token_endpoint",
-      "registration_endpoint",
-    ];
-    const missingEndpoints = requiredEndpoints.filter(
-      (endpoint) => !parsedMetadata[endpoint],
-    );
-
-    if (missingEndpoints.length > 0) {
-      dispatch({
-        type: "UPDATE_FIELD",
-        field: "jsonError",
-        value: `Missing required endpoints: ${missingEndpoints.join(", ")}`,
-      });
-      return;
-    }
-
-    dispatch({ type: "UPDATE_FIELD", field: "jsonError", value: "" });
-    addExternalOAuthMutation.mutate({
-      request: {
-        slug: toolsetSlug,
-        addExternalOAuthServerRequestBody: {
-          externalOauthServer: {
-            slug: state.slug,
-            metadata: parsedMetadata,
-          },
-        },
-      },
-    });
-  }, [state, toolsetSlug, addExternalOAuthMutation]);
-
-  const validateProxyForm = useCallback((): boolean => {
-    if (state.step !== "oauth_proxy_server_metadata_form") return false;
-    dispatch({ type: "SET_ERROR", error: null });
-
-    if (!state.slug.trim()) {
-      dispatch({
-        type: "SET_ERROR",
-        error: "Please provide a slug for the OAuth proxy server",
-      });
-      return false;
-    }
-    if (!state.authorizationEndpoint.trim()) {
-      dispatch({
-        type: "SET_ERROR",
-        error: "Authorization endpoint is required",
-      });
-      return false;
-    }
-    if (!state.tokenEndpoint.trim()) {
-      dispatch({ type: "SET_ERROR", error: "Token endpoint is required" });
-      return false;
-    }
-    const scopesArray = state.scopes
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-    if (scopesArray.length === 0) {
-      dispatch({ type: "SET_ERROR", error: "At least one scope is required" });
-      return false;
-    }
-    return true;
-  }, [state]);
-
-  const handleProxyFormNext = useCallback(() => {
-    if (!validateProxyForm()) return;
-    dispatch({ type: "PROXY_NEXT" });
-  }, [validateProxyForm]);
-
-  const handleProxyEditSubmit = useCallback(() => {
-    if (state.step !== "oauth_proxy_server_metadata_form") return;
-    if (!validateProxyForm()) return;
-
-    const scopesArray = state.scopes
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    const audienceChanged =
-      state.audience !== proxyAudiencePrefilledRef.current;
-
-    updateOAuthProxyMutation.mutate({
-      request: {
-        slug: toolsetSlug,
-        updateOAuthProxyServerRequestBody: {
-          oauthProxyServer: {
-            audience: audienceChanged ? state.audience : undefined,
-            authorizationEndpoint: state.authorizationEndpoint,
-            tokenEndpoint: state.tokenEndpoint,
-            scopesSupported: scopesArray,
-            tokenEndpointAuthMethodsSupported: [state.tokenAuthMethod],
-            environmentSlug: state.environmentSlug || undefined,
-          },
-        },
-      },
-    });
-  }, [state, toolsetSlug, updateOAuthProxyMutation, validateProxyForm]);
-
-  const handleProxyCreateSubmit = useCallback(() => {
-    if (state.step !== "oauth_proxy_client_credentials_form") return;
-    dispatch({ type: "SET_ERROR", error: null });
-
-    if (!state.clientId.trim() || !state.clientSecret.trim()) {
-      dispatch({
-        type: "SET_ERROR",
-        error: "Client ID and Client Secret are required",
-      });
-      return;
-    }
-
-    const { proxyFormData } = state;
-    const scopesArray = proxyFormData.scopes
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    const existingNames = new Set(environments.map((e) => e.name));
-    let envName = `${toolset.name} OAuth`;
-    if (existingNames.has(envName)) {
-      let suffix = 1;
-      while (existingNames.has(`${toolset.name} OAuth ${suffix}`)) {
-        suffix++;
-      }
-      envName = `${toolset.name} OAuth ${suffix}`;
-    }
-    createEnvironmentMutation.mutate(
-      {
+  const handleExternalSubmit = useCallback(
+    (data: { slug: string; metadata: Record<string, unknown> }) => {
+      addExternalOAuthMutation.mutate({
         request: {
-          createEnvironmentForm: {
-            name: envName,
-            organizationId: session.activeOrganizationId,
-            entries: [],
+          slug: toolsetSlug,
+          addExternalOAuthServerRequestBody: {
+            externalOauthServer: {
+              slug: data.slug,
+              metadata: data.metadata,
+            },
           },
         },
-      },
-      {
-        onSuccess: (env) => {
-          updateEnvironmentMutation.mutate(
-            {
-              request: {
-                slug: env.slug,
-                updateEnvironmentRequestBody: {
-                  entriesToUpdate: [
-                    { name: "CLIENT_ID", value: state.clientId },
-                    { name: "CLIENT_SECRET", value: state.clientSecret },
-                  ],
-                  entriesToRemove: [],
+      });
+    },
+    [toolsetSlug, addExternalOAuthMutation],
+  );
+
+  const handleProxyEditSubmit = useCallback(
+    (data: ProxyMetadataSubmitData) => {
+      const audienceChanged =
+        data.audience !== proxyAudiencePrefilledRef.current;
+
+      updateOAuthProxyMutation.mutate({
+        request: {
+          slug: toolsetSlug,
+          updateOAuthProxyServerRequestBody: {
+            oauthProxyServer: {
+              audience: audienceChanged ? data.audience : undefined,
+              authorizationEndpoint: data.authorizationEndpoint,
+              tokenEndpoint: data.tokenEndpoint,
+              scopesSupported: data.scopesSupported,
+              tokenEndpointAuthMethodsSupported:
+                data.tokenEndpointAuthMethodsSupported,
+              environmentSlug: data.environmentSlug || undefined,
+            },
+          },
+        },
+      });
+    },
+    [toolsetSlug, updateOAuthProxyMutation],
+  );
+
+  const handleProxyCreateSubmit = useCallback(
+    (data: { clientId: string; clientSecret: string }) => {
+      if (state.step !== "oauth_proxy_client_credentials_form") return;
+
+      const { proxyFormData } = state;
+      const scopesArray = proxyFormData.scopes
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+
+      const existingNames = new Set(environments.map((e) => e.name));
+      let envName = `${toolset.name} OAuth`;
+      if (existingNames.has(envName)) {
+        let suffix = 1;
+        while (existingNames.has(`${toolset.name} OAuth ${suffix}`)) {
+          suffix++;
+        }
+        envName = `${toolset.name} OAuth ${suffix}`;
+      }
+      createEnvironmentMutation.mutate(
+        {
+          request: {
+            createEnvironmentForm: {
+              name: envName,
+              organizationId: session.activeOrganizationId,
+              entries: [],
+            },
+          },
+        },
+        {
+          onSuccess: (env) => {
+            updateEnvironmentMutation.mutate(
+              {
+                request: {
+                  slug: env.slug,
+                  updateEnvironmentRequestBody: {
+                    entriesToUpdate: [
+                      { name: "CLIENT_ID", value: data.clientId },
+                      { name: "CLIENT_SECRET", value: data.clientSecret },
+                    ],
+                    entriesToRemove: [],
+                  },
                 },
               },
-            },
-            {
-              onSuccess: () => {
-                addOAuthProxyMutation.mutate({
-                  request: {
-                    slug: toolsetSlug,
-                    addOAuthProxyServerRequestBody: {
-                      oauthProxyServer: {
-                        providerType: "custom",
-                        slug: proxyFormData.slug,
-                        audience: proxyFormData.audience || undefined,
-                        authorizationEndpoint:
-                          proxyFormData.authorizationEndpoint,
-                        tokenEndpoint: proxyFormData.tokenEndpoint,
-                        scopesSupported: scopesArray,
-                        tokenEndpointAuthMethodsSupported: [
-                          proxyFormData.tokenAuthMethod,
-                        ],
-                        environmentSlug: env.slug,
+              {
+                onSuccess: () => {
+                  addOAuthProxyMutation.mutate({
+                    request: {
+                      slug: toolsetSlug,
+                      addOAuthProxyServerRequestBody: {
+                        oauthProxyServer: {
+                          providerType: "custom",
+                          slug: proxyFormData.slug,
+                          audience: proxyFormData.audience || undefined,
+                          authorizationEndpoint:
+                            proxyFormData.authorizationEndpoint,
+                          tokenEndpoint: proxyFormData.tokenEndpoint,
+                          scopesSupported: scopesArray,
+                          tokenEndpointAuthMethodsSupported: [
+                            proxyFormData.tokenAuthMethod,
+                          ],
+                          environmentSlug: env.slug,
+                        },
                       },
                     },
-                  },
-                });
+                  });
+                },
+                onError: (error) => {
+                  console.error("Failed to store OAuth credentials:", error);
+                  dispatch({
+                    type: "SET_RESULT",
+                    success: false,
+                    message: "Failed to store OAuth credentials",
+                  });
+                },
               },
-              onError: (error) => {
-                console.error("Failed to store OAuth credentials:", error);
-                dispatch({
-                  type: "SET_RESULT",
-                  success: false,
-                  message: "Failed to store OAuth credentials",
-                });
-              },
-            },
-          );
+            );
+          },
+          onError: (error) => {
+            console.error("Failed to create environment:", error);
+            dispatch({
+              type: "SET_RESULT",
+              success: false,
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to create environment for OAuth credentials",
+            });
+          },
         },
-        onError: (error) => {
-          console.error("Failed to create environment:", error);
-          dispatch({
-            type: "SET_RESULT",
-            success: false,
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to create environment for OAuth credentials",
-          });
-        },
-      },
-    );
-  }, [
-    state,
-    toolset.name,
-    toolsetSlug,
-    session.activeOrganizationId,
-    environments,
-    createEnvironmentMutation,
-    updateEnvironmentMutation,
-    addOAuthProxyMutation,
-  ]);
+      );
+    },
+    [
+      state,
+      toolset.name,
+      toolsetSlug,
+      session.activeOrganizationId,
+      environments,
+      createEnvironmentMutation,
+      updateEnvironmentMutation,
+      addOAuthProxyMutation,
+    ],
+  );
 
   const wizardTitle = state.title;
 
@@ -504,7 +421,6 @@ function OAuthWizard({
             discoveredOAuth={discoveredOAuth}
             editMode={!!editMode}
             isEditPending={updateOAuthProxyMutation.isPending}
-            onNext={handleProxyFormNext}
             onEditSubmit={handleProxyEditSubmit}
             onClose={onClose}
           />
