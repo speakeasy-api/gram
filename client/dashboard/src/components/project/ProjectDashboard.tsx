@@ -1,4 +1,5 @@
 import { MetricCard } from "@/components/chart/MetricCard";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
@@ -190,24 +191,25 @@ export function ProjectDashboard() {
             ) : topUsersByHooks.length === 0 ? (
               <EmptyState message="No session activity recorded" />
             ) : (
-              <ul className="space-y-3">
-                {topUsersByHooks.map((user, i) => (
-                  <li key={user.userEmail} className="flex items-start gap-3">
-                    <span className="text-muted-foreground mt-0.5 w-4 shrink-0 text-right text-xs">
-                      {i + 1}
-                    </span>
+              <ul className="divide-border divide-y">
+                {topUsersByHooks.map((user) => (
+                  <li
+                    key={user.userEmail}
+                    className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+                  >
+                    <Avatar className="size-8 shrink-0">
+                      <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                        {emailInitials(user.userEmail)}
+                      </AvatarFallback>
+                    </Avatar>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="truncate text-sm">
-                          {user.userEmail}
-                        </span>
-                        <span className="text-muted-foreground ml-2 shrink-0 text-xs">
-                          {user.eventCount.toLocaleString()} events
-                        </span>
-                      </div>
-                      <span className="text-muted-foreground text-xs">
-                        {user.uniqueTools} tools used
-                      </span>
+                      <p className="truncate text-sm font-medium">
+                        {user.userEmail}
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        {user.eventCount.toLocaleString()} calls &middot;{" "}
+                        {user.uniqueTools} tools
+                      </p>
                     </div>
                   </li>
                 ))}
@@ -335,4 +337,13 @@ function SkeletonList() {
 
 function EmptyState({ message }: { message: string }) {
   return <p className="text-muted-foreground text-sm">{message}</p>;
+}
+
+function emailInitials(email: string): string {
+  const name = email.split("@")[0] ?? "";
+  const parts = name.split(/[._-]/);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
 }
