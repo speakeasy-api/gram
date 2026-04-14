@@ -135,7 +135,11 @@ export function ExternalOAuthForm({
                     value,
                   });
                   if (state.jsonError) {
-                    dispatch({ type: "SET_ERROR", error: null });
+                    dispatch({
+                      type: "UPDATE_FIELD",
+                      field: "jsonError",
+                      value: "",
+                    });
                   }
                 }}
                 rows={12}
