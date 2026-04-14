@@ -220,7 +220,6 @@ CREATE TABLE IF NOT EXISTS skills (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 2000),
   skill_uuid TEXT CHECK (skill_uuid <> '' AND CHAR_LENGTH(skill_uuid) <= 100),
-  state TEXT NOT NULL CHECK (state IN ('pending_review', 'published', 'archived')),
   active_version_id uuid,
   created_by_user_id TEXT NOT NULL,
 

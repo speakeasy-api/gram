@@ -6,7 +6,6 @@ INSERT INTO skills (
   , slug
   , description
   , skill_uuid
-  , state
   , active_version_id
   , created_by_user_id
 )
@@ -17,7 +16,6 @@ VALUES (
   , @slug
   , sqlc.narg(description)
   , sqlc.narg(skill_uuid)
-  , @state
   , sqlc.narg(active_version_id)
   , @created_by_user_id
 )
@@ -58,7 +56,6 @@ SET
   , slug = coalesce(sqlc.narg(slug), slug)
   , description = coalesce(sqlc.narg(description), description)
   , skill_uuid = coalesce(sqlc.narg(skill_uuid), skill_uuid)
-  , state = coalesce(sqlc.narg(state), state)
   , active_version_id = coalesce(sqlc.narg(active_version_id), active_version_id)
   , updated_at = clock_timestamp()
 WHERE project_id = @project_id
@@ -69,8 +66,7 @@ RETURNING *;
 -- name: ArchiveSkill :one
 UPDATE skills
 SET
-    state = 'archived'
-  , deleted_at = clock_timestamp()
+    deleted_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE project_id = @project_id
   AND id = @id
