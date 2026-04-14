@@ -361,13 +361,13 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	}
 
 	sourceCount := 0
-	if payload.ToolsetID != nil {
+	if payload.ToolsetID != nil && *payload.ToolsetID != "" {
 		sourceCount++
 	}
-	if payload.RegistryID != nil {
+	if payload.RegistryID != nil && *payload.RegistryID != "" {
 		sourceCount++
 	}
-	if payload.ExternalURL != nil {
+	if payload.ExternalURL != nil && *payload.ExternalURL != "" {
 		sourceCount++
 	}
 	if sourceCount != 1 {
