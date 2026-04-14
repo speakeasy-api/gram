@@ -31,7 +31,7 @@ function ScopeGatedNavItem({
 }) {
   return (
     <SidebarMenuItem>
-      <RequireScope scope={scope} level="component">
+      <RequireScope scope={scope} level="component" className="w-full">
         <NavButton
           title={item.title}
           href={item.href()}
@@ -90,6 +90,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <RequireScope
                     scope={["org:read", "org:admin"]}
                     level="component"
+                    className="w-full"
                   >
                     <NavButton
                       title="Team"
