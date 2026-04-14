@@ -1736,6 +1736,10 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
 
   CONSTRAINT plugin_servers_pkey PRIMARY KEY (id),
   CONSTRAINT plugin_servers_plugin_id_fkey FOREIGN KEY (plugin_id) REFERENCES plugins (id) ON DELETE CASCADE,
+  -- RESTRICT is intentional: SET NULL would violate source_check, CASCADE would
+  -- silently destroy rows. Toolsets/registries use soft deletes so RESTRICT only
+  -- blocks manual hard deletes. If a hard-delete path is added later, it must
+  -- purge soft-deleted plugin_servers referencing the target first.
   CONSTRAINT plugin_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
   CONSTRAINT plugin_servers_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries (id) ON DELETE RESTRICT,
   CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional')),
