@@ -950,7 +950,7 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
         isOAuthConnected={isOAuthConnected}
         isOAuthEligible={!!isOAuthEligible}
         oauthParadigm={oauthParadigm}
-        mcpEnabled={toolset.mcpEnabled}
+        mcpEnabled={!!toolset.mcpEnabled}
         proxyEnvironmentSlug={proxyEnvironmentSlug}
         proxyEnvironmentName={proxyEnvironmentName}
         onConfigureClick={handleConfigureClick}
