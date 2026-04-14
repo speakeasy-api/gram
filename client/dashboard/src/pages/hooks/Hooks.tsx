@@ -1248,6 +1248,29 @@ type StackedBarDataset = {
   hoverBorderColor?: string;
 };
 
+const stackTotalPlugin = {
+  id: "stackTotal",
+  afterDatasetsDraw(chart: ChartJS) {
+    const { ctx, data } = chart;
+    const lastMeta = chart.getDatasetMeta(data.datasets.length - 1);
+    ctx.save();
+    ctx.font = "12px sans-serif";
+    ctx.fillStyle = CHART_COLORS.label;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    lastMeta.data.forEach((bar, i) => {
+      const total = data.datasets.reduce(
+        (sum, ds) => sum + ((ds.data[i] as number) || 0),
+        0,
+      );
+      ctx.fillText(String(total), bar.x + 4, bar.y);
+    });
+    ctx.restore();
+  },
+};
+
+const STACKED_BAR_PLUGINS = [stackTotalPlugin];
+
 function StackedBarChart({
   title,
   labels,
@@ -1268,83 +1291,63 @@ function StackedBarChart({
     labels.length * (barHeight + spacerHeight) + 60,
   );
 
-  const stackTotalPlugin = {
-    id: "stackTotal",
-    afterDatasetsDraw(chart: ChartJS) {
-      const { ctx, data } = chart;
-      const lastMeta = chart.getDatasetMeta(data.datasets.length - 1);
-      ctx.save();
-      ctx.font = "12px sans-serif";
-      ctx.fillStyle = CHART_COLORS.label;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      lastMeta.data.forEach((bar, i) => {
-        const total = data.datasets.reduce(
-          (sum, ds) => sum + ((ds.data[i] as number) || 0),
-          0,
-        );
-        ctx.fillText(String(total), bar.x + 4, bar.y);
-      });
-      ctx.restore();
-    },
-  };
-
-  const options: ChartOptions<"bar"> = {
-    indexAxis: "y",
-    responsive: true,
-    maintainAspectRatio: false,
-    onClick(_, elements) {
-      if (!elements.length || !handleFilter) return;
-      const { datasetIndex, index } = elements[0];
-      const datasetLabel = datasets[datasetIndex]?.label;
-      const rowLabel = labels[index];
-      if (datasetLabel && rowLabel) handleFilter(datasetLabel, rowLabel);
-    },
-    scales: {
-      x: {
-        stacked: true,
-        grid: { color: CHART_COLORS.gridLine },
-        ticks: { color: CHART_COLORS.labelFaded, precision: 0 },
-        afterFit(scale) {
-          scale.paddingRight = 30;
+  const options = useMemo<ChartOptions<"bar">>(
+    () => ({
+      indexAxis: "y",
+      responsive: true,
+      maintainAspectRatio: false,
+      onClick(_, elements) {
+        if (!elements.length || !handleFilter) return;
+        const { datasetIndex, index } = elements[0];
+        const datasetLabel = datasets[datasetIndex]?.label;
+        const rowLabel = labels[index];
+        if (datasetLabel && rowLabel) handleFilter(datasetLabel, rowLabel);
+      },
+      onHover(event, elements) {
+        const el = event.native?.target as HTMLElement | null;
+        if (el) el.style.cursor = elements.length ? "pointer" : "default";
+      },
+      scales: {
+        x: {
+          stacked: true,
+          grid: { color: CHART_COLORS.gridLine },
+          ticks: { color: CHART_COLORS.labelFaded, precision: 0 },
+          afterFit(scale) {
+            scale.paddingRight = 30;
+          },
+        },
+        y: {
+          stacked: true,
+          ticks: {
+            color: CHART_COLORS.labelFaded,
+            crossAlign: "far",
+            padding: 2,
+          },
+          grid: { display: false },
         },
       },
-      y: {
-        stacked: true,
-        ticks: {
-          color: CHART_COLORS.labelFaded,
-          crossAlign: "far",
-          padding: 2,
-        },
-        grid: { display: false },
-      },
-    },
-    plugins: {
-      legend: SHARED_LEGEND,
-      tooltip: {
-        ...SHARED_TOOLTIP,
-        callbacks: {
-          label: (item: TooltipItem<"bar">) =>
-            ` ${item.dataset.label}: ${item.parsed.x}`,
+      plugins: {
+        legend: SHARED_LEGEND,
+        tooltip: {
+          ...SHARED_TOOLTIP,
+          callbacks: {
+            label: (item: TooltipItem<"bar">) =>
+              ` ${item.dataset.label}: ${item.parsed.x}`,
+          },
         },
       },
-    },
-  };
+    }),
+    [datasets, labels, handleFilter],
+  );
 
   return (
     <div className="border-border bg-card space-y-4 rounded-lg border p-4">
       <h3 className="text font-semibold">{title}</h3>
       <div style={{ height: containerHeight }}>
         <Bar
-          plugins={[stackTotalPlugin]}
+          plugins={STACKED_BAR_PLUGINS}
           data={{ labels, datasets }}
-          options={{
-            ...options,
-            onHover(event, elements) {
-              const el = event.native?.target as HTMLElement | null;
-              if (el) el.style.cursor = elements.length ? "pointer" : "default";
-            },
-          }}
+          options={options}
         />
       </div>
     </div>
