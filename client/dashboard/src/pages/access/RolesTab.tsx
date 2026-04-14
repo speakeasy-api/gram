@@ -24,6 +24,7 @@ import { useState } from "react";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { Ellipsis } from "lucide-react";
+import { RequireScope } from "@/components/require-scope";
 
 export function RolesTab() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -101,19 +102,23 @@ export function RolesTab() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onSelect={() => setTimeout(() => setEditingRole(role), 0)}
-            >
-              Edit
-            </DropdownMenuItem>
-            {!role.isSystem && (
+            <RequireScope scope="org:admin" level="component">
               <DropdownMenuItem
-                className="text-destructive focus:text-destructive cursor-pointer"
-                onSelect={() => setTimeout(() => setDeletingRole(role), 0)}
+                className="cursor-pointer"
+                onSelect={() => setTimeout(() => setEditingRole(role), 0)}
               >
-                Delete
+                Edit
               </DropdownMenuItem>
+            </RequireScope>
+            {!role.isSystem && (
+              <RequireScope scope="org:admin" level="component">
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive cursor-pointer"
+                  onSelect={() => setTimeout(() => setDeletingRole(role), 0)}
+                >
+                  Delete
+                </DropdownMenuItem>
+              </RequireScope>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -130,12 +135,14 @@ export function RolesTab() {
             Define roles and their associated permissions.
           </Type>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Button.LeftIcon>
-            <Icon name="plus" className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Add Role</Button.Text>
-        </Button>
+        <RequireScope scope="org:admin" level="component">
+          <Button onClick={() => setIsCreateOpen(true)}>
+            <Button.LeftIcon>
+              <Icon name="plus" className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Add Role</Button.Text>
+          </Button>
+        </RequireScope>
       </div>
 
       {isLoading ? (

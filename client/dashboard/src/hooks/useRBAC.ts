@@ -1,8 +1,8 @@
-import { getRBACScopeOverrideHeader } from "@/components/rbac-dev-toolbar";
+import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export type { Scope };
 
@@ -20,12 +20,27 @@ export function useRBAC() {
     import.meta.env.DEV && getRBACScopeOverrideHeader() !== null;
   const isRbacEnabled = featureFlagEnabled || devOverrideActive;
 
+  // Re-render when the dev toolbar changes scopes in localStorage.
+  const [overrideVersion, setOverrideVersion] = useState(0);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const handler = () => setOverrideVersion((v) => v + 1);
+    window.addEventListener("rbac-override-change", handler);
+    return () => window.removeEventListener("rbac-override-change", handler);
+  }, []);
+
+  // Fetch grants from the server. When dev override is active the SDK fetcher
+  // attaches X-Gram-Scope-Override so the server returns the filtered grant set.
   const { data, isLoading } = useGrants(undefined, undefined, {
     enabled: isRbacEnabled,
     staleTime: 30_000,
   });
 
-  const grants = data?.grants;
+  // overrideVersion triggers a re-render (and therefore a re-read of devOverrideActive)
+  // when the dev toolbar changes; the query invalidation handles the actual refetch.
+  const grants = useMemo(() => {
+    return data?.grants;
+  }, [data?.grants, overrideVersion]);
 
   /**
    * Check if the user has a given scope, optionally scoped to a resource ID.
@@ -41,7 +56,9 @@ export function useRBAC() {
       if (!grants) return false;
 
       return grants.some((grant) => {
-        if (grant.scope !== scope) return false;
+        // evaluate if the grant's scope or any of its sub scopes matches the required scope
+        if (grant.scope !== scope && !grant.subScopes?.includes(scope))
+          return false;
         // Unrestricted grant — no resource allowlist
         if (!grant.resources) return true;
         // Resource-scoped grant — check if the resource is in the allowlist

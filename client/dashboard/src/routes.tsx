@@ -48,6 +48,7 @@ import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
 import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
+import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import Team from "./pages/team/Team";
 import AcceptInvite from "./pages/invite/AcceptInvite";
@@ -314,6 +315,13 @@ const ROUTE_STRUCTURE = {
     url: "logs",
     customIcon: McpIcon,
     component: Logs,
+  },
+  triggers: {
+    title: "Triggers",
+    url: "triggers",
+    icon: "zap",
+    component: TriggersRoot,
+    indexComponent: TriggersIndex,
   },
   hooks: {
     title: "Hooks",

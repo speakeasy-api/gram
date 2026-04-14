@@ -125,3 +125,39 @@ func TestScopeExpansions_isDAG(t *testing.T) {
 		require.False(t, hasCycle(start), "cycle detected in scopeExpansions from scope %q", start)
 	}
 }
+
+func TestCalculateSubScopes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		scope string
+		want  []string
+	}{
+		{scope: string(ScopeOrgAdmin), want: []string{string(ScopeOrgRead)}},
+		{scope: string(ScopeBuildWrite), want: []string{string(ScopeBuildRead)}},
+		{scope: string(ScopeMCPWrite), want: []string{string(ScopeMCPRead)}},
+		{scope: string(ScopeOrgRead), want: []string{}},
+		{scope: string(ScopeBuildRead), want: []string{}},
+		{scope: string(ScopeMCPRead), want: []string{}},
+		{scope: string(ScopeRoot), want: []string{}},
+		{scope: string(ScopeMCPConnect), want: []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.scope, func(t *testing.T) {
+			t.Parallel()
+			got := calculateSubScopes(Scope(tt.scope))
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestCalculateSubScopes_inverseOfScopeExpansions(t *testing.T) {
+	t.Parallel()
+
+	for lower, highers := range scopeExpansions {
+		for _, h := range highers {
+			require.Contains(t, calculateSubScopes(h), string(lower),
+				"higher scope %q should imply lower scope %q", h, lower)
+		}
+	}
+}
