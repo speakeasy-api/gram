@@ -78,7 +78,7 @@ func PtrToNullUUID(s *string) (uuid.NullUUID, error) {
 	}
 	id, err := uuid.Parse(*s)
 	if err != nil {
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, err
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, err //nolint:wrapcheck // callers provide their own context
 	}
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }

@@ -34,19 +34,20 @@ WHERE
   AND deleted IS FALSE
 RETURNING id, organization_id, name, description, slug, visibility, created_at, updated_at;
 
--- name: DeleteOrganizationMcpCollectionFull :exec
-WITH deleted_registries AS (
-    UPDATE organization_mcp_collection_registries SET deleted_at = clock_timestamp()
-    WHERE collection_id = @collection_id AND deleted IS FALSE
-), deleted_attachments AS (
-    UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
-    WHERE collection_id = @collection_id AND deleted IS FALSE
-)
+-- name: DeleteOrganizationMcpCollection :exec
 UPDATE organization_mcp_collections SET deleted_at = clock_timestamp()
 WHERE
-  organization_mcp_collections.id = @collection_id
-  AND organization_mcp_collections.organization_id = @organization_id
-  AND organization_mcp_collections.deleted IS FALSE;
+  id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
+-- name: DeleteOrganizationMcpCollectionRegistriesByID :exec
+UPDATE organization_mcp_collection_registries SET deleted_at = clock_timestamp()
+WHERE collection_id = @collection_id AND deleted IS FALSE;
+
+-- name: DeleteOrganizationMcpCollectionServerAttachmentsByID :exec
+UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
+WHERE collection_id = @collection_id AND deleted IS FALSE;
 
 -- name: CreateOrganizationMcpCollectionRegistry :one
 INSERT INTO organization_mcp_collection_registries (collection_id, namespace)

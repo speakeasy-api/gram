@@ -214,7 +214,15 @@ func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error 
 		return oops.E(oops.CodeBadRequest, err, "invalid collection_id").Log(ctx, s.logger)
 	}
 
-	_, err = s.repo.GetOrganizationMcpCollectionByID(ctx, repo.GetOrganizationMcpCollectionByIDParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error accessing collections").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tx := s.repo.WithTx(dbtx)
+
+	_, err = tx.GetOrganizationMcpCollectionByID(ctx, repo.GetOrganizationMcpCollectionByIDParams{
 		ID:             collectionID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
@@ -225,11 +233,21 @@ func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error 
 		return oops.E(oops.CodeUnexpected, err, "error accessing collection").Log(ctx, s.logger)
 	}
 
-	if err := s.repo.DeleteOrganizationMcpCollectionFull(ctx, repo.DeleteOrganizationMcpCollectionFullParams{
-		CollectionID:   collectionID,
+	if err := tx.DeleteOrganizationMcpCollectionRegistriesByID(ctx, collectionID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to delete collection registries").Log(ctx, s.logger)
+	}
+	if err := tx.DeleteOrganizationMcpCollectionServerAttachmentsByID(ctx, collectionID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to delete collection server attachments").Log(ctx, s.logger)
+	}
+	if err := tx.DeleteOrganizationMcpCollection(ctx, repo.DeleteOrganizationMcpCollectionParams{
+		ID:             collectionID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to delete collection").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error saving collection deletion").Log(ctx, s.logger)
 	}
 
 	return nil

@@ -116,28 +116,41 @@ func (q *Queries) CreateOrganizationMcpCollectionRegistry(ctx context.Context, a
 	return i, err
 }
 
-const deleteOrganizationMcpCollectionFull = `-- name: DeleteOrganizationMcpCollectionFull :exec
-WITH deleted_registries AS (
-    UPDATE organization_mcp_collection_registries SET deleted_at = clock_timestamp()
-    WHERE collection_id = $1 AND deleted IS FALSE
-), deleted_attachments AS (
-    UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
-    WHERE collection_id = $1 AND deleted IS FALSE
-)
+const deleteOrganizationMcpCollection = `-- name: DeleteOrganizationMcpCollection :exec
 UPDATE organization_mcp_collections SET deleted_at = clock_timestamp()
 WHERE
-  organization_mcp_collections.id = $1
-  AND organization_mcp_collections.organization_id = $2
-  AND organization_mcp_collections.deleted IS FALSE
+  id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
 `
 
-type DeleteOrganizationMcpCollectionFullParams struct {
-	CollectionID   uuid.UUID
+type DeleteOrganizationMcpCollectionParams struct {
+	ID             uuid.UUID
 	OrganizationID string
 }
 
-func (q *Queries) DeleteOrganizationMcpCollectionFull(ctx context.Context, arg DeleteOrganizationMcpCollectionFullParams) error {
-	_, err := q.db.Exec(ctx, deleteOrganizationMcpCollectionFull, arg.CollectionID, arg.OrganizationID)
+func (q *Queries) DeleteOrganizationMcpCollection(ctx context.Context, arg DeleteOrganizationMcpCollectionParams) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationMcpCollection, arg.ID, arg.OrganizationID)
+	return err
+}
+
+const deleteOrganizationMcpCollectionRegistriesByID = `-- name: DeleteOrganizationMcpCollectionRegistriesByID :exec
+UPDATE organization_mcp_collection_registries SET deleted_at = clock_timestamp()
+WHERE collection_id = $1 AND deleted IS FALSE
+`
+
+func (q *Queries) DeleteOrganizationMcpCollectionRegistriesByID(ctx context.Context, collectionID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationMcpCollectionRegistriesByID, collectionID)
+	return err
+}
+
+const deleteOrganizationMcpCollectionServerAttachmentsByID = `-- name: DeleteOrganizationMcpCollectionServerAttachmentsByID :exec
+UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
+WHERE collection_id = $1 AND deleted IS FALSE
+`
+
+func (q *Queries) DeleteOrganizationMcpCollectionServerAttachmentsByID(ctx context.Context, collectionID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationMcpCollectionServerAttachmentsByID, collectionID)
 	return err
 }
 
