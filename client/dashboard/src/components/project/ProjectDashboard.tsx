@@ -18,6 +18,7 @@ import {
 import { FilterType } from "@gram/client/models/components/listfilteroptionspayload";
 import { formatDistanceToNow, subDays } from "date-fns";
 import { useMemo } from "react";
+import { Badge } from "@speakeasy-api/moonshine";
 
 export function ProjectDashboard() {
   const { projectSlug } = useSlugs();
@@ -89,7 +90,11 @@ export function ProjectDashboard() {
   return (
     <Page.Section>
       <Page.Section.Title>Project Overview</Page.Section.Title>
-      <Page.Section.Description>{project.name}</Page.Section.Description>
+      <Page.Section.Description>
+        <Badge variant="neutral">
+          <Badge.Text>{project.name}</Badge.Text>
+        </Badge>
+      </Page.Section.Description>
       <Page.Section.CTA>7-day summary</Page.Section.CTA>
 
       <Page.Section.Body>
