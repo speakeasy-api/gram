@@ -112,7 +112,13 @@ const POSITION_KEY = "gram-rbac-dev-toolbar-pos";
 function loadPosition(): { x: number; y: number } | null {
   try {
     const raw = localStorage.getItem(POSITION_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const pos = JSON.parse(raw);
+      return {
+        x: Math.max(0, Math.min(pos.x, window.innerWidth - 320)),
+        y: Math.max(0, Math.min(pos.y, window.innerHeight - 44)),
+      };
+    }
   } catch {
     // ignore
   }
