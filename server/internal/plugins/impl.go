@@ -264,16 +264,36 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
 	}
 
-	if err := s.repo.SoftDeletePluginServers(ctx, pluginID); err != nil {
+	// Verify the plugin belongs to this project before mutating.
+	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.C(oops.CodeNotFound)
+		}
+		return oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	txRepo := s.repo.WithTx(tx)
+
+	if err := txRepo.SoftDeletePluginServers(ctx, pluginID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft-delete plugin servers").Log(ctx, s.logger)
 	}
 
-	if err := s.repo.DeletePlugin(ctx, repo.DeletePluginParams{
+	if err := txRepo.DeletePlugin(ctx, repo.DeletePluginParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      *ac.ProjectID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete plugin").Log(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
 	return nil
 }
