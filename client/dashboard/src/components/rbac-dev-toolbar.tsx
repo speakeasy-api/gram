@@ -1,13 +1,7 @@
 import { useOrganization } from "@/contexts/Auth";
 import { Switch } from "./ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ChevronDown,
-  ChevronUp,
-  GripVertical,
-  Shield,
-  Wrench,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Shield } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -285,7 +279,7 @@ export function RBACDevToolbar() {
       style={pos ? { left: pos.x, top: pos.y } : { left: 16, bottom: 16 }}
     >
       <div className={`
-          ${collapsed ? "w-fit" : "w-80"} rounded-xl border shadow-2xl backdrop-blur-md transition-all
+          w-80 rounded-xl border shadow-2xl backdrop-blur-md transition-all
           duration-200
           ${state.enabled ? "bg-background/98 border-foreground/15 dark:border-foreground/15 dark:bg-gray-950/98" : "border-border bg-white/98 dark:bg-gray-950/98"}
         `}>
@@ -307,11 +301,11 @@ export function RBACDevToolbar() {
           `}
         >
           <GripVertical className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0" />
-          <div className="bg-muted text-muted-foreground flex h-6 w-6 items-center justify-center rounded-md">
-            <Wrench className="h-3.5 w-3.5" />
-          </div>
-          <span className="text-foreground text-xs font-semibold tracking-wide">
-            Local Dev Tools
+          <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-widest text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+            DEV
+          </span>
+          <span className="text-foreground text-xs font-semibold">
+            GRAM DEVELOPER TOOLKIT
           </span>
           <div className="text-muted-foreground ml-auto">
             {collapsed ? (
