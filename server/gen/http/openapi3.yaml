@@ -10934,6 +10934,111 @@ paths:
             x-speakeasy-react-hook:
                 name: GetProjectMetricsSummary
                 type: query
+    /rpc/telemetry.getProjectOverview:
+        post:
+            description: Get project-level overview including total chats, tool calls, active servers/users, and top lists
+            operationId: getProjectOverview
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetProjectMetricsSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetProjectOverviewResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getProjectOverview telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getProjectOverview
+            x-speakeasy-react-hook:
+                name: GetProjectOverview
+                type: query
     /rpc/telemetry.getUserMetricsSummary:
         post:
             description: Get aggregated metrics summary grouped by user
@@ -18137,6 +18242,41 @@ components:
             required:
                 - from
                 - to
+        GetProjectOverviewPayload:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+            description: Payload for getting project-level overview
+            required:
+                - from
+                - to
+        GetProjectOverviewResult:
+            type: object
+            properties:
+                comparison:
+                    $ref: '#/components/schemas/ProjectOverviewSummary'
+                metrics_mode:
+                    type: string
+                    description: Indicates whether metrics are session-based or tool-call-based
+                    enum:
+                        - session
+                        - tool_call
+                summary:
+                    $ref: '#/components/schemas/ProjectOverviewSummary'
+            description: Result of project overview query
+            required:
+                - summary
+                - comparison
+                - metrics_mode
         GetProjectResult:
             type: object
             properties:
@@ -18621,6 +18761,20 @@ components:
                 - scopes
                 - created_at
                 - updated_at
+        LLMClientUsage:
+            type: object
+            properties:
+                activity_count:
+                    type: integer
+                    description: Number of messages (session mode) or tool calls (tool_call mode)
+                    format: int64
+                client_name:
+                    type: string
+                    description: Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
+            description: Usage breakdown by LLM client/agent
+            required:
+                - client_name
+                - activity_count
         ListAllowedOriginsResult:
             type: object
             properties:
@@ -20157,6 +20311,64 @@ components:
                 - id
                 - name
                 - slug
+        ProjectOverviewSummary:
+            type: object
+            properties:
+                active_servers_count:
+                    type: integer
+                    description: Number of MCP servers with at least one tool call in the time period
+                    format: int64
+                active_users_count:
+                    type: integer
+                    description: Number of unique users with activity in the time period
+                    format: int64
+                failed_chats:
+                    type: integer
+                    description: Number of failed chat sessions
+                    format: int64
+                failed_tool_calls:
+                    type: integer
+                    description: Number of failed tool calls
+                    format: int64
+                llm_client_breakdown:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/LLMClientUsage'
+                    description: Breakdown of messages/activity by LLM client/agent
+                resolved_chats:
+                    type: integer
+                    description: Number of resolved chat sessions
+                    format: int64
+                top_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TopServer'
+                    description: Top 10 MCP servers by tool call count
+                top_users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TopUser'
+                    description: Top 10 users by activity (# of messages or tool calls depending on metrics_mode)
+                total_chats:
+                    type: integer
+                    description: Total number of chat sessions
+                    format: int64
+                total_tool_calls:
+                    type: integer
+                    description: Total number of tool calls
+                    format: int64
+            description: Aggregated project-level summary metrics for a time period
+            required:
+                - total_chats
+                - resolved_chats
+                - failed_chats
+                - total_tool_calls
+                - failed_tool_calls
+                - active_servers_count
+                - active_users_count
+                - top_users
+                - top_servers
+                - llm_client_breakdown
         ProjectSummary:
             type: object
             properties:
@@ -22061,6 +22273,41 @@ components:
                 - id
                 - toolset_id
                 - environment_id
+        TopServer:
+            type: object
+            properties:
+                server_name:
+                    type: string
+                    description: MCP server name
+                tool_call_count:
+                    type: integer
+                    description: Total number of tool calls
+                    format: int64
+            description: Top MCP server by tool call count
+            required:
+                - server_name
+                - tool_call_count
+        TopUser:
+            type: object
+            properties:
+                activity_count:
+                    type: integer
+                    description: Number of messages (session mode) or tool calls (tool_call mode)
+                    format: int64
+                user_id:
+                    type: string
+                    description: User ID (internal or external depending on availability)
+                user_type:
+                    type: string
+                    description: Type of user ID
+                    enum:
+                        - internal
+                        - external
+            description: Top user by activity
+            required:
+                - user_id
+                - user_type
+                - activity_count
         TriggerDefinition:
             type: object
             properties:

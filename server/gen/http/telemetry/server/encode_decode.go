@@ -1927,6 +1927,243 @@ func EncodeGetObservabilityOverviewError(encoder func(context.Context, http.Resp
 	}
 }
 
+// EncodeGetProjectOverviewResponse returns an encoder for responses returned
+// by the telemetry getProjectOverview endpoint.
+func EncodeGetProjectOverviewResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*telemetry.GetProjectOverviewResult)
+		enc := encoder(ctx, w)
+		body := NewGetProjectOverviewResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetProjectOverviewRequest returns a decoder for requests sent to the
+// telemetry getProjectOverview endpoint.
+func DecodeGetProjectOverviewRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.GetProjectOverviewPayload, error) {
+	return func(r *http.Request) (*telemetry.GetProjectOverviewPayload, error) {
+		var payload *telemetry.GetProjectOverviewPayload
+		var (
+			body GetProjectOverviewRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateGetProjectOverviewRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewGetProjectOverviewPayload(&body, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetProjectOverviewError returns an encoder for errors returned by the
+// getProjectOverview telemetry endpoint.
+func EncodeGetProjectOverviewError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetProjectOverviewUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetProjectOverviewForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetProjectOverviewBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetProjectOverviewNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetProjectOverviewConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetProjectOverviewUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetProjectOverviewInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetProjectOverviewInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetProjectOverviewUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetProjectOverviewGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListFilterOptionsResponse returns an encoder for responses returned by
 // the telemetry listFilterOptions endpoint.
 func EncodeListFilterOptionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -3219,6 +3456,94 @@ func marshalTelemetryToolMetricToToolMetricResponseBody(v *telemetry.ToolMetric)
 		FailureCount: v.FailureCount,
 		AvgLatencyMs: v.AvgLatencyMs,
 		FailureRate:  v.FailureRate,
+	}
+
+	return res
+}
+
+// marshalTelemetryProjectOverviewSummaryToProjectOverviewSummaryResponseBody
+// builds a value of type *ProjectOverviewSummaryResponseBody from a value of
+// type *telemetry.ProjectOverviewSummary.
+func marshalTelemetryProjectOverviewSummaryToProjectOverviewSummaryResponseBody(v *telemetry.ProjectOverviewSummary) *ProjectOverviewSummaryResponseBody {
+	res := &ProjectOverviewSummaryResponseBody{
+		TotalChats:         v.TotalChats,
+		ResolvedChats:      v.ResolvedChats,
+		FailedChats:        v.FailedChats,
+		TotalToolCalls:     v.TotalToolCalls,
+		FailedToolCalls:    v.FailedToolCalls,
+		ActiveServersCount: v.ActiveServersCount,
+		ActiveUsersCount:   v.ActiveUsersCount,
+	}
+	if v.TopUsers != nil {
+		res.TopUsers = make([]*TopUserResponseBody, len(v.TopUsers))
+		for i, val := range v.TopUsers {
+			if val == nil {
+				res.TopUsers[i] = nil
+				continue
+			}
+			res.TopUsers[i] = marshalTelemetryTopUserToTopUserResponseBody(val)
+		}
+	} else {
+		res.TopUsers = []*TopUserResponseBody{}
+	}
+	if v.TopServers != nil {
+		res.TopServers = make([]*TopServerResponseBody, len(v.TopServers))
+		for i, val := range v.TopServers {
+			if val == nil {
+				res.TopServers[i] = nil
+				continue
+			}
+			res.TopServers[i] = marshalTelemetryTopServerToTopServerResponseBody(val)
+		}
+	} else {
+		res.TopServers = []*TopServerResponseBody{}
+	}
+	if v.LlmClientBreakdown != nil {
+		res.LlmClientBreakdown = make([]*LLMClientUsageResponseBody, len(v.LlmClientBreakdown))
+		for i, val := range v.LlmClientBreakdown {
+			if val == nil {
+				res.LlmClientBreakdown[i] = nil
+				continue
+			}
+			res.LlmClientBreakdown[i] = marshalTelemetryLLMClientUsageToLLMClientUsageResponseBody(val)
+		}
+	} else {
+		res.LlmClientBreakdown = []*LLMClientUsageResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTelemetryTopUserToTopUserResponseBody builds a value of type
+// *TopUserResponseBody from a value of type *telemetry.TopUser.
+func marshalTelemetryTopUserToTopUserResponseBody(v *telemetry.TopUser) *TopUserResponseBody {
+	res := &TopUserResponseBody{
+		UserID:        v.UserID,
+		UserType:      v.UserType,
+		ActivityCount: v.ActivityCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryTopServerToTopServerResponseBody builds a value of type
+// *TopServerResponseBody from a value of type *telemetry.TopServer.
+func marshalTelemetryTopServerToTopServerResponseBody(v *telemetry.TopServer) *TopServerResponseBody {
+	res := &TopServerResponseBody{
+		ServerName:    v.ServerName,
+		ToolCallCount: v.ToolCallCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryLLMClientUsageToLLMClientUsageResponseBody builds a value of
+// type *LLMClientUsageResponseBody from a value of type
+// *telemetry.LLMClientUsage.
+func marshalTelemetryLLMClientUsageToLLMClientUsageResponseBody(v *telemetry.LLMClientUsage) *LLMClientUsageResponseBody {
+	res := &LLMClientUsageResponseBody{
+		ClientName:    v.ClientName,
+		ActivityCount: v.ActivityCount,
 	}
 
 	return res

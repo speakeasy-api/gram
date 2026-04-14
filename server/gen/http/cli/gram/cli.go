@@ -77,7 +77,7 @@ func UsageCommands() []string {
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"resources list-resources",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
-		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server|updateoauth-proxy-server)",
@@ -771,6 +771,12 @@ func ParseEndpoint(
 		telemetryGetObservabilityOverviewSessionTokenFlag     = telemetryGetObservabilityOverviewFlags.String("session-token", "", "")
 		telemetryGetObservabilityOverviewProjectSlugInputFlag = telemetryGetObservabilityOverviewFlags.String("project-slug-input", "", "")
 
+		telemetryGetProjectOverviewFlags                = flag.NewFlagSet("get-project-overview", flag.ExitOnError)
+		telemetryGetProjectOverviewBodyFlag             = telemetryGetProjectOverviewFlags.String("body", "REQUIRED", "")
+		telemetryGetProjectOverviewApikeyTokenFlag      = telemetryGetProjectOverviewFlags.String("apikey-token", "", "")
+		telemetryGetProjectOverviewSessionTokenFlag     = telemetryGetProjectOverviewFlags.String("session-token", "", "")
+		telemetryGetProjectOverviewProjectSlugInputFlag = telemetryGetProjectOverviewFlags.String("project-slug-input", "", "")
+
 		telemetryListFilterOptionsFlags                = flag.NewFlagSet("list-filter-options", flag.ExitOnError)
 		telemetryListFilterOptionsBodyFlag             = telemetryListFilterOptionsFlags.String("body", "REQUIRED", "")
 		telemetryListFilterOptionsApikeyTokenFlag      = telemetryListFilterOptionsFlags.String("apikey-token", "", "")
@@ -1164,6 +1170,7 @@ func ParseEndpoint(
 	telemetryGetProjectMetricsSummaryFlags.Usage = telemetryGetProjectMetricsSummaryUsage
 	telemetryGetUserMetricsSummaryFlags.Usage = telemetryGetUserMetricsSummaryUsage
 	telemetryGetObservabilityOverviewFlags.Usage = telemetryGetObservabilityOverviewUsage
+	telemetryGetProjectOverviewFlags.Usage = telemetryGetProjectOverviewUsage
 	telemetryListFilterOptionsFlags.Usage = telemetryListFilterOptionsUsage
 	telemetryListAttributeKeysFlags.Usage = telemetryListAttributeKeysUsage
 	telemetryGetHooksSummaryFlags.Usage = telemetryGetHooksSummaryUsage
@@ -1756,6 +1763,9 @@ func ParseEndpoint(
 
 			case "get-observability-overview":
 				epf = telemetryGetObservabilityOverviewFlags
+
+			case "get-project-overview":
+				epf = telemetryGetProjectOverviewFlags
 
 			case "list-filter-options":
 				epf = telemetryListFilterOptionsFlags
@@ -2381,6 +2391,9 @@ func ParseEndpoint(
 			case "get-observability-overview":
 				endpoint = c.GetObservabilityOverview()
 				data, err = telemetryc.BuildGetObservabilityOverviewPayload(*telemetryGetObservabilityOverviewBodyFlag, *telemetryGetObservabilityOverviewApikeyTokenFlag, *telemetryGetObservabilityOverviewSessionTokenFlag, *telemetryGetObservabilityOverviewProjectSlugInputFlag)
+			case "get-project-overview":
+				endpoint = c.GetProjectOverview()
+				data, err = telemetryc.BuildGetProjectOverviewPayload(*telemetryGetProjectOverviewBodyFlag, *telemetryGetProjectOverviewApikeyTokenFlag, *telemetryGetProjectOverviewSessionTokenFlag, *telemetryGetProjectOverviewProjectSlugInputFlag)
 			case "list-filter-options":
 				endpoint = c.ListFilterOptions()
 				data, err = telemetryc.BuildListFilterOptionsPayload(*telemetryListFilterOptionsBodyFlag, *telemetryListFilterOptionsApikeyTokenFlag, *telemetryListFilterOptionsSessionTokenFlag, *telemetryListFilterOptionsProjectSlugInputFlag)
@@ -5320,6 +5333,7 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    get-project-metrics-summary: Get aggregated metrics summary for an entire project`)
 	fmt.Fprintln(os.Stderr, `    get-user-metrics-summary: Get aggregated metrics summary grouped by user`)
 	fmt.Fprintln(os.Stderr, `    get-observability-overview: Get observability overview metrics including time series, tool breakdowns, and summary stats`)
+	fmt.Fprintln(os.Stderr, `    get-project-overview: Get project-level overview including total chats, tool calls, active servers/users, and top lists`)
 	fmt.Fprintln(os.Stderr, `    list-filter-options: List available filter options (API keys or users) for the observability overview`)
 	fmt.Fprintln(os.Stderr, `    list-attribute-keys: List distinct attribute keys available for filtering`)
 	fmt.Fprintln(os.Stderr, `    get-hooks-summary: Get aggregated hooks metrics grouped by server`)
@@ -5520,6 +5534,30 @@ func telemetryGetObservabilityOverviewUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-observability-overview --body '{\n      \"api_key_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"include_time_series\": false,\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"toolset_slug\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetProjectOverviewUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-project-overview", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get project-level overview including total chats, tool calls, active servers/users, and top lists`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-project-overview --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryListFilterOptionsUsage() {
