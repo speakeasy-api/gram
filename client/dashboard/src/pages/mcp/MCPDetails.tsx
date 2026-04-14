@@ -34,7 +34,9 @@ import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools, useToolset } from "@/hooks/toolTypes";
+import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { useProductTier } from "@/hooks/useProductTier";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { isHttpTool, Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
@@ -72,7 +74,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { generateText } from "ai";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { useModel } from "../playground/Openrouter";
