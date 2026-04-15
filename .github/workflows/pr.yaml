@@ -1171,32 +1171,9 @@ jobs:
       - name: Check results
         run: |
           failed=()
-
-          check() {
-            local name="$1"
-            local result="$2"
-            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
-              failed+=("❌ $name ($result)")
-            fi
-          }
-
-          check "changes"              "${{ needs.changes.result }}"
-          check "server-build-lint"    "${{ needs.server-build-lint.result }}"
-          check "server-test"          "${{ needs.server-test.result }}"
-          check "docker-build-server"  "${{ needs.docker-build-server.result }}"
-          check "docker-build-client"  "${{ needs.docker-build-client.result }}"
-          check "client-build-lint"    "${{ needs.client-build-lint.result }}"
-          check "ts-sdk-build-lint"    "${{ needs.ts-sdk-build-lint.result }}"
-          check "cli-build-lint"       "${{ needs.cli-build-lint.result }}"
-          check "plog-build-lint"      "${{ needs.plog-build-lint.result }}"
-          check "functions-build-host" "${{ needs.functions-build-host.result }}"
-          check "functions-image"      "${{ needs.functions-image.result }}"
-          check "ts-framework-test"    "${{ needs.ts-framework-test.result }}"
-          check "elements-build-lint"  "${{ needs.elements-build-lint.result }}"
-          check "elements-test"        "${{ needs.elements-test.result }}"
-          check "elements-examples"    "${{ needs.elements-examples.result }}"
-          check "atlas-lint"           "${{ needs.atlas-lint.result }}"
-          check "atlas-push"           "${{ needs.atlas-push.result }}"
+          while IFS= read -r line; do
+            failed+=("$line")
+          done < <(echo '${{ toJSON(needs) }}' | jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | "❌ \(.key) (\(.value.result))"')
 
           if [[ ${#failed[@]} -gt 0 ]]; then
             echo "CI failed. The following checks did not pass:"
