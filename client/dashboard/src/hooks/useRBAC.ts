@@ -16,14 +16,12 @@ export type { Scope };
 export function useRBAC() {
   const telemetry = useTelemetry();
   const featureFlagEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
-  const devOverrideActive =
-    import.meta.env.DEV && getRBACScopeOverrideHeader() !== null;
+  const devOverrideActive = getRBACScopeOverrideHeader() !== null;
   const isRbacEnabled = featureFlagEnabled || devOverrideActive;
 
-  // Re-render when the dev toolbar changes scopes in localStorage.
+  // Re-render when the toolbar changes scopes in localStorage.
   const [overrideVersion, setOverrideVersion] = useState(0);
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
     const handler = () => setOverrideVersion((v) => v + 1);
     window.addEventListener("rbac-override-change", handler);
     return () => window.removeEventListener("rbac-override-change", handler);
