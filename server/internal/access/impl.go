@@ -566,9 +566,9 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 // ListGrants returns the effective grants for the current user by combining
 // direct user grants with grants inherited from their currently assigned role.
 func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*gen.ListUserGrantsResult, error) {
-	// Dev-only: return override scopes when the header is present so the
-	// frontend sees the same restricted scopes as the enforcement layer.
-	if overrides, ok := getScopeOverrides(ctx); ok {
+	// Return override scopes when active so the frontend sees the same restricted
+	// set as the enforcement layer.
+	if overrides, ok := s.access.getScopeOverrides(ctx); ok {
 		return &gen.ListUserGrantsResult{Grants: grantsFromRows(grantsFromOverrides(overrides).rows)}, nil
 	}
 

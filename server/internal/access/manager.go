@@ -19,18 +19,47 @@ type FeatureChecker interface {
 	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
+type ManagerOpts struct {
+	DevMode bool
+}
+
 type Manager struct {
 	logger   *slog.Logger
 	db       accessrepo.DBTX
 	features FeatureChecker
+	isDev    bool
 }
 
-func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker) *Manager {
+func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker, opts ...ManagerOpts) *Manager {
+	var devMode bool
+	if len(opts) > 0 {
+		devMode = opts[0].DevMode
+	}
 	return &Manager{
 		logger:   logger.With(attr.SlogComponent("access")),
 		db:       db,
 		features: features,
+		isDev:    devMode,
 	}
+}
+
+// getScopeOverrides returns the parsed scope overrides from the request context
+// if they are present AND the caller is authorised to use them. In local dev
+// any authenticated user may use the override header; in production only
+// superadmins can. Returns nil, false when overrides are absent or disallowed.
+func (m *Manager) getScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
+	overrides, ok := readScopeOverrides(ctx)
+	if !ok {
+		return nil, false
+	}
+	if m.isDev {
+		return overrides, true
+	}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || !authCtx.IsAdmin {
+		return nil, false
+	}
+	return overrides, true
 }
 
 func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
@@ -38,16 +67,14 @@ func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 
-	// Dev-only: if the request carries a scope override header, use those
-	// scopes instead of loading from the database.
-	if overrides, ok := getScopeOverrides(ctx); ok {
-		grants := grantsFromOverrides(overrides)
-		return GrantsToContext(ctx, grants), nil
-	}
-
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return ctx, nil
+	}
+
+	if overrides, ok := m.getScopeOverrides(ctx); ok {
+		grants := grantsFromOverrides(overrides)
+		return GrantsToContext(ctx, grants), nil
 	}
 
 	if authCtx.AccountType != "enterprise" {
@@ -171,11 +198,10 @@ func (m *Manager) shouldEnforce(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	// When the dev override header is present, enforce so the override
-	// scopes take effect regardless of account type or feature flag.
-	// Checked after API key exclusion so the toolbar doesn't interfere
-	// with API key auth flows.
-	if _, ok := getScopeOverrides(ctx); ok {
+	// When the caller has active scope overrides, enforce so the override scopes
+	// take effect regardless of account type or feature flag. Checked after
+	// API key exclusion so the toolbar doesn't interfere with API key auth flows.
+	if _, ok := m.getScopeOverrides(ctx); ok {
 		return true, nil
 	}
 

@@ -100,6 +100,14 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		ProjectSlug:           nil,
 		APIKeyScopes:          nil,
 		APIKeyID:              "",
+		IsAdmin:               false,
+	}
+
+	// Populate IsAdmin from the cached user info so the access manager can gate
+	// the RBAC scope-override header to admins only. A cache miss leaves IsAdmin
+	// false, which is the safe default.
+	if userInfo, err := s.userInfoCache.Get(ctx, UserInfoCacheKey(session.UserID)); err == nil {
+		authCtx.IsAdmin = userInfo.Admin
 	}
 
 	if session.ActiveOrganizationID == "" {

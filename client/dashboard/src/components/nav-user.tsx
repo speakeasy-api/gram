@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { RequireScope } from "@/components/require-scope";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -75,10 +76,12 @@ export function NavUser({
                 <Icon name="circle-user" />
                 Account
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Icon name="credit-card" />
-                Billing
-              </DropdownMenuItem>
+              <RequireScope scope={["org:read", "org:admin"]} level="section">
+                <DropdownMenuItem>
+                  <Icon name="credit-card" />
+                  Billing
+                </DropdownMenuItem>
+              </RequireScope>
               <DropdownMenuItem>
                 <Icon name="bell-dot" />
                 Notifications
