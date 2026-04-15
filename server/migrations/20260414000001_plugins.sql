@@ -48,3 +48,5 @@ CREATE TABLE "plugin_servers" (
 );
 -- Create index "plugin_servers_plugin_id_display_name_key" to table: "plugin_servers"
 CREATE UNIQUE INDEX "plugin_servers_plugin_id_display_name_key" ON "plugin_servers" ("plugin_id", "display_name") WHERE (deleted IS FALSE);
+-- Create index "plugin_servers_plugin_id_toolset_id_key" to table: "plugin_servers"
+CREATE UNIQUE INDEX "plugin_servers_plugin_id_toolset_id_key" ON "plugin_servers" ("plugin_id", "toolset_id") WHERE (deleted IS FALSE);
