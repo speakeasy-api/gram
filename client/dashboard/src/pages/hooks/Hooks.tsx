@@ -25,8 +25,12 @@ import {
   TimeRangePicker,
   type DateRangePreset,
 } from "@gram-ai/elements";
+import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
 import { telemetryListHooksTraces } from "@gram/client/funcs/telemetryListHooksTraces";
 import type {
+  GetHooksSummaryResult,
+  HooksBreakdownRow,
+  HooksTimeSeriesPoint,
   HookTraceSummary as HookTrace,
   LogFilter,
   TelemetryLogRecord,
@@ -37,7 +41,7 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { formatChartLabel } from "@/components/chart/chartUtils";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   BarElement,
   BarController,
@@ -405,6 +409,30 @@ function HooksContent() {
     return tracesData?.pages.flatMap((page) => page.traces) ?? [];
   }, [tracesData]);
 
+  // Fetch complete aggregated summary for accurate analytics (not limited by pagination)
+  const { data: summaryData } = useQuery({
+    queryKey: [
+      "hooks-summary",
+      from.toISOString(),
+      to.toISOString(),
+      logFilters,
+      selectedHookTypes,
+    ],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetHooksSummary(client, {
+          getHooksSummaryPayload: {
+            from,
+            to,
+            filters: logFilters,
+            typesToInclude:
+              selectedHookTypes.length > 0 ? selectedHookTypes : undefined,
+          },
+        }),
+      ),
+    throwOnError: false,
+  });
+
   // Add a filter chip
   const addFilter = useCallback(
     (chip: FilterChip) => {
@@ -639,6 +667,7 @@ function HooksContent() {
                   onClearCustomRange={clearCustomRange}
                   projectSlug={projectSlug}
                   serverNameMappings={serverNameMappings}
+                  summaryData={summaryData}
                 />
               </EnterpriseGate>
             </Page.Body>
@@ -680,6 +709,7 @@ function HooksInnerContent({
   onClearCustomRange,
   projectSlug,
   serverNameMappings,
+  summaryData,
 }: {
   isLogsDisabled: boolean;
   isLoading: boolean;
@@ -713,6 +743,7 @@ function HooksInnerContent({
   onClearCustomRange: () => void;
   projectSlug?: string;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
+  summaryData: GetHooksSummaryResult | undefined;
 }) {
   const orgRoutes = useOrgRoutes();
   const { from, to } = useMemo(
@@ -830,13 +861,13 @@ function HooksInnerContent({
                 </div>
               ) : (
                 <HooksAnalytics
-                  groupedTraces={groupedTraces}
                   serverNameMappings={serverNameMappings}
                   from={from}
                   to={to}
                   compact={isLogsVisible}
                   addFilter={addFilter}
                   onHookTypesChange={onHookTypesChange}
+                  summaryData={summaryData}
                 />
               )}
             </div>
@@ -1404,28 +1435,29 @@ function StackedBarChart({
 
 function ServerActivityChart({
   title,
-  traces,
+  breakdown,
   serverNameMappings,
   handleFilter,
 }: {
   title: string;
-  traces: HookTrace[];
+  breakdown: HooksBreakdownRow[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   handleFilter?: (userEmail: string, serverName: string) => void;
 }) {
   const { labels, datasets } = useMemo(() => {
-    // Build userEmail → toolSource → count
+    // Build userEmail → serverDisplayName → count
     const userMap = new Map<string, Map<string, number>>();
     const serverSet = new Set<string>();
-    for (const t of traces) {
-      const user = t.userEmail || "unknown";
-      const server = t.toolSource ?? "";
-      const displayName = !server
-        ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-        : (serverNameMappings.rawToDisplay.get(server) ?? server);
+    for (const row of breakdown) {
+      const user = row.userEmail || "unknown";
+      const displayName =
+        row.serverName === "local"
+          ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+          : (serverNameMappings.rawToDisplay.get(row.serverName) ??
+            row.serverName);
       serverSet.add(displayName);
       const inner = userMap.get(user) ?? new Map<string, number>();
-      inner.set(displayName, (inner.get(displayName) ?? 0) + 1);
+      inner.set(displayName, (inner.get(displayName) ?? 0) + row.eventCount);
       userMap.set(user, inner);
     }
 
@@ -1465,7 +1497,7 @@ function ServerActivityChart({
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
-  }, [traces, serverNameMappings.rawToDisplay]);
+  }, [breakdown, serverNameMappings.rawToDisplay]);
 
   return (
     <StackedBarChart
@@ -1479,28 +1511,29 @@ function ServerActivityChart({
 
 function SourceVolumeChart({
   title,
-  traces,
+  breakdown,
   serverNameMappings,
   handleFilter,
 }: {
   title: string;
-  traces: HookTrace[];
+  breakdown: HooksBreakdownRow[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   handleFilter?: (serverName: string, source: string) => void;
 }) {
   const { labels, datasets } = useMemo(() => {
-    // Build toolSource (display name) → hookSource → count
+    // Build serverDisplayName → hookSource → count
     const serverMap = new Map<string, Map<string, number>>();
     const sourceSet = new Set<string>();
-    for (const t of traces) {
-      const raw = t.toolSource ?? "";
-      const displayName = !raw
-        ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-        : (serverNameMappings.rawToDisplay.get(raw) ?? raw);
-      const source = t.hookSource || "unknown";
+    for (const row of breakdown) {
+      const displayName =
+        row.serverName === "local"
+          ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+          : (serverNameMappings.rawToDisplay.get(row.serverName) ??
+            row.serverName);
+      const source = row.hookSource || "unknown";
       sourceSet.add(source);
       const inner = serverMap.get(displayName) ?? new Map<string, number>();
-      inner.set(source, (inner.get(source) ?? 0) + 1);
+      inner.set(source, (inner.get(source) ?? 0) + row.eventCount);
       serverMap.set(displayName, inner);
     }
 
@@ -1542,7 +1575,7 @@ function SourceVolumeChart({
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
-  }, [traces, serverNameMappings.rawToDisplay]);
+  }, [breakdown, serverNameMappings.rawToDisplay]);
 
   return (
     <StackedBarChart
@@ -1558,24 +1591,24 @@ function SourceVolumeChart({
 
 function UserVolumeList({
   title,
-  traces,
+  breakdown,
   handleFilter,
 }: {
   title: string;
-  traces: HookTrace[];
+  breakdown: HooksBreakdownRow[];
   handleFilter?: (source: string, userEmail: string) => void;
 }) {
   const { labels, datasets } = useMemo(() => {
     // Build userEmail → hookSource → count
     const userMap = new Map<string, Map<string, number>>();
     const sourceSet = new Set<string>();
-    for (const t of traces) {
-      const user = t.userEmail;
-      if (!user) continue;
-      const source = t.hookSource ?? "unknown";
+    for (const row of breakdown) {
+      const user = row.userEmail;
+      if (!user || user === "Unknown") continue;
+      const source = row.hookSource || "unknown";
       sourceSet.add(source);
       const inner = userMap.get(user) ?? new Map<string, number>();
-      inner.set(source, (inner.get(source) ?? 0) + 1);
+      inner.set(source, (inner.get(source) ?? 0) + row.eventCount);
       userMap.set(user, inner);
     }
 
@@ -1616,7 +1649,7 @@ function UserVolumeList({
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
-  }, [traces]);
+  }, [breakdown]);
 
   return (
     <StackedBarChart
@@ -1630,27 +1663,28 @@ function UserVolumeList({
 
 function ServerErrorRateChart({
   title,
-  traces,
+  breakdown,
   serverNameMappings,
 }: {
   title: string;
-  traces: HookTrace[];
+  breakdown: HooksBreakdownRow[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }) {
   const { labels, datasets } = useMemo(() => {
-    // Build: serverDisplay → toolName → errorCount (failures only)
+    // Build: serverDisplay → toolName → failureCount (failures only)
     const serverMap = new Map<string, Map<string, number>>();
     const toolSet = new Set<string>();
-    for (const t of traces) {
-      if (t.hookStatus !== "failure") continue;
-      const raw = t.toolSource ?? "";
-      const displayName = !raw
-        ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-        : (serverNameMappings.rawToDisplay.get(raw) ?? raw);
-      const tool = t.toolName ?? "unknown";
+    for (const row of breakdown) {
+      if (row.failureCount === 0) continue;
+      const displayName =
+        row.serverName === "local"
+          ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+          : (serverNameMappings.rawToDisplay.get(row.serverName) ??
+            row.serverName);
+      const tool = row.toolName || "unknown";
       toolSet.add(tool);
       const inner = serverMap.get(displayName) ?? new Map<string, number>();
-      inner.set(tool, (inner.get(tool) ?? 0) + 1);
+      inner.set(tool, (inner.get(tool) ?? 0) + row.failureCount);
       serverMap.set(displayName, inner);
     }
 
@@ -1690,7 +1724,7 @@ function ServerErrorRateChart({
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
-  }, [traces, serverNameMappings.rawToDisplay]);
+  }, [breakdown, serverNameMappings.rawToDisplay]);
 
   const height = Math.max(120, labels.length * (24 + 8) + 60);
 
@@ -1744,26 +1778,27 @@ function ServerErrorRateChart({
 
 function UserErrorChart({
   title,
-  traces,
+  breakdown,
   serverNameMappings,
 }: {
   title: string;
-  traces: HookTrace[];
+  breakdown: HooksBreakdownRow[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }) {
   const { labels, datasets } = useMemo(() => {
     const userMap = new Map<string, Map<string, number>>();
     const serverSet = new Set<string>();
-    for (const t of traces) {
-      if (t.hookStatus !== "failure") continue;
-      const user = t.userEmail || "unknown";
-      const raw = t.toolSource ?? "";
-      const displayName = !raw
-        ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-        : (serverNameMappings.rawToDisplay.get(raw) ?? raw);
+    for (const row of breakdown) {
+      if (row.failureCount === 0) continue;
+      const user = row.userEmail || "unknown";
+      const displayName =
+        row.serverName === "local"
+          ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+          : (serverNameMappings.rawToDisplay.get(row.serverName) ??
+            row.serverName);
       serverSet.add(displayName);
       const inner = userMap.get(user) ?? new Map<string, number>();
-      inner.set(displayName, (inner.get(displayName) ?? 0) + 1);
+      inner.set(displayName, (inner.get(displayName) ?? 0) + row.failureCount);
       userMap.set(user, inner);
     }
 
@@ -1801,7 +1836,7 @@ function UserErrorChart({
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
-  }, [traces, serverNameMappings.rawToDisplay]);
+  }, [breakdown, serverNameMappings.rawToDisplay]);
 
   if (labels.length === 0) {
     return (
@@ -1817,26 +1852,23 @@ function UserErrorChart({
   return <StackedBarChart title={title} labels={labels} datasets={datasets} />;
 }
 
-function buildMultiLineData(
-  traces: HookTrace[],
-  keyFn: (t: HookTrace) => string | null | undefined,
+function buildTimeSeriesFromSummary(
+  timeSeries: HooksTimeSeriesPoint[],
+  keyFn: (p: HooksTimeSeriesPoint) => string,
   timeRangeMs: number,
 ) {
-  if (traces.length === 0)
+  if (timeSeries.length === 0)
     return { labels: [], tooltipLabels: [], datasets: [] };
 
-  const bucketMs =
-    timeRangeMs <= 24 * 60 * 60 * 1000 ? 5 * 60 * 1000 : 60 * 60 * 1000;
   const seriesMap = new Map<string, Map<number, number>>();
 
-  for (const t of traces) {
-    const ms = Number(t.startTimeUnixNano) / 1_000_000;
-    if (!ms) continue;
-    const key = keyFn(t);
+  for (const pt of timeSeries) {
+    const key = keyFn(pt);
     if (!key) continue;
-    const bucket = Math.floor(ms / bucketMs) * bucketMs;
+    // Use BigInt conversion to avoid precision loss for ns timestamps
+    const ms = Number(BigInt(pt.bucketStartNs) / BigInt(1_000_000));
     const series = seriesMap.get(key) ?? new Map<number, number>();
-    series.set(bucket, (series.get(bucket) ?? 0) + 1);
+    series.set(ms, (series.get(ms) ?? 0) + pt.eventCount);
     seriesMap.set(key, series);
   }
 
@@ -1886,7 +1918,7 @@ function MultiLineChart({
 }: {
   labels: string[];
   tooltipLabels: string[];
-  datasets: ReturnType<typeof buildMultiLineData>["datasets"];
+  datasets: ReturnType<typeof buildTimeSeriesFromSummary>["datasets"];
 }) {
   if (labels.length === 0) {
     return (
@@ -1934,12 +1966,12 @@ function MultiLineChart({
 }
 
 function ServerUsageTimeSeries({
-  traces,
+  timeSeries,
   from,
   to,
   serverNameMappings,
 }: {
-  traces: HookTrace[];
+  timeSeries: HooksTimeSeriesPoint[];
   from: Date;
   to: Date;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
@@ -1947,17 +1979,17 @@ function ServerUsageTimeSeries({
   const timeRangeMs = to.getTime() - from.getTime();
   const { labels, tooltipLabels, datasets } = useMemo(
     () =>
-      buildMultiLineData(
-        traces,
-        (t) => {
-          const raw = t.toolSource ?? "";
-          return !raw
+      buildTimeSeriesFromSummary(
+        timeSeries,
+        (pt) => {
+          return pt.serverName === "local"
             ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-            : (serverNameMappings.rawToDisplay.get(raw) ?? raw);
+            : (serverNameMappings.rawToDisplay.get(pt.serverName) ??
+                pt.serverName);
         },
         timeRangeMs,
       ),
-    [traces, timeRangeMs, serverNameMappings.rawToDisplay],
+    [timeSeries, timeRangeMs, serverNameMappings.rawToDisplay],
   );
   return (
     <MultiLineChart
@@ -1969,18 +2001,19 @@ function ServerUsageTimeSeries({
 }
 
 function UserUsageTimeSeries({
-  traces,
+  timeSeries,
   from,
   to,
 }: {
-  traces: HookTrace[];
+  timeSeries: HooksTimeSeriesPoint[];
   from: Date;
   to: Date;
 }) {
   const timeRangeMs = to.getTime() - from.getTime();
   const { labels, tooltipLabels, datasets } = useMemo(
-    () => buildMultiLineData(traces, (t) => t.userEmail, timeRangeMs),
-    [traces, timeRangeMs],
+    () =>
+      buildTimeSeriesFromSummary(timeSeries, (pt) => pt.userEmail, timeRangeMs),
+    [timeSeries, timeRangeMs],
   );
   return (
     <MultiLineChart
@@ -1992,70 +2025,38 @@ function UserUsageTimeSeries({
 }
 
 function HooksAnalytics({
-  groupedTraces,
   serverNameMappings,
   from,
   to,
   compact = false,
   addFilter,
   onHookTypesChange,
+  summaryData,
 }: {
-  groupedTraces: HookTrace[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
   compact?: boolean;
   addFilter: (chip: FilterChip) => void;
   onHookTypesChange: (types: TypesToInclude[]) => void;
+  summaryData: GetHooksSummaryResult | undefined;
 }) {
-  const derivedServers = useMemo(() => {
-    const map = new Map<
-      string,
-      { success: number; failure: number; tools: Set<string> }
-    >();
-    for (const t of groupedTraces) {
-      const key = t.toolSource ?? "";
-      const entry = map.get(key) ?? {
-        success: 0,
-        failure: 0,
-        tools: new Set<string>(),
-      };
-      if (t.hookStatus === "success") entry.success += 1;
-      else if (t.hookStatus === "failure") entry.failure += 1;
-      if (t.toolName) entry.tools.add(t.toolName);
-      map.set(key, entry);
-    }
-    return Array.from(map.entries()).map(
-      ([serverName, { success, failure, tools }]) => ({
-        serverName,
-        eventCount: success + failure,
-        successCount: success,
-        failureCount: failure,
-        failureRate: success + failure > 0 ? failure / (success + failure) : 0,
-        uniqueTools: tools.size,
-      }),
-    );
-  }, [groupedTraces]);
+  const breakdown = summaryData?.breakdown ?? [];
+  const timeSeries = summaryData?.timeSeries ?? [];
 
   const kpis = useMemo(() => {
-    const totalEvents = derivedServers.reduce((s, r) => s + r.eventCount, 0);
+    if (!summaryData) return null;
+    const { servers, users, breakdown: bd } = summaryData;
 
-    const totalSuccesses = derivedServers.reduce(
-      (s, r) => s + r.successCount,
-      0,
-    );
+    const totalEvents = summaryData.totalEvents;
+    const totalSuccesses = servers.reduce((s, r) => s + r.successCount, 0);
     const avgSuccessRate =
       totalEvents > 0 ? (totalSuccesses / totalEvents) * 100 : null;
 
-    const activeUsers = new Set(
-      groupedTraces.map((t) => t.userEmail).filter(Boolean),
-    ).size;
-
-    const activeSources = new Set(
-      groupedTraces.map((t) => t.hookSource).filter(Boolean),
-    ).size;
-
-    const uniqueTools = derivedServers.reduce((s, r) => s + r.uniqueTools, 0);
+    const activeUsers = users.length;
+    const activeSources = new Set(bd.map((r) => r.hookSource).filter(Boolean))
+      .size;
+    const uniqueTools = servers.reduce((s, r) => s + r.uniqueTools, 0);
 
     return {
       avgSuccessRate,
@@ -2064,9 +2065,9 @@ function HooksAnalytics({
       activeSources,
       uniqueTools,
     };
-  }, [derivedServers, groupedTraces]);
+  }, [summaryData]);
 
-  const hasServers = derivedServers.length > 0;
+  const hasServers = (summaryData?.servers.length ?? 0) > 0;
 
   type FilterAxisConfig = Partial<Record<"user" | "server", "dataset" | "row">>;
 
@@ -2121,39 +2122,34 @@ function HooksAnalytics({
       >
         <MetricCard
           title="Avg Success Rate"
-          value={kpis.avgSuccessRate ?? 0}
+          value={kpis?.avgSuccessRate ?? 0}
           format="percent"
           icon="circle-check"
           accentColor="green"
-          subtext="from loaded traces"
         />
         <MetricCard
           title="Total Events"
-          value={kpis.totalEvents}
+          value={kpis?.totalEvents ?? 0}
           icon="activity"
           accentColor="purple"
-          subtext="from loaded traces"
         />
         <MetricCard
           title="Active Users"
-          value={kpis.activeUsers}
+          value={kpis?.activeUsers ?? 0}
           icon="users"
           accentColor="yellow"
-          subtext="from loaded traces"
         />
         <MetricCard
           title="Active Sources"
-          value={kpis.activeSources}
+          value={kpis?.activeSources ?? 0}
           icon="monitor"
           accentColor="blue"
-          subtext="from loaded traces"
         />
         <MetricCard
           title="Unique Tools"
-          value={kpis.uniqueTools}
+          value={kpis?.uniqueTools ?? 0}
           icon="wrench"
           accentColor="orange"
-          subtext="from loaded traces"
         />
       </div>
 
@@ -2167,18 +2163,18 @@ function HooksAnalytics({
         >
           <UserVolumeList
             title="Source Usage per User"
-            traces={groupedTraces}
+            breakdown={breakdown}
             handleFilter={makeFilterHandler({ user: "row" })}
           />
           <ServerActivityChart
             title="Server Usage per User"
-            traces={groupedTraces}
+            breakdown={breakdown}
             serverNameMappings={serverNameMappings}
             handleFilter={makeFilterHandler({ server: "dataset", user: "row" })}
           />
           <SourceVolumeChart
             title="Source Usage per MCP Server"
-            traces={groupedTraces}
+            breakdown={breakdown}
             serverNameMappings={serverNameMappings}
             handleFilter={makeFilterHandler({ server: "row" })}
           />
@@ -2186,7 +2182,7 @@ function HooksAnalytics({
       )}
 
       {/* Usage Over Time */}
-      {groupedTraces.length > 0 && (
+      {timeSeries.length > 0 && (
         <div
           className={cn(
             "grid gap-4",
@@ -2196,7 +2192,7 @@ function HooksAnalytics({
           <div className="border-border bg-card space-y-4 rounded-lg border p-4">
             <h3 className="text font-semibold">Server Usage</h3>
             <ServerUsageTimeSeries
-              traces={groupedTraces}
+              timeSeries={timeSeries}
               from={from}
               to={to}
               serverNameMappings={serverNameMappings}
@@ -2204,7 +2200,7 @@ function HooksAnalytics({
           </div>
           <div className="border-border bg-card space-y-4 rounded-lg border p-4">
             <h3 className="text font-semibold">User Usage</h3>
-            <UserUsageTimeSeries traces={groupedTraces} from={from} to={to} />
+            <UserUsageTimeSeries timeSeries={timeSeries} from={from} to={to} />
           </div>
         </div>
       )}
@@ -2219,12 +2215,12 @@ function HooksAnalytics({
         >
           <ServerErrorRateChart
             title="Errors per Server and Tool"
-            traces={groupedTraces}
+            breakdown={breakdown}
             serverNameMappings={serverNameMappings}
           />
           <UserErrorChart
             title="Errors per User"
-            traces={groupedTraces}
+            breakdown={breakdown}
             serverNameMappings={serverNameMappings}
           />
         </div>
