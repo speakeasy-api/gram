@@ -438,9 +438,9 @@ func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Qu
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return oops.E(oops.CodeConflict, err, "toolset already attached to collection").Log(ctx, s.logger, attr.SlogOrganizationID(organizationID), attr.SlogToolsetID(toolsetID.String()))
+			return oops.E(oops.CodeConflict, err, "toolset already attached to collection").Log(ctx, s.logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "failed to attach server to collection").Log(ctx, s.logger, attr.SlogOrganizationID(organizationID), attr.SlogToolsetID(toolsetID.String()))
+		return oops.E(oops.CodeUnexpected, err, "failed to attach server to collection").Log(ctx, s.logger)
 	}
 
 	return nil
@@ -452,17 +452,23 @@ func (s *Service) ensureDefaultRegistryCollection(ctx context.Context, organizat
 		defaultVisibility     = "private"
 	)
 
-	existing, err := s.repo.GetOrganizationMcpCollectionBySlugAndOrg(ctx, repo.GetOrganizationMcpCollectionBySlugAndOrgParams{
+	var existing *repo.GetOrganizationMcpCollectionBySlugAndOrgRow
+	existingRow, err := s.repo.GetOrganizationMcpCollectionBySlugAndOrg(ctx, repo.GetOrganizationMcpCollectionBySlugAndOrgParams{
 		Slug:           defaultCollectionSlug,
 		OrganizationID: organizationID,
 	})
 	if err == nil {
+		existing = &existingRow
 		if _, regErr := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, existing.ID); regErr == nil {
 			return nil
 		} else if !errors.Is(regErr, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, regErr, "error getting default registry namespace").Log(ctx, s.logger)
 		}
 	} else if !errors.Is(err, pgx.ErrNoRows) {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return oops.E(oops.CodeConflict, err, "default registry collection already exists").Log(ctx, s.logger)
+		}
 		return oops.E(oops.CodeUnexpected, err, "error getting default registry collection").Log(ctx, s.logger)
 	}
 
@@ -474,31 +480,44 @@ func (s *Service) ensureDefaultRegistryCollection(ctx context.Context, organizat
 
 	tx := s.repo.WithTx(dbtx)
 	namespace := defaultRegistryNamespace(organizationSlug, organizationID)
+	var collectionID uuid.UUID
+	if existing != nil {
+		collectionID = existing.ID
+	}
+	if existing == nil {
+		created, createErr := tx.CreateOrganizationMcpCollection(ctx, repo.CreateOrganizationMcpCollectionParams{
+			OrganizationID: organizationID,
+			Name:           defaultCollectionName,
+			Description:    pgtype.Text{String: "", Valid: false},
+			Slug:           defaultCollectionSlug,
+			Visibility:     defaultVisibility,
+		})
+		if createErr != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(createErr, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+				return oops.E(oops.CodeConflict, createErr, "default registry collection already exists").Log(ctx, s.logger)
+			}
+			return oops.E(oops.CodeUnexpected, createErr, "error creating default registry collection").Log(ctx, s.logger)
+		}
 
-	var collection repo.GetOrganizationMcpCollectionBySlugAndOrgRow
-	created, createErr := tx.CreateOrganizationMcpCollection(ctx, repo.CreateOrganizationMcpCollectionParams{
-		OrganizationID: organizationID,
-		Name:           defaultCollectionName,
-		Description:    pgtype.Text{String: "", Valid: false},
-		Slug:           defaultCollectionSlug,
-		Visibility:     defaultVisibility,
-	})
-	if createErr != nil {
-		return oops.E(oops.CodeUnexpected, createErr, "error creating default registry collection").Log(ctx, s.logger)
+		collectionID = created.ID
 	}
 
-	collection = repo.GetOrganizationMcpCollectionBySlugAndOrgRow(created)
-	if _, regErr := tx.GetOrganizationMcpCollectionRegistryByID(ctx, collection.ID); regErr == nil {
+	if _, regErr := tx.GetOrganizationMcpCollectionRegistryByID(ctx, collectionID); regErr == nil {
 		return nil
 	} else if !errors.Is(regErr, pgx.ErrNoRows) {
 		return oops.E(oops.CodeUnexpected, regErr, "error getting default registry namespace").Log(ctx, s.logger)
 	}
 
 	_, err = tx.CreateOrganizationMcpCollectionRegistry(ctx, repo.CreateOrganizationMcpCollectionRegistryParams{
-		CollectionID: collection.ID,
+		CollectionID: collectionID,
 		Namespace:    namespace,
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return oops.E(oops.CodeConflict, err, "default registry namespace already exists").Log(ctx, s.logger)
+		}
 		return oops.E(oops.CodeUnexpected, err, "error creating default registry namespace").Log(ctx, s.logger)
 	}
 
