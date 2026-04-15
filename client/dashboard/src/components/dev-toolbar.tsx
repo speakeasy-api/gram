@@ -128,8 +128,16 @@ function loadPosition(): { x: number; y: number } | null {
 /**
  * Returns the X-Gram-Scope-Override header value if the dev override is active,
  * or null if disabled. Called by the SDK fetcher on every request.
+ *
+ * @param allowed - Whether the caller is permitted to read override data.
+ *   Defaults to `import.meta.env.DEV` so the SDK fetcher (which lives outside
+ *   auth context) never sends the header in production. Callers that have
+ *   verified admin status should pass `import.meta.env.DEV || isAdmin`.
  */
-export function getRBACScopeOverrideHeader(): string | null {
+export function getRBACScopeOverrideHeader(
+  allowed: boolean = import.meta.env.DEV,
+): string | null {
+  if (!allowed) return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;

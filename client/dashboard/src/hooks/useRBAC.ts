@@ -20,9 +20,10 @@ export function useRBAC() {
   const isAdmin = useIsAdmin();
   const productTier = useProductTier();
   const featureFlagEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
-  // Toolbar is accessible in dev or for admins; only check localStorage in those cases.
+  // Toolbar is accessible in dev or for admins; pass the flag into the getter
+  // so it can also gate the SDK fetcher (which lacks auth context) at the source.
   const devOverrideActive =
-    (import.meta.env.DEV || isAdmin) && getRBACScopeOverrideHeader() !== null;
+    getRBACScopeOverrideHeader(import.meta.env.DEV || isAdmin) !== null;
   // RBAC is only enforced for enterprise orgs — mirrors the server-side gate in access/manager.go.
   const isRbacEnabled =
     (featureFlagEnabled || devOverrideActive) && productTier === "enterprise";
