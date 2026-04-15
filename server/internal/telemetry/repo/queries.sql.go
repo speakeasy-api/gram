@@ -1658,3 +1658,311 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 
 	return traces, nil
 }
+
+// TopUser represents a top user by activity.
+type TopUser struct {
+	UserID        string `ch:"user_id"`
+	UserType      string `ch:"user_type"` // "internal" or "external"
+	ActivityCount uint64 `ch:"activity_count"`
+}
+
+// TopServer represents a top MCP server by tool call count.
+type TopServer struct {
+	ServerName    string `ch:"server_name"`
+	ToolCallCount uint64 `ch:"tool_call_count"`
+}
+
+// LLMClientUsage represents usage breakdown by LLM client/agent.
+type LLMClientUsage struct {
+	ClientName    string `ch:"client_name"`
+	ActivityCount uint64 `ch:"activity_count"`
+}
+
+// GetTopUsersParams contains parameters for getting top users.
+type GetTopUsersParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	ExternalUserID string // Optional filter
+	APIKeyID       string // Optional filter
+	ToolsetSlug    string // Optional filter
+	Limit          int
+	SessionMode    bool // If true, count messages; if false, count tool calls
+}
+
+// GetTopUsers retrieves top users by activity (messages or tool calls).
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetTopUsers(ctx context.Context, arg GetTopUsersParams) ([]TopUser, error) {
+	var activityColumn string
+	if arg.SessionMode {
+		// Count chat completion messages
+		activityColumn = "countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') as activity_count"
+	} else {
+		// Count tool calls
+		activityColumn = "countIf(startsWith(gram_urn, 'tools:')) as activity_count"
+	}
+
+	sb := sq.Select(
+		"if(external_user_id != '', external_user_id, user_id) as user_id",
+		"if(external_user_id != '', 'external', 'internal') as user_type",
+		activityColumn,
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where("if(external_user_id != '', external_user_id, user_id) != ''").
+		GroupBy("user_id", "user_type").
+		OrderBy("activity_count DESC").
+		//nolint:gosec // Limit is bounded by API validation
+		Limit(uint64(arg.Limit))
+
+	if arg.ExternalUserID != "" {
+		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
+	if arg.APIKeyID != "" {
+		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
+	}
+	if arg.ToolsetSlug != "" {
+		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+	}
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building top users query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []TopUser
+	for rows.Next() {
+		var user TopUser
+		if err = rows.ScanStruct(&user); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		users = append(users, user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}
+
+// GetTopServersParams contains parameters for getting top servers.
+type GetTopServersParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	ExternalUserID string // Optional filter
+	APIKeyID       string // Optional filter
+	ToolsetSlug    string // Optional filter
+	Limit          int
+}
+
+// GetTopServers retrieves top MCP servers by tool call count, excluding "local" tool calls.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetTopServers(ctx context.Context, arg GetTopServersParams) ([]TopServer, error) {
+	sb := sq.Select(
+		"if(tool_source = '', 'local', tool_source) as server_name",
+		"count(*) as tool_call_count",
+	).
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("event_source = 'hook'").
+		Where("tool_source != ''"). // Exclude "local" tool calls (empty tool_source)
+		Where("start_time_unix_nano >= ?", arg.TimeStart).
+		Where("start_time_unix_nano <= ?", arg.TimeEnd).
+		GroupBy("server_name").
+		OrderBy("tool_call_count DESC").
+		//nolint:gosec // Limit is bounded by API validation
+		Limit(uint64(arg.Limit))
+
+	// Note: trace_summaries doesn't have external_user_id/api_key_id, so we can't filter by those
+	// If filtering is needed, we'd have to query telemetry_logs instead
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building top servers query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var servers []TopServer
+	for rows.Next() {
+		var server TopServer
+		if err = rows.ScanStruct(&server); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		servers = append(servers, server)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return servers, nil
+}
+
+// GetLLMClientBreakdownParams contains parameters for getting LLM client breakdown.
+type GetLLMClientBreakdownParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	ExternalUserID string // Optional filter
+	APIKeyID       string // Optional filter
+	ToolsetSlug    string // Optional filter
+	SessionMode    bool   // If true, count messages; if false, count tool calls
+}
+
+// GetLLMClientBreakdown retrieves usage breakdown by LLM client/agent.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetLLMClientBreakdown(ctx context.Context, arg GetLLMClientBreakdownParams) ([]LLMClientUsage, error) {
+	var activityColumn string
+	if arg.SessionMode {
+		// Count chat completion messages
+		activityColumn = "countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') as activity_count"
+	} else {
+		// Count tool calls
+		activityColumn = "countIf(startsWith(gram_urn, 'tools:')) as activity_count"
+	}
+
+	sb := sq.Select(
+		"toString(attributes.gram.hook.source) as client_name",
+		activityColumn,
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where("toString(attributes.gram.hook.source) != ''").
+		GroupBy("client_name").
+		OrderBy("activity_count DESC")
+
+	if arg.ExternalUserID != "" {
+		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
+	if arg.APIKeyID != "" {
+		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
+	}
+	if arg.ToolsetSlug != "" {
+		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+	}
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building LLM client breakdown query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var clients []LLMClientUsage
+	for rows.Next() {
+		var client LLMClientUsage
+		if err = rows.ScanStruct(&client); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		clients = append(clients, client)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return clients, nil
+}
+
+// GetActiveCountsParams contains parameters for getting active counts.
+type GetActiveCountsParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	ExternalUserID string // Optional filter
+	APIKeyID       string // Optional filter
+	ToolsetSlug    string // Optional filter
+	SessionMode    bool   // If true, count by messages; if false, count by tool calls
+}
+
+// ActiveCounts represents active server and user counts.
+type ActiveCounts struct {
+	ActiveServersCount uint64 `ch:"active_servers_count"`
+	ActiveUsersCount   uint64 `ch:"active_users_count"`
+}
+
+// GetActiveCounts retrieves counts of active servers and users.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams) (*ActiveCounts, error) {
+	var userCountCondition string
+	if arg.SessionMode {
+		// Count users with chat completion messages
+		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND if(external_user_id != '', external_user_id, user_id) != '')"
+	} else {
+		// Count users with tool calls
+		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), startsWith(gram_urn, 'tools:') AND if(external_user_id != '', external_user_id, user_id) != '')"
+	}
+
+	sb := sq.Select(
+		"uniqExactIf(tool_source, tool_source != '' AND event_source = 'hook') as active_servers_count",
+		userCountCondition+" as active_users_count",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd)
+
+	if arg.ExternalUserID != "" {
+		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
+	if arg.APIKeyID != "" {
+		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
+	}
+	if arg.ToolsetSlug != "" {
+		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+	}
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building active counts query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return &ActiveCounts{
+			ActiveServersCount: 0,
+			ActiveUsersCount:   0,
+		}, nil
+	}
+
+	var counts ActiveCounts
+	if err = rows.ScanStruct(&counts); err != nil {
+		return nil, fmt.Errorf("error scanning row: %w", err)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &counts, nil
+}

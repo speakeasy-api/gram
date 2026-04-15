@@ -249,6 +249,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetObservabilityOverview", "type": "query"}`)
 	})
 
+	Method("getProjectOverview", func() {
+		Description("Get project-level overview including total chats, tool calls, active servers/users, and top lists")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetProjectOverviewPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetProjectOverviewResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getProjectOverview")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getProjectOverview")
+		Meta("openapi:extension:x-speakeasy-name-override", "getProjectOverview")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetProjectOverview", "type": "query"}`)
+	})
+
 	Method("listFilterOptions", func() {
 		Description("List available filter options (API keys or users) for the observability overview")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -933,6 +962,33 @@ var GetObservabilityOverviewResult = Type("GetObservabilityOverviewResult", func
 	Required("summary", "comparison", "time_series", "top_tools_by_count", "top_tools_by_failure_rate", "interval_seconds")
 })
 
+var GetProjectOverviewPayload = Type("GetProjectOverviewPayload", func() {
+	Description("Payload for getting project-level overview")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+
+	Required("from", "to")
+})
+
+var GetProjectOverviewResult = Type("GetProjectOverviewResult", func() {
+	Description("Result of project overview query")
+
+	Attribute("summary", ProjectOverviewSummaryType, "Current period summary metrics")
+	Attribute("comparison", ProjectOverviewSummaryType, "Previous period summary metrics for trend calculation")
+	Attribute("metrics_mode", String, "Indicates whether metrics are session-based or tool-call-based", func() {
+		Enum("session", "tool_call")
+	})
+
+	Required("summary", "comparison", "metrics_mode")
+})
+
 var ObservabilitySummaryType = Type("ObservabilitySummary", func() {
 	Description("Aggregated summary metrics for a time period")
 
@@ -957,6 +1013,41 @@ var ObservabilitySummaryType = Type("ObservabilitySummary", func() {
 		"total_tool_calls",
 		"failed_tool_calls",
 		"avg_latency_ms",
+	)
+})
+
+var ProjectOverviewSummaryType = Type("ProjectOverviewSummary", func() {
+	Description("Aggregated project-level summary metrics for a time period")
+
+	// Chat metrics
+	Attribute("total_chats", Int64, "Total number of chat sessions")
+	Attribute("resolved_chats", Int64, "Number of resolved chat sessions")
+	Attribute("failed_chats", Int64, "Number of failed chat sessions")
+
+	// Tool metrics
+	Attribute("total_tool_calls", Int64, "Total number of tool calls")
+	Attribute("failed_tool_calls", Int64, "Number of failed tool calls")
+
+	// Activity counts
+	Attribute("active_servers_count", Int64, "Number of MCP servers with at least one tool call in the time period")
+	Attribute("active_users_count", Int64, "Number of unique users with activity in the time period")
+
+	// Top lists
+	Attribute("top_users", ArrayOf(TopUserType), "Top 10 users by activity (# of messages or tool calls depending on metrics_mode)")
+	Attribute("top_servers", ArrayOf(TopServerType), "Top 10 MCP servers by tool call count")
+	Attribute("llm_client_breakdown", ArrayOf(LLMClientUsageType), "Breakdown of messages/activity by LLM client/agent")
+
+	Required(
+		"total_chats",
+		"resolved_chats",
+		"failed_chats",
+		"total_tool_calls",
+		"failed_tool_calls",
+		"active_servers_count",
+		"active_users_count",
+		"top_users",
+		"top_servers",
+		"llm_client_breakdown",
 	)
 })
 
@@ -999,6 +1090,36 @@ var ToolMetricType = Type("ToolMetric", func() {
 	Attribute("failure_rate", Float64, "Failure rate (0.0 to 1.0)")
 
 	Required("gram_urn", "call_count", "success_count", "failure_count", "avg_latency_ms", "failure_rate")
+})
+
+var TopUserType = Type("TopUser", func() {
+	Description("Top user by activity")
+
+	Attribute("user_id", String, "User ID (internal or external depending on availability)")
+	Attribute("user_type", String, "Type of user ID", func() {
+		Enum("internal", "external")
+	})
+	Attribute("activity_count", Int64, "Number of messages (session mode) or tool calls (tool_call mode)")
+
+	Required("user_id", "user_type", "activity_count")
+})
+
+var TopServerType = Type("TopServer", func() {
+	Description("Top MCP server by tool call count")
+
+	Attribute("server_name", String, "MCP server name")
+	Attribute("tool_call_count", Int64, "Total number of tool calls")
+
+	Required("server_name", "tool_call_count")
+})
+
+var LLMClientUsageType = Type("LLMClientUsage", func() {
+	Description("Usage breakdown by LLM client/agent")
+
+	Attribute("client_name", String, "Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')")
+	Attribute("activity_count", Int64, "Number of messages (session mode) or tool calls (tool_call mode)")
+
+	Required("client_name", "activity_count")
 })
 
 // Filter options types

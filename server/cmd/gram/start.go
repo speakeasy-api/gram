@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatsessionssvc "github.com/speakeasy-api/gram/server/internal/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/collections"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -585,7 +586,18 @@ func newStartCommand() *cli.Command {
 
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
-			accessManager := access.NewManager(logger, db, productFeatures)
+			roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("failed to create access role provider: %w", err)
+			}
+			accessManager := access.NewManager(
+				logger,
+				db,
+				productFeatures,
+				roleClient,
+				cache.NewRedisCacheAdapter(redisClient),
+				access.ManagerOpts{DevMode: c.String("environment") == "local"},
+			)
 
 			telemLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
@@ -668,11 +680,6 @@ func newStartCommand() *cli.Command {
 
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), accessManager)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), accessManager)
-			roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
-			if err != nil {
-				return fmt.Errorf("failed to create access role provider: %w", err)
-			}
-
 			mux := goahttp.NewMuxer()
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -694,10 +701,10 @@ func newStartCommand() *cli.Command {
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
-			mux.Use(middleware.RBACOverrideMiddleware(c.String("environment")))
+			mux.Use(middleware.RBACOverrideMiddleware())
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
-			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient, accessManager))
+			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient, accessManager, productFeatures))
 			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, accessManager, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}))
 			// access depends on audit for log writers, so inject the org-read check
 			// here instead of importing access from the audit package.
@@ -744,6 +751,7 @@ func newStartCommand() *cli.Command {
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, accessManager, func(ctx context.Context, resourceID string) error {
 				return accessManager.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: resourceID})
 			}))
+			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, accessManager, serverURL))
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, posthogClient, telemSvc, assetStorage, accessManager))
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, accessManager))

@@ -25,6 +25,9 @@ type Endpoints struct {
 	ListMembers      goa.Endpoint
 	ListGrants       goa.Endpoint
 	UpdateMemberRole goa.Endpoint
+	GetRBACStatus    goa.Endpoint
+	EnableRBAC       goa.Endpoint
+	DisableRBAC      goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "access" service with endpoints.
@@ -41,6 +44,9 @@ func NewEndpoints(s Service) *Endpoints {
 		ListMembers:      NewListMembersEndpoint(s, a.APIKeyAuth),
 		ListGrants:       NewListGrantsEndpoint(s, a.APIKeyAuth),
 		UpdateMemberRole: NewUpdateMemberRoleEndpoint(s, a.APIKeyAuth),
+		GetRBACStatus:    NewGetRBACStatusEndpoint(s, a.APIKeyAuth),
+		EnableRBAC:       NewEnableRBACEndpoint(s, a.APIKeyAuth),
+		DisableRBAC:      NewDisableRBACEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -55,6 +61,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListMembers = m(e.ListMembers)
 	e.ListGrants = m(e.ListGrants)
 	e.UpdateMemberRole = m(e.UpdateMemberRole)
+	e.GetRBACStatus = m(e.GetRBACStatus)
+	e.EnableRBAC = m(e.EnableRBAC)
+	e.DisableRBAC = m(e.DisableRBAC)
 }
 
 // NewListRolesEndpoint returns an endpoint function that calls the method
@@ -369,5 +378,74 @@ func NewUpdateMemberRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.UpdateMemberRole(ctx, p)
+	}
+}
+
+// NewGetRBACStatusEndpoint returns an endpoint function that calls the method
+// "getRBACStatus" of service "access".
+func NewGetRBACStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRBACStatusPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRBACStatus(ctx, p)
+	}
+}
+
+// NewEnableRBACEndpoint returns an endpoint function that calls the method
+// "enableRBAC" of service "access".
+func NewEnableRBACEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*EnableRBACPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.EnableRBAC(ctx, p)
+	}
+}
+
+// NewDisableRBACEndpoint returns an endpoint function that calls the method
+// "disableRBAC" of service "access".
+func NewDisableRBACEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DisableRBACPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DisableRBAC(ctx, p)
 	}
 }

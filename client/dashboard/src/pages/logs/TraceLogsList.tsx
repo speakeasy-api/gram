@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import { TelemetryLogRecord } from "@gram/client/models/components";
 import { useGramContext } from "@gram/client/react-query";
@@ -5,6 +6,39 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { formatNanoTimestamp, formatLogBody } from "./utils";
+
+// Uses design system tokens where available (destructive, warning, muted).
+// INFO has no semantic token — hardcoded Tailwind is intentional and matches
+// the deployment logs palette (PR #2167).
+const severityColors = {
+  INFO: { dot: "bg-blue-500", text: "text-blue-700", bg: "bg-blue-50" },
+  WARN: { dot: "bg-warning", text: "text-warning", bg: "bg-warning/10" },
+  ERROR: {
+    dot: "bg-destructive",
+    text: "text-destructive",
+    bg: "bg-destructive/10",
+  },
+  DEBUG: {
+    dot: "bg-muted-foreground",
+    text: "text-muted-foreground",
+    bg: "bg-muted",
+  },
+} as const;
+
+function getSeverityColors(severity?: string) {
+  switch (severity?.toUpperCase()) {
+    case "ERROR":
+    case "FATAL":
+      return severityColors.ERROR;
+    case "WARN":
+    case "WARNING":
+      return severityColors.WARN;
+    case "DEBUG":
+      return severityColors.DEBUG;
+    default:
+      return severityColors.INFO;
+  }
+}
 
 interface TraceLogsListProps {
   traceId: string;
@@ -47,6 +81,7 @@ export function TraceLogsList({
   if (isPending) {
     return (
       <div className="text-muted-foreground bg-muted/30 flex items-center gap-3 px-5 py-2">
+        <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
         <div className="flex w-5 shrink-0 justify-center">
           <Icon name="loader-circle" className="size-4 animate-spin" />
@@ -59,6 +94,7 @@ export function TraceLogsList({
   if (error) {
     return (
       <div className="bg-muted/30 flex items-center gap-3 px-5 py-2">
+        <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
         <div className="w-5 shrink-0" />
         <span className="text-destructive text-sm">
@@ -73,6 +109,7 @@ export function TraceLogsList({
   if (logs.length === 0) {
     return (
       <div className="text-muted-foreground bg-muted/30 flex items-center gap-3 px-5 py-2">
+        <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
         <div className="w-5 shrink-0" />
         <span className="text-sm">No spans found for this trace</span>
@@ -111,14 +148,21 @@ function ChildLogRow({
   const formattedTimestamp = formatNanoTimestamp(log.timeUnixNano);
   const formattedParentTimestamp = formatNanoTimestamp(parentTimestamp);
   const showTimestamp = formattedTimestamp !== formattedParentTimestamp;
+  const colors = getSeverityColors(log.severityText);
 
   return (
     <div
-      className="hover:bg-background group flex cursor-pointer items-center gap-3 px-5 py-2 transition-colors"
+      className="hover:bg-background group flex cursor-pointer items-center gap-3 px-5 py-1.5 transition-colors"
       onClick={onClick}
     >
+      {/* Severity dot indicator for rapid left-edge scanning */}
+      <span
+        className={cn("size-1.5 shrink-0 rounded-full", colors.dot)}
+        aria-hidden="true"
+      />
+
       {/* Timestamp - same width as parent for alignment, hidden if same as parent */}
-      <div className="text-muted-foreground w-[150px] shrink-0 font-mono text-sm whitespace-nowrap">
+      <div className="text-muted-foreground/60 w-[150px] shrink-0 font-mono text-[11px] whitespace-nowrap tabular-nums">
         {showTimestamp ? formattedTimestamp : null}
       </div>
 
@@ -136,7 +180,11 @@ function ChildLogRow({
 
       {/* Severity badge inline */}
       <span
-        className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${getSeverityBadgeClass(log.severityText)}`}
+        className={cn(
+          "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
+          colors.bg,
+          colors.text,
+        )}
       >
         {log.severityText?.toLowerCase() || "info"}
       </span>
@@ -147,20 +195,4 @@ function ChildLogRow({
       </span>
     </div>
   );
-}
-
-function getSeverityBadgeClass(severity?: string): string {
-  switch (severity?.toUpperCase()) {
-    case "ERROR":
-    case "FATAL":
-      return "bg-rose-500/15 text-rose-600 dark:text-rose-400";
-    case "WARN":
-    case "WARNING":
-      return "bg-amber-500/15 text-amber-600 dark:text-amber-400";
-    case "DEBUG":
-      return "bg-muted text-muted-foreground";
-    case "INFO":
-    default:
-      return "bg-blue-500/15 text-blue-600 dark:text-blue-400";
-  }
 }

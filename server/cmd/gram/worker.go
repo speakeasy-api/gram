@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 func newWorkerCommand() *cli.Command {
@@ -440,7 +441,15 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
 
-			accessManager := access.NewManager(logger, db, productFeatures)
+			// we don't require a real workOS client for workers as they bypass RBAC
+			accessManager := access.NewManager(
+				logger,
+				db,
+				productFeatures,
+				workos.NewStubClient(),
+				cache.NewRedisCacheAdapter(redisClient),
+				access.ManagerOpts{DevMode: c.String("environment") == "local"},
+			)
 
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)

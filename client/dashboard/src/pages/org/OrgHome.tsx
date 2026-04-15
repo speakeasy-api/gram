@@ -1,6 +1,7 @@
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { ProjectAvatar } from "@/components/project-menu";
+import { CreateResourceCard } from "@/components/create-resource-card";
 import { DotCard } from "@/components/ui/dot-card";
 import { Heading } from "@/components/ui/heading";
 import { SearchBar } from "@/components/ui/search-bar";
@@ -8,7 +9,7 @@ import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { RequireScope } from "@/components/require-scope";
-import { ArrowRight, Plus } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 
@@ -74,39 +75,15 @@ export function OrgHomeInner() {
               level="component"
               className="w-full"
             >
-              <button
-                type="button"
+              <CreateResourceCard
+                className="max-w-md"
                 onClick={() => {
                   setNewProjectName(search);
                   setCreateDialogOpen(true);
                 }}
-                className="w-full max-w-md text-left hover:no-underline"
-              >
-                <DotCard
-                  icon={
-                    <Plus className="text-muted-foreground group-hover:text-primary h-10 w-10 transition-colors" />
-                  }
-                  className="!border-foreground/10 hover:!border-foreground/20 border-dashed"
-                >
-                  <Type
-                    variant="subheading"
-                    as="div"
-                    className="text-md text-muted-foreground group-hover:text-primary transition-colors"
-                  >
-                    Create &ldquo;{search}&rdquo;
-                  </Type>
-                  <Type small muted className="mb-3">
-                    Create a new project with this name
-                  </Type>
-
-                  <div className="mt-auto flex items-center justify-end pt-2">
-                    <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
-                      <span>Create</span>
-                      <Plus className="h-3.5 w-3.5" />
-                    </div>
-                  </div>
-                </DotCard>
-              </button>
+                title={<>Create &ldquo;{search}&rdquo;</>}
+                description="Create a new project with this name"
+              />
             </RequireScope>
           </div>
         </div>
@@ -147,36 +124,11 @@ export function OrgHomeInner() {
             </Link>
           ))}
           <RequireScope scope="org:admin" level="component" className="w-full">
-            <button
-              type="button"
+            <CreateResourceCard
               onClick={() => setCreateDialogOpen(true)}
-              className="w-full text-left hover:no-underline"
-            >
-              <DotCard
-                icon={
-                  <Plus className="text-muted-foreground group-hover:text-primary h-10 w-10 transition-colors" />
-                }
-                className="!border-foreground/10 hover:!border-foreground/20 border-dashed"
-              >
-                <Type
-                  variant="subheading"
-                  as="div"
-                  className="text-md text-muted-foreground group-hover:text-primary transition-colors"
-                >
-                  New Project
-                </Type>
-                <Type small muted className="mb-3">
-                  Create a new project for your organization
-                </Type>
-
-                <div className="mt-auto flex items-center justify-end pt-2">
-                  <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
-                    <span>Create</span>
-                    <Plus className="h-3.5 w-3.5" />
-                  </div>
-                </div>
-              </DotCard>
-            </button>
+              title="New Project"
+              description="Create a new project for your organization"
+            />
           </RequireScope>
         </div>
       )}

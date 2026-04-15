@@ -1,4 +1,4 @@
-import { NavButton } from "@/components/nav-menu";
+import { NavButton, NavMenu } from "@/components/nav-menu";
 import { RequireScope } from "@/components/require-scope";
 import {
   Sidebar,
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useIsAdmin, useOrganization } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Scope } from "@/hooks/useRBAC";
+import { Scope, useRBAC } from "@/hooks/useRBAC";
 import { AppRoute, useOrgRoutes } from "@/routes";
 import { Icon } from "@speakeasy-api/moonshine";
 import { ExternalLink } from "lucide-react";
@@ -48,7 +48,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const organization = useOrganization();
   const isAdmin = useIsAdmin();
   const telemetry = useTelemetry();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
+  const { isRbacEnabled } = useRBAC();
   const isTeamPageEnabled =
     telemetry.isFeatureEnabled("gram-team-page") ?? false;
 
@@ -70,6 +70,12 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 scope={["build:read", "org:admin"]}
               />
             </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>explore</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <NavMenu items={[orgRoutes.collections]} />
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>

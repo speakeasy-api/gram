@@ -5,7 +5,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -13,7 +15,7 @@ func TestLoadIntoContext_LoadsUserGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -35,7 +37,7 @@ func TestLoadIntoContext_SkipsNonSessionAuth(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -55,7 +57,7 @@ func TestLoadIntoContext_SkipsNonEnterpriseOrgs(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

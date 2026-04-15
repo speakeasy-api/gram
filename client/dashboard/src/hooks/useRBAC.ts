@@ -1,5 +1,7 @@
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar";
+import { useIsAdmin } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useProductTier } from "@/hooks/useProductTier";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -15,19 +17,27 @@ export type { Scope };
  */
 export function useRBAC() {
   const telemetry = useTelemetry();
+  const isAdmin = useIsAdmin();
+  const productTier = useProductTier();
   const featureFlagEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
+  // Toolbar is accessible in dev or for admins; pass the flag into the getter
+  // so it can also gate the SDK fetcher (which lacks auth context) at the source.
   const devOverrideActive =
-    import.meta.env.DEV && getRBACScopeOverrideHeader() !== null;
-  const isRbacEnabled = featureFlagEnabled || devOverrideActive;
+    getRBACScopeOverrideHeader(import.meta.env.DEV || isAdmin) !== null;
+  // Enterprise gate applies to the feature flag only. The dev override bypasses
+  // the tier check entirely (mirroring the server, which applies override grants
+  // before checking account type in access/manager.go).
+  const isRbacEnabled =
+    (featureFlagEnabled && productTier === "enterprise") || devOverrideActive;
 
-  // Re-render when the dev toolbar changes scopes in localStorage.
+  // Re-render when the toolbar changes scopes in localStorage.
   const [overrideVersion, setOverrideVersion] = useState(0);
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!import.meta.env.DEV && !isAdmin) return;
     const handler = () => setOverrideVersion((v) => v + 1);
     window.addEventListener("rbac-override-change", handler);
     return () => window.removeEventListener("rbac-override-change", handler);
-  }, []);
+  }, [isAdmin]);
 
   // Fetch grants from the server. When dev override is active the SDK fetcher
   // attaches X-Gram-Scope-Override so the server returns the filtered grant set.

@@ -432,16 +432,6 @@ func (p *ProcessDeployment) doExternalMCPs(
 	}
 
 	for _, mcp := range externalMCPs {
-		if !mcp.RegistryID.Valid || mcp.RegistryID.UUID == uuid.Nil {
-			return oops.E(
-				oops.CodeInvariantViolation,
-				errors.New("registry id is null"),
-				"external mcp attachment is missing registry id",
-			).Log(ctx, p.logger)
-		}
-
-		registryID := mcp.RegistryID.UUID
-
 		pool.Go(func() error {
 			processor := externalmcp.NewToolExtractor(p.logger, p.guardianPolicy, p.db, p.registryClient)
 
@@ -451,12 +441,13 @@ func (p *ProcessDeployment) doExternalMCPs(
 				ProjectID:    projectID,
 				DeploymentID: deploymentID,
 				MCP: externalmcp.ToolExtractorTaskMCPServer{
-					AttachmentID:            mcp.ID,
-					RegistryID:              registryID,
-					Name:                    mcp.Name,
-					Slug:                    mcp.Slug,
-					RegistryServerSpecifier: mcp.RegistryServerSpecifier,
-					SelectedRemotes:         mcp.SelectedRemotes,
+					AttachmentID:                        mcp.ID,
+					RegistryID:                          mcp.RegistryID,
+					OrganizationMcpCollectionRegistryID: mcp.OrganizationMcpCollectionRegistryID,
+					Name:                                mcp.Name,
+					Slug:                                mcp.Slug,
+					RegistryServerSpecifier:             mcp.RegistryServerSpecifier,
+					SelectedRemotes:                     mcp.SelectedRemotes,
 				},
 			})
 		})

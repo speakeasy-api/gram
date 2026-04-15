@@ -18,6 +18,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useSlugs } from "@/contexts/Sdk";
+import { cn } from "@/lib/utils";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import {
@@ -38,9 +39,16 @@ import {
 } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, Settings, XIcon } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Check,
+  ChevronDown,
+  Loader2,
+  RefreshCw,
+  Settings,
+  XIcon,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOrgRoutes } from "@/routes";
 import { Link, useSearchParams } from "react-router";
 import type { ActiveLogFilter } from "./log-filter-types";
@@ -420,6 +428,12 @@ function LogsContent() {
     isLogsDisabled,
   } = hasStructuredFilters ? attrLogsQuery : toolCallsQuery;
 
+  const queryClient = useQueryClient();
+  const handleRefresh = useCallback(() => {
+    refetch();
+    queryClient.invalidateQueries({ queryKey: ["trace-logs"] });
+  }, [refetch, queryClient]);
+
   // Flatten all pages into a single array of traces, merging duplicates that
   // span page boundaries (attribute-filtered logs are grouped per-page, so the
   // same traceId can appear in multiple pages with partial counts).
@@ -489,28 +503,31 @@ function LogsContent() {
   );
 
   // Handle scroll for infinite loading
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const container = e.currentTarget;
-    const scrollTop = container.scrollTop;
-    const scrollHeight = container.scrollHeight;
-    const clientHeight = container.clientHeight;
-    const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const container = e.currentTarget;
+      const scrollTop = container.scrollTop;
+      const scrollHeight = container.scrollHeight;
+      const clientHeight = container.clientHeight;
+      const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
 
-    if (isFetchingNextPage || isFetching) return;
-    if (!hasNextPage) return;
+      if (isFetchingNextPage || isFetching) return;
+      if (!hasNextPage) return;
 
-    if (distanceFromBottom < 200) {
-      fetchNextPage();
-    }
-  };
+      if (distanceFromBottom < 200) {
+        fetchNextPage();
+      }
+    },
+    [fetchNextPage, hasNextPage, isFetching, isFetchingNextPage],
+  );
 
-  const toggleExpand = (traceId: string) => {
+  const toggleExpand = useCallback((traceId: string) => {
     setExpandedTraceId((prev) => (prev === traceId ? null : traceId));
-  };
+  }, []);
 
-  const handleLogClick = (log: TelemetryLogRecord) => {
+  const handleLogClick = useCallback((log: TelemetryLogRecord) => {
     setSelectedLog(log);
-  };
+  }, []);
 
   const isLoading = isFetching && allTraces.length === 0;
   const hasActiveFilters =
@@ -563,6 +580,7 @@ function LogsContent() {
         hasNextPage={hasNextPage}
         isFetchingNextPage={isFetchingNextPage}
         refetch={refetch}
+        onRefresh={handleRefresh}
         // Time range props
         dateRange={dateRange}
         customRange={customRange}
@@ -605,6 +623,7 @@ function LogsInnerContent({
   hasNextPage,
   isFetchingNextPage,
   refetch,
+  onRefresh,
   // Time range props
   dateRange,
   customRange,
@@ -642,6 +661,7 @@ function LogsInnerContent({
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   refetch: () => void;
+  onRefresh: () => void;
   // Time range props
   dateRange: DateRangePreset;
   customRange: { from: Date; to: Date } | null;
@@ -658,6 +678,29 @@ function LogsInnerContent({
   hasActiveFilters: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
+
+  // Enforce a minimum visible duration for the refresh button's in-flight
+  // state. Instant or cached refetches would otherwise flash the spinner for
+  // a few ms and feel uncommunicative.
+  const MIN_REFRESH_MS = 2000;
+  const [refreshStartedAt, setRefreshStartedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (refreshStartedAt === null || isFetching) return;
+    const remaining = Math.max(
+      0,
+      MIN_REFRESH_MS - (Date.now() - refreshStartedAt),
+    );
+    const timeout = setTimeout(() => setRefreshStartedAt(null), remaining);
+    return () => clearTimeout(timeout);
+  }, [isFetching, refreshStartedAt]);
+
+  const isRefreshing = refreshStartedAt !== null;
+
+  const handleRefreshClick = () => {
+    setRefreshStartedAt(Date.now());
+    onRefresh();
+  };
 
   const pageTitle = (
     <div className="flex min-w-0 flex-col gap-1">
@@ -695,12 +738,40 @@ function LogsInnerContent({
                 <div className="shrink-0 px-8 py-4">
                   <div className="mb-4 flex items-start justify-between gap-4">
                     {pageTitle}
-                    <Button variant="outline" size="sm" asChild>
-                      <Link to={orgRoutes.logs.href()}>
-                        <Settings className="h-4 w-4" />
-                        Configure settings
-                      </Link>
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRefreshClick}
+                        disabled={isRefreshing}
+                        aria-label="Refresh logs"
+                        className={cn(
+                          "min-w-[110px] justify-center transition-all",
+                          isRefreshing &&
+                            "ring-primary/30 ring-2 ring-offset-1",
+                        )}
+                      >
+                        {isRefreshing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span className="text-muted-foreground">
+                              Refreshing…
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-4 w-4" />
+                            Refresh
+                          </>
+                        )}
+                      </Button>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link to={orgRoutes.logs.href()}>
+                          <Settings className="h-4 w-4" />
+                          Configure settings
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                   {/* Filter and Search Row */}
                   <div className="flex flex-wrap items-center gap-4">
@@ -738,15 +809,9 @@ function LogsInnerContent({
                 {/* Content section - full width */}
                 <div className="min-h-0 flex-1 overflow-hidden border-t">
                   <div className="bg-background flex h-full flex-col">
-                    {/* Loading indicator */}
-                    {isFetching && allTraces.length > 0 && (
-                      <div className="bg-primary/20 absolute top-0 right-0 left-0 z-20 h-1">
-                        <div className="bg-primary h-full animate-pulse" />
-                      </div>
-                    )}
-
                     {/* Header */}
                     <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-8 py-2.5 text-xs font-medium tracking-wide uppercase">
+                      <div className="w-1.5 shrink-0" />
                       <div className="w-[150px] shrink-0">Timestamp</div>
                       <div className="w-5 shrink-0" />
                       <div className="flex-1">Source / Tool</div>
@@ -851,7 +916,7 @@ function TraceListContent({
             key={trace.traceId}
             trace={trace}
             isExpanded={expandedTraceId === trace.traceId}
-            onToggle={() => onToggleExpand(trace.traceId)}
+            onToggle={onToggleExpand}
             onLogClick={onLogClick}
           />
         ),

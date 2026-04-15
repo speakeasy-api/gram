@@ -104,6 +104,7 @@ OPENROUTER_DEV_KEY = "unset"
 ## MOCK_IDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.
 MOCK_IDP_HOST = "localhost"
 MOCK_IDP_PORT = "35291"
+MOCK_IDP_USER_ADMIN = "true"
 SPEAKEASY_SERVER_ADDRESS = "http://{{env.MOCK_IDP_HOST}}:{{env.MOCK_IDP_PORT}}"
 SPEAKEASY_SECRET_KEY = "test-secret"
 ## The following variables enable OIDC mode for the mock IDP, which

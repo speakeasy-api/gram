@@ -1,8 +1,10 @@
+import { cn } from "@/lib/utils";
 import {
   TelemetryLogRecord,
   ToolCallSummary,
 } from "@gram/client/models/components";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
+import { memo, useCallback } from "react";
 import { StatusBadge } from "./StatusBadge";
 import { TraceLogsList } from "./TraceLogsList";
 import {
@@ -16,11 +18,11 @@ import {
 interface TraceRowProps {
   trace: ToolCallSummary;
   isExpanded: boolean;
-  onToggle: () => void;
+  onToggle: (traceId: string) => void;
   onLogClick: (log: TelemetryLogRecord) => void;
 }
 
-export function TraceRow({
+export const TraceRow = memo(function TraceRow({
   trace,
   isExpanded,
   onToggle,
@@ -31,15 +33,29 @@ export function TraceRow({
   const toolName = trace.toolName || getToolNameFromUrn(trace.gramUrn);
   const ToolIcon = getToolIcon(trace);
 
+  const handleClick = useCallback(
+    () => onToggle(trace.traceId),
+    [onToggle, trace.traceId],
+  );
+
   return (
     <div className="border-border/50 border-b last:border-b-0">
       {/* Parent trace row */}
       <div
-        className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-8 py-2.5 transition-colors"
-        onClick={onToggle}
+        className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-8 py-1.5 transition-colors"
+        onClick={handleClick}
       >
+        {/* Status dot indicator for rapid left-edge scanning */}
+        <span
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            isSuccess ? "bg-success" : "bg-destructive",
+          )}
+          aria-hidden="true"
+        />
+
         {/* Timestamp */}
-        <div className="text-muted-foreground w-[150px] shrink-0 font-mono text-sm whitespace-nowrap">
+        <div className="text-muted-foreground/60 w-[150px] shrink-0 font-mono text-[11px] whitespace-nowrap tabular-nums">
           {formatNanoTimestamp(trace.startTimeUnixNano)}
         </div>
 
@@ -87,4 +103,4 @@ export function TraceRow({
       )}
     </div>
   );
-}
+});

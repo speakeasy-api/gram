@@ -27,7 +27,7 @@ export type NamedAsset =
       name: string;
       slug: string;
       type: "externalmcp";
-      registryId: string;
+      registryId?: string;
       iconUrl?: string;
     };
 

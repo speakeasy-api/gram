@@ -26,14 +26,16 @@ export type SearchUsersPayloadSort = ClosedEnum<typeof SearchUsersPayloadSort>;
 /**
  * Type of user identifier to group by
  */
-export const UserType = {
+export const SearchUsersPayloadUserType = {
   Internal: "internal",
   External: "external",
 } as const;
 /**
  * Type of user identifier to group by
  */
-export type UserType = ClosedEnum<typeof UserType>;
+export type SearchUsersPayloadUserType = ClosedEnum<
+  typeof SearchUsersPayloadUserType
+>;
 
 /**
  * Payload for searching user usage summaries
@@ -58,7 +60,7 @@ export type SearchUsersPayload = {
   /**
    * Type of user identifier to group by
    */
-  userType: UserType;
+  userType: SearchUsersPayloadUserType;
 };
 
 /** @internal */
@@ -67,9 +69,9 @@ export const SearchUsersPayloadSort$outboundSchema: z.ZodMiniEnum<
 > = z.enum(SearchUsersPayloadSort);
 
 /** @internal */
-export const UserType$outboundSchema: z.ZodMiniEnum<typeof UserType> = z.enum(
-  UserType,
-);
+export const SearchUsersPayloadUserType$outboundSchema: z.ZodMiniEnum<
+  typeof SearchUsersPayloadUserType
+> = z.enum(SearchUsersPayloadUserType);
 
 /** @internal */
 export type SearchUsersPayload$Outbound = {
@@ -90,7 +92,7 @@ export const SearchUsersPayload$outboundSchema: z.ZodMiniType<
     filter: SearchUsersFilter$outboundSchema,
     limit: z._default(z.int(), 50),
     sort: z._default(SearchUsersPayloadSort$outboundSchema, "desc"),
-    userType: UserType$outboundSchema,
+    userType: SearchUsersPayloadUserType$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
