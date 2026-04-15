@@ -1,5 +1,3 @@
-// TEST: deliberate type error to verify ci-gate failure message
-const _ciGateTest: number = "this is not a number";
 import { MCPCard } from "@/components/mcp/MCPCard";
 import { Page } from "@/components/page-layout";
 import { Skeleton } from "@/components/ui/skeleton";
