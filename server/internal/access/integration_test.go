@@ -5,7 +5,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -26,7 +28,7 @@ func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	manager := NewManager(testLogger(t), conn, stubFeatureChecker{enabled: true}, nil, nil)
+	manager := NewManager(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
 	err = manager.Require(ctx,
 		Check{Scope: ScopeBuildRead, ResourceID: "proj:123"},
@@ -56,7 +58,7 @@ func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	manager := NewManager(testLogger(t), conn, stubFeatureChecker{enabled: true}, nil, nil)
+	manager := NewManager(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
 	projectIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj:123", "proj:456"})
 	require.NoError(t, err)

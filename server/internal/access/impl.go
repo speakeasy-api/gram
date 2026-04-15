@@ -967,6 +967,7 @@ func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) erro
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			// Already enabled — unique constraint on (org, feature) WHERE deleted IS FALSE.
+			s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, true)
 			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "enable RBAC feature flag").Log(ctx, logger)
