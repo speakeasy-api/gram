@@ -20795,9 +20795,27 @@ components:
                     type: integer
                     description: Total number of logs in this trace
                     format: int64
+                skill_discovery_root:
+                    type: string
+                    description: Skill discovery root (from materialized column)
+                skill_id:
+                    type: string
+                    description: Skill ID (from materialized column)
                 skill_name:
                     type: string
                     description: Skill name (from materialized column, only for Skill tool)
+                skill_resolution_status:
+                    type: string
+                    description: Skill resolution status (from materialized column)
+                skill_scope:
+                    type: string
+                    description: Skill scope (from materialized column)
+                skill_source_type:
+                    type: string
+                    description: Skill source type (from materialized column)
+                skill_version_id:
+                    type: string
+                    description: Skill version ID (from materialized column)
                 start_time_unix_nano:
                     type: string
                     description: Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
