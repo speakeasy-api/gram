@@ -236,6 +236,66 @@ func TestService_Info(t *testing.T) {
 	})
 }
 
+// TestService_Info_RegularUserOrgRelationshipUpserted verifies that a standard (non-admin)
+// user who belongs to a non-speakeasy org gets an organization_user_relationships row
+// created when Info is called. This is the common path for all real customers.
+func TestService_Info_RegularUserOrgRelationshipUpserted(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	ctx, instance := newTestAuthService(t, userInfo)
+
+	err := instance.createTestUser(ctx, userInfo)
+	require.NoError(t, err)
+
+	err = instance.createTestOrganization(ctx, userInfo.Organizations[0])
+	require.NoError(t, err)
+
+	queries := orgRepo.New(instance.conn)
+
+	// Confirm no relationship exists before the Info call.
+	exists, err := queries.HasOrganizationUserRelationship(ctx, orgRepo.HasOrganizationUserRelationshipParams{
+		OrganizationID: userInfo.Organizations[0].ID,
+		UserID:         userInfo.UserID,
+	})
+	require.NoError(t, err)
+	require.False(t, exists, "expected no org-user relationship before Info call")
+
+	session := sessions.Session{
+		SessionID:            "regular-user-session-id",
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: userInfo.Organizations[0].ID,
+	}
+	err = instance.sessionManager.StoreSession(ctx, session)
+	require.NoError(t, err)
+
+	authCtx := &contextvalues.AuthContext{
+		SessionID:            &session.SessionID,
+		UserID:               session.UserID,
+		ActiveOrganizationID: session.ActiveOrganizationID,
+		AccountType:          "test",
+		ProjectID:            nil,
+		OrganizationSlug:     "",
+		Email:                &userInfo.Email,
+		ProjectSlug:          nil,
+		APIKeyScopes:         nil,
+	}
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	result, err := instance.service.Info(ctx, &gen.InfoPayload{SessionToken: nil})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.False(t, result.IsAdmin)
+
+	// The upsert must have created the relationship.
+	exists, err = queries.HasOrganizationUserRelationship(ctx, orgRepo.HasOrganizationUserRelationshipParams{
+		OrganizationID: userInfo.Organizations[0].ID,
+		UserID:         userInfo.UserID,
+	})
+	require.NoError(t, err)
+	require.True(t, exists, "expected org-user relationship to be upserted by Info call")
+}
+
 // TestService_Info_AdminOrgRelationshipUpserted verifies that an admin user who has no
 // pre-existing record in organization_user_relationships gets one created when Info is
 // called for their speakeasy-team org.
