@@ -681,6 +681,40 @@ type PackageVersion struct {
 	Deleted      bool
 }
 
+type Plugin struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+	Description    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type PluginAssignment struct {
+	ID             uuid.UUID
+	PluginID       uuid.UUID
+	OrganizationID string
+	PrincipalUrn   string
+	CreatedAt      pgtype.Timestamptz
+}
+
+type PluginServer struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	ToolsetID   uuid.UUID
+	DisplayName string
+	Policy      string
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	Deleted     bool
+}
+
 // RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource='*' means unrestricted.
 type PrincipalGrant struct {
 	ID uuid.UUID
