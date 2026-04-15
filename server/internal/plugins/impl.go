@@ -34,10 +34,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 var validPrincipalURN = regexp.MustCompile(`^(\*|role:[a-zA-Z0-9_-]+|user:[a-zA-Z0-9_-]+)$`)
+
+// GitHubConfig holds the configured GitHub client and the Gram-owned org
+// where plugin repos are created. Nil means GitHub publishing is disabled.
+type GitHubConfig struct {
+	Client         *ghclient.Client
+	Org            string
+	InstallationID int64
+}
 
 type Service struct {
 	tracer    trace.Tracer
@@ -46,6 +55,7 @@ type Service struct {
 	repo      *repo.Queries
 	auth      *auth.Auth
 	access    *access.Manager
+	github    *GitHubConfig
 	serverURL string
 }
 
@@ -58,6 +68,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	accessManager *access.Manager,
+	github *GitHubConfig,
 	serverURL string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
@@ -69,6 +80,7 @@ func NewService(
 		repo:      repo.New(db),
 		auth:      auth.New(logger, db, sessions, accessManager),
 		access:    accessManager,
+		github:    github,
 		serverURL: serverURL,
 	}
 }
@@ -599,6 +611,101 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 		ContentType:        "application/zip",
 		ContentDisposition: fmt.Sprintf(`attachment; filename="%s.zip"`, dbPlugin.Slug),
 	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+}
+
+// --- Publish & Distribution ---
+
+func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishStatusPayload) (*gen.PublishStatusResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	result := &gen.PublishStatusResult{
+		Configured: s.github != nil,
+		Connected:  false,
+		RepoOwner:  nil,
+		RepoName:   nil,
+		RepoURL:    nil,
+	}
+
+	if s.github != nil {
+		conn, err := s.repo.GetGitHubConnection(ctx, *ac.ProjectID)
+		if err == nil {
+			result.Connected = true
+			result.RepoOwner = &conn.RepoOwner
+			result.RepoName = &conn.RepoName
+			repoURL := fmt.Sprintf("https://github.com/%s/%s", conn.RepoOwner, conn.RepoName)
+			result.RepoURL = &repoURL
+		}
+	}
+
+	return result, nil
+}
+
+func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPluginsPayload) (*gen.PublishPluginsResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	if s.github == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "GitHub publishing is not configured")
+	}
+
+	pluginInfos, err := s.resolvePluginInfos(ctx, *ac.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+
+	files, err := GeneratePluginPackages(pluginInfos, cfg)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "generate plugin packages").Log(ctx, s.logger)
+	}
+
+	repoName := ac.OrganizationSlug + "-plugins"
+
+	if err := s.github.Client.CreateRepo(ctx, s.github.InstallationID, s.github.Org, repoName, false); err != nil {
+		s.logger.WarnContext(ctx, "repo creation returned error (may already exist)",
+			attr.SlogOrganizationID(ac.ActiveOrganizationID),
+			attr.SlogError(err),
+		)
+	}
+
+	_, err = s.github.Client.PushFiles(
+		ctx,
+		s.github.InstallationID,
+		s.github.Org,
+		repoName,
+		"main",
+		"Update plugin packages",
+		files,
+	)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "push plugin files to GitHub").Log(ctx, s.logger)
+	}
+
+	if _, err := s.repo.UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
+		ProjectID:      *ac.ProjectID,
+		InstallationID: s.github.InstallationID,
+		RepoOwner:      s.github.Org,
+		RepoName:       repoName,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "upsert github connection").Log(ctx, s.logger)
+	}
+
+	repoURL := fmt.Sprintf("https://github.com/%s/%s", s.github.Org, repoName)
+	return &gen.PublishPluginsResult{RepoURL: repoURL}, nil
 }
 
 // --- Internal helpers ---

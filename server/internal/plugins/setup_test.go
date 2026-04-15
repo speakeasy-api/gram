@@ -96,7 +96,7 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, access.NewManager(logger, conn, stubFeatureChecker{}, workos.NewStubClient(), cache.NoopCache), "https://app.getgram.ai")
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, access.NewManager(logger, conn, stubFeatureChecker{}, workos.NewStubClient(), cache.NoopCache), nil, "https://app.getgram.ai")
 
 	return ctx, &testInstance{
 		service:        svc,

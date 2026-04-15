@@ -130,3 +130,18 @@ ORDER BY p.slug, ps.sort_order ASC;
 
 -- name: GetOrganizationName :one
 SELECT name FROM organization_metadata WHERE id = @id;
+
+-- name: GetGitHubConnection :one
+SELECT *
+FROM plugin_github_connections
+WHERE project_id = @project_id;
+
+-- name: UpsertGitHubConnection :one
+INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name)
+VALUES (@project_id, @installation_id, @repo_owner, @repo_name)
+ON CONFLICT (project_id) DO UPDATE
+  SET installation_id = EXCLUDED.installation_id,
+      repo_owner = EXCLUDED.repo_owner,
+      repo_name = EXCLUDED.repo_name,
+      updated_at = clock_timestamp()
+RETURNING *;

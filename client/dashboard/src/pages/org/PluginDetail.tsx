@@ -18,6 +18,11 @@ import { useState } from "react";
 import { useParams } from "react-router";
 import type { PluginServer } from "@gram/client/models/components";
 import { useFetcher } from "@/contexts/Fetcher";
+import {
+  invalidateAllPublishStatus,
+  usePublishStatusSuspense,
+} from "@gram/client/react-query/publishStatus";
+import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 
 export default function PluginDetail() {
   const { pluginId } = useParams<{ pluginId: string }>();
@@ -28,6 +33,7 @@ export default function PluginDetail() {
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
 
   const { fetch: authFetch } = useFetcher();
+  const { data: publishStatus } = usePublishStatusSuspense();
   const { data: toolsetsData } = useListToolsetsForOrg();
   const toolsets = toolsetsData?.toolsets ?? [];
 
@@ -52,6 +58,10 @@ export default function PluginDetail() {
 
   const removeServerMutation = useRemovePluginServerMutation({
     onSuccess: () => invalidateAll(),
+  });
+
+  const publishMutation = usePublishPluginsMutation({
+    onSuccess: () => invalidateAllPublishStatus(queryClient),
   });
 
   const handleUpdate: React.FormEventHandler<HTMLFormElement> = (e) => {
@@ -229,6 +239,77 @@ export default function PluginDetail() {
             <Button.Text>Download Claude Plugin</Button.Text>
           </Button>
         </div>
+
+        {/* Publish section */}
+        {publishStatus && (
+          <>
+            <Heading variant="h5" className="mt-8 mb-3">
+              Publish
+            </Heading>
+            {!publishStatus.configured ? (
+              <Type muted small>
+                GitHub publishing is not configured on this server.
+              </Type>
+            ) : publishStatus.connected && publishStatus.repoUrl ? (
+              <Stack direction="vertical" gap={2}>
+                <Type muted small>
+                  Published to{" "}
+                  <a
+                    href={publishStatus.repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    {publishStatus.repoOwner}/{publishStatus.repoName}
+                  </a>
+                </Type>
+                <div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      publishMutation.mutate({
+                        security: { sessionHeaderGramSession: "" },
+                      })
+                    }
+                    disabled={publishMutation.isPending}
+                  >
+                    <Button.LeftIcon>
+                      <Icon name="refresh-cw" className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>
+                      {publishMutation.isPending
+                        ? "Publishing..."
+                        : "Re-publish"}
+                    </Button.Text>
+                  </Button>
+                </div>
+              </Stack>
+            ) : (
+              <div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() =>
+                    publishMutation.mutate({
+                      security: { sessionHeaderGramSession: "" },
+                    })
+                  }
+                  disabled={publishMutation.isPending}
+                >
+                  <Button.LeftIcon>
+                    <Icon name="upload" className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>
+                    {publishMutation.isPending
+                      ? "Publishing..."
+                      : "Publish to GitHub"}
+                  </Button.Text>
+                </Button>
+              </div>
+            )}
+          </>
+        )}
 
         {/* Edit Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

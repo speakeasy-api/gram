@@ -41,6 +41,10 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	DownloadPluginPackage(context.Context, *DownloadPluginPackagePayload) (res *DownloadPluginPackageResult, body io.ReadCloser, err error)
+	// Check whether GitHub publishing is configured and connected for this project.
+	GetPublishStatus(context.Context, *GetPublishStatusPayload) (res *PublishStatusResult, err error)
+	// Generate and publish all plugin packages to a GitHub repository.
+	PublishPlugins(context.Context, *PublishPluginsPayload) (res *PublishPluginsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -63,7 +67,7 @@ const ServiceName = "plugins"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "downloadPluginPackage"}
+var MethodNames = [12]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "downloadPluginPackage", "getPublishStatus", "publishPlugins"}
 
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
@@ -121,6 +125,13 @@ type DownloadPluginPackageResult struct {
 // GetPluginPayload is the payload type of the plugins service getPlugin method.
 type GetPluginPayload struct {
 	ID               string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// GetPublishStatusPayload is the payload type of the plugins service
+// getPublishStatus method.
+type GetPublishStatusPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -183,6 +194,35 @@ type PluginServer struct {
 	// Ordering within the plugin.
 	SortOrder int32
 	CreatedAt string
+}
+
+// PublishPluginsPayload is the payload type of the plugins service
+// publishPlugins method.
+type PublishPluginsPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// PublishPluginsResult is the result type of the plugins service
+// publishPlugins method.
+type PublishPluginsResult struct {
+	// The URL of the published GitHub repository.
+	RepoURL string
+}
+
+// PublishStatusResult is the result type of the plugins service
+// getPublishStatus method.
+type PublishStatusResult struct {
+	// Whether GitHub publishing is configured on the server.
+	Configured bool
+	// Whether this project has a GitHub connection.
+	Connected bool
+	// GitHub repo owner, if connected.
+	RepoOwner *string
+	// GitHub repo name, if connected.
+	RepoName *string
+	// Full GitHub repository URL, if connected.
+	RepoURL *string
 }
 
 // RemovePluginServerPayload is the payload type of the plugins service

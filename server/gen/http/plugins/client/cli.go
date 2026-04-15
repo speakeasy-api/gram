@@ -416,3 +416,47 @@ func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID stri
 
 	return v, nil
 }
+
+// BuildGetPublishStatusPayload builds the payload for the plugins
+// getPublishStatus endpoint from CLI flags.
+func BuildGetPublishStatusPayload(pluginsGetPublishStatusSessionToken string, pluginsGetPublishStatusProjectSlugInput string) (*plugins.GetPublishStatusPayload, error) {
+	var sessionToken *string
+	{
+		if pluginsGetPublishStatusSessionToken != "" {
+			sessionToken = &pluginsGetPublishStatusSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsGetPublishStatusProjectSlugInput != "" {
+			projectSlugInput = &pluginsGetPublishStatusProjectSlugInput
+		}
+	}
+	v := &plugins.GetPublishStatusPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildPublishPluginsPayload builds the payload for the plugins publishPlugins
+// endpoint from CLI flags.
+func BuildPublishPluginsPayload(pluginsPublishPluginsSessionToken string, pluginsPublishPluginsProjectSlugInput string) (*plugins.PublishPluginsPayload, error) {
+	var sessionToken *string
+	{
+		if pluginsPublishPluginsSessionToken != "" {
+			sessionToken = &pluginsPublishPluginsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsPublishPluginsProjectSlugInput != "" {
+			projectSlugInput = &pluginsPublishPluginsProjectSlugInput
+		}
+	}
+	v := &plugins.PublishPluginsPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
