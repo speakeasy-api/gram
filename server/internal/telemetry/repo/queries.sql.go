@@ -1539,6 +1539,12 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		"user_email",
 		"hook_source",
 		"skill_name",
+		"skill_scope",
+		"skill_discovery_root",
+		"skill_source_type",
+		"skill_id",
+		"skill_version_id",
+		"skill_resolution_status",
 		"multiIf(max(hook_has_failure) = 1, 'failure', max(hook_has_success) = 1, 'success', 'pending') as hook_status",
 	).
 		From("trace_summaries").
@@ -1612,7 +1618,21 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		}
 	}
 
-	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source", "user_email", "hook_source", "skill_name")
+	sb = sb.GroupBy(
+		"trace_id",
+		"tool_name",
+		"tool_source",
+		"event_source",
+		"user_email",
+		"hook_source",
+		"skill_name",
+		"skill_scope",
+		"skill_discovery_root",
+		"skill_source_type",
+		"skill_id",
+		"skill_version_id",
+		"skill_resolution_status",
+	)
 
 	// Pagination based on trace_id cursor
 	if arg.Cursor != "" {
@@ -1823,7 +1843,7 @@ type GetLLMClientBreakdownParams struct {
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
 	ToolsetSlug    string // Optional filter
-	SessionMode    bool // If true, count messages; if false, count tool calls
+	SessionMode    bool   // If true, count messages; if false, count tool calls
 }
 
 // GetLLMClientBreakdown retrieves usage breakdown by LLM client/agent.
@@ -1896,7 +1916,7 @@ type GetActiveCountsParams struct {
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
 	ToolsetSlug    string // Optional filter
-	SessionMode    bool // If true, count by messages; if false, count by tool calls
+	SessionMode    bool   // If true, count by messages; if false, count by tool calls
 }
 
 // ActiveCounts represents active server and user counts.

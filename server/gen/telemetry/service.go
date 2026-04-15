@@ -287,6 +287,18 @@ type HookTraceSummary struct {
 	HookSource *string
 	// Skill name (from materialized column, only for Skill tool)
 	SkillName *string
+	// Skill scope (from materialized column)
+	SkillScope *string
+	// Skill discovery root (from materialized column)
+	SkillDiscoveryRoot *string
+	// Skill source type (from materialized column)
+	SkillSourceType *string
+	// Skill ID (from materialized column)
+	SkillID *string
+	// Skill version ID (from materialized column)
+	SkillVersionID *string
+	// Skill resolution status (from materialized column)
+	SkillResolutionStatus *string
 }
 
 // Aggregated hooks metrics for a single server

@@ -53,7 +53,13 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     toolset_slug String MATERIALIZED toString(attributes.gram.toolset.slug) COMMENT 'Toolset slug (materialized from attributes.gram.toolset.slug).',
     user_email String MATERIALIZED toString(attributes.user.email) COMMENT 'User email (materialized from attributes.user.email).',
     hook_source String MATERIALIZED toString(attributes.gram.hook.source) COMMENT 'Hook source (materialized from attributes.gram.hook.source).',
-    skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).'
+    skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).',
+    skill_scope String MATERIALIZED toString(attributes.gram.skill.scope) COMMENT 'Skill scope (materialized from attributes.gram.skill.scope).',
+    skill_discovery_root String MATERIALIZED toString(attributes.gram.skill.discovery_root) COMMENT 'Skill discovery root (materialized from attributes.gram.skill.discovery_root).',
+    skill_source_type String MATERIALIZED toString(attributes.gram.skill.source_type) COMMENT 'Skill source type (materialized from attributes.gram.skill.source_type).',
+    skill_id String MATERIALIZED toString(attributes.gram.skill.id) COMMENT 'Skill ID (materialized from attributes.gram.skill.id).',
+    skill_version_id String MATERIALIZED toString(attributes.gram.skill.version_id) COMMENT 'Skill version ID (materialized from attributes.gram.skill.version_id).',
+    skill_resolution_status String MATERIALIZED toString(attributes.gram.skill.resolution_status) COMMENT 'Skill resolution status (materialized from attributes.gram.skill.resolution_status).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -86,6 +92,12 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_toolset_slug ON telemetry_logs
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_user_email ON telemetry_logs (user_email) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_source ON telemetry_logs (hook_source) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_name ON telemetry_logs (skill_name) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_scope ON telemetry_logs (skill_scope) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_discovery_root ON telemetry_logs (skill_discovery_root) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_source_type ON telemetry_logs (skill_source_type) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_id ON telemetry_logs (skill_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_version_id ON telemetry_logs (skill_version_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_resolution_status ON telemetry_logs (skill_resolution_status) TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS trace_summaries (
     -- Key cols
@@ -102,6 +114,12 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     user_email SimpleAggregateFunction(any, String),
     hook_source SimpleAggregateFunction(any, String),
     skill_name SimpleAggregateFunction(any, String),
+    skill_scope SimpleAggregateFunction(any, String),
+    skill_discovery_root SimpleAggregateFunction(any, String),
+    skill_source_type SimpleAggregateFunction(any, String),
+    skill_id SimpleAggregateFunction(any, String),
+    skill_version_id SimpleAggregateFunction(any, String),
+    skill_resolution_status SimpleAggregateFunction(any, String),
 
     -- Aggregates
     start_time_unix_nano SimpleAggregateFunction(min, Int64),
@@ -132,6 +150,12 @@ SELECT
     any(user_email) AS user_email,
     any(hook_source) AS hook_source,
     any(skill_name) AS skill_name,
+    any(skill_scope) AS skill_scope,
+    any(skill_discovery_root) AS skill_discovery_root,
+    any(skill_source_type) AS skill_source_type,
+    any(skill_id) AS skill_id,
+    any(skill_version_id) AS skill_version_id,
+    any(skill_resolution_status) AS skill_resolution_status,
     min(time_unix_nano) AS start_time_unix_nano,
     toUInt64(count(*)) AS log_count,
     anyIfState(

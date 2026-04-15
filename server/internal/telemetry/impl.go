@@ -1614,17 +1614,23 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 	traces := make([]*telem_gen.HookTraceSummary, len(items))
 	for i, item := range items {
 		traces[i] = &telem_gen.HookTraceSummary{
-			TraceID:           item.TraceID,
-			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
-			LogCount:          item.LogCount,
-			HookStatus:        item.HookStatus,
-			GramUrn:           item.GramURN,
-			ToolName:          item.ToolName,
-			ToolSource:        item.ToolSource,
-			EventSource:       item.EventSource,
-			UserEmail:         item.UserEmail,
-			HookSource:        item.HookSource,
-			SkillName:         item.SkillName,
+			TraceID:               item.TraceID,
+			StartTimeUnixNano:     strconv.FormatInt(item.StartTimeUnixNano, 10),
+			LogCount:              item.LogCount,
+			HookStatus:            item.HookStatus,
+			GramUrn:               item.GramURN,
+			ToolName:              item.ToolName,
+			ToolSource:            item.ToolSource,
+			EventSource:           item.EventSource,
+			UserEmail:             item.UserEmail,
+			HookSource:            item.HookSource,
+			SkillName:             item.SkillName,
+			SkillScope:            item.SkillScope,
+			SkillDiscoveryRoot:    item.SkillDiscoveryRoot,
+			SkillSourceType:       item.SkillSourceType,
+			SkillID:               item.SkillID,
+			SkillVersionID:        item.SkillVersionID,
+			SkillResolutionStatus: item.SkillResolutionStatus,
 		}
 	}
 
