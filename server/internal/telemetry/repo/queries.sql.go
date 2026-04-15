@@ -1598,7 +1598,8 @@ func (q *Queries) GetHooksBreakdown(ctx context.Context, arg GetHooksBreakdownPa
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
 
 	sb = sb.GroupBy("user_email", "server_name", "hook_source", "tool_name").
-		OrderBy("event_count DESC")
+		OrderBy("event_count DESC").
+		Limit(1000) // Defensive cap: top 1000 combinations ordered by volume
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -1665,7 +1666,8 @@ func (q *Queries) GetHooksTimeSeries(ctx context.Context, arg GetHooksTimeSeries
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
 
 	sb = sb.GroupBy("bucket_start", "server_name", "user_email").
-		OrderBy("bucket_start ASC")
+		OrderBy("bucket_start ASC").
+		Limit(10000) // Defensive cap: 288 buckets/day * ~34 server/user combos at 5min resolution
 
 	query, args, err := sb.ToSql()
 	if err != nil {
