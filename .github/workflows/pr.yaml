@@ -1180,6 +1180,7 @@ jobs:
             fi
           }
 
+          check "changes"              "${{ needs.changes.result }}"
           check "server-build-lint"    "${{ needs.server-build-lint.result }}"
           check "server-test"          "${{ needs.server-test.result }}"
           check "docker-build-server"  "${{ needs.docker-build-server.result }}"
