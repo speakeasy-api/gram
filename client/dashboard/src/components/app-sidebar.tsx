@@ -18,6 +18,7 @@ import * as React from "react";
 import { useState } from "react";
 import { RequireScope } from "./require-scope";
 import { FeatureRequestModal } from "./FeatureRequestModal";
+import { Button } from "./ui/button";
 import { Type } from "./ui/type";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
