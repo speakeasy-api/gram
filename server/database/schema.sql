@@ -1714,16 +1714,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_project_id_slug_key
   ON plugins (organization_id, project_id, slug)
   WHERE deleted IS FALSE;
 
--- Links a plugin to MCP servers. Each row represents one server included in
--- the plugin. Exactly one source column (toolset_id, registry_id, external_url)
--- must be set per row.
+-- Links a plugin to a toolset-backed MCP server.
 CREATE TABLE IF NOT EXISTS plugin_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   plugin_id uuid NOT NULL,
-  toolset_id uuid,
-  registry_id uuid,
-  registry_server_specifier TEXT,
-  external_url TEXT CHECK (external_url IS NULL OR external_url <> ''),
+  toolset_id uuid NOT NULL,
   display_name TEXT NOT NULL CHECK (display_name <> ''),
   policy TEXT NOT NULL DEFAULT 'required',
   sort_order INT NOT NULL DEFAULT 0,
@@ -1735,19 +1730,12 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
 
   CONSTRAINT plugin_servers_pkey PRIMARY KEY (id),
   CONSTRAINT plugin_servers_plugin_id_fkey FOREIGN KEY (plugin_id) REFERENCES plugins (id) ON DELETE CASCADE,
-  -- RESTRICT is intentional: SET NULL would violate source_check, CASCADE would
-  -- silently destroy rows. Toolsets/registries use soft deletes so RESTRICT only
-  -- blocks manual hard deletes. If a hard-delete path is added later, it must
-  -- purge soft-deleted plugin_servers referencing the target first.
+  -- RESTRICT is intentional: CASCADE would silently destroy rows.
+  -- Toolsets use soft deletes so RESTRICT only blocks manual hard deletes.
+  -- If a hard-delete path is added later, it must purge soft-deleted
+  -- plugin_servers referencing the target first.
   CONSTRAINT plugin_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
-  CONSTRAINT plugin_servers_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries (id) ON DELETE RESTRICT,
-  CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional')),
-  CONSTRAINT plugin_servers_source_check CHECK (
-    (toolset_id IS NOT NULL)::int + (registry_id IS NOT NULL)::int + (external_url IS NOT NULL)::int = 1
-  ),
-  CONSTRAINT plugin_servers_registry_specifier_check CHECK (
-    registry_id IS NOT NULL OR registry_server_specifier IS NULL
-  )
+  CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional'))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_display_name_key
