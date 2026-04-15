@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Globe, LockIcon } from "lucide-react";
 
 import type { DiscoveredOAuth, WizardDispatch } from "./types";
+import { Badge } from "@speakeasy-api/moonshine";
 
 export function PathSelection({
   discoveredOAuth,
@@ -43,6 +44,7 @@ export function PathSelection({
         >
           <LockIcon className="text-muted-foreground h-6 w-6" />
           <Type className="font-medium">OAuth Proxy</Type>
+          <Badge variant="neutral">Recommended</Badge>
           <Type muted small>
             For internal servers that don't natively support MCP OAuth. Gram
             proxies OAuth on behalf of your server.
