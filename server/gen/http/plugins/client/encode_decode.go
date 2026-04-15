@@ -2419,15 +2419,12 @@ func unmarshalPluginServerResponseBodyToPluginsPluginServer(v *PluginServerRespo
 		return nil
 	}
 	res := &plugins.PluginServer{
-		ID:                      *v.ID,
-		ToolsetID:               v.ToolsetID,
-		RegistryID:              v.RegistryID,
-		RegistryServerSpecifier: v.RegistryServerSpecifier,
-		ExternalURL:             v.ExternalURL,
-		DisplayName:             *v.DisplayName,
-		Policy:                  *v.Policy,
-		SortOrder:               *v.SortOrder,
-		CreatedAt:               *v.CreatedAt,
+		ID:          *v.ID,
+		ToolsetID:   *v.ToolsetID,
+		DisplayName: *v.DisplayName,
+		Policy:      *v.Policy,
+		SortOrder:   *v.SortOrder,
+		CreatedAt:   *v.CreatedAt,
 	}
 
 	return res

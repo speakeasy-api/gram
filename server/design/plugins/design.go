@@ -279,24 +279,18 @@ var _ = Service("plugins", func() {
 
 // --- Models ---
 
-// PluginServerModel represents an MCP server included in a plugin.
+// PluginServerModel represents a toolset-backed MCP server included in a plugin.
 var PluginServerModel = Type("PluginServer", func() {
-	Required("id", "display_name", "policy", "sort_order", "created_at")
+	Required("id", "toolset_id", "display_name", "policy", "sort_order", "created_at")
 
 	Attribute("id", String, func() {
 		Description("Unique plugin server identifier.")
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID, if this server is a first-party toolset.")
+		Description("Gram toolset ID.")
 		Format(FormatUUID)
 	})
-	Attribute("registry_id", String, func() {
-		Description("MCP registry ID, if this server is from a catalog.")
-		Format(FormatUUID)
-	})
-	Attribute("registry_server_specifier", String, "Registry server specifier (e.g. io.modelcontextprotocol.anonymous/exa).")
-	Attribute("external_url", String, "External MCP server URL.")
 	Attribute("display_name", String, "Display name shown in generated plugin config.")
 	Attribute("policy", String, func() {
 		Description("Whether this server is required or optional.")
@@ -366,19 +360,15 @@ var UpdatePluginForm = Type("UpdatePluginForm", func() {
 })
 
 var AddPluginServerForm = Type("AddPluginServerForm", func() {
-	Required("plugin_id", "display_name")
+	Required("plugin_id", "toolset_id", "display_name")
 
 	Attribute("plugin_id", String, func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
+		Description("Gram toolset ID for the MCP server.")
 		Format(FormatUUID)
 	})
-	Attribute("registry_id", String, func() {
-		Format(FormatUUID)
-	})
-	Attribute("registry_server_specifier", String)
-	Attribute("external_url", String)
 	Attribute("display_name", String, "Display name for the server.")
 	Attribute("policy", String, func() {
 		Enum("required", "optional")

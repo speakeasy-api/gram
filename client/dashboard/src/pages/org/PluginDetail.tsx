@@ -24,9 +24,6 @@ export default function PluginDetail() {
   const queryClient = useQueryClient();
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAddServerOpen, setIsAddServerOpen] = useState(false);
-  const [addServerSourceType, setAddServerSourceType] = useState<
-    "toolset" | "external"
-  >("toolset");
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
 
@@ -76,36 +73,19 @@ export default function PluginDetail() {
   const handleAddServer: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-
-    if (addServerSourceType === "toolset") {
-      const toolsetId = fd.get("toolsetId") as string;
-      const toolset = toolsets.find((t) => t.id === toolsetId);
-      addServerMutation.mutate({
-        security: { sessionHeaderGramSession: "" },
-        request: {
-          addPluginServerForm: {
-            pluginId: pluginId!,
-            displayName: toolset?.name ?? toolsetId,
-            toolsetId,
-            policy: "required",
-          },
+    const toolsetId = fd.get("toolsetId") as string;
+    const toolset = toolsets.find((t) => t.id === toolsetId);
+    addServerMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        addPluginServerForm: {
+          pluginId: pluginId!,
+          toolsetId,
+          displayName: toolset?.name ?? toolsetId,
+          policy: "required",
         },
-      });
-    } else {
-      const externalUrl = fd.get("externalUrl") as string;
-      const displayName = fd.get("displayName") as string;
-      addServerMutation.mutate({
-        security: { sessionHeaderGramSession: "" },
-        request: {
-          addPluginServerForm: {
-            pluginId: pluginId!,
-            displayName,
-            externalUrl,
-            policy: "required",
-          },
-        },
-      });
-    }
+      },
+    });
   };
 
   const handleRemoveServer = (server: PluginServer) => {
@@ -138,16 +118,6 @@ export default function PluginDetail() {
       header: "Name",
       width: "2fr",
       render: (s) => <Type variant="body">{s.displayName}</Type>,
-    },
-    {
-      key: "type",
-      header: "Source",
-      width: "1fr",
-      render: (s) => (
-        <Type variant="body">
-          {s.toolsetId ? "Toolset" : s.registryId ? "Registry" : "External"}
-        </Type>
-      ),
     },
     {
       key: "policy",
@@ -309,67 +279,28 @@ export default function PluginDetail() {
                 Add an MCP server to this plugin bundle.
               </Dialog.Description>
             </Dialog.Header>
-            <div className="mb-4 flex gap-2">
-              <Button
-                size="sm"
-                variant={
-                  addServerSourceType === "toolset" ? "primary" : "secondary"
-                }
-                onClick={() => setAddServerSourceType("toolset")}
-                type="button"
-              >
-                Toolset
-              </Button>
-              <Button
-                size="sm"
-                variant={
-                  addServerSourceType === "external" ? "primary" : "secondary"
-                }
-                onClick={() => setAddServerSourceType("external")}
-                type="button"
-              >
-                External URL
-              </Button>
-            </div>
             <form onSubmit={handleAddServer} className="flex flex-col gap-4">
-              {addServerSourceType === "toolset" ? (
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium">Toolset</label>
-                  {toolsets.length > 0 ? (
-                    <select
-                      name="toolsetId"
-                      className="bg-background rounded-md border px-3 py-2 text-sm"
-                      required
-                    >
-                      <option value="">Select a toolset</option>
-                      {toolsets.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <Type muted small>
-                      No toolsets available. Create a toolset first.
-                    </Type>
-                  )}
-                </div>
-              ) : (
-                <>
-                  <InputField
-                    label="Display Name"
-                    name="displayName"
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium">Toolset</label>
+                {toolsets.length > 0 ? (
+                  <select
+                    name="toolsetId"
+                    className="bg-background rounded-md border px-3 py-2 text-sm"
                     required
-                    autoFocus
-                  />
-                  <InputField
-                    label="URL"
-                    name="externalUrl"
-                    placeholder="https://..."
-                    required
-                  />
-                </>
-              )}
+                  >
+                    <option value="">Select a toolset</option>
+                    {toolsets.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Type muted small>
+                    No toolsets available. Create a toolset first.
+                  </Type>
+                )}
+              </div>
               <Dialog.Footer>
                 <Button
                   variant="secondary"
@@ -381,8 +312,7 @@ export default function PluginDetail() {
                 <Button
                   type="submit"
                   disabled={
-                    addServerMutation.isPending ||
-                    (addServerSourceType === "toolset" && toolsets.length === 0)
+                    addServerMutation.isPending || toolsets.length === 0
                   }
                 >
                   Add

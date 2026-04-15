@@ -19,13 +19,11 @@ func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 					DisplayName: "crm-tools",
 					Policy:      "required",
 					MCPURL:      "https://app.getgram.ai/mcp/acme-abc12",
-					UseGramAuth: true,
 				},
 				{
-					DisplayName: "external-analytics",
+					DisplayName: "analytics",
 					Policy:      "optional",
-					MCPURL:      "https://analytics.example.com/mcp",
-					UseGramAuth: false,
+					MCPURL:      "https://app.getgram.ai/mcp/analytics-xyz",
 				},
 			},
 		},
@@ -33,14 +31,13 @@ func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 
 	cfg := GenerateConfig{
 		OrgName:   "Acme Corp",
-		OrgEmail:  "admin@acme.com",
+		OrgEmail:  "",
 		ServerURL: "https://app.getgram.ai",
 	}
 
 	files, err := GeneratePluginPackages(plugins, cfg)
 	require.NoError(t, err)
 
-	// Verify expected file paths exist.
 	expectedPaths := []string{
 		".claude-plugin/marketplace.json",
 		"engineering-tools/.claude-plugin/plugin.json",
@@ -54,23 +51,22 @@ func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 	}
 }
 
-func TestGenerateClaudeMCPConfigHasCorrectAuthHeaders(t *testing.T) {
+func TestGenerateClaudeMCPConfigAlwaysHasAuthHeaders(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
 		{
-			Name:        "Test",
-			Slug:        "test",
-			Description: "",
+			Name: "Test",
+			Slug: "test",
 			Servers: []PluginServerInfo{
-				{DisplayName: "gram-server", Policy: "", MCPURL: "https://app.getgram.ai/mcp/test", UseGramAuth: true},
-				{DisplayName: "external", Policy: "", MCPURL: "https://ext.example.com", UseGramAuth: false},
+				{DisplayName: "gram-server", MCPURL: "https://app.getgram.ai/mcp/test"},
+				{DisplayName: "another", MCPURL: "https://app.getgram.ai/mcp/another"},
 			},
 		},
 	}
 
 	files, err := GeneratePluginPackages(plugins, GenerateConfig{
 		OrgName:   "Test Org",
-		OrgEmail:  "test@test.com",
+		OrgEmail:  "",
 		ServerURL: "https://app.getgram.ai",
 	})
 	require.NoError(t, err)
@@ -79,31 +75,26 @@ func TestGenerateClaudeMCPConfigHasCorrectAuthHeaders(t *testing.T) {
 	err = json.Unmarshal(files["test/.mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
-	// Gram-hosted server should have auth header.
-	gramServer := mcpConfig.MCPServers["gram-server"]
-	require.Equal(t, "Bearer ${user_config.GRAM_API_KEY}", gramServer.Headers["Authorization"])
-
-	// External server should not have auth header.
-	extServer := mcpConfig.MCPServers["external"]
-	require.Empty(t, extServer.Headers)
+	for name, server := range mcpConfig.MCPServers {
+		require.Equal(t, "Bearer ${user_config.GRAM_API_KEY}", server.Headers["Authorization"], "server %s missing auth header", name)
+	}
 }
 
 func TestGenerateCursorMCPConfigUsesEnvSyntax(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
 		{
-			Name:        "Test",
-			Slug:        "test",
-			Description: "",
+			Name: "Test",
+			Slug: "test",
 			Servers: []PluginServerInfo{
-				{DisplayName: "gram-server", Policy: "", MCPURL: "https://app.getgram.ai/mcp/test", UseGramAuth: true},
+				{DisplayName: "gram-server", MCPURL: "https://app.getgram.ai/mcp/test"},
 			},
 		},
 	}
 
 	files, err := GeneratePluginPackages(plugins, GenerateConfig{
 		OrgName:   "Test Org",
-		OrgEmail:  "test@test.com",
+		OrgEmail:  "",
 		ServerURL: "https://app.getgram.ai",
 	})
 	require.NoError(t, err)
@@ -119,13 +110,13 @@ func TestGenerateCursorMCPConfigUsesEnvSyntax(t *testing.T) {
 func TestGenerateMarketplaceManifest(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
-		{Name: "A", Slug: "a", Description: "First plugin", Servers: nil},
-		{Name: "B", Slug: "b", Description: "Second plugin", Servers: nil},
+		{Name: "A", Slug: "a", Description: "First plugin"},
+		{Name: "B", Slug: "b", Description: "Second plugin"},
 	}
 
 	files, err := GeneratePluginPackages(plugins, GenerateConfig{
 		OrgName:   "Acme",
-		OrgEmail:  "admin@acme.com",
+		OrgEmail:  "",
 		ServerURL: "https://app.getgram.ai",
 	})
 	require.NoError(t, err)
@@ -139,17 +130,4 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 	require.Len(t, manifest.Plugins, 2)
 	require.Equal(t, "./a", manifest.Plugins[0].Source)
 	require.Equal(t, "./b", manifest.Plugins[1].Source)
-}
-
-func TestResolveServerMCPURL(t *testing.T) {
-	t.Parallel()
-	toolsetSlug := "acme-abc12"
-	url, useAuth := ResolveServerMCPURL("https://app.getgram.ai", &toolsetSlug, nil, nil)
-	require.Equal(t, "https://app.getgram.ai/mcp/acme-abc12", url)
-	require.True(t, useAuth)
-
-	extURL := "https://ext.example.com/mcp"
-	url, useAuth = ResolveServerMCPURL("https://app.getgram.ai", nil, nil, &extURL)
-	require.Equal(t, "https://ext.example.com/mcp", url)
-	require.False(t, useAuth)
 }

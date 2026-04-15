@@ -2,12 +2,17 @@ package plugins_test
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -19,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -96,6 +102,25 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 		conn:           conn,
 		sessionManager: sessionManager,
 	}
+}
+
+func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	slug := fmt.Sprintf("test-%s-%s", name, uuid.New().String()[:8])
+	ts, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   name,
+		Slug:                   slug,
+		Description:            pgtype.Text{Valid: false},
+		DefaultEnvironmentSlug: pgtype.Text{Valid: false},
+		McpSlug:                pgtype.Text{String: slug, Valid: true},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+	return ts
 }
 
 func withAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...access.Grant) context.Context {

@@ -31,17 +31,14 @@ type PluginAssignment struct {
 }
 
 type PluginServer struct {
-	ID                      uuid.UUID
-	PluginID                uuid.UUID
-	ToolsetID               uuid.NullUUID
-	RegistryID              uuid.NullUUID
-	RegistryServerSpecifier pgtype.Text
-	ExternalUrl             pgtype.Text
-	DisplayName             string
-	Policy                  string
-	SortOrder               int32
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
-	DeletedAt               pgtype.Timestamptz
-	Deleted                 bool
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	ToolsetID   uuid.UUID
+	DisplayName string
+	Policy      string
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	Deleted     bool
 }

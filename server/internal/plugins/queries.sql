@@ -55,13 +55,10 @@ WHERE id = @id
   AND deleted IS FALSE;
 
 -- name: AddPluginServer :one
-INSERT INTO plugin_servers (plugin_id, toolset_id, registry_id, registry_server_specifier, external_url, display_name, policy, sort_order)
+INSERT INTO plugin_servers (plugin_id, toolset_id, display_name, policy, sort_order)
 VALUES (
   @plugin_id,
-  sqlc.narg('toolset_id'),
-  sqlc.narg('registry_id'),
-  sqlc.narg('registry_server_specifier'),
-  sqlc.narg('external_url'),
+  @toolset_id,
   @display_name,
   @policy,
   @sort_order
@@ -112,7 +109,7 @@ WHERE plugin_id = @plugin_id;
 
 -- name: ListPluginsWithServersForProject :many
 -- Used during plugin generation: returns all active plugin servers joined with
--- their parent plugin and optional toolset mcp_slug for URL construction.
+-- their parent plugin and toolset mcp_slug for URL construction.
 SELECT
   p.id AS plugin_id,
   p.name AS plugin_name,
@@ -123,13 +120,10 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.toolset_id,
-  ps.registry_id,
-  ps.registry_server_specifier,
-  ps.external_url,
   t.mcp_slug AS toolset_mcp_slug
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
-LEFT JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
+JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
 WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC;

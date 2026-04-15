@@ -328,53 +328,18 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
 	}
 
-	params := repo.AddPluginServerParams{
-		PluginID:                pluginID,
-		ToolsetID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RegistryID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RegistryServerSpecifier: pgtype.Text{String: "", Valid: false},
-		ExternalUrl:             pgtype.Text{String: "", Valid: false},
-		DisplayName:             payload.DisplayName,
-		Policy:                  payload.Policy,
-		SortOrder:               payload.SortOrder,
+	toolsetID, err := uuid.Parse(payload.ToolsetID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset id").Log(ctx, s.logger)
 	}
 
-	if payload.ToolsetID != nil {
-		id, err := uuid.Parse(*payload.ToolsetID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset id").Log(ctx, s.logger)
-		}
-		params.ToolsetID = uuid.NullUUID{UUID: id, Valid: true}
-	}
-	if payload.RegistryID != nil {
-		id, err := uuid.Parse(*payload.RegistryID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry id").Log(ctx, s.logger)
-		}
-		params.RegistryID = uuid.NullUUID{UUID: id, Valid: true}
-	}
-	if payload.RegistryServerSpecifier != nil && *payload.RegistryServerSpecifier != "" {
-		params.RegistryServerSpecifier = conv.PtrToPGText(payload.RegistryServerSpecifier)
-	}
-	if payload.ExternalURL != nil && *payload.ExternalURL != "" {
-		params.ExternalUrl = conv.PtrToPGText(payload.ExternalURL)
-	}
-
-	sourceCount := 0
-	if payload.ToolsetID != nil && *payload.ToolsetID != "" {
-		sourceCount++
-	}
-	if payload.RegistryID != nil && *payload.RegistryID != "" {
-		sourceCount++
-	}
-	if payload.ExternalURL != nil && *payload.ExternalURL != "" {
-		sourceCount++
-	}
-	if sourceCount != 1 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "exactly one of toolset_id, registry_id, or external_url must be provided")
-	}
-
-	row, err := s.repo.AddPluginServer(ctx, params)
+	row, err := s.repo.AddPluginServer(ctx, repo.AddPluginServerParams{
+		PluginID:    pluginID,
+		ToolsetID:   toolsetID,
+		DisplayName: payload.DisplayName,
+		Policy:      payload.Policy,
+		SortOrder:   payload.SortOrder,
+	})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
@@ -644,18 +609,11 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 			pluginMap[r.PluginID] = pb
 		}
 
-		mcpURL, useGramAuth := ResolveServerMCPURL(
-			s.serverURL,
-			conv.FromPGText[string](r.ToolsetMcpSlug),
-			conv.FromPGText[string](r.RegistryServerSpecifier),
-			conv.FromPGText[string](r.ExternalUrl),
-		)
-		if mcpURL != "" {
+		if mcpSlug := conv.FromPGText[string](r.ToolsetMcpSlug); mcpSlug != nil {
 			pb.servers = append(pb.servers, PluginServerInfo{
 				DisplayName: r.ServerDisplayName,
 				Policy:      r.ServerPolicy,
-				MCPURL:      mcpURL,
-				UseGramAuth: useGramAuth,
+				MCPURL:      fmt.Sprintf("%s/mcp/%s", s.serverURL, *mcpSlug),
 			})
 		}
 	}
@@ -727,28 +685,14 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, assignments []repo.
 }
 
 func pluginServerToGen(s repo.PluginServer) *gen.PluginServer {
-	result := &gen.PluginServer{
-		ID:                      s.ID.String(),
-		ToolsetID:               nil,
-		RegistryID:              nil,
-		RegistryServerSpecifier: nil,
-		ExternalURL:             nil,
-		DisplayName:             s.DisplayName,
-		Policy:                  s.Policy,
-		SortOrder:               s.SortOrder,
-		CreatedAt:               formatTime(s.CreatedAt),
+	return &gen.PluginServer{
+		ID:          s.ID.String(),
+		ToolsetID:   s.ToolsetID.String(),
+		DisplayName: s.DisplayName,
+		Policy:      s.Policy,
+		SortOrder:   s.SortOrder,
+		CreatedAt:   formatTime(s.CreatedAt),
 	}
-	if s.ToolsetID.Valid {
-		id := s.ToolsetID.UUID.String()
-		result.ToolsetID = &id
-	}
-	if s.RegistryID.Valid {
-		id := s.RegistryID.UUID.String()
-		result.RegistryID = &id
-	}
-	result.RegistryServerSpecifier = conv.FromPGText[string](s.RegistryServerSpecifier)
-	result.ExternalURL = conv.FromPGText[string](s.ExternalUrl)
-	return result
 }
 
 func pluginAssignmentToGen(a repo.PluginAssignment) *gen.PluginAssignment {

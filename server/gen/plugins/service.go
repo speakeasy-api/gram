@@ -68,13 +68,11 @@ var MethodNames = [10]string{"listPlugins", "getPlugin", "createPlugin", "update
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
 type AddPluginServerPayload struct {
-	SessionToken            *string
-	ProjectSlugInput        *string
-	PluginID                string
-	ToolsetID               *string
-	RegistryID              *string
-	RegistryServerSpecifier *string
-	ExternalURL             *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	PluginID         string
+	// Gram toolset ID for the MCP server.
+	ToolsetID string
 	// Display name for the server.
 	DisplayName string
 	Policy      string
@@ -174,14 +172,8 @@ type PluginAssignment struct {
 type PluginServer struct {
 	// Unique plugin server identifier.
 	ID string
-	// Gram toolset ID, if this server is a first-party toolset.
-	ToolsetID *string
-	// MCP registry ID, if this server is from a catalog.
-	RegistryID *string
-	// Registry server specifier (e.g. io.modelcontextprotocol.anonymous/exa).
-	RegistryServerSpecifier *string
-	// External MCP server URL.
-	ExternalURL *string
+	// Gram toolset ID.
+	ToolsetID string
 	// Display name shown in generated plugin config.
 	DisplayName string
 	// Whether this server is required or optional.

@@ -178,17 +178,18 @@ func TestPluginsService_AddPluginServer(t *testing.T) {
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Server Test"})
 	require.NoError(t, err)
 
-	extURL := "https://ext.example.com/mcp"
+	toolset := createTestToolset(t, ctx, ti.conn, "test-toolset")
 	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		DisplayName: "External Server",
-		ExternalURL: &extURL,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "My Toolset Server",
 		Policy:      "required",
 		SortOrder:   0,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "External Server", server.DisplayName)
+	require.Equal(t, "My Toolset Server", server.DisplayName)
 	require.Equal(t, "required", server.Policy)
+	require.Equal(t, toolset.ID.String(), server.ToolsetID)
 }
 
 func TestPluginsService_UpdatePluginServer_VerifiesOwnership(t *testing.T) {
@@ -199,11 +200,11 @@ func TestPluginsService_UpdatePluginServer_VerifiesOwnership(t *testing.T) {
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Ownership Test"})
 	require.NoError(t, err)
 
-	extURL := "https://ext.example.com/mcp"
+	toolset := createTestToolset(t, ctx, ti.conn, "ownership-toolset")
 	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
 		DisplayName: "My Server",
-		ExternalURL: &extURL,
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -232,11 +233,11 @@ func TestPluginsService_RemovePluginServer_VerifiesOwnership(t *testing.T) {
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Remove Ownership"})
 	require.NoError(t, err)
 
-	extURL := "https://ext.example.com/mcp"
+	toolset := createTestToolset(t, ctx, ti.conn, "remove-toolset")
 	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
 		DisplayName: "My Server",
-		ExternalURL: &extURL,
 		Policy:      "required",
 		SortOrder:   0,
 	})

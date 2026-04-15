@@ -11,8 +11,6 @@ type PluginServerInfo struct {
 	Policy      string
 	// Resolved MCP URL (e.g. https://app.getgram.ai/mcp/{slug}).
 	MCPURL string
-	// Whether auth header should use Gram API key.
-	UseGramAuth bool
 }
 
 // PluginInfo contains the data needed to generate packages for a single plugin.
@@ -68,7 +66,6 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 // the root level (no subdirectory prefix). Used for per-plugin ZIP downloads
 // that can be installed directly via `claude --plugin-dir`.
 func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform string) (map[string][]byte, error) {
-	// Use an empty prefix so files are at the root of the ZIP.
 	files := make(map[string][]byte)
 
 	switch platform {
@@ -87,110 +84,28 @@ func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform
 	return files, nil
 }
 
-// generateClaudePluginFlat generates Claude Code plugin files at the root level (no prefix).
 func generateClaudePluginFlat(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
-	var userConfig map[string]userConfigEntry
-	for _, s := range p.Servers {
-		if s.UseGramAuth {
-			userConfig = map[string]userConfigEntry{
-				"GRAM_API_KEY": {
-					Description: "Your Gram API key for authenticating MCP server connections",
-					Sensitive:   true,
-				},
-			}
-			break
-		}
-	}
-
-	pluginJSON, err := marshalJSON(claudePluginMeta{
-		Name:        p.Slug,
-		Description: p.Description,
-		Version:     "0.1.0",
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
-		Homepage:    "https://getgram.ai",
-		UserConfig:  userConfig,
-	})
-	if err != nil {
-		return fmt.Errorf("marshal plugin.json: %w", err)
-	}
-	files[".claude-plugin/plugin.json"] = pluginJSON
-
-	mcpServers := make(map[string]claudeMCPServer)
-	for _, s := range p.Servers {
-		server := claudeMCPServer{
-			Type:    "http",
-			URL:     s.MCPURL,
-			Headers: nil,
-		}
-		if s.UseGramAuth {
-			server.Headers = map[string]string{
-				"Authorization": "Bearer ${user_config.GRAM_API_KEY}",
-			}
-		}
-		mcpServers[s.DisplayName] = server
-	}
-	mcpJSON, err := marshalJSON(claudeMCPConfig{MCPServers: mcpServers})
-	if err != nil {
-		return fmt.Errorf("marshal .mcp.json: %w", err)
-	}
-	files[".mcp.json"] = mcpJSON
-
-	return nil
+	return generateClaudePluginWithPrefix(files, "", p, cfg)
 }
 
-// generateCursorPluginFlat generates Cursor plugin files at the root level (no prefix).
 func generateCursorPluginFlat(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
-	pluginJSON, err := marshalJSON(cursorPluginMeta{
-		Name:        p.Slug,
-		DisplayName: p.Name,
-		Description: p.Description,
-		Version:     "0.1.0",
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
-		Homepage:    "https://getgram.ai",
-	})
-	if err != nil {
-		return fmt.Errorf("marshal plugin.json: %w", err)
-	}
-	files[".cursor-plugin/plugin.json"] = pluginJSON
-
-	mcpServers := make(map[string]cursorMCPServer)
-	for _, s := range p.Servers {
-		server := cursorMCPServer{
-			URL:     s.MCPURL,
-			Headers: nil,
-		}
-		if s.UseGramAuth {
-			server.Headers = map[string]string{
-				"Authorization": "Bearer ${env:GRAM_API_KEY}",
-			}
-		}
-		mcpServers[s.DisplayName] = server
-	}
-	mcpJSON, err := marshalJSON(cursorMCPConfig{MCPServers: mcpServers})
-	if err != nil {
-		return fmt.Errorf("marshal mcp.json: %w", err)
-	}
-	files["mcp.json"] = mcpJSON
-
-	return nil
+	return generateCursorPluginWithPrefix(files, "", p.Slug, p, cfg)
 }
 
 func generateClaudePlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
-	prefix := p.Slug + "/"
+	return generateClaudePluginWithPrefix(files, p.Slug+"/", p, cfg)
+}
 
-	// .claude-plugin/plugin.json
-	// Check if any server needs Gram auth to decide whether to include userConfig.
-	var userConfig map[string]userConfigEntry
-	for _, s := range p.Servers {
-		if s.UseGramAuth {
-			userConfig = map[string]userConfigEntry{
-				"GRAM_API_KEY": {
-					Description: "Your Gram API key for authenticating MCP server connections",
-					Sensitive:   true,
-				},
-			}
-			break
-		}
+func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
+	return generateCursorPluginWithPrefix(files, p.Slug+"-cursor/", p.Slug+"-cursor", p, cfg)
+}
+
+func generateClaudePluginWithPrefix(files map[string][]byte, prefix string, p PluginInfo, cfg GenerateConfig) error {
+	userConfig := map[string]userConfigEntry{
+		"GRAM_API_KEY": {
+			Description: "Your Gram API key for authenticating MCP server connections",
+			Sensitive:   true,
+		},
 	}
 
 	pluginJSON, err := marshalJSON(claudePluginMeta{
@@ -206,20 +121,15 @@ func generateClaudePlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 	}
 	files[prefix+".claude-plugin/plugin.json"] = pluginJSON
 
-	// .mcp.json
 	mcpServers := make(map[string]claudeMCPServer)
 	for _, s := range p.Servers {
-		server := claudeMCPServer{
-			Type:    "http",
-			URL:     s.MCPURL,
-			Headers: nil,
-		}
-		if s.UseGramAuth {
-			server.Headers = map[string]string{
+		mcpServers[s.DisplayName] = claudeMCPServer{
+			Type: "http",
+			URL:  s.MCPURL,
+			Headers: map[string]string{
 				"Authorization": "Bearer ${user_config.GRAM_API_KEY}",
-			}
+			},
 		}
-		mcpServers[s.DisplayName] = server
 	}
 	mcpJSON, err := marshalJSON(claudeMCPConfig{MCPServers: mcpServers})
 	if err != nil {
@@ -230,13 +140,15 @@ func generateClaudePlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 	return nil
 }
 
-func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
-	prefix := p.Slug + "-cursor/"
+func generateCursorPluginWithPrefix(files map[string][]byte, prefix, name string, p PluginInfo, cfg GenerateConfig) error {
+	displayName := p.Name
+	if prefix != "" {
+		displayName = p.Name + " (Cursor)"
+	}
 
-	// .cursor-plugin/plugin.json
 	pluginJSON, err := marshalJSON(cursorPluginMeta{
-		Name:        p.Slug + "-cursor",
-		DisplayName: p.Name + " (Cursor)",
+		Name:        name,
+		DisplayName: displayName,
 		Description: p.Description,
 		Version:     "0.1.0",
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
@@ -247,19 +159,14 @@ func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 	}
 	files[prefix+".cursor-plugin/plugin.json"] = pluginJSON
 
-	// mcp.json
 	mcpServers := make(map[string]cursorMCPServer)
 	for _, s := range p.Servers {
-		server := cursorMCPServer{
-			URL:     s.MCPURL,
-			Headers: nil,
-		}
-		if s.UseGramAuth {
-			server.Headers = map[string]string{
+		mcpServers[s.DisplayName] = cursorMCPServer{
+			URL: s.MCPURL,
+			Headers: map[string]string{
 				"Authorization": "Bearer ${env:GRAM_API_KEY}",
-			}
+			},
 		}
-		mcpServers[s.DisplayName] = server
 	}
 	mcpJSON, err := marshalJSON(cursorMCPConfig{MCPServers: mcpServers})
 	if err != nil {
@@ -268,21 +175,6 @@ func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 	files[prefix+"mcp.json"] = mcpJSON
 
 	return nil
-}
-
-// ResolveServerMCPURL builds the MCP URL for a plugin server based on its source type.
-func ResolveServerMCPURL(serverURL string, toolsetMCPSlug *string, registryServerSpecifier *string, externalURL *string) (url string, useGramAuth bool) {
-	switch {
-	case toolsetMCPSlug != nil && *toolsetMCPSlug != "":
-		return fmt.Sprintf("%s/mcp/%s", serverURL, *toolsetMCPSlug), true
-	case externalURL != nil && *externalURL != "":
-		return *externalURL, false
-	case registryServerSpecifier != nil && *registryServerSpecifier != "":
-		// Registry servers are proxied through Gram for now.
-		return *registryServerSpecifier, false
-	default:
-		return "", false
-	}
 }
 
 // --- JSON types ---

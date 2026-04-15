@@ -40,38 +40,29 @@ func (q *Queries) AddPluginAssignment(ctx context.Context, arg AddPluginAssignme
 }
 
 const addPluginServer = `-- name: AddPluginServer :one
-INSERT INTO plugin_servers (plugin_id, toolset_id, registry_id, registry_server_specifier, external_url, display_name, policy, sort_order)
+INSERT INTO plugin_servers (plugin_id, toolset_id, display_name, policy, sort_order)
 VALUES (
   $1,
   $2,
   $3,
   $4,
-  $5,
-  $6,
-  $7,
-  $8
+  $5
 )
-RETURNING id, plugin_id, toolset_id, registry_id, registry_server_specifier, external_url, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+RETURNING id, plugin_id, toolset_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 `
 
 type AddPluginServerParams struct {
-	PluginID                uuid.UUID
-	ToolsetID               uuid.NullUUID
-	RegistryID              uuid.NullUUID
-	RegistryServerSpecifier pgtype.Text
-	ExternalUrl             pgtype.Text
-	DisplayName             string
-	Policy                  string
-	SortOrder               int32
+	PluginID    uuid.UUID
+	ToolsetID   uuid.UUID
+	DisplayName string
+	Policy      string
+	SortOrder   int32
 }
 
 func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams) (PluginServer, error) {
 	row := q.db.QueryRow(ctx, addPluginServer,
 		arg.PluginID,
 		arg.ToolsetID,
-		arg.RegistryID,
-		arg.RegistryServerSpecifier,
-		arg.ExternalUrl,
 		arg.DisplayName,
 		arg.Policy,
 		arg.SortOrder,
@@ -81,9 +72,6 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 		&i.ID,
 		&i.PluginID,
 		&i.ToolsetID,
-		&i.RegistryID,
-		&i.RegistryServerSpecifier,
-		&i.ExternalUrl,
 		&i.DisplayName,
 		&i.Policy,
 		&i.SortOrder,
@@ -234,7 +222,7 @@ func (q *Queries) ListPluginAssignments(ctx context.Context, pluginID uuid.UUID)
 }
 
 const listPluginServers = `-- name: ListPluginServers :many
-SELECT id, plugin_id, toolset_id, registry_id, registry_server_specifier, external_url, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+SELECT id, plugin_id, toolset_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 FROM plugin_servers
 WHERE plugin_id = $1
   AND deleted IS FALSE
@@ -254,9 +242,6 @@ func (q *Queries) ListPluginServers(ctx context.Context, pluginID uuid.UUID) ([]
 			&i.ID,
 			&i.PluginID,
 			&i.ToolsetID,
-			&i.RegistryID,
-			&i.RegistryServerSpecifier,
-			&i.ExternalUrl,
 			&i.DisplayName,
 			&i.Policy,
 			&i.SortOrder,
@@ -351,36 +336,30 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.toolset_id,
-  ps.registry_id,
-  ps.registry_server_specifier,
-  ps.external_url,
   t.mcp_slug AS toolset_mcp_slug
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
-LEFT JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
+JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
 WHERE p.project_id = $1
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC
 `
 
 type ListPluginsWithServersForProjectRow struct {
-	PluginID                uuid.UUID
-	PluginName              string
-	PluginSlug              string
-	PluginDescription       pgtype.Text
-	ServerID                uuid.UUID
-	ServerDisplayName       string
-	ServerPolicy            string
-	ServerSortOrder         int32
-	ToolsetID               uuid.NullUUID
-	RegistryID              uuid.NullUUID
-	RegistryServerSpecifier pgtype.Text
-	ExternalUrl             pgtype.Text
-	ToolsetMcpSlug          pgtype.Text
+	PluginID          uuid.UUID
+	PluginName        string
+	PluginSlug        string
+	PluginDescription pgtype.Text
+	ServerID          uuid.UUID
+	ServerDisplayName string
+	ServerPolicy      string
+	ServerSortOrder   int32
+	ToolsetID         uuid.UUID
+	ToolsetMcpSlug    pgtype.Text
 }
 
 // Used during plugin generation: returns all active plugin servers joined with
-// their parent plugin and optional toolset mcp_slug for URL construction.
+// their parent plugin and toolset mcp_slug for URL construction.
 func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectID uuid.UUID) ([]ListPluginsWithServersForProjectRow, error) {
 	rows, err := q.db.Query(ctx, listPluginsWithServersForProject, projectID)
 	if err != nil {
@@ -400,9 +379,6 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectI
 			&i.ServerPolicy,
 			&i.ServerSortOrder,
 			&i.ToolsetID,
-			&i.RegistryID,
-			&i.RegistryServerSpecifier,
-			&i.ExternalUrl,
 			&i.ToolsetMcpSlug,
 		); err != nil {
 			return nil, err
@@ -517,7 +493,7 @@ SET display_name = $1,
 WHERE id = $4
   AND plugin_id = $5
   AND deleted IS FALSE
-RETURNING id, plugin_id, toolset_id, registry_id, registry_server_specifier, external_url, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+RETURNING id, plugin_id, toolset_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdatePluginServerParams struct {
@@ -541,9 +517,6 @@ func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServer
 		&i.ID,
 		&i.PluginID,
 		&i.ToolsetID,
-		&i.RegistryID,
-		&i.RegistryServerSpecifier,
-		&i.ExternalUrl,
 		&i.DisplayName,
 		&i.Policy,
 		&i.SortOrder,

@@ -16459,8 +16459,6 @@ components:
                 display_name:
                     type: string
                     description: Display name for the server.
-                external_url:
-                    type: string
                 plugin_id:
                     type: string
                     format: uuid
@@ -16470,20 +16468,17 @@ components:
                     enum:
                         - required
                         - optional
-                registry_id:
-                    type: string
-                    format: uuid
-                registry_server_specifier:
-                    type: string
                 sort_order:
                     type: integer
                     default: 0
                     format: int32
                 toolset_id:
                     type: string
+                    description: Gram toolset ID for the MCP server.
                     format: uuid
             required:
                 - plugin_id
+                - toolset_id
                 - display_name
         AllowedOrigin:
             type: object
@@ -21197,9 +21192,6 @@ components:
                 display_name:
                     type: string
                     description: Display name shown in generated plugin config.
-                external_url:
-                    type: string
-                    description: External MCP server URL.
                 id:
                     type: string
                     description: Unique plugin server identifier.
@@ -21210,23 +21202,17 @@ components:
                     enum:
                         - required
                         - optional
-                registry_id:
-                    type: string
-                    description: MCP registry ID, if this server is from a catalog.
-                    format: uuid
-                registry_server_specifier:
-                    type: string
-                    description: Registry server specifier (e.g. io.modelcontextprotocol.anonymous/exa).
                 sort_order:
                     type: integer
                     description: Ordering within the plugin.
                     format: int32
                 toolset_id:
                     type: string
-                    description: Gram toolset ID, if this server is a first-party toolset.
+                    description: Gram toolset ID.
                     format: uuid
             required:
                 - id
+                - toolset_id
                 - display_name
                 - policy
                 - sort_order

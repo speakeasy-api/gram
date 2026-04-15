@@ -36,11 +36,9 @@ type UpdatePluginRequestBody struct {
 // AddPluginServerRequestBody is the type of the "plugins" service
 // "addPluginServer" endpoint HTTP request body.
 type AddPluginServerRequestBody struct {
-	PluginID                *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
-	ToolsetID               *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	RegistryID              *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	RegistryServerSpecifier *string `form:"registry_server_specifier,omitempty" json:"registry_server_specifier,omitempty" xml:"registry_server_specifier,omitempty"`
-	ExternalURL             *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
+	PluginID *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
+	// Gram toolset ID for the MCP server.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// Display name for the server.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	Policy      *string `form:"policy,omitempty" json:"policy,omitempty" xml:"policy,omitempty"`
@@ -146,14 +144,8 @@ type UpdatePluginResponseBody struct {
 type AddPluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Gram toolset ID, if this server is a first-party toolset.
-	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// MCP registry ID, if this server is from a catalog.
-	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// Registry server specifier (e.g. io.modelcontextprotocol.anonymous/exa).
-	RegistryServerSpecifier *string `form:"registry_server_specifier,omitempty" json:"registry_server_specifier,omitempty" xml:"registry_server_specifier,omitempty"`
-	// External MCP server URL.
-	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
+	// Gram toolset ID.
+	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
 	// Display name shown in generated plugin config.
 	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
 	// Whether this server is required or optional.
@@ -168,14 +160,8 @@ type AddPluginServerResponseBody struct {
 type UpdatePluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Gram toolset ID, if this server is a first-party toolset.
-	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// MCP registry ID, if this server is from a catalog.
-	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// Registry server specifier (e.g. io.modelcontextprotocol.anonymous/exa).
-	RegistryServerSpecifier *string `form:"registry_server_specifier,omitempty" json:"registry_server_specifier,omitempty" xml:"registry_server_specifier,omitempty"`
-	// External MCP server URL.
-	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
+	// Gram toolset ID.
+	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
 	// Display name shown in generated plugin config.
 	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
 	// Whether this server is required or optional.
@@ -2058,14 +2044,8 @@ type PluginResponseBody struct {
 type PluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Gram toolset ID, if this server is a first-party toolset.
-	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// MCP registry ID, if this server is from a catalog.
-	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// Registry server specifier (e.g. io.modelcontextprotocol.anonymous/exa).
-	RegistryServerSpecifier *string `form:"registry_server_specifier,omitempty" json:"registry_server_specifier,omitempty" xml:"registry_server_specifier,omitempty"`
-	// External MCP server URL.
-	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
+	// Gram toolset ID.
+	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
 	// Display name shown in generated plugin config.
 	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
 	// Whether this server is required or optional.
@@ -2215,15 +2195,12 @@ func NewUpdatePluginResponseBody(res *plugins.Plugin) *UpdatePluginResponseBody 
 // of the "addPluginServer" endpoint of the "plugins" service.
 func NewAddPluginServerResponseBody(res *plugins.PluginServer) *AddPluginServerResponseBody {
 	body := &AddPluginServerResponseBody{
-		ID:                      res.ID,
-		ToolsetID:               res.ToolsetID,
-		RegistryID:              res.RegistryID,
-		RegistryServerSpecifier: res.RegistryServerSpecifier,
-		ExternalURL:             res.ExternalURL,
-		DisplayName:             res.DisplayName,
-		Policy:                  res.Policy,
-		SortOrder:               res.SortOrder,
-		CreatedAt:               res.CreatedAt,
+		ID:          res.ID,
+		ToolsetID:   res.ToolsetID,
+		DisplayName: res.DisplayName,
+		Policy:      res.Policy,
+		SortOrder:   res.SortOrder,
+		CreatedAt:   res.CreatedAt,
 	}
 	return body
 }
@@ -2232,15 +2209,12 @@ func NewAddPluginServerResponseBody(res *plugins.PluginServer) *AddPluginServerR
 // result of the "updatePluginServer" endpoint of the "plugins" service.
 func NewUpdatePluginServerResponseBody(res *plugins.PluginServer) *UpdatePluginServerResponseBody {
 	body := &UpdatePluginServerResponseBody{
-		ID:                      res.ID,
-		ToolsetID:               res.ToolsetID,
-		RegistryID:              res.RegistryID,
-		RegistryServerSpecifier: res.RegistryServerSpecifier,
-		ExternalURL:             res.ExternalURL,
-		DisplayName:             res.DisplayName,
-		Policy:                  res.Policy,
-		SortOrder:               res.SortOrder,
-		CreatedAt:               res.CreatedAt,
+		ID:          res.ID,
+		ToolsetID:   res.ToolsetID,
+		DisplayName: res.DisplayName,
+		Policy:      res.Policy,
+		SortOrder:   res.SortOrder,
+		CreatedAt:   res.CreatedAt,
 	}
 	return body
 }
@@ -3761,12 +3735,9 @@ func NewDeletePluginPayload(id string, sessionToken *string, projectSlugInput *s
 // payload.
 func NewAddPluginServerPayload(body *AddPluginServerRequestBody, sessionToken *string, projectSlugInput *string) *plugins.AddPluginServerPayload {
 	v := &plugins.AddPluginServerPayload{
-		PluginID:                *body.PluginID,
-		ToolsetID:               body.ToolsetID,
-		RegistryID:              body.RegistryID,
-		RegistryServerSpecifier: body.RegistryServerSpecifier,
-		ExternalURL:             body.ExternalURL,
-		DisplayName:             *body.DisplayName,
+		PluginID:    *body.PluginID,
+		ToolsetID:   *body.ToolsetID,
+		DisplayName: *body.DisplayName,
 	}
 	if body.Policy != nil {
 		v.Policy = *body.Policy
@@ -3885,6 +3856,9 @@ func ValidateAddPluginServerRequestBody(body *AddPluginServerRequestBody) (err e
 	if body.PluginID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("plugin_id", "body"))
 	}
+	if body.ToolsetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
+	}
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
@@ -3893,9 +3867,6 @@ func ValidateAddPluginServerRequestBody(body *AddPluginServerRequestBody) (err e
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
-	}
-	if body.RegistryID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
 	}
 	if body.Policy != nil {
 		if !(*body.Policy == "required" || *body.Policy == "optional") {
