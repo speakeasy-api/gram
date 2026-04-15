@@ -74,6 +74,20 @@ func resolveAttributeColumn(path string) string {
 	}
 }
 
+var hookTraceFilterColumns = map[string]string{
+	"gram.tool.name":               "trace_summaries.tool_name",
+	"gram.tool_call.source":        "trace_summaries.tool_source",
+	"gram.event.source":            "trace_summaries.event_source",
+	"user.email":                   "trace_summaries.user_email",
+	"gram.hook.source":             "trace_summaries.hook_source",
+	"gram.skill.scope":             "trace_summaries.skill_scope",
+	"gram.skill.discovery_root":    "trace_summaries.skill_discovery_root",
+	"gram.skill.source_type":       "trace_summaries.skill_source_type",
+	"gram.skill.id":                "trace_summaries.skill_id",
+	"gram.skill.version_id":        "trace_summaries.skill_version_id",
+	"gram.skill.resolution_status": "trace_summaries.skill_resolution_status",
+}
+
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
@@ -1712,8 +1726,6 @@ type ListHooksTracesParams struct {
 }
 
 // ListHooksTraces retrieves aggregated hook trace summaries grouped by trace_id.
-// This query directly accesses telemetry_logs to fetch user_email from attributes JSON,
-// while using materialized columns for tool_name, tool_source, and event_source.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams) ([]HookTraceSummary, error) {
@@ -1722,30 +1734,31 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		"min(start_time_unix_nano) as start_time_unix_nano",
 		"sum(log_count) as log_count",
 		"any(gram_urn) as gram_urn",
-		"tool_name",
-		"tool_source",
-		"event_source",
-		"user_email",
-		"hook_source",
-		"skill_name",
-		"skill_scope",
-		"skill_discovery_root",
-		"skill_source_type",
-		"skill_id",
-		"skill_version_id",
-		"skill_resolution_status",
+		"any(tool_name) as tool_name",
+		"any(tool_source) as tool_source",
+		"any(event_source) as event_source",
+		"any(user_email) as user_email",
+		"any(hook_source) as hook_source",
+		"any(skill_name) as skill_name",
+		"any(skill_scope) as skill_scope",
+		"any(skill_discovery_root) as skill_discovery_root",
+		"any(skill_source_type) as skill_source_type",
+		"any(skill_id) as skill_id",
+		"any(skill_version_id) as skill_version_id",
+		"any(skill_resolution_status) as skill_resolution_status",
 		"multiIf(max(hook_has_failure) = 1, 'failure', max(hook_has_success) = 1, 'success', 'pending') as hook_status",
 	).
 		From("trace_summaries").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("event_source = 'hook'").
+		Where("trace_summaries.gram_project_id = ?", arg.GramProjectID).
+		Where("trace_summaries.event_source = 'hook'").
 		Having("start_time_unix_nano >= ?", arg.TimeStart).
 		Having("start_time_unix_nano <= ?", arg.TimeEnd).
-		Where("trace_id IS NOT NULL AND trace_id != ''")
+		Where("trace_summaries.trace_id IS NOT NULL AND trace_summaries.trace_id != ''")
 
-	// Apply arbitrary attribute filters
+	// Apply materialized attribute filters available on trace_summaries.
 	for _, filter := range arg.Filters {
 		if !validJSONPath.MatchString(filter.Path) {
+<<<<<<< HEAD
 			continue // skip invalid paths to prevent injection
 		}
 		materializedCol, isMaterialized := materializedColumns[filter.Path]
@@ -1755,41 +1768,27 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		} else {
 			// Not materialized - access via attributes JSON
 			columnRef = fmt.Sprintf("toString(attributes.`%s`)", filter.Path)
+=======
+			continue
+>>>>>>> fc9c0b1c9 (fix: stabilize hooks trace aggregation and filter handling)
 		}
 
-		switch filter.Op {
-		case "eq":
-			if len(filter.Values) > 0 {
-				sb = sb.Where(squirrel.Eq{columnRef: filter.Values[0]})
-			}
-		case "not_eq":
-			if len(filter.Values) > 0 {
-				sb = sb.Where(squirrel.NotEq{columnRef: filter.Values[0]})
-			}
-		case "contains":
-			if len(filter.Values) > 0 {
-				sb = sb.Where(fmt.Sprintf("position(%s, ?) > 0", columnRef), filter.Values[0])
-			}
-		case "in":
-			if len(filter.Values) > 0 {
-				sb = sb.Where(squirrel.Eq{columnRef: filter.Values})
-			}
-		case "exists":
-			if isMaterialized {
-				sb = sb.Where(fmt.Sprintf("%s IS NOT NULL AND %s != ''", columnRef, columnRef))
-			} else {
-				sb = sb.Where(fmt.Sprintf("has(JSONExtractKeys(attributes), '%s')", filter.Path))
-			}
-		case "not_exists":
-			if isMaterialized {
-				sb = sb.Where(squirrel.Or{
-					squirrel.Eq{columnRef: nil},
-					squirrel.Eq{columnRef: ""},
-				})
-			} else {
-				sb = sb.Where(fmt.Sprintf("NOT has(JSONExtractKeys(attributes), '%s')", filter.Path))
-			}
+		path := strings.TrimPrefix(filter.Path, "@")
+		columnRef, ok := hookTraceFilterColumns[path]
+		if !ok {
+			continue
 		}
+
+		predicate := AttributeFilter{
+			Path:   path,
+			Op:     filter.Op,
+			Values: filter.Values,
+		}.Predicate(columnRef)
+		if predicate == nil {
+			continue
+		}
+
+		sb = sb.Where(predicate)
 	}
 
 	// Apply hook type filtering if specified
@@ -1798,11 +1797,11 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		for _, hookType := range arg.TypesToInclude {
 			switch hookType {
 			case "skill":
-				typeConditions = append(typeConditions, "tool_name = 'Skill'")
+				typeConditions = append(typeConditions, "trace_summaries.tool_name = 'Skill'")
 			case "mcp":
-				typeConditions = append(typeConditions, "(tool_source != '' AND tool_name != 'Skill')")
+				typeConditions = append(typeConditions, "(trace_summaries.tool_source != '' AND trace_summaries.tool_name != 'Skill')")
 			case "local":
-				typeConditions = append(typeConditions, "(tool_source = '' AND tool_name != 'Skill')")
+				typeConditions = append(typeConditions, "(trace_summaries.tool_source = '' AND trace_summaries.tool_name != 'Skill')")
 			}
 		}
 		if len(typeConditions) > 0 {
@@ -1810,21 +1809,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		}
 	}
 
-	sb = sb.GroupBy(
-		"trace_id",
-		"tool_name",
-		"tool_source",
-		"event_source",
-		"user_email",
-		"hook_source",
-		"skill_name",
-		"skill_scope",
-		"skill_discovery_root",
-		"skill_source_type",
-		"skill_id",
-		"skill_version_id",
-		"skill_resolution_status",
-	)
+	sb = sb.GroupBy("trace_id")
 
 	// Pagination based on trace_id cursor
 	if arg.Cursor != "" {
@@ -1861,6 +1846,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		if err = rows.ScanStruct(&trace); err != nil {
 			return nil, fmt.Errorf("error scanning row: %w", err)
 		}
+		normalizeEmptyHookTraceSummaryFields(&trace)
 		traces = append(traces, trace)
 	}
 
@@ -1869,6 +1855,30 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 	}
 
 	return traces, nil
+}
+
+func normalizeEmptyHookTraceSummaryFields(trace *HookTraceSummary) {
+	trace.HookStatus = nilIfEmpty(trace.HookStatus)
+	trace.ToolName = nilIfEmpty(trace.ToolName)
+	trace.ToolSource = nilIfEmpty(trace.ToolSource)
+	trace.EventSource = nilIfEmpty(trace.EventSource)
+	trace.UserEmail = nilIfEmpty(trace.UserEmail)
+	trace.HookSource = nilIfEmpty(trace.HookSource)
+	trace.SkillName = nilIfEmpty(trace.SkillName)
+	trace.SkillScope = nilIfEmpty(trace.SkillScope)
+	trace.SkillDiscoveryRoot = nilIfEmpty(trace.SkillDiscoveryRoot)
+	trace.SkillSourceType = nilIfEmpty(trace.SkillSourceType)
+	trace.SkillID = nilIfEmpty(trace.SkillID)
+	trace.SkillVersionID = nilIfEmpty(trace.SkillVersionID)
+	trace.SkillResolutionStatus = nilIfEmpty(trace.SkillResolutionStatus)
+}
+
+func nilIfEmpty(value *string) *string {
+	if value == nil || *value != "" {
+		return value
+	}
+
+	return nil
 }
 
 // TopUser represents a top user by activity.
