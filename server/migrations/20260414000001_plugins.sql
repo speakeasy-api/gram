@@ -28,7 +28,7 @@ CREATE TABLE "plugin_assignments" (
   CONSTRAINT "plugin_assignments_plugin_id_fkey" FOREIGN KEY ("plugin_id") REFERENCES "plugins" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Create index "plugin_assignments_plugin_id_principal_urn_key" to table: "plugin_assignments"
-CREATE UNIQUE INDEX "plugin_assignments_plugin_id_principal_urn_key" ON "plugin_assignments" ("plugin_id", "organization_id", "principal_urn");
+CREATE UNIQUE INDEX "plugin_assignments_plugin_id_principal_urn_key" ON "plugin_assignments" ("plugin_id", "principal_urn");
 -- Create "plugin_servers" table
 CREATE TABLE "plugin_servers" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),

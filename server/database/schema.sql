@@ -1758,4 +1758,4 @@ CREATE TABLE IF NOT EXISTS plugin_assignments (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_assignments_plugin_id_principal_urn_key
-  ON plugin_assignments (plugin_id, organization_id, principal_urn);
+  ON plugin_assignments (plugin_id, principal_urn);
