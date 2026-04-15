@@ -65,7 +65,7 @@ func TestCollectionsService_Create_WithToolsetIds(t *testing.T) {
 	require.Len(t, servers.Servers, 1)
 }
 
-func TestCollectionsService_Create_InvalidToolsetIdsSkipped(t *testing.T) {
+func TestCollectionsService_Create_InvalidToolsetIdsRejected(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestCollectionsService(t)
@@ -80,9 +80,9 @@ func TestCollectionsService_Create_InvalidToolsetIdsSkipped(t *testing.T) {
 		ApikeyToken:          nil,
 		ProjectSlugInput:     nil,
 	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, "Collection Bad IDs", result.Name)
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Contains(t, err.Error(), "invalid toolset_id")
 }
 
 func TestCollectionsService_Create_DuplicateSlug(t *testing.T) {
