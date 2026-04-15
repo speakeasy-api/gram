@@ -441,7 +441,12 @@ func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Qu
 		return oops.E(oops.CodeInvalid, nil, "cannot attach a toolset that is not enabled as an MCP server").Log(ctx, s.logger)
 	}
 
-	if installed, checkErr := queries.IsToolsetInstalledFromCatalog(ctx, toolsetID); checkErr == nil && installed {
+	installed, checkErr := queries.IsToolsetInstalledFromCatalog(ctx, toolsetID)
+	if checkErr != nil {
+		return oops.E(oops.CodeUnexpected, checkErr, "error checking if toolset is installed from catalog").Log(ctx, s.logger)
+	}
+
+	if installed {
 		return oops.E(oops.CodeInvalid, nil, "cannot attach a toolset installed from the catalog").Log(ctx, s.logger)
 	}
 
