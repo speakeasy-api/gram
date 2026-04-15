@@ -269,10 +269,12 @@ export function TopHeader() {
                     Project Settings
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => orgRoutes.billing.goTo()}>
-                  <CreditCardIcon className="mr-2 h-4 w-4" />
-                  Billing
-                </DropdownMenuItem>
+                {canAccessOrgRoutes && (
+                  <DropdownMenuItem onClick={() => orgRoutes.billing.goTo()}>
+                    <CreditCardIcon className="mr-2 h-4 w-4" />
+                    Billing
+                  </DropdownMenuItem>
+                )}
                 {isAdmin && (
                   <DropdownMenuItem
                     onClick={() => orgRoutes.adminSettings.goTo()}
