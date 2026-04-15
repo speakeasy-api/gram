@@ -1,6 +1,7 @@
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar";
 import { useIsAdmin } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useProductTier } from "@/hooks/useProductTier";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -17,11 +18,14 @@ export type { Scope };
 export function useRBAC() {
   const telemetry = useTelemetry();
   const isAdmin = useIsAdmin();
+  const productTier = useProductTier();
   const featureFlagEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
   // Toolbar is accessible in dev or for admins; only check localStorage in those cases.
   const devOverrideActive =
     (import.meta.env.DEV || isAdmin) && getRBACScopeOverrideHeader() !== null;
-  const isRbacEnabled = featureFlagEnabled || devOverrideActive;
+  // RBAC is only enforced for enterprise orgs — mirrors the server-side gate in access/manager.go.
+  const isRbacEnabled =
+    (featureFlagEnabled || devOverrideActive) && productTier === "enterprise";
 
   // Re-render when the toolbar changes scopes in localStorage.
   const [overrideVersion, setOverrideVersion] = useState(0);
