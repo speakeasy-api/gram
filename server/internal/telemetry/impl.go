@@ -1624,9 +1624,11 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 
 	// Get unique session count
 	sessionCount, err := s.chRepo.GetHooksSessionCount(ctx, repo.GetHooksSessionCountParams{
-		GramProjectID: authCtx.ProjectID.String(),
-		TimeStart:     timeStart,
-		TimeEnd:       timeEnd,
+		GramProjectID:  authCtx.ProjectID.String(),
+		TimeStart:      timeStart,
+		TimeEnd:        timeEnd,
+		Filters:        attributeFilters,
+		TypesToInclude: typesToInclude,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks session count: %v", err)

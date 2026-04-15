@@ -1380,9 +1380,11 @@ func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams
 
 // GetHooksSessionCountParams defines the parameters for getting unique session count.
 type GetHooksSessionCountParams struct {
-	GramProjectID string
-	TimeStart     int64
-	TimeEnd       int64
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	Filters        []AttributeFilter
+	TypesToInclude []string
 }
 
 // GetHooksSessionCount retrieves the count of unique sessions for hooks.
@@ -1395,6 +1397,7 @@ func (q *Queries) GetHooksSessionCount(ctx context.Context, arg GetHooksSessionC
 		Where("event_source = 'hook'").
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
 
 	query, args, err := sb.ToSql()
 	if err != nil {
