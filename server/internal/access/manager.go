@@ -175,6 +175,7 @@ func (m *Manager) resolveRoleSlug(ctx context.Context, userID, orgID string) (st
 		return "", fmt.Errorf("get user: %w", err)
 	}
 	if !user.WorkosID.Valid || user.WorkosID.String == "" {
+		m.storeRoleSlugCache(ctx, userID, orgID, "")
 		return "", nil
 	}
 
@@ -183,6 +184,7 @@ func (m *Manager) resolveRoleSlug(ctx context.Context, userID, orgID string) (st
 		return "", fmt.Errorf("get org: %w", err)
 	}
 	if !org.WorkosID.Valid || org.WorkosID.String == "" {
+		m.storeRoleSlugCache(ctx, userID, orgID, "")
 		return "", nil
 	}
 
@@ -191,10 +193,17 @@ func (m *Manager) resolveRoleSlug(ctx context.Context, userID, orgID string) (st
 		return "", fmt.Errorf("get org membership: %w", err)
 	}
 	if member == nil {
+		m.storeRoleSlugCache(ctx, userID, orgID, "")
 		return "", nil
 	}
 
-	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: member.RoleSlug}
+	m.storeRoleSlugCache(ctx, userID, orgID, member.RoleSlug)
+
+	return member.RoleSlug, nil
+}
+
+func (m *Manager) storeRoleSlugCache(ctx context.Context, userID, orgID, slug string) {
+	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: slug}
 	if err := m.roleCache.Store(ctx, entry); err != nil {
 		m.logger.WarnContext(ctx, "failed to cache role slug",
 			attr.SlogUserID(userID),
@@ -202,8 +211,6 @@ func (m *Manager) resolveRoleSlug(ctx context.Context, userID, orgID string) (st
 			attr.SlogError(err),
 		)
 	}
-
-	return member.RoleSlug, nil
 }
 
 // InvalidateRoleCache removes the cached role slug for a single user. Call

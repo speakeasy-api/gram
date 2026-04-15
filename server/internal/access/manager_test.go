@@ -2,9 +2,13 @@ package access
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -73,6 +77,29 @@ func TestManagerRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnexpected)
+}
+
+func TestResolveRoleSlug_cachesEmptyMembershipResult(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "test@example.com", "Test User", "user_workos_test", "membership_test")
+
+	membership := &countingMembershipFetcher{}
+	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true}, membership, newMapCache())
+
+	roleSlug, err := manager.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Empty(t, roleSlug)
+
+	roleSlug, err = manager.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Empty(t, roleSlug)
+	require.Equal(t, 1, membership.calls)
 }
 
 func TestManagerRequireAny_mapsDeniedToForbidden(t *testing.T) {
@@ -170,6 +197,69 @@ func TestManagerFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 	resourceIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
+}
+
+type countingMembershipFetcher struct {
+	calls int
+}
+
+func (c *countingMembershipFetcher) GetOrgMembership(context.Context, string, string) (*workos.Member, error) {
+	c.calls++
+	return nil, nil
+}
+
+type mapCache struct {
+	items map[string][]byte
+}
+
+func newMapCache() *mapCache {
+	return &mapCache{items: map[string][]byte{}}
+}
+
+func (m *mapCache) Get(_ context.Context, key string, value any) error {
+	item, ok := m.items[key]
+	if !ok {
+		return errors.New("cache miss")
+	}
+	if err := json.Unmarshal(item, value); err != nil {
+		return fmt.Errorf("unmarshal cache item: %w", err)
+	}
+	return nil
+}
+
+func (m *mapCache) Set(_ context.Context, key string, value any, _ time.Duration) error {
+	item, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("marshal cache item: %w", err)
+	}
+	m.items[key] = item
+	return nil
+}
+
+func (m *mapCache) Update(ctx context.Context, key string, value any) error {
+	return m.Set(ctx, key, value, 0)
+}
+
+func (m *mapCache) Delete(_ context.Context, key string) error {
+	delete(m.items, key)
+	return nil
+}
+
+func (m *mapCache) ListAppend(context.Context, string, any, time.Duration) error {
+	return errors.New("not implemented")
+}
+
+func (m *mapCache) ListRange(context.Context, string, int64, int64, any) error {
+	return errors.New("not implemented")
+}
+
+func (m *mapCache) DeleteByPrefix(_ context.Context, prefix string) error {
+	for key := range m.items {
+		if strings.HasPrefix(key, prefix) {
+			delete(m.items, key)
+		}
+	}
+	return nil
 }
 
 func enterpriseSessionCtx(t *testing.T) context.Context {
