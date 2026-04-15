@@ -77,7 +77,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { generateText } from "ai";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { useModel } from "../playground/Openrouter";
