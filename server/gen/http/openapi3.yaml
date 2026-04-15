@@ -12027,6 +12027,378 @@ paths:
             tags:
                 - skills
             x-speakeasy-name-override: capture
+    /rpc/skills.get:
+        get:
+            description: Get a captured skill by slug.
+            operationId: getSkill
+            parameters:
+                - allowEmptyValue: true
+                  description: The slug of the skill
+                  in: query
+                  name: slug
+                  required: true
+                  schema:
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    maxLength: 40
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Skill'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: get skills
+            tags:
+                - skills
+            x-speakeasy-name-override: getBySlug
+            x-speakeasy-react-hook:
+                name: Skill
+    /rpc/skills.getSettings:
+        get:
+            description: Get capture settings for a project.
+            operationId: getSkillsSettings
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillCaptureSettings'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getSettings skills
+            tags:
+                - skills
+            x-speakeasy-name-override: getSettings
+            x-speakeasy-react-hook:
+                name: SkillsSettings
+    /rpc/skills.list:
+        get:
+            description: List captured skills for a project.
+            operationId: listSkills
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSkillsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: list skills
+            tags:
+                - skills
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: ListSkills
+    /rpc/skills.setSettings:
+        post:
+            description: Update capture settings for a project.
+            operationId: setSkillsSettings
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetSkillCaptureSettingsForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillCaptureSettings'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: setSettings skills
+            tags:
+                - skills
+            x-speakeasy-name-override: setSettings
+            x-speakeasy-react-hook:
+                name: SetSkillsSettings
     /rpc/slack-apps.configure:
         post:
             description: Store Slack credentials (client ID, client secret, signing secret) for an app.
@@ -21621,6 +21993,15 @@ components:
                     description: List of available MCP servers
             required:
                 - servers
+        ListSkillsResult:
+            type: object
+            properties:
+                skills:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillEntry'
+            required:
+                - skills
         ListSlackAppsResult:
             type: object
             properties:
@@ -24059,6 +24440,19 @@ components:
                     $ref: '#/components/schemas/Project'
             required:
                 - project
+        SetSkillCaptureSettingsForm:
+            type: object
+            properties:
+                capture_project_skills:
+                    type: boolean
+                capture_user_skills:
+                    type: boolean
+                enabled:
+                    type: boolean
+            required:
+                - enabled
+                - capture_project_skills
+                - capture_user_skills
         SetSourceEnvironmentLinkRequestBody:
             type: object
             properties:
@@ -24093,6 +24487,102 @@ components:
             required:
                 - toolset_id
                 - environment_id
+        Skill:
+            type: object
+            properties:
+                active_version_id:
+                    type: string
+                created_at:
+                    type: string
+                    format: date-time
+                description:
+                    type: string
+                id:
+                    type: string
+                name:
+                    type: string
+                skill_uuid:
+                    type: string
+                slug:
+                    type: string
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - name
+                - slug
+                - created_at
+                - updated_at
+        SkillCaptureSettings:
+            type: object
+            properties:
+                capture_project_skills:
+                    type: boolean
+                capture_user_skills:
+                    type: boolean
+                effective_mode:
+                    type: string
+                    enum:
+                        - disabled
+                        - project_only
+                        - user_only
+                        - project_and_user
+                enabled:
+                    type: boolean
+                inherited_from_organization:
+                    type: boolean
+                org_default_mode:
+                    type: string
+                    enum:
+                        - disabled
+                        - project_only
+                        - user_only
+                        - project_and_user
+                project_override_mode:
+                    type: string
+                    enum:
+                        - disabled
+                        - project_only
+                        - user_only
+                        - project_and_user
+            required:
+                - effective_mode
+                - enabled
+                - capture_project_skills
+                - capture_user_skills
+                - inherited_from_organization
+        SkillEntry:
+            type: object
+            properties:
+                active_version:
+                    $ref: '#/components/schemas/SkillVersionSummary'
+                created_at:
+                    type: string
+                    format: date-time
+                description:
+                    type: string
+                id:
+                    type: string
+                name:
+                    type: string
+                skill_uuid:
+                    type: string
+                slug:
+                    type: string
+                updated_at:
+                    type: string
+                    format: date-time
+                version_count:
+                    type: integer
+                    format: int64
+            required:
+                - id
+                - name
+                - slug
+                - created_at
+                - updated_at
+                - version_count
         SkillSummary:
             type: object
             properties:
@@ -24112,6 +24602,32 @@ components:
                 - skill_name
                 - use_count
                 - unique_users
+        SkillVersionSummary:
+            type: object
+            properties:
+                asset_format:
+                    type: string
+                author_name:
+                    type: string
+                content_sha256:
+                    type: string
+                created_at:
+                    type: string
+                    format: date-time
+                first_seen_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                size_bytes:
+                    type: integer
+                    format: int64
+            required:
+                - id
+                - content_sha256
+                - asset_format
+                - size_bytes
+                - created_at
         SlackAppResult:
             type: object
             properties:

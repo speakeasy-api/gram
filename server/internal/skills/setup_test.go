@@ -87,7 +87,8 @@ func newTestSkillsServiceWithCaptureMode(t *testing.T, mode *string) (context.Co
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	storage := assetstest.NewTestBlobStore(t)
-	svc := skills.NewService(logger, tracerProvider, conn, sessionManager, storage, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache))
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	svc := skills.NewService(logger, tracerProvider, conn, sessionManager, storage, accessManager)
 
 	ti := &testInstance{
 		service:        svc,

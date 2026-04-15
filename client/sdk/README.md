@@ -322,6 +322,14 @@ run();
 
 * [list](docs/sdks/resources/README.md#list) - listResources resources
 
+### [Skills](docs/sdks/skills/README.md)
+
+* [capture](docs/sdks/skills/README.md#capture) - capture skills
+* [getBySlug](docs/sdks/skills/README.md#getbyslug) - get skills
+* [getSettings](docs/sdks/skills/README.md#getsettings) - getSettings skills
+* [list](docs/sdks/skills/README.md#list) - list skills
+* [setSettings](docs/sdks/skills/README.md#setsettings) - setSettings skills
+
 ### [Slack](docs/sdks/slack/README.md)
 
 * [configureSlackApp](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
@@ -539,6 +547,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`projectsSetOrganizationWhitelist`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
 - [`projectsUpsertAllowedOrigin`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
+- [`skillsCapture`](docs/sdks/skills/README.md#capture) - capture skills
+- [`skillsGetBySlug`](docs/sdks/skills/README.md#getbyslug) - get skills
+- [`skillsGetSettings`](docs/sdks/skills/README.md#getsettings) - getSettings skills
+- [`skillsList`](docs/sdks/skills/README.md#list) - list skills
+- [`skillsSetSettings`](docs/sdks/skills/README.md#setsettings) - setSettings skills
 - [`slackConfigureSlackApp`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
 - [`slackCreateSlackApp`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`slackDeleteSlackApp`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
@@ -719,6 +732,7 @@ To learn about this feature and how to get started, check
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
 - [`useListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
+- [`useListSkills`](docs/sdks/skills/README.md#list) - list skills
 - [`useListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
@@ -764,8 +778,12 @@ To learn about this feature and how to get started, check
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`useSetPluginAssignmentsMutation`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
 - [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects
+- [`useSetSkillsSettingsMutation`](docs/sdks/skills/README.md#setsettings) - setSettings skills
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
+- [`useSkill`](docs/sdks/skills/README.md#getbyslug) - get skills
+- [`useSkillsCaptureMutation`](docs/sdks/skills/README.md#capture) - capture skills
+- [`useSkillsSettings`](docs/sdks/skills/README.md#getsettings) - getSettings skills
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates

@@ -27,12 +27,14 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/http/skills/server"
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -61,12 +63,14 @@ const (
 )
 
 type Service struct {
-	tracer  trace.Tracer
-	logger  *slog.Logger
-	auth    *auth.Auth
-	db      *pgxpool.Pool
-	storage assets.BlobStore
-	repo    *assetsrepo.Queries
+	tracer     trace.Tracer
+	logger     *slog.Logger
+	auth       *auth.Auth
+	access     *access.Manager
+	db         *pgxpool.Pool
+	storage    assets.BlobStore
+	repo       *assetsrepo.Queries
+	skillsRepo *skillsrepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -78,15 +82,17 @@ func NewService(
 	db *pgxpool.Pool,
 	sessionsMgr *sessions.Manager,
 	storage assets.BlobStore,
-	accessLoader auth.AccessLoader,
+	accessManager *access.Manager,
 ) *Service {
 	return &Service{
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills"),
-		logger:  logger.With(attr.SlogComponent("skills")),
-		auth:    auth.New(logger, db, sessionsMgr, accessLoader),
-		db:      db,
-		storage: storage,
-		repo:    assetsrepo.New(db),
+		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills"),
+		logger:     logger.With(attr.SlogComponent("skills")),
+		auth:       auth.New(logger, db, sessionsMgr, accessManager),
+		access:     accessManager,
+		db:         db,
+		storage:    storage,
+		repo:       assetsrepo.New(db),
+		skillsRepo: skillsrepo.New(db),
 	}
 }
 
@@ -102,6 +108,101 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.Skill, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
+	skill, err := s.skillsRepo.GetSkillBySlug(ctx, skillsrepo.GetSkillBySlugParams{
+		ProjectID: *authCtx.ProjectID,
+		Slug:      string(payload.Slug),
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get skill by slug: %w", err), "error loading skill").Log(ctx, s.logger)
+	}
+
+	return buildSkill(skill), nil
+}
+
+func (s *Service) List(ctx context.Context, _ *gen.ListPayload) (*gen.ListSkillsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.skillsRepo.ListSkillsWithActiveVersion(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("list skills: %w", err), "error listing skills").Log(ctx, s.logger)
+	}
+
+	skills := make([]*gen.SkillEntry, 0, len(rows))
+	for _, row := range rows {
+		skills = append(skills, buildSkillEntry(row))
+	}
+
+	return &gen.ListSkillsResult{
+		Skills: skills,
+	}, nil
+}
+
+func (s *Service) GetSettings(ctx context.Context, _ *gen.GetSettingsPayload) (*gen.SkillCaptureSettings, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
+	settings, err := s.getCaptureSettings(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+
+	return settings, nil
+}
+
+func (s *Service) SetSettings(ctx context.Context, payload *gen.SetSettingsPayload) (*gen.SkillCaptureSettings, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
+	mode := captureModeFromSettings(payload.Enabled, payload.CaptureProjectSkills, payload.CaptureUserSkills)
+	if _, err := s.skillsRepo.UpsertProjectCapturePolicyOverride(ctx, skillsrepo.UpsertProjectCapturePolicyOverrideParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Mode:           string(mode),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("set capture policy override: %w", err), "error saving capture policy")
+	}
+
+	settings, err := s.getCaptureSettings(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+
+	return settings, nil
 }
 
 func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, reader io.ReadCloser) (*gen.CaptureSkillResult, error) {
@@ -233,12 +334,42 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 	}, nil
 }
 
+func (s *Service) getCaptureSettings(ctx context.Context, organizationID string, projectID uuid.UUID) (*gen.SkillCaptureSettings, error) {
+	if organizationID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "missing organization context")
+	}
+
+	row, err := s.skillsRepo.GetCaptureSettings(ctx, skillsrepo.GetCaptureSettingsParams{
+		OrganizationID: organizationID,
+		ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get capture settings: %w", err), "error loading capture policy")
+	}
+
+	effectiveMode, err := parseCaptureMode(row.EffectiveMode)
+	if err != nil {
+		return nil, err
+	}
+
+	orgDefaultMode, err := parseOptionalCaptureMode(conv.PtrEmpty(row.OrgDefaultMode))
+	if err != nil {
+		return nil, err
+	}
+	projectOverrideMode, err := parseOptionalCaptureMode(conv.PtrEmpty(row.ProjectOverrideMode))
+	if err != nil {
+		return nil, err
+	}
+
+	return buildCaptureSettings(effectiveMode, orgDefaultMode, projectOverrideMode), nil
+}
+
 func (s *Service) getEffectiveCaptureMode(ctx context.Context, organizationID string, projectID uuid.UUID) (CaptureMode, error) {
 	if organizationID == "" {
 		return CaptureModeDisabled, oops.E(oops.CodeUnauthorized, nil, "missing organization context")
 	}
 
-	mode, err := skillsrepo.New(s.db).GetEffectiveCaptureMode(ctx, skillsrepo.GetEffectiveCaptureModeParams{
+	mode, err := s.skillsRepo.GetEffectiveCaptureMode(ctx, skillsrepo.GetEffectiveCaptureModeParams{
 		OrganizationID: organizationID,
 		ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
 	})
@@ -268,6 +399,81 @@ func captureModeAllowsScope(mode CaptureMode, scope string) bool {
 	}
 }
 
+func captureModeFromSettings(enabled bool, captureProjectSkills bool, captureUserSkills bool) CaptureMode {
+	if !enabled {
+		return CaptureModeDisabled
+	}
+
+	switch {
+	case captureProjectSkills && captureUserSkills:
+		return CaptureModeProjectAndUser
+	case captureProjectSkills:
+		return CaptureModeProjectOnly
+	case captureUserSkills:
+		return CaptureModeUserOnly
+	default:
+		return CaptureModeDisabled
+	}
+}
+
+func parseCaptureMode(mode string) (CaptureMode, error) {
+	captureMode := CaptureMode(mode)
+	switch captureMode {
+	case CaptureModeDisabled, CaptureModeProjectOnly, CaptureModeUserOnly, CaptureModeProjectAndUser:
+		return captureMode, nil
+	default:
+		return CaptureModeDisabled, oops.E(oops.CodeUnexpected, nil, "invalid capture policy mode")
+	}
+}
+
+func parseOptionalCaptureMode(mode *string) (*CaptureMode, error) {
+	if mode == nil {
+		return nil, nil
+	}
+
+	parsed, err := parseCaptureMode(*mode)
+	if err != nil {
+		return nil, err
+	}
+
+	return &parsed, nil
+}
+
+func buildCaptureSettings(effectiveMode CaptureMode, orgDefaultMode *CaptureMode, projectOverrideMode *CaptureMode) *gen.SkillCaptureSettings {
+	enabled, captureProjectSkills, captureUserSkills := captureModeToSettings(effectiveMode)
+
+	return &gen.SkillCaptureSettings{
+		EffectiveMode:             string(effectiveMode),
+		OrgDefaultMode:            optionalCaptureModeString(orgDefaultMode),
+		ProjectOverrideMode:       optionalCaptureModeString(projectOverrideMode),
+		Enabled:                   enabled,
+		CaptureProjectSkills:      captureProjectSkills,
+		CaptureUserSkills:         captureUserSkills,
+		InheritedFromOrganization: projectOverrideMode == nil,
+	}
+}
+
+func captureModeToSettings(mode CaptureMode) (enabled bool, captureProjectSkills bool, captureUserSkills bool) {
+	switch mode {
+	case CaptureModeProjectAndUser:
+		return true, true, true
+	case CaptureModeProjectOnly:
+		return true, true, false
+	case CaptureModeUserOnly:
+		return true, false, true
+	default:
+		return false, false, false
+	}
+}
+
+func optionalCaptureModeString(mode *CaptureMode) *string {
+	if mode == nil {
+		return nil
+	}
+
+	return conv.PtrEmpty(string(*mode))
+}
+
 func (s *Service) archiveStaleSkillAsset(ctx context.Context, projectID uuid.UUID, assetID uuid.UUID) error {
 	_, err := s.db.Exec(ctx, `
 		UPDATE assets
@@ -281,6 +487,59 @@ func (s *Service) archiveStaleSkillAsset(ctx context.Context, projectID uuid.UUI
 	}
 
 	return nil
+}
+
+func buildSkillEntry(row skillsrepo.ListSkillsWithActiveVersionRow) *gen.SkillEntry {
+	return &gen.SkillEntry{
+		ID:            row.Skill.ID.String(),
+		Name:          row.Skill.Name,
+		Slug:          row.Skill.Slug,
+		Description:   conv.FromPGText[string](row.Skill.Description),
+		SkillUUID:     conv.FromPGText[string](row.Skill.SkillUuid),
+		CreatedAt:     row.Skill.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:     row.Skill.UpdatedAt.Time.Format(time.RFC3339),
+		VersionCount:  row.VersionCount,
+		ActiveVersion: buildSkillVersionSummary(row),
+	}
+}
+
+func buildSkill(skill skillsrepo.Skill) *gen.Skill {
+	var activeVersionID *string
+	if skill.ActiveVersionID.Valid {
+		activeVersionID = conv.PtrEmpty(skill.ActiveVersionID.UUID.String())
+	}
+
+	return &gen.Skill{
+		ID:              skill.ID.String(),
+		Name:            skill.Name,
+		Slug:            skill.Slug,
+		Description:     conv.FromPGText[string](skill.Description),
+		SkillUUID:       conv.FromPGText[string](skill.SkillUuid),
+		ActiveVersionID: activeVersionID,
+		CreatedAt:       skill.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:       skill.UpdatedAt.Time.Format(time.RFC3339),
+	}
+}
+
+func buildSkillVersionSummary(row skillsrepo.ListSkillsWithActiveVersionRow) *gen.SkillVersionSummary {
+	if !row.ActiveVersionID.Valid {
+		return nil
+	}
+
+	var firstSeenAt *string
+	if row.ActiveVersionFirstSeenAt.Valid {
+		firstSeenAt = conv.PtrEmpty(row.ActiveVersionFirstSeenAt.Time.Format(time.RFC3339))
+	}
+
+	return &gen.SkillVersionSummary{
+		ID:            row.ActiveVersionID.UUID.String(),
+		ContentSha256: row.ActiveVersionContentSha256.String,
+		AssetFormat:   row.ActiveVersionAssetFormat.String,
+		SizeBytes:     row.ActiveVersionSizeBytes.Int64,
+		AuthorName:    conv.FromPGText[string](row.ActiveVersionAuthorName),
+		CreatedAt:     row.ActiveVersionCreatedAt.Time.Format(time.RFC3339),
+		FirstSeenAt:   firstSeenAt,
+	}
 }
 
 func (s *Service) findExistingAsset(ctx context.Context, projectID uuid.UUID, sha string) (*gen.CaptureSkillAsset, error) {

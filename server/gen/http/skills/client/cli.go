@@ -8,13 +8,128 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"unicode/utf8"
 
 	skills "github.com/speakeasy-api/gram/server/gen/skills"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// BuildGetPayload builds the payload for the skills get endpoint from CLI
+// flags.
+func BuildGetPayload(skillsGetSlug string, skillsGetSessionToken string, skillsGetProjectSlugInput string) (*skills.GetPayload, error) {
+	var err error
+	var slug string
+	{
+		slug = skillsGetSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsGetSessionToken != "" {
+			sessionToken = &skillsGetSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsGetProjectSlugInput != "" {
+			projectSlugInput = &skillsGetProjectSlugInput
+		}
+	}
+	v := &skills.GetPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListPayload builds the payload for the skills list endpoint from CLI
+// flags.
+func BuildListPayload(skillsListSessionToken string, skillsListProjectSlugInput string) (*skills.ListPayload, error) {
+	var sessionToken *string
+	{
+		if skillsListSessionToken != "" {
+			sessionToken = &skillsListSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsListProjectSlugInput != "" {
+			projectSlugInput = &skillsListProjectSlugInput
+		}
+	}
+	v := &skills.ListPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetSettingsPayload builds the payload for the skills getSettings
+// endpoint from CLI flags.
+func BuildGetSettingsPayload(skillsGetSettingsSessionToken string, skillsGetSettingsProjectSlugInput string) (*skills.GetSettingsPayload, error) {
+	var sessionToken *string
+	{
+		if skillsGetSettingsSessionToken != "" {
+			sessionToken = &skillsGetSettingsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsGetSettingsProjectSlugInput != "" {
+			projectSlugInput = &skillsGetSettingsProjectSlugInput
+		}
+	}
+	v := &skills.GetSettingsPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetSettingsPayload builds the payload for the skills setSettings
+// endpoint from CLI flags.
+func BuildSetSettingsPayload(skillsSetSettingsBody string, skillsSetSettingsSessionToken string, skillsSetSettingsProjectSlugInput string) (*skills.SetSettingsPayload, error) {
+	var err error
+	var body SetSettingsRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsSetSettingsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"capture_project_skills\": false,\n      \"capture_user_skills\": false,\n      \"enabled\": false\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsSetSettingsSessionToken != "" {
+			sessionToken = &skillsSetSettingsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsSetSettingsProjectSlugInput != "" {
+			projectSlugInput = &skillsSetSettingsProjectSlugInput
+		}
+	}
+	v := &skills.SetSettingsPayload{
+		Enabled:              body.Enabled,
+		CaptureProjectSkills: body.CaptureProjectSkills,
+		CaptureUserSkills:    body.CaptureUserSkills,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
 
 // BuildCapturePayload builds the payload for the skills capture endpoint from
 // CLI flags.

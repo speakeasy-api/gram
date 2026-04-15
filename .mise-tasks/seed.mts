@@ -46,6 +46,345 @@ type Asset = {
     }
 );
 
+type SeededSkillVersion = {
+  label: string;
+  pushedAt: string;
+  pushedBy: string;
+  body: string;
+  state: "pending_review" | "active" | "superseded";
+  authorName: string;
+  firstSeenTraceId: string;
+  firstSeenSessionId: string;
+  firstSeenAt: string;
+};
+
+type SeededSkill = {
+  skillUUID: string;
+  slug: string;
+  name: string;
+  description: string;
+  createdByUserId: string;
+  scope: "project" | "user";
+  discoveryRoot:
+    | "project_agents"
+    | "project_claude"
+    | "project_cursor"
+    | "user_agents"
+    | "user_claude"
+    | "user_cursor";
+  sourceType: "local_filesystem";
+  resolutionStatus:
+    | "resolved"
+    | "unresolved_name_only"
+    | "invalid_skill_root"
+    | "skipped_by_author";
+  versions: SeededSkillVersion[];
+};
+
+type SeededSkillRuntime = {
+  name: string;
+  skillUUID: string;
+  scope: SeededSkill["scope"];
+  discoveryRoot: SeededSkill["discoveryRoot"];
+  sourceType: SeededSkill["sourceType"];
+  resolutionStatus: SeededSkill["resolutionStatus"];
+  activeVersionID: string | null;
+  latestVersionID: string;
+};
+
+const SEEDED_SKILLS: SeededSkill[] = [
+  {
+    skillUUID: "c73f0446-fdee-5c21-a982-a131b6ee9d4c",
+    slug: "engineer-onboarding",
+    name: "engineer-onboarding",
+    description: "Onboarding skill for new engineering hires",
+    createdByUserId: "alice",
+    scope: "project",
+    discoveryRoot: "project_agents",
+    sourceType: "local_filesystem",
+    resolutionStatus: "resolved",
+    versions: [
+      {
+        label: "v1.2",
+        pushedAt: "2026-03-22T14:00:00Z",
+        pushedBy: "alice",
+        authorName: "alice",
+        state: "active",
+        firstSeenTraceId: "seed-trace-engineer-onboarding-v12",
+        firstSeenSessionId: "seed-session-engineer-onboarding",
+        firstSeenAt: "2026-03-22T14:00:00Z",
+        body: "When a new engineer joins the team, walk them through the complete setup process.\n\nKey steps:\n1. Clone the monorepo and run the bootstrap script\n2. Set up local development environment with Docker Compose\n3. Get access to AWS, Datadog, and PagerDuty\n4. Complete the first-week coding challenge\n5. Shadow an on-call rotation",
+      },
+      {
+        label: "v1.1",
+        pushedAt: "2026-03-10T10:00:00Z",
+        pushedBy: "alice",
+        authorName: "alice",
+        state: "superseded",
+        firstSeenTraceId: "seed-trace-engineer-onboarding-v11",
+        firstSeenSessionId: "seed-session-engineer-onboarding",
+        firstSeenAt: "2026-03-10T10:00:00Z",
+        body: "When a new engineer joins the team, walk them through the setup process.\n\nKey steps:\n1. Clone the monorepo\n2. Set up local development with Docker Compose\n3. Get access to AWS and Datadog\n4. Complete the first-week coding challenge",
+      },
+      {
+        label: "v1.0",
+        pushedAt: "2026-02-15T09:00:00Z",
+        pushedBy: "alice",
+        authorName: "alice",
+        state: "superseded",
+        firstSeenTraceId: "seed-trace-engineer-onboarding-v10",
+        firstSeenSessionId: "seed-session-engineer-onboarding",
+        firstSeenAt: "2026-02-15T09:00:00Z",
+        body: "When a new engineer joins the team, help them clone the repo, set up local tools, and complete the onboarding challenge.",
+      },
+    ],
+  },
+  {
+    skillUUID: "9ad6bf0c-1315-54b5-8db2-f59445daad11",
+    slug: "incident-response",
+    name: "incident-response",
+    description:
+      "Skill for guiding engineers through incident response procedures",
+    createdByUserId: "carol",
+    scope: "project",
+    discoveryRoot: "project_agents",
+    sourceType: "local_filesystem",
+    resolutionStatus: "resolved",
+    versions: [
+      {
+        label: "v2.0",
+        pushedAt: "2026-03-26T09:00:00Z",
+        pushedBy: "carol",
+        authorName: "carol",
+        state: "active",
+        firstSeenTraceId: "seed-trace-incident-response-v20",
+        firstSeenSessionId: "seed-session-incident-response",
+        firstSeenAt: "2026-03-26T09:00:00Z",
+        body: "When an incident is declared, guide the on-call engineer through the response process.\n\nKey procedures:\n1. Acknowledge the alert in PagerDuty within 5 minutes\n2. Open an incident channel in Slack (#inc-YYYYMMDD-brief)\n3. Assess severity using the SEV1-SEV4 framework\n4. Execute the relevant runbook for the affected service\n5. Post status updates every 15 minutes\n6. Conduct a blameless post-mortem within 48 hours",
+      },
+      {
+        label: "v1.0",
+        pushedAt: "2026-03-01T12:00:00Z",
+        pushedBy: "carol",
+        authorName: "carol",
+        state: "superseded",
+        firstSeenTraceId: "seed-trace-incident-response-v10",
+        firstSeenSessionId: "seed-session-incident-response",
+        firstSeenAt: "2026-03-01T12:00:00Z",
+        body: "When an incident is declared, guide the on-call engineer through acknowledgment, severity assessment, runbook execution, and team communication.",
+      },
+    ],
+  },
+  {
+    skillUUID: "a319e0bf-dd01-5571-a337-bebe536e374b",
+    slug: "competitive-analysis",
+    name: "competitive-analysis",
+    description: "Skill for answering competitive positioning questions",
+    createdByUserId: "alice",
+    scope: "project",
+    discoveryRoot: "project_claude",
+    sourceType: "local_filesystem",
+    resolutionStatus: "resolved",
+    versions: [
+      {
+        label: "v3.1",
+        pushedAt: "2026-03-26T14:00:00Z",
+        pushedBy: "alice",
+        authorName: "alice",
+        state: "active",
+        firstSeenTraceId: "seed-trace-competitive-analysis-v31",
+        firstSeenSessionId: "seed-session-competitive-analysis",
+        firstSeenAt: "2026-03-26T14:00:00Z",
+        body: "When a sales rep asks about competitors, provide accurate and up-to-date competitive intelligence.\n\nKey areas:\n- Feature comparison matrices\n- Pricing intelligence (updated quarterly)\n- Win/loss analysis patterns\n- Competitor weakness talking points\n\nAlways recommend checking the latest landscape doc for current data.",
+      },
+      {
+        label: "v3.0",
+        pushedAt: "2026-03-15T11:00:00Z",
+        pushedBy: "alice",
+        authorName: "alice",
+        state: "superseded",
+        firstSeenTraceId: "seed-trace-competitive-analysis-v30",
+        firstSeenSessionId: "seed-session-competitive-analysis",
+        firstSeenAt: "2026-03-15T11:00:00Z",
+        body: "When a sales rep asks about competitors, provide current competitive intelligence with pricing, differentiators, and win/loss patterns.",
+      },
+      {
+        label: "v2.0",
+        pushedAt: "2026-02-20T08:00:00Z",
+        pushedBy: "bob",
+        authorName: "bob",
+        state: "superseded",
+        firstSeenTraceId: "seed-trace-competitive-analysis-v20",
+        firstSeenSessionId: "seed-session-competitive-analysis",
+        firstSeenAt: "2026-02-20T08:00:00Z",
+        body: "Answer competitor questions with battle cards, positioning guidance, and examples from recent deals.",
+      },
+    ],
+  },
+  {
+    skillUUID: "a77de254-a027-57b2-b9b5-1757bc813132",
+    slug: "financial-reporting",
+    name: "financial-reporting",
+    description: "Skill for generating and interpreting financial reports",
+    createdByUserId: "dave",
+    scope: "project",
+    discoveryRoot: "project_cursor",
+    sourceType: "local_filesystem",
+    resolutionStatus: "resolved",
+    versions: [
+      {
+        label: "v1.0",
+        pushedAt: "2026-03-23T16:00:00Z",
+        pushedBy: "dave",
+        authorName: "dave",
+        state: "active",
+        firstSeenTraceId: "seed-trace-financial-reporting-v10",
+        firstSeenSessionId: "seed-session-financial-reporting",
+        firstSeenAt: "2026-03-23T16:00:00Z",
+        body: "Help finance team members with quarterly and annual financial reporting.\n\nKey capabilities:\n- Revenue recognition calculations (ASC 606)\n- ARR/MRR breakdown by customer segment\n- Churn and expansion metrics\n- Board deck financial slide preparation\n- Variance analysis against forecast",
+      },
+    ],
+  },
+  {
+    skillUUID: "261a536d-8653-52e7-8e46-10100d458036",
+    slug: "objection-handling",
+    name: "objection-handling",
+    description:
+      "Skill for handling common sales objections with proven responses",
+    createdByUserId: "cursor-agent-12",
+    scope: "user",
+    discoveryRoot: "user_cursor",
+    sourceType: "local_filesystem",
+    resolutionStatus: "unresolved_name_only",
+    versions: [
+      {
+        label: "pending-review",
+        pushedAt: "2026-03-31T09:00:00Z",
+        pushedBy: "cursor-agent-12",
+        authorName: "cursor-agent-12",
+        state: "pending_review",
+        firstSeenTraceId: "seed-trace-objection-handling-pr",
+        firstSeenSessionId: "seed-session-objection-handling",
+        firstSeenAt: "2026-03-31T09:00:00Z",
+        body: "When a prospect raises an objection during a sales call, provide the recommended response framework.\n\nCommon objections:\n- Price concerns: reframe around TCO and ROI calculator\n- Existing solution: focus on real-time capabilities and scale\n- On-prem requirements: highlight hybrid deployment option\n- Security concerns: reference SOC 2 certification and CISO call",
+      },
+    ],
+  },
+  {
+    skillUUID: "bc4e7a97-4e72-5b91-8140-ee6e3848cf3f",
+    slug: "compliance-checker",
+    name: "compliance-checker",
+    description:
+      "Automated compliance verification for SOC 2, GDPR, and data retention policies",
+    createdByUserId: "dave",
+    scope: "project",
+    discoveryRoot: "project_agents",
+    sourceType: "local_filesystem",
+    resolutionStatus: "resolved",
+    versions: [
+      {
+        label: "v1.3",
+        pushedAt: "2026-04-01T10:00:00Z",
+        pushedBy: "dave",
+        authorName: "dave",
+        state: "active",
+        firstSeenTraceId: "seed-trace-compliance-checker-v13",
+        firstSeenSessionId: "seed-session-compliance-checker",
+        firstSeenAt: "2026-04-01T10:00:00Z",
+        body: "Verify compliance posture across the organization.\n\nCapabilities:\n- Check SOC 2 Type II control status\n- Validate GDPR data processing agreements for EU customers\n- Audit data retention policy adherence\n- Generate compliance summary for board reporting\n- Flag overdue DPA renewals\n- Cross-reference audit log retention with regulatory requirements",
+      },
+      {
+        label: "v1.2",
+        pushedAt: "2026-03-20T14:00:00Z",
+        pushedBy: "dave",
+        authorName: "dave",
+        state: "superseded",
+        firstSeenTraceId: "seed-trace-compliance-checker-v12",
+        firstSeenSessionId: "seed-session-compliance-checker",
+        firstSeenAt: "2026-03-20T14:00:00Z",
+        body: "Verify compliance posture across the organization.\n\nCapabilities:\n- Check SOC 2 Type II control status\n- Validate GDPR data processing agreements for EU customers\n- Audit data retention policy adherence\n- Generate compliance summary for board reporting",
+      },
+    ],
+  },
+];
+
+const SEEDED_CAPTURE_MODE = "project_and_user";
+
+const SEEDED_SKILL_TRACES = [
+  {
+    traceId: "seedskilltrace000000000000000001",
+    skillUUID: "c73f0446-fdee-5c21-a982-a131b6ee9d4c",
+    sessionId: "seed-skill-session-001",
+    hookSource: "claude",
+    userEmail: "alice@example.com",
+    timestamp: "2026-04-12T09:00:00Z",
+    success: true,
+  },
+  {
+    traceId: "seedskilltrace000000000000000002",
+    skillUUID: "c73f0446-fdee-5c21-a982-a131b6ee9d4c",
+    sessionId: "seed-skill-session-002",
+    hookSource: "cli",
+    userEmail: "bob@example.com",
+    timestamp: "2026-04-12T09:05:00Z",
+    success: true,
+  },
+  {
+    traceId: "seedskilltrace000000000000000003",
+    skillUUID: "9ad6bf0c-1315-54b5-8db2-f59445daad11",
+    sessionId: "seed-skill-session-003",
+    hookSource: "claude",
+    userEmail: "carol@example.com",
+    timestamp: "2026-04-12T09:10:00Z",
+    success: true,
+  },
+  {
+    traceId: "seedskilltrace000000000000000004",
+    skillUUID: "a319e0bf-dd01-5571-a337-bebe536e374b",
+    sessionId: "seed-skill-session-004",
+    hookSource: "vscode",
+    userEmail: "alice@example.com",
+    timestamp: "2026-04-12T09:15:00Z",
+    success: true,
+  },
+  {
+    traceId: "seedskilltrace000000000000000005",
+    skillUUID: "a319e0bf-dd01-5571-a337-bebe536e374b",
+    sessionId: "seed-skill-session-005",
+    hookSource: "api",
+    userEmail: "bob@example.com",
+    timestamp: "2026-04-12T09:20:00Z",
+    success: true,
+  },
+  {
+    traceId: "seedskilltrace000000000000000006",
+    skillUUID: "a77de254-a027-57b2-b9b5-1757bc813132",
+    sessionId: "seed-skill-session-006",
+    hookSource: "cli",
+    userEmail: "dave@example.com",
+    timestamp: "2026-04-12T09:25:00Z",
+    success: true,
+  },
+  {
+    traceId: "seedskilltrace000000000000000007",
+    skillUUID: "bc4e7a97-4e72-5b91-8140-ee6e3848cf3f",
+    sessionId: "seed-skill-session-007",
+    hookSource: "claude",
+    userEmail: "dave@example.com",
+    timestamp: "2026-04-12T09:30:00Z",
+    success: true,
+  },
+  {
+    traceId: "seedskilltrace000000000000000008",
+    skillUUID: "261a536d-8653-52e7-8e46-10100d458036",
+    sessionId: "seed-skill-session-008",
+    hookSource: "vscode",
+    userEmail: "carol@example.com",
+    timestamp: "2026-04-12T09:35:00Z",
+    success: false,
+  },
+] as const;
+
 const PLAYGROUND_MCP_APP_SLUG = "playground-mcp-app";
 const PLAYGROUND_MCP_APP_TOOL_NAME = "show_dashboard";
 const PLAYGROUND_MCP_APP_RESOURCE_URI = `ui://${PLAYGROUND_MCP_APP_SLUG}/dashboard`;
@@ -381,11 +720,17 @@ async function seed() {
     ? projects[firstSeededProjectSlug]
     : undefined;
   if (firstProject) {
+    const seededSkills = await seedSkillsData({
+      projectId: firstProject.id,
+      organizationId: activeOrgID,
+      serverURL,
+    });
     const toolUrns = projectToolUrns[firstProject.slug] ?? [];
     await seedObservabilityData({
       projectId: firstProject.id,
       organizationId: activeOrgID,
       toolUrns,
+      seededSkills,
     });
   }
 
@@ -1529,15 +1874,15 @@ async function upsertMcpLogsToolset(init: {
   return toolset;
 }
 
-// Namespace UUID for generating deterministic chat IDs
+// Namespace UUID for generating deterministic seed IDs
 const CHAT_UUID_NAMESPACE = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"; // DNS namespace
+const SEED_DEPLOYMENT_ID = "d17a5eed-0001-5000-9000-000000000001";
 
-function generateChatUUID(chatNumber: number): string {
-  // Generate a deterministic UUID v5 from the chat number
+function generateNamespacedUUID(value: string): string {
   const hash = crypto
     .createHash("sha1")
     .update(CHAT_UUID_NAMESPACE)
-    .update(`chat-${chatNumber}`)
+    .update(value)
     .digest();
 
   // Set version (5) and variant bits
@@ -1548,12 +1893,248 @@ function generateChatUUID(chatNumber: number): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
+function generateChatUUID(chatNumber: number): string {
+  return generateNamespacedUUID(`chat-${chatNumber}`);
+}
+
+function seedUUID(prefix: string, index: number): string {
+  return generateNamespacedUUID(`${prefix}-${index}`);
+}
+
+function sqlString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function sqlNullable(value: string | null | undefined): string {
+  return value == null ? "NULL" : sqlString(value);
+}
+
+function sqlTimestamp(value: string): string {
+  return `${sqlString(value)}::timestamptz`;
+}
+
+function escapeClickHouseJSON(value: unknown): string {
+  return JSON.stringify(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+async function executePostgresSQL(label: string, sql: string): Promise<void> {
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const tmpFile = path.join(process.cwd(), `.seed-${label}.sql`);
+
+  await fs.writeFile(tmpFile, sql, "utf-8");
+
+  try {
+    await $`docker compose cp ${tmpFile} gram-db:/tmp/${label}.sql`.quiet();
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -f /tmp/${label}.sql`.quiet();
+  } finally {
+    await fs.unlink(tmpFile).catch(() => {});
+  }
+}
+
+async function seedSkillsData(init: {
+  projectId: string;
+  organizationId: string;
+  serverURL: string;
+}): Promise<SeededSkillRuntime[]> {
+  const { projectId, organizationId, serverURL } = init;
+  const skillSlugs = SEEDED_SKILLS.map((skill) => sqlString(skill.slug)).join(
+    ", ",
+  );
+  const skillUUIDs = SEEDED_SKILLS.map((skill) =>
+    sqlString(skill.skillUUID),
+  ).join(", ");
+  const statements: string[] = [];
+  const runtimeSkills: SeededSkillRuntime[] = [];
+
+  statements.push("BEGIN;");
+  statements.push(`
+    DELETE FROM skills
+    WHERE project_id = ${sqlString(projectId)}::uuid
+      AND (
+        slug IN (${skillSlugs})
+        OR skill_uuid IN (${skillUUIDs})
+      );
+  `);
+  statements.push(`
+    DELETE FROM assets
+    WHERE project_id = ${sqlString(projectId)}::uuid
+      AND kind = 'skill'
+      AND name LIKE 'seed-skill-%';
+  `);
+  statements.push(`
+    INSERT INTO skills_capture_policies (
+        organization_id,
+        project_id,
+        mode
+    ) VALUES (
+        ${sqlString(organizationId)},
+        NULL,
+        ${sqlString(SEEDED_CAPTURE_MODE)}
+    )
+    ON CONFLICT (organization_id)
+    WHERE project_id IS NULL AND deleted IS FALSE
+    DO UPDATE SET
+        mode = EXCLUDED.mode,
+        deleted_at = NULL,
+        updated_at = clock_timestamp();
+  `);
+
+  for (const skill of SEEDED_SKILLS) {
+    const skillID = generateNamespacedUUID(
+      `seed-skill:${projectId}:${skill.skillUUID}`,
+    );
+    const latestVersion = skill.versions[0];
+    const activeVersion =
+      skill.versions.find((version) => version.state === "active") ?? null;
+    const activeVersionID = activeVersion
+      ? generateNamespacedUUID(
+          `seed-skill-version:${projectId}:${skill.skillUUID}:${activeVersion.label}`,
+        )
+      : null;
+
+    statements.push(`
+      INSERT INTO skills (
+          id,
+          organization_id,
+          project_id,
+          name,
+          slug,
+          description,
+          skill_uuid,
+          active_version_id,
+          created_by_user_id,
+          created_at,
+          updated_at
+      ) VALUES (
+          ${sqlString(skillID)}::uuid,
+          ${sqlString(organizationId)},
+          ${sqlString(projectId)}::uuid,
+          ${sqlString(skill.name)},
+          ${sqlString(skill.slug)},
+          ${sqlString(skill.description)},
+          ${sqlString(skill.skillUUID)},
+          NULL,
+          ${sqlString(skill.createdByUserId)},
+          ${sqlTimestamp(latestVersion.pushedAt)},
+          ${sqlTimestamp(latestVersion.pushedAt)}
+      );
+    `);
+
+    for (const version of skill.versions) {
+      const versionID = generateNamespacedUUID(
+        `seed-skill-version:${projectId}:${skill.skillUUID}:${version.label}`,
+      );
+      const assetID = generateNamespacedUUID(
+        `seed-skill-asset:${projectId}:${skill.skillUUID}:${version.label}`,
+      );
+      const skillBytes = Buffer.byteLength(version.body, "utf8");
+      const contentSHA256 = crypto
+        .createHash("sha256")
+        .update(version.body)
+        .digest("hex");
+      const assetURL = `${serverURL}/seed-assets/skills/${skill.slug}/${version.label}.zip`;
+
+      statements.push(`
+        INSERT INTO assets (
+            id,
+            project_id,
+            name,
+            url,
+            kind,
+            content_type,
+            content_length,
+            sha256,
+            created_at,
+            updated_at
+        ) VALUES (
+            ${sqlString(assetID)}::uuid,
+            ${sqlString(projectId)}::uuid,
+            ${sqlString(`seed-skill-${skill.slug}-${version.label}.zip`)},
+            ${sqlString(assetURL)},
+            'skill',
+            'application/zip',
+            ${skillBytes},
+            ${sqlString(contentSHA256)},
+            ${sqlTimestamp(version.pushedAt)},
+            ${sqlTimestamp(version.pushedAt)}
+        );
+      `);
+
+      statements.push(`
+        INSERT INTO skill_versions (
+            id,
+            skill_id,
+            asset_id,
+            content_sha256,
+            asset_format,
+            size_bytes,
+            skill_bytes,
+            state,
+            captured_by_user_id,
+            author_name,
+            first_seen_trace_id,
+            first_seen_session_id,
+            first_seen_at,
+            created_at,
+            updated_at
+        ) VALUES (
+            ${sqlString(versionID)}::uuid,
+            ${sqlString(skillID)}::uuid,
+            ${sqlString(assetID)}::uuid,
+            ${sqlString(contentSHA256)},
+            'zip',
+            ${skillBytes},
+            ${skillBytes},
+            ${sqlString(version.state)},
+            ${sqlString(skill.createdByUserId)},
+            ${sqlString(version.authorName)},
+            ${sqlString(version.firstSeenTraceId)},
+            ${sqlString(version.firstSeenSessionId)},
+            ${sqlTimestamp(version.firstSeenAt)},
+            ${sqlTimestamp(version.pushedAt)},
+            ${sqlTimestamp(version.pushedAt)}
+        );
+      `);
+    }
+
+    if (activeVersionID) {
+      statements.push(`
+        UPDATE skills
+        SET active_version_id = ${sqlString(activeVersionID)}::uuid,
+            updated_at = ${sqlTimestamp(latestVersion.pushedAt)}
+        WHERE id = ${sqlString(skillID)}::uuid;
+      `);
+    }
+
+    runtimeSkills.push({
+      name: skill.name,
+      skillUUID: skill.skillUUID,
+      scope: skill.scope,
+      discoveryRoot: skill.discoveryRoot,
+      sourceType: skill.sourceType,
+      resolutionStatus: skill.resolutionStatus,
+      activeVersionID,
+      latestVersionID: generateNamespacedUUID(
+        `seed-skill-version:${projectId}:${skill.skillUUID}:${latestVersion.label}`,
+      ),
+    });
+  }
+
+  statements.push("COMMIT;");
+  await executePostgresSQL("skills", statements.join("\n"));
+  log.info(`Seeded ${SEEDED_SKILLS.length} skills into PostgreSQL`);
+
+  return runtimeSkills;
+}
+
 async function seedObservabilityData(init: {
   projectId: string;
   organizationId: string;
   toolUrns: string[];
+  seededSkills: SeededSkillRuntime[];
 }): Promise<void> {
-  const { projectId, organizationId, toolUrns } = init;
+  const { projectId, organizationId, toolUrns, seededSkills } = init;
 
   log.info(`Seeding observability data with ${toolUrns.length} tool URNs...`);
 
@@ -1688,7 +2269,7 @@ async function seedObservabilityData(init: {
         trace_id: `trace-${Math.random().toString(36).substring(2, 15)}`,
         span_id: `span-${Math.random().toString(36).substring(2, 10)}`,
         request_id: `req-${Math.random().toString(36).substring(2, 12)}`,
-        user_id: `user-${Math.floor(Math.random() * 1000)}`,
+        user_id: seedUUID("user", Math.floor(Math.random() * 1000)),
         duration_ms: Math.floor(Math.random() * 500),
         metadata: {
           host: `server-${Math.floor(Math.random() * 10) + 1}.prod.example.com`,
@@ -1911,8 +2492,8 @@ async function seedObservabilityData(init: {
 
   for (let i = 0; i < NUM_CHATS; i++) {
     const chatId = generateChatUUID(i);
-    const extUserId = `ext-user-${i % 80}`;
-    const userId = `user-${i % 200}`;
+    const extUserId = seedUUID("ext-user", i % 80);
+    const userId = seedUUID("user", i % 200);
 
     // Random time within the past DAYS_BACK days
     const daysAgo = Math.random() * DAYS_BACK;
@@ -2048,9 +2629,9 @@ async function seedObservabilityData(init: {
 
   for (let i = 0; i < NUM_CHATS; i++) {
     const chatId = generateChatUUID(i);
-    const extUserId = `ext-user-${i % 80}`;
-    const userId = `user-${i % 200}`;
-    const apiKeyId = `key-${i % 5}`;
+    const extUserId = seedUUID("ext-user", i % 80);
+    const userId = seedUUID("user", i % 200);
+    const apiKeyId = seedUUID("key", i % 5);
 
     const daysAgo = Math.random() * DAYS_BACK;
     const eventTime = new Date(now - daysAgo * msPerDay);
@@ -2068,7 +2649,7 @@ async function seedObservabilityData(init: {
     const latency = (0.05 + Math.random() * 2).toFixed(3);
 
     chInserts.push(
-      `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${toolUrn}', '${traceId}', '{"http.response.status_code": ${statusCode}, "http.server.request.duration": ${latency}, "gram.tool.urn": "${toolUrn}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', '${toolUrn}', 'gram-mcp-gateway', '${chatId}')`,
+      `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${toolUrn}', '${traceId}', '{"http.response.status_code": ${statusCode}, "http.server.request.duration": ${latency}, "gram.tool.urn": "${toolUrn}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "${SEED_DEPLOYMENT_ID}"}', '${projectId}', '${toolUrn}', 'gram-mcp-gateway', '${chatId}')`,
     );
 
     // Chat completion event - same trace ID links it to the tool call
@@ -2078,7 +2659,7 @@ async function seedObservabilityData(init: {
     const completionStatus = Math.random() < 0.92 ? 200 : 500;
 
     chInserts.push(
-      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '${traceId}', '{"gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
+      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '${traceId}', '{"gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}}', '{"gram.deployment.id": "${SEED_DEPLOYMENT_ID}"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
     );
 
     // Resolution event (70% of chats) - same trace ID
@@ -2099,7 +2680,7 @@ async function seedObservabilityData(init: {
       }
 
       chInserts.push(
-        `(${timeNano + BigInt(2000000)}, ${timeNano + BigInt(2000000)}, 'INFO', 'Chat resolution: ${resolution}', '${traceId}', '{"gen_ai.evaluation.name": "chat_resolution", "gen_ai.evaluation.score.label": "${resolution}", "gen_ai.evaluation.score.value": ${score}, "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'chat_resolution', 'gram-resolution-analyzer', '${chatId}')`,
+        `(${timeNano + BigInt(2000000)}, ${timeNano + BigInt(2000000)}, 'INFO', 'Chat resolution: ${resolution}', '${traceId}', '{"gen_ai.evaluation.name": "chat_resolution", "gen_ai.evaluation.score.label": "${resolution}", "gen_ai.evaluation.score.value": ${score}, "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "${SEED_DEPLOYMENT_ID}"}', '${projectId}', 'chat_resolution', 'gram-resolution-analyzer', '${chatId}')`,
       );
     }
   }
@@ -2126,7 +2707,7 @@ async function seedObservabilityData(init: {
   ]; // Empty string = no user email
 
   for (let i = 0; i < NUM_HOOKS; i++) {
-    const sessionId = `session-${i % 50}`; // Group hooks into sessions
+    const sessionId = seedUUID("session", i % 50); // Group hooks into sessions
     const toolUseId = `toolu_${crypto.randomBytes(12).toString("hex")}`;
     const userEmail =
       USER_EMAILS[Math.floor(Math.random() * USER_EMAILS.length)];
@@ -2144,7 +2725,7 @@ async function seedObservabilityData(init: {
     // Generate a unique trace ID for this tool call (32 hex chars)
     const traceId = crypto.randomBytes(16).toString("hex");
 
-    // Decide if this is a successful call or failure (90% success)
+    // Decide if this is a successful call or failure.
     const isFailure = Math.random() > 0.9;
 
     // 1. SessionStart event (10% of the time)
@@ -2201,6 +2782,54 @@ async function seedObservabilityData(init: {
         `(${postTimeNano}, ${postTimeNano}, '${isFailure ? "ERROR" : "INFO"}', 'Tool: ${toolName}, Hook: ${postHookEvent}', '${traceId}', '${JSON.stringify(postToolAttrs).replace(/'/g, "\\'")}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,
       );
     }
+  }
+
+  const seededSkillByUUID = new Map(
+    seededSkills.map((skill) => [skill.skillUUID, skill] as const),
+  );
+
+  for (const trace of SEEDED_SKILL_TRACES) {
+    const seededSkill = seededSkillByUUID.get(trace.skillUUID);
+    if (!seededSkill) {
+      continue;
+    }
+
+    const baseTimeNano = BigInt(Date.parse(trace.timestamp)) * BigInt(1000000);
+    const versionID =
+      seededSkill.activeVersionID ?? seededSkill.latestVersionID;
+    const preToolAttrs = {
+      "gram.event.source": "hook",
+      "gram.tool.name": "Skill",
+      "gram.hook.event": "PreToolUse",
+      "gram.hook.source": trace.hookSource,
+      "gram.project.id": projectId,
+      "gen_ai.conversation.id": trace.sessionId,
+      "gen_ai.tool_call.id": `toolu_${trace.traceId}`,
+      "user.email": trace.userEmail,
+      "gram.skill.scope": seededSkill.scope,
+      "gram.skill.discovery_root": seededSkill.discoveryRoot,
+      "gram.skill.source_type": seededSkill.sourceType,
+      "gram.skill.id": seededSkill.skillUUID,
+      "gram.skill.version_id": versionID,
+      "gram.skill.resolution_status": seededSkill.resolutionStatus,
+      "gen_ai.tool.call.arguments": JSON.stringify({
+        skill: seededSkill.name,
+      }),
+    };
+    const postToolAttrs = {
+      ...preToolAttrs,
+      "gram.hook.event": trace.success ? "PostToolUse" : "PostToolUseFailure",
+      ...(trace.success
+        ? {}
+        : { "gram.hook.error": "Seeded skill invocation failed" }),
+    };
+
+    chInserts.push(
+      `(${baseTimeNano}, ${baseTimeNano}, 'INFO', 'Tool: Skill, Hook: PreToolUse', '${trace.traceId}', '${escapeClickHouseJSON(preToolAttrs)}', '{}', '${projectId}', 'Skill', '${trace.hookSource}', '${trace.sessionId}')`,
+    );
+    chInserts.push(
+      `(${baseTimeNano + BigInt(1000000)}, ${baseTimeNano + BigInt(1000000)}, '${trace.success ? "INFO" : "ERROR"}', 'Tool: Skill, Hook: ${trace.success ? "PostToolUse" : "PostToolUseFailure"}', '${trace.traceId}', '${escapeClickHouseJSON(postToolAttrs)}', '{}', '${projectId}', 'Skill', '${trace.hookSource}', '${trace.sessionId}')`,
+    );
   }
 
   const chSQL = `

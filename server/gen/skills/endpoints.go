@@ -17,7 +17,11 @@ import (
 
 // Endpoints wraps the "skills" service endpoints.
 type Endpoints struct {
-	Capture goa.Endpoint
+	Get         goa.Endpoint
+	List        goa.Endpoint
+	GetSettings goa.Endpoint
+	SetSettings goa.Endpoint
+	Capture     goa.Endpoint
 }
 
 // CaptureRequestData holds both the payload and the HTTP request body reader
@@ -34,13 +38,161 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Capture: NewCaptureEndpoint(s, a.APIKeyAuth),
+		Get:         NewGetEndpoint(s, a.APIKeyAuth),
+		List:        NewListEndpoint(s, a.APIKeyAuth),
+		GetSettings: NewGetSettingsEndpoint(s, a.APIKeyAuth),
+		SetSettings: NewSetSettingsEndpoint(s, a.APIKeyAuth),
+		Capture:     NewCaptureEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "skills" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.Get = m(e.Get)
+	e.List = m(e.List)
+	e.GetSettings = m(e.GetSettings)
+	e.SetSettings = m(e.SetSettings)
 	e.Capture = m(e.Capture)
+}
+
+// NewGetEndpoint returns an endpoint function that calls the method "get" of
+// service "skills".
+func NewGetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.Get(ctx, p)
+	}
+}
+
+// NewListEndpoint returns an endpoint function that calls the method "list" of
+// service "skills".
+func NewListEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.List(ctx, p)
+	}
+}
+
+// NewGetSettingsEndpoint returns an endpoint function that calls the method
+// "getSettings" of service "skills".
+func NewGetSettingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSettingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSettings(ctx, p)
+	}
+}
+
+// NewSetSettingsEndpoint returns an endpoint function that calls the method
+// "setSettings" of service "skills".
+func NewSetSettingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetSettingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetSettings(ctx, p)
+	}
 }
 
 // NewCaptureEndpoint returns an endpoint function that calls the method
