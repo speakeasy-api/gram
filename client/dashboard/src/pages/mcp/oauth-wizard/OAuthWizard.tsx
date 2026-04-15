@@ -5,7 +5,6 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useProductTier } from "@/hooks/useProductTier";
-import { useRoutes } from "@/routes";
 import {
   invalidateAllGetMcpMetadata,
   invalidateAllListEnvironments,
@@ -14,7 +13,6 @@ import {
   useAddOAuthProxyServerMutation,
   useUpdateOAuthProxyServerMutation,
   useCreateEnvironmentMutation,
-  useGetMcpMetadata,
   useListEnvironments,
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
@@ -209,25 +207,8 @@ function OAuthWizard({
   });
 
   const createEnvironmentMutation = useCreateEnvironmentMutation();
-  const { data: mcpMetadataData } = useGetMcpMetadata(
-    { toolsetSlug },
-    undefined,
-    { throwOnError: false, retry: false },
-  );
-  const mcpMetadata = mcpMetadataData?.metadata;
-
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
-
-  const attachedEnvironmentName = useMemo(() => {
-    if (!mcpMetadata?.defaultEnvironmentId) return null;
-    return (
-      environments.find((e) => e.id === mcpMetadata.defaultEnvironmentId)
-        ?.name ?? null
-    );
-  }, [environments, mcpMetadata?.defaultEnvironmentId]);
-
-  const routes = useRoutes();
 
   // --- Step actions ---
 
@@ -296,12 +277,6 @@ function OAuthWizard({
               actions.oauth_proxy_client_credentials_form.isSubmitting
             }
             onSubmit={actions.oauth_proxy_client_credentials_form.submit}
-            attachedEnvironmentName={attachedEnvironmentName}
-            environmentsLink={
-              <routes.environments.Link className="text-muted-foreground hover:text-foreground text-sm transition-colors">
-                Manage environments →
-              </routes.environments.Link>
-            }
           />
         )}
 
