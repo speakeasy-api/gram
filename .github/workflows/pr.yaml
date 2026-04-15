@@ -1170,14 +1170,42 @@ jobs:
     steps:
       - name: Check results
         run: |
-          results="${{ join(needs.*.result, ' ') }}"
-          for result in $results; do
+          failed=()
+
+          check() {
+            local name="$1"
+            local result="$2"
             if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
-              echo "CI failed: found job with result '$result'"
-              exit 1
+              failed+=("❌ $name ($result)")
             fi
-          done
-          echo "All CI checks passed or were skipped."
+          }
+
+          check "server-build-lint"    "${{ needs.server-build-lint.result }}"
+          check "server-test"          "${{ needs.server-test.result }}"
+          check "docker-build-server"  "${{ needs.docker-build-server.result }}"
+          check "docker-build-client"  "${{ needs.docker-build-client.result }}"
+          check "client-build-lint"    "${{ needs.client-build-lint.result }}"
+          check "ts-sdk-build-lint"    "${{ needs.ts-sdk-build-lint.result }}"
+          check "cli-build-lint"       "${{ needs.cli-build-lint.result }}"
+          check "plog-build-lint"      "${{ needs.plog-build-lint.result }}"
+          check "functions-build-host" "${{ needs.functions-build-host.result }}"
+          check "functions-image"      "${{ needs.functions-image.result }}"
+          check "ts-framework-test"    "${{ needs.ts-framework-test.result }}"
+          check "elements-build-lint"  "${{ needs.elements-build-lint.result }}"
+          check "elements-test"        "${{ needs.elements-test.result }}"
+          check "elements-examples"    "${{ needs.elements-examples.result }}"
+          check "atlas-lint"           "${{ needs.atlas-lint.result }}"
+          check "atlas-push"           "${{ needs.atlas-push.result }}"
+
+          if [[ ${#failed[@]} -gt 0 ]]; then
+            echo "CI failed. The following checks did not pass:"
+            for item in "${failed[@]}"; do
+              echo "  $item"
+            done
+            exit 1
+          fi
+
+          echo "✅ All CI checks passed or were skipped."
 
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404
