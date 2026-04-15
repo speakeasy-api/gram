@@ -26,13 +26,20 @@ type Manager struct {
 	isDev    bool
 }
 
-func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker, isDev bool) *Manager {
+func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker) *Manager {
 	return &Manager{
 		logger:   logger.With(attr.SlogComponent("access")),
 		db:       db,
 		features: features,
-		isDev:    isDev,
+		isDev:    false,
 	}
+}
+
+// SetDevMode enables the local-dev override behaviour where any authenticated
+// user (not just superadmins) can use the scope override header. Should be
+// called once at startup when the environment is "local".
+func (m *Manager) SetDevMode() {
+	m.isDev = true
 }
 
 // canUseOverride reports whether the scope override header is honoured for the

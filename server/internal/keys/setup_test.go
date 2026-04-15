@@ -77,7 +77,7 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 	ctx = withDefaultOrgAdminGrant(t, ctx, conn)
 
-	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, true)
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{})
 	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", accessManager)
 	keyAuth := auth.NewKeyAuth(conn, logger, billingClient)
 

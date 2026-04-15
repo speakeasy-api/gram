@@ -73,7 +73,7 @@ func newTestResourcesService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, true)
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{})
 	svc := resources.NewService(logger, tracerProvider, conn, sessionManager, accessManager)
 
 	return ctx, &testInstance{

@@ -77,7 +77,7 @@ func newTestEnvironmentService(t *testing.T) (context.Context, *testInstance) {
 
 	enc := testenv.NewEncryptionClient(t)
 
-	svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, true))
+	svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
 
 	return ctx, &testInstance{
 		service:        svc,

@@ -13,7 +13,7 @@ func TestLoadIntoContext_LoadsUserGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true}, true)
+	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true})
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -35,7 +35,7 @@ func TestLoadIntoContext_SkipsNonSessionAuth(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true}, true)
+	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true})
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -55,7 +55,7 @@ func TestLoadIntoContext_SkipsNonEnterpriseOrgs(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true}, true)
+	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true})
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
