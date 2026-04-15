@@ -324,13 +324,12 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	// on auth info write through data for user/org relationship as a backfill mechanism
 	// user and org both will have been created by now
 	// admin is only exception where there is not a single user-org relationship written
-	if !userInfo.Admin {
-		if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			UserID:         authCtx.UserID,
-		}); err != nil {
-			s.logger.ErrorContext(ctx, "error upserting organization user relationship", attr.SlogError(err))
-		}
+
+	if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "error upserting organization user relationship", attr.SlogError(err))
 	}
 
 	// Fully unpack the userInfo object
