@@ -1,4 +1,4 @@
-import { useOrganization } from "@/contexts/Auth";
+import { useIsAdmin, useOrganization } from "@/contexts/Auth";
 import { Switch } from "./ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, GripVertical, Shield } from "lucide-react";
@@ -130,7 +130,6 @@ function loadPosition(): { x: number; y: number } | null {
  * or null if disabled. Called by the SDK fetcher on every request.
  */
 export function getRBACScopeOverrideHeader(): string | null {
-  if (!import.meta.env.DEV) return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
@@ -162,6 +161,13 @@ const GROUP_ORDER: { key: ResourceType; label: string }[] = [
 ];
 
 export function RBACDevToolbar() {
+  const isAdmin = useIsAdmin();
+  // Always visible in dev; in other environments, restricted to superadmins.
+  if (import.meta.env.DEV || isAdmin) return <RBACDevToolbarInner />;
+  return null;
+}
+
+function RBACDevToolbarInner() {
   const [state, setState] = useState<OverrideState>(loadState);
   const [collapsed, setCollapsed] = useState(true);
   const [activeTab, setActiveTab] = useState("rbac");

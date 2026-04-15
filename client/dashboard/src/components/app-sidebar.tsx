@@ -13,7 +13,7 @@ import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
-import { MinusIcon, TestTube2Icon } from "lucide-react";
+import { Building2Icon, MinusIcon, TestTube2Icon } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 import { RequireScope } from "./require-scope";
@@ -64,6 +64,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <NavButton
                     title="Organization settings"
                     href={`/${orgSlug}`}
+                    Icon={Building2Icon}
                   />
                 </SidebarMenuItem>
               </RequireScope>
