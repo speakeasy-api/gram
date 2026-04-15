@@ -1,6 +1,6 @@
 import { Page } from "@/components/page-layout";
 import {
-  InsightsSidebar,
+  InsightsConfig,
   useInsightsState,
 } from "@/components/insights-sidebar";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
@@ -800,33 +800,34 @@ export default function ObservabilityOverview() {
   }, [from, to]);
 
   return (
-    <InsightsSidebar
-      mcpConfig={mcpConfig}
-      title="What would you like to know?"
-      subtitle="Ask about metrics, trends, or performance insights"
-      contextInfo={dateRangeContext}
-      hideTrigger={isLogsDisabled}
-      suggestions={[
-        {
-          title: "Resolution Summary",
-          label: "Summarize chat resolutions",
-          prompt:
-            "Summarize the chat resolution metrics for the current period. What's the success rate?",
-        },
-        {
-          title: "Tool Failures",
-          label: "Analyze failing tools",
-          prompt:
-            "Which tools have the highest failure rates? What might be causing the failures?",
-        },
-        {
-          title: "Performance Trends",
-          label: "Analyze trends",
-          prompt:
-            "What trends do you see in the metrics? Are things improving or declining?",
-        },
-      ]}
-    >
+    <>
+      <InsightsConfig
+        mcpConfig={mcpConfig}
+        title="What would you like to know?"
+        subtitle="Ask about metrics, trends, or performance insights"
+        contextInfo={dateRangeContext}
+        hideTrigger={isLogsDisabled}
+        suggestions={[
+          {
+            title: "Resolution Summary",
+            label: "Summarize chat resolutions",
+            prompt:
+              "Summarize the chat resolution metrics for the current period. What's the success rate?",
+          },
+          {
+            title: "Tool Failures",
+            label: "Analyze failing tools",
+            prompt:
+              "Which tools have the highest failure rates? What might be causing the failures?",
+          },
+          {
+            title: "Performance Trends",
+            label: "Analyze trends",
+            prompt:
+              "What trends do you see in the metrics? Are things improving or declining?",
+          },
+        ]}
+      />
       <Page>
         <Page.Header>
           <Page.Header.Breadcrumbs fullWidth />
@@ -871,7 +872,7 @@ export default function ObservabilityOverview() {
           />
         </Page.Body>
       </Page>
-    </InsightsSidebar>
+    </>
   );
 }
 
