@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 var validPrincipalURN = regexp.MustCompile(`^(\*|role:[a-zA-Z0-9_-]+|user:[a-zA-Z0-9_-]+)$`)
@@ -331,6 +332,18 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	toolsetID, err := uuid.Parse(payload.ToolsetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset id").Log(ctx, s.logger)
+	}
+
+	// Verify the toolset exists and belongs to the same project.
+	toolset, err := toolsetsrepo.New(s.db).GetToolsetByID(ctx, toolsetID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "toolset not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "verify toolset").Log(ctx, s.logger)
+	}
+	if toolset.ProjectID != *ac.ProjectID {
+		return nil, oops.E(oops.CodeBadRequest, nil, "toolset belongs to a different project")
 	}
 
 	row, err := s.repo.AddPluginServer(ctx, repo.AddPluginServerParams{
