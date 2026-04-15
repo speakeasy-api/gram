@@ -24,9 +24,11 @@ export function useRBAC() {
   // so it can also gate the SDK fetcher (which lacks auth context) at the source.
   const devOverrideActive =
     getRBACScopeOverrideHeader(import.meta.env.DEV || isAdmin) !== null;
-  // RBAC is only enforced for enterprise orgs — mirrors the server-side gate in access/manager.go.
+  // Enterprise gate applies to the feature flag only. The dev override bypasses
+  // the tier check entirely (mirroring the server, which applies override grants
+  // before checking account type in access/manager.go).
   const isRbacEnabled =
-    (featureFlagEnabled || devOverrideActive) && productTier === "enterprise";
+    (featureFlagEnabled && productTier === "enterprise") || devOverrideActive;
 
   // Re-render when the toolbar changes scopes in localStorage.
   const [overrideVersion, setOverrideVersion] = useState(0);
