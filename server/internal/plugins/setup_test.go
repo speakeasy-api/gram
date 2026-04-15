@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -95,7 +96,7 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, access.NewManager(logger, conn, stubFeatureChecker{}), "https://app.getgram.ai")
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, access.NewManager(logger, conn, stubFeatureChecker{}, workos.NewStubClient(), cache.NoopCache), "https://app.getgram.ai")
 
 	return ctx, &testInstance{
 		service:        svc,

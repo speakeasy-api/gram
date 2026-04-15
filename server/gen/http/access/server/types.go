@@ -152,6 +152,13 @@ type UpdateMemberRoleResponseBody struct {
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
 }
 
+// GetRBACStatusResponseBody is the type of the "access" service
+// "getRBACStatus" endpoint HTTP response body.
+type GetRBACStatusResponseBody struct {
+	// Whether RBAC enforcement is currently enabled for this organization.
+	RbacEnabled bool `form:"rbac_enabled" json:"rbac_enabled" xml:"rbac_enabled"`
+}
+
 // ListRolesUnauthorizedResponseBody is the type of the "access" service
 // "listRoles" endpoint HTTP response body for the "unauthorized" error.
 type ListRolesUnauthorizedResponseBody struct {
@@ -1775,6 +1782,549 @@ type UpdateMemberRoleGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetRBACStatusUnauthorizedResponseBody is the type of the "access" service
+// "getRBACStatus" endpoint HTTP response body for the "unauthorized" error.
+type GetRBACStatusUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRBACStatusForbiddenResponseBody is the type of the "access" service
+// "getRBACStatus" endpoint HTTP response body for the "forbidden" error.
+type GetRBACStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRBACStatusBadRequestResponseBody is the type of the "access" service
+// "getRBACStatus" endpoint HTTP response body for the "bad_request" error.
+type GetRBACStatusBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRBACStatusNotFoundResponseBody is the type of the "access" service
+// "getRBACStatus" endpoint HTTP response body for the "not_found" error.
+type GetRBACStatusNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRBACStatusConflictResponseBody is the type of the "access" service
+// "getRBACStatus" endpoint HTTP response body for the "conflict" error.
+type GetRBACStatusConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRBACStatusUnsupportedMediaResponseBody is the type of the "access"
+// service "getRBACStatus" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetRBACStatusUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRBACStatusInvalidResponseBody is the type of the "access" service
+// "getRBACStatus" endpoint HTTP response body for the "invalid" error.
+type GetRBACStatusInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRBACStatusInvariantViolationResponseBody is the type of the "access"
+// service "getRBACStatus" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetRBACStatusInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRBACStatusUnexpectedResponseBody is the type of the "access" service
+// "getRBACStatus" endpoint HTTP response body for the "unexpected" error.
+type GetRBACStatusUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRBACStatusGatewayErrorResponseBody is the type of the "access" service
+// "getRBACStatus" endpoint HTTP response body for the "gateway_error" error.
+type GetRBACStatusGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableRBACUnauthorizedResponseBody is the type of the "access" service
+// "enableRBAC" endpoint HTTP response body for the "unauthorized" error.
+type EnableRBACUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableRBACForbiddenResponseBody is the type of the "access" service
+// "enableRBAC" endpoint HTTP response body for the "forbidden" error.
+type EnableRBACForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableRBACBadRequestResponseBody is the type of the "access" service
+// "enableRBAC" endpoint HTTP response body for the "bad_request" error.
+type EnableRBACBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableRBACNotFoundResponseBody is the type of the "access" service
+// "enableRBAC" endpoint HTTP response body for the "not_found" error.
+type EnableRBACNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableRBACConflictResponseBody is the type of the "access" service
+// "enableRBAC" endpoint HTTP response body for the "conflict" error.
+type EnableRBACConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableRBACUnsupportedMediaResponseBody is the type of the "access" service
+// "enableRBAC" endpoint HTTP response body for the "unsupported_media" error.
+type EnableRBACUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableRBACInvalidResponseBody is the type of the "access" service
+// "enableRBAC" endpoint HTTP response body for the "invalid" error.
+type EnableRBACInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableRBACInvariantViolationResponseBody is the type of the "access" service
+// "enableRBAC" endpoint HTTP response body for the "invariant_violation" error.
+type EnableRBACInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableRBACUnexpectedResponseBody is the type of the "access" service
+// "enableRBAC" endpoint HTTP response body for the "unexpected" error.
+type EnableRBACUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableRBACGatewayErrorResponseBody is the type of the "access" service
+// "enableRBAC" endpoint HTTP response body for the "gateway_error" error.
+type EnableRBACGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableRBACUnauthorizedResponseBody is the type of the "access" service
+// "disableRBAC" endpoint HTTP response body for the "unauthorized" error.
+type DisableRBACUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableRBACForbiddenResponseBody is the type of the "access" service
+// "disableRBAC" endpoint HTTP response body for the "forbidden" error.
+type DisableRBACForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableRBACBadRequestResponseBody is the type of the "access" service
+// "disableRBAC" endpoint HTTP response body for the "bad_request" error.
+type DisableRBACBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableRBACNotFoundResponseBody is the type of the "access" service
+// "disableRBAC" endpoint HTTP response body for the "not_found" error.
+type DisableRBACNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableRBACConflictResponseBody is the type of the "access" service
+// "disableRBAC" endpoint HTTP response body for the "conflict" error.
+type DisableRBACConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableRBACUnsupportedMediaResponseBody is the type of the "access" service
+// "disableRBAC" endpoint HTTP response body for the "unsupported_media" error.
+type DisableRBACUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableRBACInvalidResponseBody is the type of the "access" service
+// "disableRBAC" endpoint HTTP response body for the "invalid" error.
+type DisableRBACInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableRBACInvariantViolationResponseBody is the type of the "access"
+// service "disableRBAC" endpoint HTTP response body for the
+// "invariant_violation" error.
+type DisableRBACInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableRBACUnexpectedResponseBody is the type of the "access" service
+// "disableRBAC" endpoint HTTP response body for the "unexpected" error.
+type DisableRBACUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableRBACGatewayErrorResponseBody is the type of the "access" service
+// "disableRBAC" endpoint HTTP response body for the "gateway_error" error.
+type DisableRBACGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RoleResponseBody is used to define fields on response body types.
 type RoleResponseBody struct {
 	// Unique role identifier.
@@ -2015,6 +2565,15 @@ func NewUpdateMemberRoleResponseBody(res *access.AccessMember) *UpdateMemberRole
 		PhotoURL: res.PhotoURL,
 		RoleID:   res.RoleID,
 		JoinedAt: res.JoinedAt,
+	}
+	return body
+}
+
+// NewGetRBACStatusResponseBody builds the HTTP response body from the result
+// of the "getRBACStatus" endpoint of the "access" service.
+func NewGetRBACStatusResponseBody(res *access.RBACStatus) *GetRBACStatusResponseBody {
+	body := &GetRBACStatusResponseBody{
+		RbacEnabled: res.RbacEnabled,
 	}
 	return body
 }
@@ -3281,6 +3840,426 @@ func NewUpdateMemberRoleGatewayErrorResponseBody(res *goa.ServiceError) *UpdateM
 	return body
 }
 
+// NewGetRBACStatusUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getRBACStatus" endpoint of the "access" service.
+func NewGetRBACStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetRBACStatusUnauthorizedResponseBody {
+	body := &GetRBACStatusUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRBACStatusForbiddenResponseBody builds the HTTP response body from the
+// result of the "getRBACStatus" endpoint of the "access" service.
+func NewGetRBACStatusForbiddenResponseBody(res *goa.ServiceError) *GetRBACStatusForbiddenResponseBody {
+	body := &GetRBACStatusForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRBACStatusBadRequestResponseBody builds the HTTP response body from
+// the result of the "getRBACStatus" endpoint of the "access" service.
+func NewGetRBACStatusBadRequestResponseBody(res *goa.ServiceError) *GetRBACStatusBadRequestResponseBody {
+	body := &GetRBACStatusBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRBACStatusNotFoundResponseBody builds the HTTP response body from the
+// result of the "getRBACStatus" endpoint of the "access" service.
+func NewGetRBACStatusNotFoundResponseBody(res *goa.ServiceError) *GetRBACStatusNotFoundResponseBody {
+	body := &GetRBACStatusNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRBACStatusConflictResponseBody builds the HTTP response body from the
+// result of the "getRBACStatus" endpoint of the "access" service.
+func NewGetRBACStatusConflictResponseBody(res *goa.ServiceError) *GetRBACStatusConflictResponseBody {
+	body := &GetRBACStatusConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRBACStatusUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getRBACStatus" endpoint of the "access" service.
+func NewGetRBACStatusUnsupportedMediaResponseBody(res *goa.ServiceError) *GetRBACStatusUnsupportedMediaResponseBody {
+	body := &GetRBACStatusUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRBACStatusInvalidResponseBody builds the HTTP response body from the
+// result of the "getRBACStatus" endpoint of the "access" service.
+func NewGetRBACStatusInvalidResponseBody(res *goa.ServiceError) *GetRBACStatusInvalidResponseBody {
+	body := &GetRBACStatusInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRBACStatusInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getRBACStatus" endpoint of the "access" service.
+func NewGetRBACStatusInvariantViolationResponseBody(res *goa.ServiceError) *GetRBACStatusInvariantViolationResponseBody {
+	body := &GetRBACStatusInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRBACStatusUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getRBACStatus" endpoint of the "access" service.
+func NewGetRBACStatusUnexpectedResponseBody(res *goa.ServiceError) *GetRBACStatusUnexpectedResponseBody {
+	body := &GetRBACStatusUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRBACStatusGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getRBACStatus" endpoint of the "access" service.
+func NewGetRBACStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetRBACStatusGatewayErrorResponseBody {
+	body := &GetRBACStatusGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableRBACUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "enableRBAC" endpoint of the "access" service.
+func NewEnableRBACUnauthorizedResponseBody(res *goa.ServiceError) *EnableRBACUnauthorizedResponseBody {
+	body := &EnableRBACUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableRBACForbiddenResponseBody builds the HTTP response body from the
+// result of the "enableRBAC" endpoint of the "access" service.
+func NewEnableRBACForbiddenResponseBody(res *goa.ServiceError) *EnableRBACForbiddenResponseBody {
+	body := &EnableRBACForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableRBACBadRequestResponseBody builds the HTTP response body from the
+// result of the "enableRBAC" endpoint of the "access" service.
+func NewEnableRBACBadRequestResponseBody(res *goa.ServiceError) *EnableRBACBadRequestResponseBody {
+	body := &EnableRBACBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableRBACNotFoundResponseBody builds the HTTP response body from the
+// result of the "enableRBAC" endpoint of the "access" service.
+func NewEnableRBACNotFoundResponseBody(res *goa.ServiceError) *EnableRBACNotFoundResponseBody {
+	body := &EnableRBACNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableRBACConflictResponseBody builds the HTTP response body from the
+// result of the "enableRBAC" endpoint of the "access" service.
+func NewEnableRBACConflictResponseBody(res *goa.ServiceError) *EnableRBACConflictResponseBody {
+	body := &EnableRBACConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableRBACUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "enableRBAC" endpoint of the "access" service.
+func NewEnableRBACUnsupportedMediaResponseBody(res *goa.ServiceError) *EnableRBACUnsupportedMediaResponseBody {
+	body := &EnableRBACUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableRBACInvalidResponseBody builds the HTTP response body from the
+// result of the "enableRBAC" endpoint of the "access" service.
+func NewEnableRBACInvalidResponseBody(res *goa.ServiceError) *EnableRBACInvalidResponseBody {
+	body := &EnableRBACInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableRBACInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "enableRBAC" endpoint of the "access" service.
+func NewEnableRBACInvariantViolationResponseBody(res *goa.ServiceError) *EnableRBACInvariantViolationResponseBody {
+	body := &EnableRBACInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableRBACUnexpectedResponseBody builds the HTTP response body from the
+// result of the "enableRBAC" endpoint of the "access" service.
+func NewEnableRBACUnexpectedResponseBody(res *goa.ServiceError) *EnableRBACUnexpectedResponseBody {
+	body := &EnableRBACUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableRBACGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "enableRBAC" endpoint of the "access" service.
+func NewEnableRBACGatewayErrorResponseBody(res *goa.ServiceError) *EnableRBACGatewayErrorResponseBody {
+	body := &EnableRBACGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableRBACUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "disableRBAC" endpoint of the "access" service.
+func NewDisableRBACUnauthorizedResponseBody(res *goa.ServiceError) *DisableRBACUnauthorizedResponseBody {
+	body := &DisableRBACUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableRBACForbiddenResponseBody builds the HTTP response body from the
+// result of the "disableRBAC" endpoint of the "access" service.
+func NewDisableRBACForbiddenResponseBody(res *goa.ServiceError) *DisableRBACForbiddenResponseBody {
+	body := &DisableRBACForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableRBACBadRequestResponseBody builds the HTTP response body from the
+// result of the "disableRBAC" endpoint of the "access" service.
+func NewDisableRBACBadRequestResponseBody(res *goa.ServiceError) *DisableRBACBadRequestResponseBody {
+	body := &DisableRBACBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableRBACNotFoundResponseBody builds the HTTP response body from the
+// result of the "disableRBAC" endpoint of the "access" service.
+func NewDisableRBACNotFoundResponseBody(res *goa.ServiceError) *DisableRBACNotFoundResponseBody {
+	body := &DisableRBACNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableRBACConflictResponseBody builds the HTTP response body from the
+// result of the "disableRBAC" endpoint of the "access" service.
+func NewDisableRBACConflictResponseBody(res *goa.ServiceError) *DisableRBACConflictResponseBody {
+	body := &DisableRBACConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableRBACUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "disableRBAC" endpoint of the "access" service.
+func NewDisableRBACUnsupportedMediaResponseBody(res *goa.ServiceError) *DisableRBACUnsupportedMediaResponseBody {
+	body := &DisableRBACUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableRBACInvalidResponseBody builds the HTTP response body from the
+// result of the "disableRBAC" endpoint of the "access" service.
+func NewDisableRBACInvalidResponseBody(res *goa.ServiceError) *DisableRBACInvalidResponseBody {
+	body := &DisableRBACInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableRBACInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "disableRBAC" endpoint of the "access" service.
+func NewDisableRBACInvariantViolationResponseBody(res *goa.ServiceError) *DisableRBACInvariantViolationResponseBody {
+	body := &DisableRBACInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableRBACUnexpectedResponseBody builds the HTTP response body from the
+// result of the "disableRBAC" endpoint of the "access" service.
+func NewDisableRBACUnexpectedResponseBody(res *goa.ServiceError) *DisableRBACUnexpectedResponseBody {
+	body := &DisableRBACUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableRBACGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "disableRBAC" endpoint of the "access" service.
+func NewDisableRBACGatewayErrorResponseBody(res *goa.ServiceError) *DisableRBACGatewayErrorResponseBody {
+	body := &DisableRBACGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListRolesPayload builds a access service listRoles endpoint payload.
 func NewListRolesPayload(apikeyToken *string, sessionToken *string) *access.ListRolesPayload {
 	v := &access.ListRolesPayload{}
@@ -3400,6 +4379,31 @@ func NewUpdateMemberRolePayload(body *UpdateMemberRoleRequestBody, apikeyToken *
 		RoleID: *body.RoleID,
 	}
 	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetRBACStatusPayload builds a access service getRBACStatus endpoint
+// payload.
+func NewGetRBACStatusPayload(sessionToken *string) *access.GetRBACStatusPayload {
+	v := &access.GetRBACStatusPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewEnableRBACPayload builds a access service enableRBAC endpoint payload.
+func NewEnableRBACPayload(sessionToken *string) *access.EnableRBACPayload {
+	v := &access.EnableRBACPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewDisableRBACPayload builds a access service disableRBAC endpoint payload.
+func NewDisableRBACPayload(sessionToken *string) *access.DisableRBACPayload {
+	v := &access.DisableRBACPayload{}
 	v.SessionToken = sessionToken
 
 	return v

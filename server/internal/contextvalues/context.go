@@ -22,6 +22,7 @@ type AuthContext struct {
 	Whitelisted           bool
 	ProjectSlug           *string
 	APIKeyScopes          []string
+	IsAdmin               bool
 }
 
 type RequestContext struct {

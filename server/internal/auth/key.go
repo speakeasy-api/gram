@@ -149,6 +149,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		ExternalUserID:        "",
 		SessionID:             nil,
 		ProjectSlug:           nil,
+		IsAdmin:               false,
 	})
 
 	return ctx, nil

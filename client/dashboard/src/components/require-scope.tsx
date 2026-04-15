@@ -99,13 +99,13 @@ function ScopeDisabled({
         <TooltipTrigger asChild>
           <div
             className={cn(
-              "pointer-events-none inline-flex cursor-not-allowed opacity-50 select-none",
+              "pointer-events-none inline-flex opacity-50 select-none",
               className,
             )}
           >
             {/* Wrapper div that re-enables pointer events for the tooltip to work */}
             <div
-              className="pointer-events-auto w-full"
+              className="pointer-events-auto w-full cursor-not-allowed [&_*]:cursor-not-allowed"
               onClickCapture={(e) => {
                 e.preventDefault();
                 e.stopPropagation();

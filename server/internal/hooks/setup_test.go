@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -80,7 +81,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 
 	// Pass nil for telemetry logger, temporalEnv, productFeatures, and chatTitleGenerator in tests
-	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, nil, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}), nil, nil)
+	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, nil, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache), nil, nil)
 
 	return ctx, &testInstance{
 		service:        svc,

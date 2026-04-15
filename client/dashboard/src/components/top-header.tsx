@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Link } from "react-router";
+import { useRBAC } from "@/hooks/useRBAC";
 import { GramLogo } from "./gram-logo";
 import { InputDialog } from "./input-dialog";
 import { ProjectAvatar } from "./project-menu";
@@ -54,6 +55,8 @@ export function TopHeader() {
   const { projectSlug } = useSlugs();
   const [open, setOpen] = useState(false);
   const isAdmin = useIsAdmin();
+  const { hasAnyScope } = useRBAC();
+  const canAccessOrgRoutes = hasAnyScope(["org:read", "org:admin"]);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [pylonOpen, setPylonOpen] = useState(false);
   const togglePylon = useCallback(() => {
@@ -116,12 +119,18 @@ export function TopHeader() {
           </span>
 
           {/* Org link */}
-          <Link
-            to={`/${organization.slug}`}
-            className="text-foreground/80 hover:text-foreground hover:bg-accent rounded-md px-2 py-1 text-base font-medium whitespace-nowrap transition-colors hover:no-underline"
-          >
-            {organization.slug}
-          </Link>
+          {canAccessOrgRoutes ? (
+            <Link
+              to={`/${organization.slug}`}
+              className="text-foreground/80 hover:text-foreground hover:bg-accent rounded-md px-2 py-1 text-base font-medium whitespace-nowrap transition-colors hover:no-underline"
+            >
+              {organization.slug}
+            </Link>
+          ) : (
+            <span className="text-foreground/80 cursor-default rounded-md px-2 py-1 text-base font-medium whitespace-nowrap">
+              {organization.slug}
+            </span>
+          )}
 
           {/* Project Switcher - hidden on org-level pages */}
           {projectSlug && (
@@ -260,10 +269,12 @@ export function TopHeader() {
                     Project Settings
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => orgRoutes.billing.goTo()}>
-                  <CreditCardIcon className="mr-2 h-4 w-4" />
-                  Billing
-                </DropdownMenuItem>
+                {canAccessOrgRoutes && (
+                  <DropdownMenuItem onClick={() => orgRoutes.billing.goTo()}>
+                    <CreditCardIcon className="mr-2 h-4 w-4" />
+                    Billing
+                  </DropdownMenuItem>
+                )}
                 {isAdmin && (
                   <DropdownMenuItem
                     onClick={() => orgRoutes.adminSettings.goTo()}

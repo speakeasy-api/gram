@@ -1,3 +1,4 @@
+import { QuerySamplesPopover } from "@/components/QuerySamplesPopover";
 import {
   CommandEmpty,
   CommandGroup,
@@ -20,6 +21,29 @@ import {
   parseOperatorSymbol,
   tryParseFilterExpression,
 } from "./log-filter-types";
+
+const FILTER_QUERY_SAMPLES = [
+  {
+    value: "http.response.status_code != 200",
+    label: "Non-2xx responses",
+  },
+  {
+    value: "http.response.status_code = 500",
+    label: "Server errors only",
+  },
+  {
+    value: "severity_text = ERROR",
+    label: "Error-level logs",
+  },
+  {
+    value: "http.request.method = POST",
+    label: "POST requests only",
+  },
+  {
+    value: "gram.tool.name ~ search",
+    label: "Tool names containing 'search'",
+  },
+];
 
 type Step = "key" | "operator" | "value";
 
@@ -340,6 +364,15 @@ export function LogFilterBar({
                 className="min-h-[24px] min-w-[120px] flex-1 bg-transparent text-sm outline-none"
               />
             )}
+            <QuerySamplesPopover
+              title="Sample filter queries"
+              ariaLabel="Show sample filter queries"
+              samples={FILTER_QUERY_SAMPLES}
+              onSelect={(sample) => {
+                onSearchInputChange(sample.value);
+                requestAnimationFrame(() => inputRef.current?.focus());
+              }}
+            />
             {searchInput && (
               <button
                 onClick={() => {

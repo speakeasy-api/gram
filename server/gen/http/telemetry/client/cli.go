@@ -487,6 +487,51 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 	return v, nil
 }
 
+// BuildGetProjectOverviewPayload builds the payload for the telemetry
+// getProjectOverview endpoint from CLI flags.
+func BuildGetProjectOverviewPayload(telemetryGetProjectOverviewBody string, telemetryGetProjectOverviewApikeyToken string, telemetryGetProjectOverviewSessionToken string, telemetryGetProjectOverviewProjectSlugInput string) (*telemetry.GetProjectOverviewPayload, error) {
+	var err error
+	var body GetProjectOverviewRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetProjectOverviewBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetProjectOverviewApikeyToken != "" {
+			apikeyToken = &telemetryGetProjectOverviewApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetProjectOverviewSessionToken != "" {
+			sessionToken = &telemetryGetProjectOverviewSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetProjectOverviewProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetProjectOverviewProjectSlugInput
+		}
+	}
+	v := &telemetry.GetProjectOverviewPayload{
+		From: body.From,
+		To:   body.To,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListFilterOptionsPayload builds the payload for the telemetry
 // listFilterOptions endpoint from CLI flags.
 func BuildListFilterOptionsPayload(telemetryListFilterOptionsBody string, telemetryListFilterOptionsApikeyToken string, telemetryListFilterOptionsSessionToken string, telemetryListFilterOptionsProjectSlugInput string) (*telemetry.ListFilterOptionsPayload, error) {

@@ -1,0 +1,40 @@
+{
+  "type": "module",
+  "name": "mermaid-app",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Mermaid diagram renderer exposed as an MCP app via Gram Functions. React + Vite built as a single-file bundle and served through experimental_uiResource.",
+  "keywords": [
+    "mcp",
+    "mcp-apps",
+    "getgram.ai"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build:ui": "vite build",
+    "build:inline": "node scripts/inline-html.mjs",
+    "build:gram": "gf build",
+    "build": "pnpm run build:ui && pnpm run build:inline && pnpm run build:gram",
+    "lint": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.ui.json",
+    "push": "pnpm run build && gf push"
+  },
+  "dependencies": {
+    "@gram-ai/functions": "^0.14.0",
+    "mermaid": "^11.4.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@types/node": "22.x",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5",
+    "vite": "^6.0.0",
+    "vite-plugin-singlefile": "^2.0.0"
+  }
+}
