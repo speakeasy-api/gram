@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math"
 	"sort"
@@ -30,6 +31,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
+	"golang.org/x/sync/errgroup"
 )
 
 const logsDisabledMsg = "logs are not enabled for this organization"
@@ -1491,54 +1493,6 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	attributeFilters := toRepoAttributeFilters(payload.Filters)
 	typesToInclude := payload.TypesToInclude
 
-	// Get server summary
-	serverRows, err := s.chRepo.GetHooksSummary(ctx, repo.GetHooksSummaryParams{
-		GramProjectID:  authCtx.ProjectID.String(),
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		Filters:        attributeFilters,
-		TypesToInclude: typesToInclude,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks summary: %v", err)
-	}
-
-	// Get user summary
-	userRows, err := s.chRepo.GetHooksUserSummary(ctx, repo.GetHooksUserSummaryParams{
-		GramProjectID:  authCtx.ProjectID.String(),
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		Filters:        attributeFilters,
-		TypesToInclude: typesToInclude,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks user summary: %v", err)
-	}
-
-	// Get skills summary
-	skillRows, err := s.chRepo.GetSkillsSummary(ctx, repo.GetSkillsSummaryParams{
-		GramProjectID:  authCtx.ProjectID.String(),
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		Filters:        attributeFilters,
-		TypesToInclude: typesToInclude,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting skills summary: %v", err)
-	}
-
-	// Get cross-dimensional breakdown for bar charts
-	breakdownRows, err := s.chRepo.GetHooksBreakdown(ctx, repo.GetHooksBreakdownParams{
-		GramProjectID:  authCtx.ProjectID.String(),
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		Filters:        attributeFilters,
-		TypesToInclude: typesToInclude,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks breakdown: %v", err)
-	}
-
 	// Compute time series bucket size: 5 min for ≤24h windows, 60 min otherwise
 	const fiveMinNs = int64(5 * 60 * 1e9)
 	const sixtyMinNs = int64(60 * 60 * 1e9)
@@ -1547,17 +1501,105 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		bucketSizeNs = fiveMinNs
 	}
 
-	// Get time series for line charts
-	timeSeriesPoints, err := s.chRepo.GetHooksTimeSeries(ctx, repo.GetHooksTimeSeriesParams{
-		GramProjectID:  authCtx.ProjectID.String(),
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		BucketSizeNs:   bucketSizeNs,
-		Filters:        attributeFilters,
-		TypesToInclude: typesToInclude,
+	// Run all six independent ClickHouse queries in parallel
+	var (
+		serverRows       []repo.HooksServerSummaryRow
+		userRows         []repo.HooksUserSummaryRow
+		skillRows        []repo.SkillSummaryRow
+		breakdownRows    []repo.HooksBreakdownRow
+		timeSeriesPoints []repo.HooksTimeSeriesPoint
+		sessionCount     int64
+	)
+	eg, egCtx := errgroup.WithContext(ctx)
+	projectID := authCtx.ProjectID.String()
+
+	eg.Go(func() error {
+		var err error
+		serverRows, err = s.chRepo.GetHooksSummary(egCtx, repo.GetHooksSummaryParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks server summary: %w", err)
+		}
+		return nil
 	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks time series: %v", err)
+	eg.Go(func() error {
+		var err error
+		userRows, err = s.chRepo.GetHooksUserSummary(egCtx, repo.GetHooksUserSummaryParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks user summary: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		skillRows, err = s.chRepo.GetSkillsSummary(egCtx, repo.GetSkillsSummaryParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get skills summary: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		breakdownRows, err = s.chRepo.GetHooksBreakdown(egCtx, repo.GetHooksBreakdownParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks breakdown: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		timeSeriesPoints, err = s.chRepo.GetHooksTimeSeries(egCtx, repo.GetHooksTimeSeriesParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			BucketSizeNs:   bucketSizeNs,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks time series: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		sessionCount, err = s.chRepo.GetHooksSessionCount(egCtx, repo.GetHooksSessionCountParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks session count: %w", err)
+		}
+		return nil
+	})
+	if err := eg.Wait(); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching hooks summary data")
 	}
 
 	// Transform server rows into response
@@ -1622,17 +1664,6 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		})
 	}
 
-	// Get unique session count
-	sessionCount, err := s.chRepo.GetHooksSessionCount(ctx, repo.GetHooksSessionCountParams{
-		GramProjectID:  authCtx.ProjectID.String(),
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		Filters:        attributeFilters,
-		TypesToInclude: typesToInclude,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks session count: %v", err)
-	}
 	totalSessions = sessionCount
 
 	return &telem_gen.GetHooksSummaryResult{
