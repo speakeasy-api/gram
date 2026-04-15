@@ -157,12 +157,16 @@ func (s *GoaService) CreateDraft(ctx context.Context, p *gen.CreateDraftPayload)
 	}
 
 	d, err := svc.Create(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, drafts.CreateDraftParams{
-		FilePath:   p.FilePath,
-		Content:    p.Content,
-		Operation:  p.Operation,
-		Source:     p.Source,
-		AuthorType: p.AuthorType,
-		Labels:     labelsJSON,
+		FilePath:        p.FilePath,
+		Title:           nil,
+		OriginalContent: nil,
+		Content:         p.Content,
+		Operation:       p.Operation,
+		Source:          p.Source,
+		AuthorType:      p.AuthorType,
+		AuthorUserID:    nil,
+		AgentName:       nil,
+		Labels:          labelsJSON,
 	})
 	if err != nil {
 		if errors.Is(err, drafts.ErrInvalidOperation) || errors.Is(err, drafts.ErrEmptyFilePath) {
@@ -351,7 +355,12 @@ func (s *GoaService) GetFeedback(ctx context.Context, p *gen.GetFeedbackPayload)
 		return nil, oops.E(oops.CodeUnexpected, err, "get feedback").Log(ctx, s.logger)
 	}
 
-	return feedbackToResult(summaries, nil), nil
+	userVote, err := s.feedback.LatestVoteDirection(ctx, *authCtx.ProjectID, p.FilePath, authCtx.UserID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get latest vote").Log(ctx, s.logger)
+	}
+
+	return feedbackToResult(summaries, userVote), nil
 }
 
 func (s *GoaService) VoteFeedback(ctx context.Context, p *gen.VoteFeedbackPayload) (*gen.CorpusFeedbackResult, error) {
@@ -624,9 +633,9 @@ func draftToResult(d *drafts.Draft) *gen.CorpusDraftResult {
 		ID:              d.ID.String(),
 		ProjectID:       d.ProjectID.String(),
 		FilePath:        d.FilePath,
-		Title:           nil,
+		Title:           conv.FromPGText[string](d.Title),
 		Content:         conv.FromPGText[string](d.Content),
-		OriginalContent: nil,
+		OriginalContent: conv.FromPGText[string](d.OriginalContent),
 		Operation:       d.Operation,
 		Status:          d.Status,
 		Source:          conv.FromPGText[string](d.Source),

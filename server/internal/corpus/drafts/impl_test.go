@@ -187,6 +187,28 @@ func TestPublishDraft_UpdatesFile(t *testing.T) {
 	require.Equal(t, "updated content", string(blob))
 }
 
+func TestPublishDraft_PreservesUnchangedFiles(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	ti.seedGitFile(t, "guide.md", []byte("original content"))
+	ti.seedGitFile(t, "keep.md", []byte("keep this"))
+
+	content := "updated content"
+	created := createDraft(t, ctx, ti, "guide.md", drafts.OpUpdate, &content)
+
+	_, err := ti.svc.Publish(ctx, ti.projectID, ti.orgID, []uuid.UUID{created.ID})
+	require.NoError(t, err)
+
+	guideBlob, err := ti.git.ReadBlob("HEAD", "guide.md")
+	require.NoError(t, err)
+	require.Equal(t, "updated content", string(guideBlob))
+
+	keepBlob, err := ti.git.ReadBlob("HEAD", "keep.md")
+	require.NoError(t, err)
+	require.Equal(t, "keep this", string(keepBlob))
+}
+
 func TestPublishDraft_DeletesFile(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

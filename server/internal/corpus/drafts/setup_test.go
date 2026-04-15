@@ -218,7 +218,7 @@ func (r *testGitRepo) ReadBlob(ref string, path string) ([]byte, error) {
 	return data, nil
 }
 
-func (r *testGitRepo) readAllFiles(ref string) (map[string][]byte, error) {
+func (r *testGitRepo) ReadFiles(ref string) (map[string][]byte, error) {
 	hash, err := r.repo.ResolveRevision(plumbing.Revision(ref))
 	if err != nil {
 		return nil, fmt.Errorf("resolve ref: %w", err)
@@ -243,4 +243,8 @@ func (r *testGitRepo) readAllFiles(ref string) (map[string][]byte, error) {
 		files[entry.Name] = blob
 	}
 	return files, nil
+}
+
+func (r *testGitRepo) readAllFiles(ref string) (map[string][]byte, error) {
+	return r.ReadFiles(ref)
 }

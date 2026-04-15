@@ -316,6 +316,24 @@ func (r *Repo) ReadBlob(ref string, path string) ([]byte, error) {
 	return content, nil
 }
 
+func (r *Repo) ReadFiles(ref string) (map[string][]byte, error) {
+	entries, err := r.ReadTree(ref)
+	if err != nil {
+		return nil, err
+	}
+
+	files := make(map[string][]byte, len(entries))
+	for _, entry := range entries {
+		content, err := r.ReadBlob(ref, entry.Path)
+		if err != nil {
+			return nil, fmt.Errorf("read blob %s: %w", entry.Path, err)
+		}
+		files[entry.Path] = content
+	}
+
+	return files, nil
+}
+
 func (r *Repo) FileLog(path string) ([]LogEntry, error) {
 	logIter, err := r.repo.Log(&gogit.LogOptions{
 		From:       plumbing.ZeroHash,

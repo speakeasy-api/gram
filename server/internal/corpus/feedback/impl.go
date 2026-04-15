@@ -70,9 +70,8 @@ func NewService(db *pgxpool.Pool) *Service {
 	}
 }
 
-// Vote records an up/down vote on a file. If the same direction already exists,
-// it clears the vote (toggle). If a different direction exists, it switches.
-// Returns nil when the vote was toggled off.
+// Vote records an up/down vote on a file. Every vote is persisted as a new row,
+// allowing the same user to vote multiple times on the same file.
 func (s *Service) Vote(ctx context.Context, projectID uuid.UUID, orgID string, params VoteParams) (*Vote, error) {
 	if !validDirections[params.Direction] {
 		return nil, ErrInvalidDirection
@@ -81,44 +80,6 @@ func (s *Service) Vote(ctx context.Context, projectID uuid.UUID, orgID string, p
 		return nil, ErrEmptyFilePath
 	}
 
-	// Check for existing vote
-	existing, err := s.repo.GetVote(ctx, repo.GetVoteParams{
-		ProjectID: projectID,
-		FilePath:  params.FilePath,
-		UserID:    params.UserID,
-	})
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("get vote: %w", err)
-	}
-
-	if err == nil {
-		// Existing vote found
-		if existing.Direction == params.Direction {
-			// Toggle off — delete the vote
-			err = s.repo.DeleteVote(ctx, repo.DeleteVoteParams{
-				ProjectID: projectID,
-				FilePath:  params.FilePath,
-				UserID:    params.UserID,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("delete vote: %w", err)
-			}
-			return nil, nil
-		}
-		// Switch direction
-		v, err := s.repo.UpdateVoteDirection(ctx, repo.UpdateVoteDirectionParams{
-			ProjectID: projectID,
-			FilePath:  params.FilePath,
-			UserID:    params.UserID,
-			Direction: params.Direction,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("update vote direction: %w", err)
-		}
-		return &v, nil
-	}
-
-	// No existing vote — create new
 	v, err := s.repo.CreateVote(ctx, repo.CreateVoteParams{
 		ProjectID:      projectID,
 		OrganizationID: orgID,
@@ -130,6 +91,31 @@ func (s *Service) Vote(ctx context.Context, projectID uuid.UUID, orgID string, p
 		return nil, fmt.Errorf("create vote: %w", err)
 	}
 	return &v, nil
+}
+
+// LatestVoteDirection returns the most recent vote direction from the given
+// user for a file. It returns nil when the user has never voted on the file.
+func (s *Service) LatestVoteDirection(ctx context.Context, projectID uuid.UUID, filePath string, userID string) (*string, error) {
+	if filePath == "" {
+		return nil, ErrEmptyFilePath
+	}
+	if userID == "" {
+		return nil, nil
+	}
+
+	vote, err := s.repo.GetLatestVoteForFileByUser(ctx, repo.GetLatestVoteForFileByUserParams{
+		ProjectID: projectID,
+		FilePath:  filePath,
+		UserID:    userID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get latest vote: %w", err)
+	}
+
+	return &vote.Direction, nil
 }
 
 // ListFeedback returns aggregated vote counts per file path. If filePath is

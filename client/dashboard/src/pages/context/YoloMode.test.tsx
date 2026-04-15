@@ -1,38 +1,18 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  createTestQueryClient,
+  extractFetchUrl,
+  TestQueryWrapper,
+} from "@/test-utils";
 import { YoloMode } from "./YoloMode";
-import type { AutoPublishConfig } from "@/hooks/useAutoPublish";
-
-function makeConfig(
-  overrides: Partial<AutoPublishConfig> = {},
-): AutoPublishConfig {
-  return {
-    enabled: false,
-    intervalMinutes: 10,
-    minUpvotes: 0,
-    authorTypeFilter: null,
-    labelFilter: null,
-    minAgeHours: 0,
-    ...overrides,
-  };
-}
 
 function jsonResponse(data: unknown): Response {
   return new Response(JSON.stringify(data), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
-}
-
-function renderWithQuery(ui: React.ReactElement) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
-  );
 }
 
 describe("YoloMode", () => {
@@ -43,13 +23,27 @@ describe("YoloMode", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.restoreAllMocks();
   });
 
   test("renders toggle from config API", async () => {
-    fetchSpy.mockResolvedValueOnce(jsonResponse(makeConfig({ enabled: true })));
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        enabled: true,
+        interval_minutes: 10,
+        min_upvotes: 0,
+        min_age_hours: 0,
+      }),
+    );
 
-    renderWithQuery(<YoloMode projectId="proj-1" />);
+    const queryClient = createTestQueryClient();
+
+    render(
+      <TestQueryWrapper queryClient={queryClient}>
+        <YoloMode projectId="proj-1" />
+      </TestQueryWrapper>,
+    );
 
     const toggle = await screen.findByRole("switch");
     expect(toggle).toBeInTheDocument();
@@ -58,36 +52,84 @@ describe("YoloMode", () => {
 
   test("toggling calls setAutoPublishConfig", async () => {
     const user = userEvent.setup();
+    const requestBodies = new Map<string, Record<string, unknown>>();
 
-    fetchSpy.mockResolvedValueOnce(
-      jsonResponse(makeConfig({ enabled: false })),
+    fetchSpy.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = extractFetchUrl(input);
+      if (input instanceof Request && input.body) {
+        requestBodies.set(
+          url,
+          (await input.clone().json()) as Record<string, unknown>,
+        );
+      }
+
+      if (url.includes("/rpc/corpus.getAutoPublishConfig")) {
+        return jsonResponse({
+          enabled: false,
+          interval_minutes: 10,
+          min_upvotes: 0,
+          min_age_hours: 0,
+        });
+      }
+
+      if (url.includes("/rpc/corpus.setAutoPublishConfig")) {
+        return jsonResponse({
+          enabled: true,
+          interval_minutes: 10,
+          min_upvotes: 0,
+          min_age_hours: 0,
+        });
+      }
+
+      return new Response("Not Found", { status: 404 });
+    });
+
+    const queryClient = createTestQueryClient();
+
+    render(
+      <TestQueryWrapper queryClient={queryClient}>
+        <YoloMode projectId="proj-1" />
+      </TestQueryWrapper>,
     );
 
-    renderWithQuery(<YoloMode projectId="proj-1" />);
-
     const toggle = await screen.findByRole("switch");
-    expect(toggle).toHaveAttribute("aria-checked", "false");
-
-    fetchSpy.mockResolvedValueOnce(jsonResponse(makeConfig({ enabled: true })));
+    await waitFor(() => {
+      expect(toggle).toHaveAttribute("aria-checked", "false");
+    });
 
     await user.click(toggle);
 
     await waitFor(() => {
-      const putCall = fetchSpy.mock.calls.find(
-        (call) => typeof call[1] === "object" && call[1]?.method === "PUT",
+      const updateCall = fetchSpy.mock.calls.find((call: [RequestInfo | URL]) =>
+        extractFetchUrl(call[0]).includes("/rpc/corpus.setAutoPublishConfig"),
       );
-      expect(putCall).toBeDefined();
-      const body = JSON.parse(putCall![1]!.body as string);
-      expect(body.enabled).toBe(true);
+      expect(updateCall).toBeDefined();
+      expect(requestBodies.get(extractFetchUrl(updateCall?.[0]))).toEqual({
+        enabled: true,
+        interval_minutes: 10,
+        min_upvotes: 0,
+        min_age_hours: 0,
+      });
     });
   });
 
   test("shows config panel when enabled", async () => {
     fetchSpy.mockResolvedValueOnce(
-      jsonResponse(makeConfig({ enabled: true, intervalMinutes: 30 })),
+      jsonResponse({
+        enabled: true,
+        interval_minutes: 30,
+        min_upvotes: 0,
+        min_age_hours: 0,
+      }),
     );
 
-    renderWithQuery(<YoloMode projectId="proj-1" />);
+    const queryClient = createTestQueryClient();
+
+    render(
+      <TestQueryWrapper queryClient={queryClient}>
+        <YoloMode projectId="proj-1" />
+      </TestQueryWrapper>,
+    );
 
     await waitFor(() => {
       expect(screen.getByRole("switch")).toHaveAttribute(

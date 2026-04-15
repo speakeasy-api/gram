@@ -91,6 +91,10 @@ func (s *stubGitRepo) CommitFiles(_ map[string][]byte, _ string) (string, error)
 	return "deadbeef", nil
 }
 
+func (s *stubGitRepo) ReadFiles(_ string) (map[string][]byte, error) {
+	return map[string][]byte{}, nil
+}
+
 func (s *stubGitRepo) ReadBlob(_ string, _ string) ([]byte, error) {
 	return nil, nil
 }

@@ -43,6 +43,8 @@ gram.code-workspace
 .local.env.json
 /server/cmd/local
 /local/cmd
+/server/.corpus-repos/
+/docs/superpowers/
 dist/
 **/.claude/settings.local.json
 **/.claude/.gram-install-prompted

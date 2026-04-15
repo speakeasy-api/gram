@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import Editor, { loader, OnMount } from "@monaco-editor/react";
+import Editor, { DiffEditor, loader, OnMount } from "@monaco-editor/react";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import type * as Monaco from "monaco-editor";
 import * as monaco from "monaco-editor";
@@ -42,6 +42,30 @@ interface MonacoEditorProps {
   readOnly?: boolean;
   height?: string;
   wordWrap?: "on" | "off" | "wordWrapColumn" | "bounded";
+}
+
+interface CorpusEditorProps {
+  value?: string;
+  path: string;
+  language?: string;
+  className?: string;
+  readOnly?: boolean;
+  height?: string;
+  onChange?: (value: string) => void;
+  onValidate?: (markers: Monaco.editor.IMarker[]) => void;
+  options?: Monaco.editor.IStandaloneEditorConstructionOptions;
+}
+
+interface CorpusDiffEditorProps {
+  original?: string;
+  modified?: string;
+  path: string;
+  language?: string;
+  className?: string;
+  readOnly?: boolean;
+  height?: string;
+  onChange?: (value: string) => void;
+  options?: Monaco.editor.IDiffEditorConstructionOptions;
 }
 
 /**
@@ -120,6 +144,169 @@ export function MonacoEditor({
         loading={
           <div className="flex items-center justify-center h-full">
             <div className="text-muted-foreground">Loading editor...</div>
+          </div>
+        }
+      />
+    </div>
+  );
+}
+
+export function CorpusEditor({
+  value,
+  path,
+  language = "markdown",
+  className,
+  readOnly = false,
+  height = "100%",
+  onChange,
+  onValidate,
+  options,
+}: CorpusEditorProps) {
+  const { theme } = useMoonshineConfig();
+  const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+  const themeName = theme === "dark" ? "vs-dark" : "vs";
+
+  const handleBeforeMount = (_monaco: typeof Monaco) => {};
+
+  const handleEditorMount: OnMount = (editor, _monaco) => {
+    editorRef.current = editor;
+  };
+
+  const handleMarkersChanged = (markers: Monaco.editor.IMarker[]) => {
+    onValidate?.(markers);
+  };
+
+  // Type cast needed for React 19 compatibility with @monaco-editor/react
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const MonacoCodeEditor = Editor as any;
+
+  return (
+    <div className={cn("overflow-hidden", className)} style={{ height }}>
+      <MonacoCodeEditor
+        value={value ?? ""}
+        height="100%"
+        key={path}
+        beforeMount={handleBeforeMount}
+        onMount={handleEditorMount}
+        language={language}
+        onChange={(nextValue: string | undefined) =>
+          onChange?.(nextValue ?? "")
+        }
+        theme={themeName}
+        wrapperProps={{
+          className: cn("flex-1 overflow-auto"),
+        }}
+        onValidate={handleMarkersChanged}
+        options={{
+          fixedOverflowWidgets: true,
+          padding: { top: 30, bottom: 30 },
+          renderValidationDecorations: "on",
+          overviewRulerLanes: 0,
+          wrappingStrategy: "simple",
+          wordWrap: "on",
+          links: false,
+          contextmenu: false,
+          scrollBeyondLastLine: false,
+          scrollBeyondLastColumn: 0,
+          formatOnPaste: true,
+          formatOnType: true,
+          wordBasedSuggestions: false,
+          largeFileOptimizations: true,
+          automaticLayout: true,
+          minimap: { enabled: false },
+          fontSize: 12,
+          readOnly,
+          fontFamily:
+            'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+          ...options,
+        }}
+        path={path}
+        loading={
+          <div className="flex items-center justify-center h-full">
+            <div className="text-muted-foreground">Loading editor...</div>
+          </div>
+        }
+      />
+    </div>
+  );
+}
+
+export function CorpusDiffEditor({
+  original,
+  modified,
+  path,
+  language = "markdown",
+  className,
+  readOnly = false,
+  height = "100%",
+  onChange,
+  options,
+}: CorpusDiffEditorProps) {
+  const { theme } = useMoonshineConfig();
+  const themeName = theme === "dark" ? "vs-dark" : "vs";
+  const diffEditorRef = useRef<Monaco.editor.IStandaloneDiffEditor | null>(
+    null,
+  );
+  const changeSubscriptionRef = useRef<Monaco.IDisposable | null>(null);
+
+  useEffect(() => {
+    return () => {
+      changeSubscriptionRef.current?.dispose();
+      changeSubscriptionRef.current = null;
+    };
+  }, []);
+
+  const handleDiffMount = (editor: Monaco.editor.IStandaloneDiffEditor) => {
+    diffEditorRef.current = editor;
+
+    changeSubscriptionRef.current?.dispose();
+    changeSubscriptionRef.current = null;
+
+    const modifiedEditor = editor.getModifiedEditor();
+    changeSubscriptionRef.current = modifiedEditor.onDidChangeModelContent(
+      () => {
+        onChange?.(modifiedEditor.getValue());
+      },
+    );
+  };
+
+  // Type cast needed for React 19 compatibility with @monaco-editor/react
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const MonacoDiffEditor = DiffEditor as any;
+
+  return (
+    <div className={cn("overflow-hidden", className)} style={{ height }}>
+      <MonacoDiffEditor
+        key={path}
+        original={original ?? ""}
+        modified={modified ?? ""}
+        height="100%"
+        language={language}
+        originalModelPath={`${path}:original`}
+        modifiedModelPath={`${path}:modified`}
+        keepCurrentOriginalModel
+        keepCurrentModifiedModel
+        theme={themeName}
+        wrapperProps={{
+          className: cn("flex-1 overflow-auto"),
+        }}
+        onMount={handleDiffMount}
+        options={{
+          automaticLayout: true,
+          fixedOverflowWidgets: true,
+          fontSize: 12,
+          minimap: { enabled: false },
+          readOnly,
+          renderGutterMenu: false,
+          renderMarginRevertIcon: false,
+          renderSideBySide: false,
+          scrollBeyondLastLine: false,
+          wordWrap: "on",
+          ...options,
+        }}
+        loading={
+          <div className="flex items-center justify-center h-full">
+            <div className="text-muted-foreground">Loading diff...</div>
           </div>
         }
       />

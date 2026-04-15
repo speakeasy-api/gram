@@ -25,11 +25,10 @@ func TestVote_Up(t *testing.T) {
 	require.Equal(t, ti.projectID, vote.ProjectID)
 }
 
-func TestVote_Toggle(t *testing.T) {
+func TestVote_RepeatedDirectionAccumulates(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	// Vote up
 	_, err := ti.svc.Vote(ctx, ti.projectID, ti.orgID, feedback.VoteParams{
 		FilePath:  "docs/guide.md",
 		UserID:    ti.userID,
@@ -37,26 +36,33 @@ func TestVote_Toggle(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Vote up again — should clear
 	vote, err := ti.svc.Vote(ctx, ti.projectID, ti.orgID, feedback.VoteParams{
 		FilePath:  "docs/guide.md",
 		UserID:    ti.userID,
 		Direction: feedback.DirectionUp,
 	})
 	require.NoError(t, err)
-	require.Nil(t, vote)
+	require.NotNil(t, vote)
+	require.Equal(t, feedback.DirectionUp, vote.Direction)
 
-	// List feedback — should have zero votes
 	list, err := ti.svc.ListFeedback(ctx, ti.projectID, nil)
 	require.NoError(t, err)
-	require.Empty(t, list)
+	require.Len(t, list, 1)
+	require.Equal(t, int64(2), list[0].Upvotes)
+	require.Equal(t, int64(0), list[0].Downvotes)
+
+	filePath := "docs/guide.md"
+	fileList, err := ti.svc.ListFeedback(ctx, ti.projectID, &filePath)
+	require.NoError(t, err)
+	require.Len(t, fileList, 1)
+	require.Equal(t, int64(2), fileList[0].Upvotes)
+	require.Equal(t, int64(0), fileList[0].Downvotes)
 }
 
-func TestVote_Switch(t *testing.T) {
+func TestVote_OppositeDirectionAlsoAccumulates(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	// Vote up
 	_, err := ti.svc.Vote(ctx, ti.projectID, ti.orgID, feedback.VoteParams{
 		FilePath:  "docs/api.md",
 		UserID:    ti.userID,
@@ -64,7 +70,6 @@ func TestVote_Switch(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Vote down — should switch direction
 	vote, err := ti.svc.Vote(ctx, ti.projectID, ti.orgID, feedback.VoteParams{
 		FilePath:  "docs/api.md",
 		UserID:    ti.userID,
@@ -73,6 +78,43 @@ func TestVote_Switch(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, vote)
 	require.Equal(t, feedback.DirectionDown, vote.Direction)
+
+	filePath := "docs/api.md"
+	fileList, err := ti.svc.ListFeedback(ctx, ti.projectID, &filePath)
+	require.NoError(t, err)
+	require.Len(t, fileList, 1)
+	require.Equal(t, int64(1), fileList[0].Upvotes)
+	require.Equal(t, int64(1), fileList[0].Downvotes)
+}
+
+func TestLatestVoteDirection(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	filePath := "docs/reference.md"
+
+	direction, err := ti.svc.LatestVoteDirection(ctx, ti.projectID, filePath, ti.userID)
+	require.NoError(t, err)
+	require.Nil(t, direction)
+
+	_, err = ti.svc.Vote(ctx, ti.projectID, ti.orgID, feedback.VoteParams{
+		FilePath:  filePath,
+		UserID:    ti.userID,
+		Direction: feedback.DirectionUp,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.svc.Vote(ctx, ti.projectID, ti.orgID, feedback.VoteParams{
+		FilePath:  filePath,
+		UserID:    ti.userID,
+		Direction: feedback.DirectionDown,
+	})
+	require.NoError(t, err)
+
+	direction, err = ti.svc.LatestVoteDirection(ctx, ti.projectID, filePath, ti.userID)
+	require.NoError(t, err)
+	require.NotNil(t, direction)
+	require.Equal(t, feedback.DirectionDown, *direction)
 }
 
 func TestListFeedback(t *testing.T) {
@@ -107,7 +149,8 @@ func TestListFeedback(t *testing.T) {
 	}
 
 	// List feedback for specific file
-	fileList, err := ti.svc.ListFeedback(ctx, ti.projectID, new("a.md"))
+	filePath := "a.md"
+	fileList, err := ti.svc.ListFeedback(ctx, ti.projectID, &filePath)
 	require.NoError(t, err)
 	require.Len(t, fileList, 1)
 	require.Equal(t, "a.md", fileList[0].FilePath)

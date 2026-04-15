@@ -1,5 +1,16 @@
-import { rpc } from "@/lib/rpc";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Gram } from "@gram/client";
+import type {
+  CorpusFeedbackCommentResult,
+  CorpusFeedbackResult,
+} from "@gram/client/models/components";
+import { ServiceError } from "@gram/client/models/errors/serviceerror";
+import {
+  useCorpusAddCommentMutation,
+  useCorpusVoteFeedbackMutation,
+  useGramContext,
+} from "@gram/client/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { getFeedbackFixture } from "./feedback-fixtures";
 
 export type FeedbackComment = {
   id: string;
@@ -16,10 +27,27 @@ export type FeedbackData = {
   downvotes: number;
   labels: string[];
   userVote?: "up" | "down" | null;
-  comments: FeedbackComment[];
+  readOnly?: boolean;
 };
 
 export type VoteDirection = "up" | "down";
+
+function isPermissionDenied(error: unknown): boolean {
+  if (error instanceof ServiceError) {
+    return error.statusCode === 403;
+  }
+
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "statusCode" in error &&
+    (error as { statusCode?: number }).statusCode === 403
+  );
+}
+
+function shouldUseFeedbackFixture(error: unknown): boolean {
+  return import.meta.env.DEV && isPermissionDenied(error);
+}
 
 export function feedbackQueryKey(filePath: string) {
   return ["corpus", "feedback", filePath] as const;
@@ -33,26 +61,64 @@ export function commentsQueryKey(filePath: string) {
  * Hook for fetching feedback (votes) for a corpus file.
  */
 export function useFeedback(filePath: string) {
+  const client = useGramContext() as Gram;
   const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: feedbackQueryKey(filePath),
-    queryFn: () => rpc<FeedbackData>("corpus.getFeedback", { filePath }),
+    queryFn: async (): Promise<FeedbackData> => {
+      try {
+        const result: CorpusFeedbackResult = await client.corpus.getFeedback({
+          getFeedbackRequestBody: {
+            filePath,
+          },
+        });
+
+        return {
+          downvotes: result.downvotes,
+          labels: result.labels,
+          upvotes: result.upvotes,
+          userVote: result.userVote ?? null,
+        };
+      } catch (error) {
+        if (!shouldUseFeedbackFixture(error)) {
+          throw error;
+        }
+
+        return {
+          ...getFeedbackFixture(filePath).feedback,
+          readOnly: true,
+        };
+      }
+    },
     enabled: !!filePath,
+    throwOnError: false,
   });
 
-  const voteMutation = useMutation({
-    mutationFn: (direction: VoteDirection) =>
-      rpc("corpus.voteFeedback", { filePath, direction }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: feedbackQueryKey(filePath) });
+  const voteMutation = useCorpusVoteFeedbackMutation({
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: feedbackQueryKey(filePath),
+      });
     },
   });
 
   return {
     data: query.data,
     isLoading: query.isLoading,
-    vote: (direction: VoteDirection) => voteMutation.mutate(direction),
+    vote: (direction: VoteDirection) =>
+      query.data?.readOnly
+        ? undefined
+        : voteMutation.mutate({
+            request: {
+              voteFeedbackRequestBody: {
+                filePath,
+                direction,
+              },
+            },
+          }),
+    isReadOnly: query.data?.readOnly ?? false,
+    error: query.error,
     isVoting: voteMutation.isPending,
   };
 }
@@ -61,32 +127,60 @@ export function useFeedback(filePath: string) {
  * Hook for fetching and adding comments on a corpus file.
  */
 export function useComments(filePath: string) {
+  const client = useGramContext() as Gram;
   const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: commentsQueryKey(filePath),
-    queryFn: async () => {
-      const result = await rpc<{ comments: FeedbackComment[] }>(
-        "corpus.listComments",
-        { filePath },
-      );
-      return result.comments;
+    queryFn: async (): Promise<FeedbackComment[]> => {
+      try {
+        const result = await client.corpus.listComments({
+          getFeedbackRequestBody: {
+            filePath,
+          },
+        });
+        return result.comments.map((comment: CorpusFeedbackCommentResult) => ({
+          author: comment.author,
+          authorType: comment.authorType,
+          content: comment.content,
+          createdAt: comment.createdAt.toISOString(),
+          downvotes: comment.downvotes,
+          id: comment.id,
+          upvotes: comment.upvotes,
+        }));
+      } catch (error) {
+        if (!shouldUseFeedbackFixture(error)) {
+          throw error;
+        }
+
+        return getFeedbackFixture(filePath).comments;
+      }
     },
     enabled: !!filePath,
+    throwOnError: false,
   });
 
-  const addMutation = useMutation({
-    mutationFn: (content: string) =>
-      rpc("corpus.addComment", { filePath, content }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: commentsQueryKey(filePath) });
+  const addMutation = useCorpusAddCommentMutation({
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: commentsQueryKey(filePath),
+      });
     },
   });
 
   return {
     data: query.data,
     isLoading: query.isLoading,
-    addComment: (content: string) => addMutation.mutate(content),
+    addComment: (content: string) =>
+      addMutation.mutate({
+        request: {
+          addCommentRequestBody: {
+            filePath,
+            content,
+          },
+        },
+      }),
+    error: query.error,
     isAddingComment: addMutation.isPending,
   };
 }

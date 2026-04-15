@@ -5038,7 +5038,7 @@ paths:
         - corpus
       summary: searchLogs corpus
       description: Search corpus search logs for a project.
-      operationId: corpusSearchLogs
+      operationId: searchLogs
       parameters:
         - name: Gram-Session
           in: header
@@ -5131,7 +5131,7 @@ paths:
         - corpus
       summary: searchStats corpus
       description: Get aggregated corpus search statistics for a project.
-      operationId: corpusSearchStats
+      operationId: searchStats
       parameters:
         - name: Gram-Session
           in: header

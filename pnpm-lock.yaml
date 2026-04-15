@@ -230,6 +230,9 @@ importers:
       ai:
         specifier: 'catalog:'
         version: 5.0.66(zod@4.3.6)
+      buffer:
+        specifier: ^6.0.3
+        version: 6.0.3
       chart.js:
         specifier: ^4.5.1
         version: 4.5.1

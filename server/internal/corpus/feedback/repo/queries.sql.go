@@ -113,40 +113,24 @@ func (q *Queries) CreateVote(ctx context.Context, arg CreateVoteParams) (CorpusF
 	return i, err
 }
 
-const deleteVote = `-- name: DeleteVote :exec
-DELETE FROM corpus_feedback
-WHERE project_id = $1
-  AND file_path = $2
-  AND user_id = $3
-`
-
-type DeleteVoteParams struct {
-	ProjectID uuid.UUID
-	FilePath  string
-	UserID    string
-}
-
-func (q *Queries) DeleteVote(ctx context.Context, arg DeleteVoteParams) error {
-	_, err := q.db.Exec(ctx, deleteVote, arg.ProjectID, arg.FilePath, arg.UserID)
-	return err
-}
-
-const getVote = `-- name: GetVote :one
+const getLatestVoteForFileByUser = `-- name: GetLatestVoteForFileByUser :one
 SELECT id, project_id, organization_id, file_path, user_id, direction, labels, created_at, updated_at
 FROM corpus_feedback
 WHERE project_id = $1
   AND file_path = $2
   AND user_id = $3
+ORDER BY created_at DESC, id DESC
+LIMIT 1
 `
 
-type GetVoteParams struct {
+type GetLatestVoteForFileByUserParams struct {
 	ProjectID uuid.UUID
 	FilePath  string
 	UserID    string
 }
 
-func (q *Queries) GetVote(ctx context.Context, arg GetVoteParams) (CorpusFeedback, error) {
-	row := q.db.QueryRow(ctx, getVote, arg.ProjectID, arg.FilePath, arg.UserID)
+func (q *Queries) GetLatestVoteForFileByUser(ctx context.Context, arg GetLatestVoteForFileByUserParams) (CorpusFeedback, error) {
+	row := q.db.QueryRow(ctx, getLatestVoteForFileByUser, arg.ProjectID, arg.FilePath, arg.UserID)
 	var i CorpusFeedback
 	err := row.Scan(
 		&i.ID,
@@ -285,43 +269,4 @@ func (q *Queries) ListFeedbackForFile(ctx context.Context, arg ListFeedbackForFi
 		return nil, err
 	}
 	return items, nil
-}
-
-const updateVoteDirection = `-- name: UpdateVoteDirection :one
-UPDATE corpus_feedback
-SET direction = $1,
-    updated_at = clock_timestamp()
-WHERE project_id = $2
-  AND file_path = $3
-  AND user_id = $4
-RETURNING id, project_id, organization_id, file_path, user_id, direction, labels, created_at, updated_at
-`
-
-type UpdateVoteDirectionParams struct {
-	Direction string
-	ProjectID uuid.UUID
-	FilePath  string
-	UserID    string
-}
-
-func (q *Queries) UpdateVoteDirection(ctx context.Context, arg UpdateVoteDirectionParams) (CorpusFeedback, error) {
-	row := q.db.QueryRow(ctx, updateVoteDirection,
-		arg.Direction,
-		arg.ProjectID,
-		arg.FilePath,
-		arg.UserID,
-	)
-	var i CorpusFeedback
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.OrganizationID,
-		&i.FilePath,
-		&i.UserID,
-		&i.Direction,
-		&i.Labels,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }

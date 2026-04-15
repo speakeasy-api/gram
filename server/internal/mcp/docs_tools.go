@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -110,16 +111,21 @@ func marshalTextToolResult(reqID msgID, text string) (json.RawMessage, error) {
 		Meta:     nil,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal text content chunk: %w", err)
 	}
 
-	return json.Marshal(result[toolCallResult]{
+	payload, err := json.Marshal(result[toolCallResult]{
 		ID: reqID,
 		Result: toolCallResult{
 			Content: []json.RawMessage{chunk},
 			IsError: false,
 		},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal text tool result: %w", err)
+	}
+
+	return payload, nil
 }
 
 type searchDocsArguments struct {

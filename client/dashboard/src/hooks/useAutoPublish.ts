@@ -1,5 +1,9 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { rpc } from "@/lib/rpc";
+import type { Gram } from "@gram/client";
+import {
+  useCorpusSetAutoPublishConfigMutation,
+  useGramContext,
+} from "@gram/client/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 /**
  * Shape of the auto-publish configuration returned by the server.
@@ -15,38 +19,38 @@ export interface AutoPublishConfig {
 
 const QUERY_KEY = "autoPublishConfig";
 
-async function fetchConfig(): Promise<AutoPublishConfig> {
-  return rpc<AutoPublishConfig>("corpus.getAutoPublishConfig", {});
-}
-
-async function updateConfig(
-  config: AutoPublishConfig,
-): Promise<AutoPublishConfig> {
-  return rpc<AutoPublishConfig>("corpus.setAutoPublishConfig", {
-    enabled: config.enabled,
-    interval_minutes: config.intervalMinutes,
-    min_upvotes: config.minUpvotes,
-    author_type_filter: config.authorTypeFilter,
-    label_filter: config.labelFilter,
-    min_age_hours: config.minAgeHours,
-  });
-}
-
 /**
  * Hook for reading and writing auto-publish (YOLO mode) configuration.
  */
 export function useAutoPublish(projectId: string) {
+  const client = useGramContext() as Gram;
   const queryClient = useQueryClient();
 
   const query = useQuery<AutoPublishConfig>({
     queryKey: [QUERY_KEY, projectId],
-    queryFn: () => fetchConfig(),
+    queryFn: async () => {
+      const config = await client.corpus.getAutoPublishConfig({});
+      return {
+        authorTypeFilter: config.authorTypeFilter ?? null,
+        enabled: config.enabled,
+        intervalMinutes: config.intervalMinutes,
+        labelFilter: config.labelFilter ?? null,
+        minAgeHours: config.minAgeHours,
+        minUpvotes: config.minUpvotes,
+      };
+    },
   });
 
-  const mutation = useMutation<AutoPublishConfig, Error, AutoPublishConfig>({
-    mutationFn: updateConfig,
+  const mutation = useCorpusSetAutoPublishConfigMutation({
     onSuccess: (data) => {
-      queryClient.setQueryData([QUERY_KEY, projectId], data);
+      queryClient.setQueryData([QUERY_KEY, projectId], {
+        authorTypeFilter: data.authorTypeFilter ?? null,
+        enabled: data.enabled,
+        intervalMinutes: data.intervalMinutes,
+        labelFilter: data.labelFilter ?? null,
+        minAgeHours: data.minAgeHours,
+        minUpvotes: data.minUpvotes,
+      } satisfies AutoPublishConfig);
     },
   });
 
@@ -54,7 +58,19 @@ export function useAutoPublish(projectId: string) {
     config: query.data ?? null,
     isLoading: query.isLoading,
     error: query.error,
-    setConfig: mutation.mutate,
+    setConfig: (config: AutoPublishConfig) =>
+      mutation.mutate({
+        request: {
+          corpusAutoPublishConfigResult: {
+            authorTypeFilter: config.authorTypeFilter ?? undefined,
+            enabled: config.enabled,
+            intervalMinutes: config.intervalMinutes,
+            labelFilter: config.labelFilter ?? undefined,
+            minAgeHours: config.minAgeHours,
+            minUpvotes: config.minUpvotes,
+          },
+        },
+      }),
     isSaving: mutation.isPending,
   };
 }

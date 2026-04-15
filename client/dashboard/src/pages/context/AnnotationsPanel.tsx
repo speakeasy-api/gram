@@ -10,7 +10,12 @@ import { useState } from "react";
  * file. Fetches data via useAnnotations hook.
  */
 export function AnnotationsPanel({ filePath }: { filePath: string }) {
-  const { data: annotations, create, isCreating } = useAnnotations(filePath);
+  const {
+    data: annotations,
+    create,
+    isCreating,
+    isReadOnly,
+  } = useAnnotations(filePath);
   const [showForm, setShowForm] = useState(false);
   const [content, setContent] = useState("");
 
@@ -19,6 +24,7 @@ export function AnnotationsPanel({ filePath }: { filePath: string }) {
   }
 
   const handleSubmit = () => {
+    if (isReadOnly) return;
     if (!content.trim()) return;
     create(content.trim());
     setContent("");
@@ -51,7 +57,7 @@ export function AnnotationsPanel({ filePath }: { filePath: string }) {
               <Button
                 size="sm"
                 onClick={handleSubmit}
-                disabled={isCreating || !content.trim()}
+                disabled={isCreating || isReadOnly || !content.trim()}
               >
                 Submit
               </Button>
@@ -72,6 +78,7 @@ export function AnnotationsPanel({ filePath }: { filePath: string }) {
             size="sm"
             variant="outline"
             className="w-full"
+            disabled={isReadOnly}
             onClick={() => setShowForm(true)}
           >
             <PlusIcon className="h-3.5 w-3.5 mr-1.5" />

@@ -49,7 +49,13 @@ import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SourceDetails from "./pages/sources/SourceDetails";
-import ContextPage, { ContextRoot } from "./pages/context/Context";
+import {
+  ContextContentPage,
+  ContextIndexRedirect,
+  ContextObservabilityPage,
+  ContextPendingChangesPage,
+  ContextRoot,
+} from "./pages/context/Context";
 import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
@@ -232,7 +238,24 @@ const ROUTE_STRUCTURE = {
     url: "context",
     icon: "library",
     component: ContextRoot,
-    indexComponent: ContextPage,
+    indexComponent: ContextIndexRedirect,
+    subPages: {
+      content: {
+        title: "Content",
+        url: "content/*",
+        component: ContextContentPage,
+      },
+      pendingChanges: {
+        title: "Pending Changes",
+        url: "pending-changes",
+        component: ContextPendingChangesPage,
+      },
+      observability: {
+        title: "Observability",
+        url: "observability",
+        component: ContextObservabilityPage,
+      },
+    },
   },
   catalog: {
     title: "Catalog",
@@ -415,13 +438,19 @@ export const useRoutes = (overrides?: {
   const matchesCurrent = (url: string) => {
     const urlParts = url.split("/").filter(Boolean);
     const currentParts = location.pathname.split("/").filter(Boolean);
+    const hasSplat = urlParts[urlParts.length - 1] === "*";
 
-    if (urlParts.length !== currentParts.length) {
+    if (hasSplat) {
+      if (currentParts.length < urlParts.length - 1) {
+        return false;
+      }
+    } else if (urlParts.length !== currentParts.length) {
       return false;
     }
 
     return urlParts.every(
-      (part, index) => part === currentParts[index] || part.startsWith(":"),
+      (part, index) =>
+        part === "*" || part === currentParts[index] || part.startsWith(":"),
     );
   };
 
@@ -444,7 +473,19 @@ export const useRoutes = (overrides?: {
       const finalParts = [];
 
       for (const part of parts) {
-        if (part.startsWith(":")) {
+        if (part === "*") {
+          const v = params.shift();
+          if (!v) {
+            continue;
+          }
+
+          finalParts.push(
+            ...v
+              .split("/")
+              .filter(Boolean)
+              .map((segment) => encodeURIComponent(segment)),
+          );
+        } else if (part.startsWith(":")) {
           if (part === ":orgSlug") {
             finalParts.push(orgSlug);
           } else if (part === ":projectSlug") {

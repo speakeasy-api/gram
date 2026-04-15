@@ -1719,9 +1719,14 @@ CREATE TABLE IF NOT EXISTS corpus_feedback (
 
   CONSTRAINT corpus_feedback_pkey PRIMARY KEY (id),
   CONSTRAINT corpus_feedback_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
-  CONSTRAINT corpus_feedback_project_id_file_path_user_id_key UNIQUE (project_id, file_path, user_id),
   CONSTRAINT corpus_feedback_direction_check CHECK (direction IN ('up', 'down'))
 );
+
+CREATE INDEX IF NOT EXISTS corpus_feedback_project_id_file_path_idx
+ON corpus_feedback (project_id, file_path);
+
+CREATE INDEX IF NOT EXISTS corpus_feedback_project_id_file_path_user_id_created_at_idx
+ON corpus_feedback (project_id, file_path, user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS corpus_feedback_comments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

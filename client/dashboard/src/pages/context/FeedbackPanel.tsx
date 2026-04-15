@@ -9,7 +9,7 @@ import { ThumbsDownIcon, ThumbsUpIcon } from "lucide-react";
  * thread for a corpus file. Fetches data via useFeedback + useComments hooks.
  */
 export function FeedbackPanel({ filePath }: { filePath: string }) {
-  const { data: feedback, vote } = useFeedback(filePath);
+  const { data: feedback, vote, isReadOnly } = useFeedback(filePath);
   const { data: comments } = useComments(filePath);
 
   if (!feedback) {
@@ -23,6 +23,7 @@ export function FeedbackPanel({ filePath }: { filePath: string }) {
         downvotes={feedback.downvotes}
         userVote={feedback.userVote}
         labels={feedback.labels}
+        disabled={isReadOnly}
         onUpvote={() => vote("up")}
         onDownvote={() => vote("down")}
       />
@@ -36,6 +37,7 @@ function VoteBar({
   downvotes,
   userVote,
   labels,
+  disabled,
   onUpvote,
   onDownvote,
 }: {
@@ -43,6 +45,7 @@ function VoteBar({
   downvotes: number;
   userVote?: "up" | "down" | null;
   labels: string[];
+  disabled?: boolean;
   onUpvote: () => void;
   onDownvote: () => void;
 }) {
@@ -51,9 +54,10 @@ function VoteBar({
       <div className="flex items-center gap-1.5">
         <button
           aria-label="Upvote"
+          disabled={disabled}
           onClick={onUpvote}
           className={cn(
-            "p-0.5 rounded transition-colors",
+            "p-0.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
             userVote === "up"
               ? "text-primary"
               : "text-muted-foreground hover:text-foreground",
@@ -66,9 +70,10 @@ function VoteBar({
       <div className="flex items-center gap-1.5">
         <button
           aria-label="Downvote"
+          disabled={disabled}
           onClick={onDownvote}
           className={cn(
-            "p-0.5 rounded transition-colors",
+            "p-0.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
             userVote === "down"
               ? "text-destructive"
               : "text-muted-foreground hover:text-foreground",

@@ -1,18 +1,29 @@
 import { Page } from "@/components/page-layout";
+import { CorpusDiffEditor, CorpusEditor } from "@/components/monaco-editor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useProject, useSession } from "@/contexts/Auth";
+import { useSlugs } from "@/contexts/Sdk";
 import { Dialog } from "@/components/ui/dialog";
-import {
-  PageTabsTrigger,
-  Tabs,
-  TabsContent,
-  TabsList,
-} from "@/components/ui/tabs";
+import { PageTabsTrigger, Tabs, TabsList } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
-import { cloneCorpus, readCorpusTree } from "@/hooks/useCorpusFS";
-import { fetchDrafts, publishDrafts } from "@/hooks/useDrafts";
+import {
+  cloneCorpus,
+  type CorpusRepoRef,
+  getCorpusRemoteURL,
+  pushCorpusFile,
+  readCommittedCorpusFile,
+  readCorpusDirtyPaths,
+  readCorpusFile,
+  readCorpusFileVersions,
+  readCorpusTree,
+  writeCorpusFile,
+} from "@/hooks/useCorpusFS";
+import { fetchDrafts, publishDrafts, saveDraft } from "@/hooks/useDrafts";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import { Icon, ResizablePanel } from "@speakeasy-api/moonshine";
 import {
   BotIcon,
@@ -28,21 +39,27 @@ import {
   UserIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Outlet } from "react-router";
+import {
+  Link,
+  Navigate,
+  Outlet,
+  useNavigate,
+  useOutletContext,
+  useParams,
+} from "react-router";
 import { AddRepoDialog } from "./AddRepoDialog";
 import { AnnotationsPanel } from "./AnnotationsPanel";
 import { FeedbackPanel } from "./FeedbackPanel";
 import { ObservabilityTab } from "./ObservabilityTab";
+import { buildCorpusQuickStart } from "./contextQuickStart";
 import {
   type ContextFile,
   type ContextFolder,
   type ContextNode,
-  type DiffLine,
   type DocsMcpConfig,
   type DraftDocument,
   type FileVersion,
   collectDrafts,
-  computeLineDiff,
   countDrafts,
   countItems,
   findFile,
@@ -52,149 +69,362 @@ import {
   getEffectiveConfig,
   MOCK_ALL_ROLES,
   parseSkillFrontmatter,
-  resolvePath,
 } from "./mock-data";
-
-export function ContextRoot() {
-  return <Outlet />;
-}
 
 const RESIZABLE_PANEL_CLASS =
   "[&>[role='separator']]:w-px [&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:border-0 [&>[role='separator']]:hover:bg-primary [&>[role='separator']]:relative [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:cursor-col-resize";
 
-export default function ContextPage() {
+type ContextRouteContext = {
+  corpusTree: ContextFolder | null;
+  corpusLoading: boolean;
+  corpusError: string | null;
+  dirtyPaths: Set<string>;
+  corpusRemoteURL: string | null;
+  projectSlug: string | null;
+  corpusRef: CorpusRepoRef | null;
+  sessionToken?: string;
+  authorName: string;
+  authorEmail: string;
+  refreshDirtyPaths: () => Promise<void>;
+  onPushed: () => Promise<void>;
+  drafts: DraftDocument[];
+  draftsLoading: boolean;
+  ensureDraftsLoaded: () => Promise<DraftDocument[]>;
+  refreshDrafts: () => Promise<DraftDocument[]>;
+  upsertDraft: (draft: DraftDocument) => void;
+  projectId: string;
+  totalDrafts: number;
+};
+
+function useContextRouteContext() {
+  return useOutletContext<ContextRouteContext>();
+}
+
+export function ContextIndexRedirect() {
+  return <Navigate to="content" replace />;
+}
+
+export function ContextRoot() {
   const project = useProject();
-  const { session } = useSession();
+  const { session, user } = useSession();
+  const { orgSlug } = useSlugs();
+  const routes = useRoutes();
+
+  const corpusRef = useMemo(() => {
+    if (!project.id || !project.slug || !orgSlug) {
+      return null;
+    }
+
+    return {
+      projectId: project.id,
+      projectSlug: project.slug,
+      orgSlug,
+    };
+  }, [orgSlug, project.id, project.slug]);
 
   // ── Corpus tree from git ────────────────────────────────────────────────
   const [corpusTree, setCorpusTree] = useState<ContextFolder | null>(null);
   const [corpusLoading, setCorpusLoading] = useState(true);
   const [corpusError, setCorpusError] = useState<string | null>(null);
+  const [dirtyPaths, setDirtyPaths] = useState<Set<string>>(new Set());
+
+  const loadCorpus = useCallback(async () => {
+    if (!corpusRef) {
+      setCorpusTree({
+        type: "folder",
+        name: "docs",
+        children: [],
+        updatedAt: new Date().toISOString(),
+      });
+      setCorpusLoading(false);
+      setCorpusError(null);
+      setDirtyPaths(new Set());
+      return;
+    }
+
+    setCorpusLoading(true);
+    setCorpusError(null);
+    try {
+      await cloneCorpus(corpusRef, session || undefined);
+      const [children, nextDirtyPaths] = await Promise.all([
+        readCorpusTree(corpusRef),
+        readCorpusDirtyPaths(corpusRef),
+      ]);
+      setCorpusTree({
+        type: "folder",
+        name: "docs",
+        children,
+        updatedAt: new Date().toISOString(),
+      });
+      setDirtyPaths(new Set(nextDirtyPaths));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (
+        msg.includes("Could not find") ||
+        msg.includes("empty") ||
+        msg.includes("404") ||
+        msg.includes("HttpError")
+      ) {
+        setCorpusTree({
+          type: "folder",
+          name: "docs",
+          children: [],
+          updatedAt: new Date().toISOString(),
+        });
+        setDirtyPaths(new Set());
+      } else {
+        setCorpusError(msg);
+      }
+    } finally {
+      setCorpusLoading(false);
+    }
+  }, [corpusRef, session]);
 
   useEffect(() => {
-    if (!project.id) return;
-    let cancelled = false;
+    void loadCorpus();
+  }, [loadCorpus]);
 
-    (async () => {
-      setCorpusLoading(true);
-      setCorpusError(null);
-      try {
-        await cloneCorpus(project.id, session || undefined);
-        const children = await readCorpusTree(project.id);
-        if (!cancelled) {
-          setCorpusTree({
-            type: "folder",
-            name: "docs",
-            children,
-            updatedAt: new Date().toISOString(),
-          });
-        }
-      } catch (err) {
-        if (!cancelled) {
-          // Empty repo is not an error — show empty tree
-          const msg = err instanceof Error ? err.message : String(err);
-          if (
-            msg.includes("Could not find") ||
-            msg.includes("empty") ||
-            msg.includes("404") ||
-            msg.includes("HttpError")
-          ) {
-            setCorpusTree({
-              type: "folder",
-              name: "docs",
-              children: [],
-              updatedAt: new Date().toISOString(),
-            });
-          } else {
-            setCorpusError(msg);
-          }
-        }
-      } finally {
-        if (!cancelled) setCorpusLoading(false);
-      }
-    })();
+  const handleRefreshDirtyPaths = useCallback(async () => {
+    if (!corpusRef) {
+      return;
+    }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [project.id, session]);
+    const nextDirtyPaths = await readCorpusDirtyPaths(corpusRef);
+    setDirtyPaths(new Set(nextDirtyPaths));
+  }, [corpusRef]);
 
   // ── Drafts from API ────────────────────────────────────────────────────
   const [drafts, setDrafts] = useState<DraftDocument[]>([]);
-  const [draftsLoading, setDraftsLoading] = useState(true);
+  const [draftsLoading, setDraftsLoading] = useState(false);
+  const [draftsLoaded, setDraftsLoaded] = useState(false);
+  const draftsRequestRef = useRef<Promise<DraftDocument[]> | null>(null);
 
-  const loadDrafts = useCallback(async () => {
-    if (!project.id) return;
-    setDraftsLoading(true);
-    try {
-      const result = await fetchDrafts(project.id);
-      setDrafts(result);
-    } catch {
-      // Silently fall back to empty — API may not be deployed yet
-      setDrafts([]);
-    } finally {
-      setDraftsLoading(false);
-    }
-  }, [project.id]);
+  const loadDrafts = useCallback(
+    async (force = false) => {
+      if (!project.id) {
+        setDrafts([]);
+        setDraftsLoaded(true);
+        setDraftsLoading(false);
+        return [];
+      }
 
-  useEffect(() => {
-    loadDrafts();
+      if (!force) {
+        if (draftsLoaded) {
+          return drafts;
+        }
+
+        if (draftsRequestRef.current) {
+          return draftsRequestRef.current;
+        }
+      }
+
+      setDraftsLoading(true);
+      const request = (async () => {
+        try {
+          const result = await fetchDrafts(project.id);
+          setDrafts(result);
+          setDraftsLoaded(true);
+          return result;
+        } catch {
+          // Silently fall back to empty — API may not be deployed yet
+          setDrafts([]);
+          setDraftsLoaded(true);
+          return [];
+        } finally {
+          setDraftsLoading(false);
+          draftsRequestRef.current = null;
+        }
+      })();
+
+      draftsRequestRef.current = request;
+      return request;
+    },
+    [drafts, draftsLoaded, project.id],
+  );
+
+  const refreshDrafts = useCallback(() => {
+    return loadDrafts(true);
   }, [loadDrafts]);
 
+  const upsertDraft = useCallback((draft: DraftDocument) => {
+    setDrafts((current) => {
+      const existingIndex = current.findIndex((item) => item.id === draft.id);
+      if (existingIndex === -1) {
+        return [draft, ...current];
+      }
+
+      const next = [...current];
+      next[existingIndex] = draft;
+      return next;
+    });
+    setDraftsLoaded(true);
+  }, []);
+
   const totalDrafts = drafts.filter((d) => d.status === "open").length;
+  const activeTab = routes.context.pendingChanges.active
+    ? "pending-changes"
+    : routes.context.observability.active
+      ? "observability"
+      : "content";
+
+  const outletContext = useMemo<ContextRouteContext>(
+    () => ({
+      corpusTree,
+      corpusLoading,
+      corpusError,
+      dirtyPaths,
+      corpusRemoteURL: project.id ? getCorpusRemoteURL(project.id) : null,
+      projectSlug: project.slug || null,
+      corpusRef,
+      sessionToken: session || undefined,
+      authorName: user.displayName || user.email || "Gram User",
+      authorEmail: user.email || "corpus@getgram.ai",
+      refreshDirtyPaths: handleRefreshDirtyPaths,
+      onPushed: loadCorpus,
+      drafts,
+      draftsLoading,
+      ensureDraftsLoaded: loadDrafts,
+      refreshDrafts,
+      upsertDraft,
+      projectId: project.id,
+      totalDrafts,
+    }),
+    [
+      corpusError,
+      corpusLoading,
+      corpusRef,
+      corpusTree,
+      dirtyPaths,
+      drafts,
+      draftsLoading,
+      loadDrafts,
+      handleRefreshDirtyPaths,
+      loadCorpus,
+      project.id,
+      project.slug,
+      refreshDrafts,
+      session,
+      totalDrafts,
+      upsertDraft,
+      user.displayName,
+      user.email,
+    ],
+  );
 
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs fullWidth />
       </Page.Header>
-      <Page.Body fullWidth noPadding>
-        <Tabs defaultValue="content" className="flex flex-col h-full">
+      <Page.Body fullWidth fullHeight noPadding overflowHidden>
+        <Tabs value={activeTab} className="flex flex-col h-full">
           <div className="border-b">
             <div className="px-8">
               <TabsList className="h-auto bg-transparent p-0 gap-6 rounded-none items-stretch">
-                <PageTabsTrigger value="content">Content</PageTabsTrigger>
-                <PageTabsTrigger value="pending-changes">
-                  Pending Changes
-                  {totalDrafts > 0 && (
-                    <span className="ml-1.5 inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-amber-500 text-white text-xs font-medium leading-none">
-                      {totalDrafts}
-                    </span>
-                  )}
+                <PageTabsTrigger value="content" asChild>
+                  <Link to={routes.context.content.href()}>Content</Link>
                 </PageTabsTrigger>
-                <PageTabsTrigger value="observability">
-                  Observability
+                <PageTabsTrigger value="pending-changes" asChild>
+                  <Link to={routes.context.pendingChanges.href()}>
+                    Pending Changes
+                    {totalDrafts > 0 && (
+                      <span className="ml-1.5 inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-amber-500 text-white text-xs font-medium leading-none">
+                        {totalDrafts}
+                      </span>
+                    )}
+                  </Link>
+                </PageTabsTrigger>
+                <PageTabsTrigger value="observability" asChild>
+                  <Link to={routes.context.observability.href()}>
+                    Observability
+                  </Link>
                 </PageTabsTrigger>
               </TabsList>
             </div>
           </div>
-          <TabsContent value="content" className="flex-1 min-h-0">
-            <ContentTab
-              tree={corpusTree}
-              loading={corpusLoading}
-              error={corpusError}
-            />
-          </TabsContent>
-          <TabsContent
-            value="pending-changes"
-            className="flex-1 min-h-0 p-8 overflow-y-auto"
-          >
-            <PendingChangesTab
-              drafts={drafts}
-              loading={draftsLoading}
-              projectId={project.id}
-              onPublished={loadDrafts}
-            />
-          </TabsContent>
-          <TabsContent
-            value="observability"
-            className="flex-1 min-h-0 p-8 overflow-y-auto"
-          >
-            <ObservabilityTab />
-          </TabsContent>
+          <div className="flex-1 min-h-0">
+            <Outlet context={outletContext} />
+          </div>
         </Tabs>
       </Page.Body>
     </Page>
+  );
+}
+
+export function ContextContentPage() {
+  const {
+    authorEmail,
+    authorName,
+    corpusError,
+    corpusLoading,
+    corpusRef,
+    corpusRemoteURL,
+    corpusTree,
+    dirtyPaths,
+    drafts,
+    ensureDraftsLoaded,
+    refreshDirtyPaths,
+    onPushed,
+    projectSlug,
+    sessionToken,
+    upsertDraft,
+  } = useContextRouteContext();
+
+  return (
+    <ContentTab
+      tree={corpusTree}
+      loading={corpusLoading}
+      error={corpusError}
+      dirtyPaths={dirtyPaths}
+      corpusRemoteURL={corpusRemoteURL}
+      projectSlug={projectSlug}
+      corpusRef={corpusRef}
+      sessionToken={sessionToken}
+      authorName={authorName}
+      authorEmail={authorEmail}
+      drafts={drafts}
+      ensureDraftsLoaded={ensureDraftsLoaded}
+      onDraftSaved={upsertDraft}
+      refreshDirtyPaths={refreshDirtyPaths}
+      onPushed={onPushed}
+    />
+  );
+}
+
+export function ContextPendingChangesPage() {
+  const {
+    corpusRef,
+    drafts,
+    draftsLoading,
+    ensureDraftsLoaded,
+    projectId,
+    refreshDrafts,
+  } = useContextRouteContext();
+
+  useEffect(() => {
+    void ensureDraftsLoaded();
+  }, [ensureDraftsLoaded]);
+
+  return (
+    <div className="h-full min-h-0 p-8 overflow-y-auto">
+      <PendingChangesTab
+        corpusRef={corpusRef}
+        drafts={drafts}
+        loading={draftsLoading}
+        projectId={projectId}
+        onPublished={() => {
+          void refreshDrafts();
+        }}
+      />
+    </div>
+  );
+}
+
+export function ContextObservabilityPage() {
+  return (
+    <div className="h-full min-h-0 p-8 overflow-y-auto">
+      <ObservabilityTab />
+    </div>
   );
 }
 
@@ -211,29 +441,111 @@ function ContentTab({
   tree,
   loading,
   error,
+  dirtyPaths,
+  corpusRemoteURL,
+  projectSlug,
+  corpusRef,
+  sessionToken,
+  authorName,
+  authorEmail,
+  drafts,
+  ensureDraftsLoaded,
+  onDraftSaved,
+  refreshDirtyPaths,
+  onPushed,
 }: {
   tree: ContextFolder | null;
   loading: boolean;
   error: string | null;
+  dirtyPaths: Set<string>;
+  corpusRemoteURL: string | null;
+  projectSlug: string | null;
+  corpusRef: CorpusRepoRef | null;
+  sessionToken?: string;
+  authorName: string;
+  authorEmail: string;
+  drafts: DraftDocument[];
+  ensureDraftsLoaded: () => Promise<DraftDocument[]>;
+  onDraftSaved: (draft: DraftDocument) => void;
+  refreshDirtyPaths: () => Promise<void>;
+  onPushed: () => Promise<void>;
 }) {
-  const [selectedFile, setSelectedFile] = useState<ContextFile | null>(null);
-  const [selectedPath, setSelectedPath] = useState<string[]>([]);
   const [addRepoOpen, setAddRepoOpen] = useState(false);
   const [viewAsRole, setViewAsRole] = useState<string | null>(null);
+  const routes = useRoutes();
+  const navigate = useNavigate();
+  const params = useParams();
 
   const contextTree = tree ?? EMPTY_TREE;
+  const routePath = params["*"] ?? "";
+  const requestedPath = useMemo(
+    () => splitContextRoutePath(routePath),
+    [routePath],
+  );
+  const selection = useMemo(
+    () => resolveContextSelection(contextTree, requestedPath),
+    [contextTree, requestedPath],
+  );
+  const selectedFile = selection.file;
+  const selectedPath = selection.selectedPath;
+  const selectedFolder = selection.folder;
   const effectiveConfig = getEffectiveConfig(contextTree, selectedPath);
-  const selectedFolder = resolvePath(contextTree, selectedPath);
+  const selectedFilePath = useMemo(
+    () => joinContextRoutePath(selection.canonicalSegments),
+    [selection.canonicalSegments],
+  );
 
-  const handleFileSelect = (file: ContextFile, path: string[]) => {
-    setSelectedFile(file);
-    setSelectedPath(path);
-  };
+  useEffect(() => {
+    if (loading || error) {
+      return;
+    }
 
-  const handleFolderSelect = (path: string[]) => {
-    setSelectedFile(null);
-    setSelectedPath(path);
-  };
+    const requested = joinContextRoutePath(requestedPath);
+    const canonical = joinContextRoutePath(selection.canonicalSegments);
+    if (requested === canonical) {
+      return;
+    }
+
+    navigate(
+      canonical
+        ? routes.context.content.href(canonical)
+        : routes.context.content.href(),
+      { replace: true },
+    );
+  }, [
+    error,
+    loading,
+    navigate,
+    requestedPath,
+    routes,
+    selection.canonicalSegments,
+  ]);
+
+  const navigateToSelection = useCallback(
+    (segments: string[]) => {
+      const path = joinContextRoutePath(segments);
+      navigate(
+        path
+          ? routes.context.content.href(path)
+          : routes.context.content.href(),
+      );
+    },
+    [navigate, routes],
+  );
+
+  const handleFileSelect = useCallback(
+    (path: string[]) => {
+      navigateToSelection(path);
+    },
+    [navigateToSelection],
+  );
+
+  const handleFolderSelect = useCallback(
+    (path: string[]) => {
+      navigateToSelection(path);
+    },
+    [navigateToSelection],
+  );
 
   return (
     <>
@@ -298,11 +610,7 @@ function ContentTab({
             </div>
             <div className="flex-1 overflow-y-auto py-1">
               {loading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Type small muted>
-                    Loading corpus...
-                  </Type>
-                </div>
+                <ContextTreeSkeleton />
               ) : error ? (
                 <div className="flex items-center justify-center py-8">
                   <Type small muted className="text-destructive">
@@ -310,16 +618,21 @@ function ContentTab({
                   </Type>
                 </div>
               ) : (
-                <TreeNode
-                  node={contextTree}
-                  depth={0}
-                  selectedFile={selectedFile}
-                  onFileSelect={handleFileSelect}
-                  onFolderSelect={handleFolderSelect}
-                  parentPath={[]}
-                  viewAsRole={viewAsRole}
-                  configs={collectConfigs(contextTree)}
-                />
+                contextTree.children.map((child) => (
+                  <TreeNode
+                    key={child.name}
+                    node={child}
+                    depth={0}
+                    selectedPath={selection.canonicalSegments}
+                    selectedKind={selection.kind}
+                    dirtyPaths={dirtyPaths}
+                    onFileSelect={handleFileSelect}
+                    onFolderSelect={handleFolderSelect}
+                    parentPath={[]}
+                    viewAsRole={viewAsRole}
+                    configs={collectConfigs(contextTree)}
+                  />
+                ))
               )}
             </div>
           </div>
@@ -327,15 +640,35 @@ function ContentTab({
 
         {/* Right: detail view */}
         <ResizablePanel.Pane minSize={40}>
-          <div className="h-full overflow-y-auto p-6">
-            {selectedFile ? (
-              <FileDetail file={selectedFile} />
+          <div className="h-full min-h-0 p-6">
+            {loading ? (
+              <ContextDetailSkeleton />
+            ) : selectedFile ? (
+              <div className="h-full min-h-0">
+                <FileDetail
+                  file={selectedFile}
+                  filePath={selectedFilePath}
+                  corpusRef={corpusRef}
+                  sessionToken={sessionToken}
+                  authorName={authorName}
+                  authorEmail={authorEmail}
+                  drafts={drafts}
+                  ensureDraftsLoaded={ensureDraftsLoaded}
+                  onDraftSaved={onDraftSaved}
+                  refreshDirtyPaths={refreshDirtyPaths}
+                  onPushed={onPushed}
+                />
+              </div>
             ) : selectedFolder ? (
-              <FolderDetail
-                folder={selectedFolder}
-                path={selectedPath}
-                config={effectiveConfig}
-              />
+              <div className="h-full overflow-y-auto">
+                <FolderDetail
+                  folder={selectedFolder}
+                  path={selectedPath}
+                  config={effectiveConfig}
+                  corpusRemoteURL={corpusRemoteURL}
+                  projectSlug={projectSlug}
+                />
+              </div>
             ) : (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center space-y-2">
@@ -362,6 +695,72 @@ function ContentTab({
   );
 }
 
+function ContextTreeSkeleton() {
+  return (
+    <div className="px-2 py-2 space-y-1.5">
+      <Skeleton className="h-6 w-full rounded-sm" />
+      <Skeleton className="h-6 w-[88%] rounded-sm" />
+      <Skeleton className="h-6 w-[82%] rounded-sm" />
+      <Skeleton className="h-6 w-[76%] rounded-sm ml-5" />
+      <Skeleton className="h-6 w-[72%] rounded-sm ml-10" />
+      <Skeleton className="h-6 w-[84%] rounded-sm ml-5" />
+      <Skeleton className="h-6 w-[79%] rounded-sm" />
+      <Skeleton className="h-6 w-[68%] rounded-sm ml-5" />
+    </div>
+  );
+}
+
+function ContextDetailSkeleton() {
+  return (
+    <div className="h-full min-h-0 rounded-lg border border-border bg-card overflow-hidden flex flex-col">
+      <div className="px-4 py-3 border-b border-border space-y-3">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-4 w-4 rounded-sm" />
+          <Skeleton className="h-5 w-56" />
+        </div>
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-3 w-40" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-6 w-20 rounded-md" />
+          <Skeleton className="h-6 w-20 rounded-md" />
+        </div>
+      </div>
+      <div className="flex-1 min-h-0 p-4">
+        <div className="h-full rounded-md border border-border bg-muted/20 p-4">
+          <div className="space-y-3">
+            <Skeleton className="h-5 w-40" />
+            {Array.from({ length: 14 }).map((_, index) => (
+              <div key={index} className="flex items-center gap-4">
+                <Skeleton className="h-4 w-6 shrink-0" />
+                <Skeleton
+                  className={cn(
+                    "h-4",
+                    index % 5 === 0
+                      ? "w-1/3"
+                      : index % 3 === 0
+                        ? "w-2/3"
+                        : "w-1/2",
+                  )}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="shrink-0 border-t border-border px-4 py-3 flex items-center justify-between gap-3">
+        <Skeleton className="h-4 w-40" />
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-8 w-20 rounded-md" />
+          <Skeleton className="h-8 w-16 rounded-md" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Tree View ─────────────────────────────────────────────────────────────
 
 /** Collect all .docs-mcp.json configs from root and nested folders. */
@@ -380,6 +779,94 @@ function collectConfigs(folder: ContextFolder): DocsMcpConfig[] {
     }
   }
   return configs;
+}
+
+type ContextSelection = {
+  kind: "file" | "folder";
+  canonicalSegments: string[];
+  selectedPath: string[];
+  folder: ContextFolder;
+  file: ContextFile | null;
+};
+
+function splitContextRoutePath(path: string): string[] {
+  return path.split("/").filter(Boolean);
+}
+
+function joinContextRoutePath(segments: string[]): string {
+  return segments.join("/");
+}
+
+function pathsEqual(a: string[], b: string[]): boolean {
+  return (
+    a.length === b.length && a.every((segment, index) => segment === b[index])
+  );
+}
+
+function resolveContextSelection(
+  root: ContextFolder,
+  segments: string[],
+): ContextSelection {
+  if (segments.length === 0) {
+    return {
+      kind: "folder",
+      canonicalSegments: [],
+      selectedPath: [],
+      folder: root,
+      file: null,
+    };
+  }
+
+  let currentFolder = root;
+  const folderPath: string[] = [];
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    const child = currentFolder.children.find((node) => node.name === segment);
+
+    if (!child) {
+      return {
+        kind: "folder",
+        canonicalSegments: folderPath,
+        selectedPath: folderPath,
+        folder: currentFolder,
+        file: null,
+      };
+    }
+
+    if (child.type === "folder") {
+      folderPath.push(segment);
+      currentFolder = child;
+
+      if (index === segments.length - 1) {
+        return {
+          kind: "folder",
+          canonicalSegments: folderPath,
+          selectedPath: folderPath,
+          folder: currentFolder,
+          file: null,
+        };
+      }
+
+      continue;
+    }
+
+    return {
+      kind: "file",
+      canonicalSegments: [...folderPath, segment],
+      selectedPath: folderPath,
+      folder: currentFolder,
+      file: child,
+    };
+  }
+
+  return {
+    kind: "folder",
+    canonicalSegments: folderPath,
+    selectedPath: folderPath,
+    folder: currentFolder,
+    file: null,
+  };
 }
 
 /** Check if a path is denied for a role across all .docs-mcp.json configs. */
@@ -402,7 +889,9 @@ function isPathDeniedForRole(
 function TreeNode({
   node,
   depth,
-  selectedFile,
+  selectedPath,
+  selectedKind,
+  dirtyPaths,
   onFileSelect,
   onFolderSelect,
   parentPath,
@@ -411,21 +900,28 @@ function TreeNode({
 }: {
   node: ContextNode;
   depth: number;
-  selectedFile: ContextFile | null;
-  onFileSelect: (file: ContextFile, path: string[]) => void;
+  selectedPath: string[];
+  selectedKind: "file" | "folder";
+  dirtyPaths: Set<string>;
+  onFileSelect: (path: string[]) => void;
   onFolderSelect: (path: string[]) => void;
   parentPath: string[];
   viewAsRole?: string | null;
   configs?: DocsMcpConfig[];
 }) {
-  const [expanded, setExpanded] = useState(depth < 1);
+  const nodeSegments = [...parentPath, node.name];
+  const selectedPrefix = selectedPath.slice(0, nodeSegments.length);
+  const isOnSelectedPath = pathsEqual(nodeSegments, selectedPrefix);
+  const [expanded, setExpanded] = useState(depth < 1 || isOnSelectedPath);
+
+  useEffect(() => {
+    if (isOnSelectedPath) {
+      setExpanded(true);
+    }
+  }, [isOnSelectedPath]);
 
   // Build the path string for access control checks
-  const nodePath =
-    depth === 0
-      ? ""
-      : [...parentPath, node.name].join("/") +
-        (node.type === "folder" ? "/" : "");
+  const nodePath = nodeSegments.join("/") + (node.type === "folder" ? "/" : "");
   const isDenied =
     viewAsRole != null &&
     nodePath &&
@@ -438,22 +934,27 @@ function TreeNode({
   const CHEVRON_SPACER = 18; // 12px chevron + 6px gap
 
   if (node.type === "file") {
-    const isSelected = selectedFile?.name === node.name;
+    const filePath = [...parentPath, node.name];
+    const isSelected =
+      selectedKind === "file" && pathsEqual(selectedPath, filePath);
+    const isDirty = dirtyPaths.has(filePath.join("/"));
     return (
       <button
-        onClick={() => !isDenied && onFileSelect(node, parentPath)}
+        onClick={() => !isDenied && onFileSelect(filePath)}
         className={cn(
           "flex items-center gap-1.5 w-full py-1 pr-2 text-xs transition-colors rounded-sm",
           isDenied && "opacity-30 cursor-not-allowed",
-          !isDenied && isSelected
-            ? "bg-primary/10 text-foreground"
-            : !isDenied &&
-                "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+          !isDenied && isSelected && "bg-primary/10 text-foreground",
+          !isDenied &&
+            !isSelected &&
+            "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+          !isDenied && isDirty && !isSelected && "bg-muted/35 text-foreground",
+          !isDenied && isDirty && isSelected && "bg-primary/15",
         )}
         style={{ paddingLeft: depth * INDENT_PX + 8 + CHEVRON_SPACER }}
       >
         <Icon name={getFileIcon(node)} className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">{node.name}</span>
+        <span className={cn("truncate", isDirty && "italic")}>{node.name}</span>
         {isDenied && (
           <Icon
             name="lock"
@@ -468,7 +969,9 @@ function TreeNode({
   }
 
   // Folder
-  const folderPath = depth === 0 ? [] : [...parentPath, node.name];
+  const folderPath = [...parentPath, node.name];
+  const isSelected =
+    selectedKind === "folder" && pathsEqual(selectedPath, folderPath);
   const draftCount = countDrafts(node);
 
   const sortedChildren = [...node.children].sort((a, b) => {
@@ -490,8 +993,10 @@ function TreeNode({
         className={cn(
           "flex items-center gap-1.5 w-full py-1 pr-2 text-xs transition-colors rounded-sm",
           isDenied && "opacity-30",
-          !isDenied &&
-            "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+          !isDenied && isSelected
+            ? "bg-primary/10 text-foreground"
+            : !isDenied &&
+                "text-muted-foreground hover:text-foreground hover:bg-muted/50",
         )}
         style={{ paddingLeft: depth * INDENT_PX + 8 }}
       >
@@ -500,9 +1005,7 @@ function TreeNode({
           className="h-3 w-3 shrink-0"
         />
         <Icon name="folder" className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate font-medium">
-          {depth === 0 ? "docs" : node.name}
-        </span>
+        <span className="truncate font-medium">{node.name}</span>
         {isDenied && (
           <Icon
             name="lock"
@@ -520,7 +1023,9 @@ function TreeNode({
               key={child.name}
               node={child}
               depth={depth + 1}
-              selectedFile={selectedFile}
+              selectedPath={selectedPath}
+              selectedKind={selectedKind}
+              dirtyPaths={dirtyPaths}
               onFileSelect={onFileSelect}
               onFolderSelect={onFolderSelect}
               parentPath={folderPath}
@@ -539,11 +1044,13 @@ function TreeNode({
 type YoloSchedule = "off" | "24h" | "weekly";
 
 function PendingChangesTab({
+  corpusRef,
   drafts,
-  loading: _loading,
+  loading,
   projectId,
   onPublished,
 }: {
+  corpusRef: CorpusRepoRef | null;
   drafts: DraftDocument[];
   loading: boolean;
   projectId: string;
@@ -592,6 +1099,34 @@ function PendingChangesTab({
         );
     }
   }, [drafts, sortBy]);
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl space-y-3">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-9 w-40" />
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="ml-auto h-8 w-28" />
+        </div>
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div
+              key={index}
+              className="rounded-lg border border-border bg-card p-4 space-y-3"
+            >
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-5 w-20" />
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="ml-auto h-8 w-24" />
+              </div>
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (sorted.length === 0) {
     return (
@@ -668,6 +1203,7 @@ function PendingChangesTab({
         {sorted.map((draft) => (
           <DraftDocumentCard
             key={draft.id}
+            corpusRef={corpusRef}
             draft={draft}
             expanded={expandedId === draft.id}
             onToggle={() =>
@@ -753,11 +1289,13 @@ function YoloModeToggle({
 }
 
 function DraftDocumentCard({
+  corpusRef,
   draft,
   expanded,
   onToggle,
   onPublish,
 }: {
+  corpusRef: CorpusRepoRef | null;
   draft: DraftDocument;
   expanded: boolean;
   onToggle: () => void;
@@ -768,6 +1306,10 @@ function DraftDocumentCard({
   const [iterateState, setIterateState] = useState<IterateState>("idle");
   const [iteratePrompt, setIteratePrompt] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
+  const [originalContent, setOriginalContent] = useState(
+    draft.originalContent ?? "",
+  );
+  const [originalContentLoading, setOriginalContentLoading] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(0 as never);
 
   const handleIterate = useCallback(() => {
@@ -784,6 +1326,49 @@ function DraftDocumentCard({
   }, []);
 
   useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  useEffect(() => {
+    setOriginalContent(draft.originalContent ?? "");
+  }, [draft.id, draft.originalContent]);
+
+  useEffect(() => {
+    if (
+      !expanded ||
+      !isEdit ||
+      draft.originalContent != null ||
+      !draft.filePath ||
+      !corpusRef
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      setOriginalContentLoading(true);
+      try {
+        const committedContent = await readCommittedCorpusFile(
+          corpusRef,
+          draft.filePath,
+        );
+        if (!cancelled) {
+          setOriginalContent(committedContent);
+        }
+      } catch {
+        if (!cancelled) {
+          setOriginalContent("");
+        }
+      } finally {
+        if (!cancelled) {
+          setOriginalContentLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [corpusRef, draft.filePath, draft.originalContent, expanded, isEdit]);
 
   const isProcessing = iterateState === "processing";
   const isDone = iterateState === "done";
@@ -930,15 +1515,23 @@ function DraftDocumentCard({
         <div className="border-t border-border">
           {/* Diff / preview */}
           <div className="p-4 border-b border-border">
-            {isEdit && draft.originalContent ? (
-              <DiffView
-                oldText={draft.originalContent}
-                newText={draft.content}
+            {isEdit ? (
+              <ContextDiffPanel
+                title={draft.title}
+                subtitle="Draft changes"
+                original={originalContent}
+                modified={draft.content}
+                path={`draft:${draft.id}`}
+                loading={originalContentLoading}
               />
             ) : (
-              <pre className="text-xs font-mono whitespace-pre-wrap text-foreground bg-muted/30 rounded-md p-3 max-h-[400px] overflow-auto">
-                {draft.content}
-              </pre>
+              <ContextDiffPanel
+                title={draft.title}
+                subtitle="New document"
+                original=""
+                modified={draft.content}
+                path={`draft:${draft.id}:create`}
+              />
             )}
           </div>
 
@@ -1131,18 +1724,375 @@ function FileKindBadge({ kind }: { kind: ContextFile["kind"] }) {
   }
 }
 
-function FileDetail({ file }: { file: ContextFile }) {
-  const [viewMode, setViewMode] = useState<
-    "published" | "draft" | "diff" | "history"
-  >(file.draft ? "diff" : "published");
+function FileDetail({
+  file,
+  filePath,
+  corpusRef,
+  sessionToken,
+  authorName,
+  authorEmail,
+  drafts,
+  ensureDraftsLoaded,
+  onDraftSaved,
+  refreshDirtyPaths,
+  onPushed,
+}: {
+  file: ContextFile;
+  filePath: string;
+  corpusRef: CorpusRepoRef | null;
+  sessionToken?: string;
+  authorName: string;
+  authorEmail: string;
+  drafts: DraftDocument[];
+  ensureDraftsLoaded: () => Promise<DraftDocument[]>;
+  onDraftSaved: (draft: DraftDocument) => void;
+  refreshDirtyPaths: () => Promise<void>;
+  onPushed: () => Promise<void>;
+}) {
+  const [viewMode, setViewMode] = useState<"published" | "draft" | "history">(
+    "published",
+  );
+  const [editorContent, setEditorContent] = useState(file.content ?? "");
+  const [committedContent, setCommittedContent] = useState(file.content ?? "");
+  const [versions, setVersions] = useState<FileVersion[]>(file.versions);
+  const [isFileLoading, setIsFileLoading] = useState(Boolean(corpusRef));
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionsLoaded, setVersionsLoaded] = useState(
+    file.versions.length > 0,
+  );
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isPushing, setIsPushing] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const pendingWriteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestContentRef = useRef(file.content ?? "");
+  const committedContentRef = useRef(file.content ?? "");
+  const existingDraft = useMemo(
+    () =>
+      drafts.find(
+        (draft) => draft.status === "open" && draft.filePath === filePath,
+      ) ?? null,
+    [drafts, filePath],
+  );
 
   const displayContent =
     viewMode === "draft" && file.draft?.content
       ? file.draft.content
-      : file.content;
+      : editorContent;
+  const displaySize =
+    editorContent.length > 0 ? new Blob([editorContent]).size : file.size;
+  const isDirty = editorContent !== committedContent;
+  const canEditPublished = Boolean(corpusRef);
+  const editorReadOnly =
+    viewMode !== "published" || !canEditPublished || isPushing || isFileLoading;
+
+  useEffect(() => {
+    if (pendingWriteRef.current) {
+      clearTimeout(pendingWriteRef.current);
+      pendingWriteRef.current = null;
+    }
+
+    setViewMode("published");
+    setVersions(file.versions);
+    setVersionsLoaded(file.versions.length > 0);
+    setVersionsLoading(false);
+    setSaveError(null);
+    setIsFileLoading(Boolean(corpusRef));
+
+    let cancelled = false;
+
+    const loadFile = async () => {
+      if (!corpusRef) {
+        const nextContent = file.content ?? "";
+        const nextCommittedContent = file.versions[0]?.content ?? nextContent;
+        if (cancelled) {
+          return;
+        }
+
+        setEditorContent(nextContent);
+        setCommittedContent(nextCommittedContent);
+        latestContentRef.current = nextContent;
+        committedContentRef.current = nextCommittedContent;
+        setIsFileLoading(false);
+        return;
+      }
+
+      try {
+        const [nextContent, nextCommittedContent] = await Promise.all([
+          readCorpusFile(corpusRef, filePath),
+          readCommittedCorpusFile(corpusRef, filePath),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setEditorContent(nextContent);
+        setCommittedContent(nextCommittedContent);
+        latestContentRef.current = nextContent;
+        committedContentRef.current = nextCommittedContent;
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : String(error);
+        setSaveError(message);
+        setEditorContent("");
+        setCommittedContent("");
+        latestContentRef.current = "";
+        committedContentRef.current = "";
+      } finally {
+        if (!cancelled) {
+          setIsFileLoading(false);
+        }
+      }
+    };
+
+    void loadFile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [corpusRef, file.content, file.versions, filePath]);
+
+  useEffect(() => {
+    if (viewMode !== "history" || versionsLoaded || versionsLoading) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadVersions = async () => {
+      if (!corpusRef) {
+        setVersionsLoaded(true);
+        return;
+      }
+
+      setVersionsLoading(true);
+      try {
+        const nextVersions = await readCorpusFileVersions(corpusRef, filePath);
+        if (!cancelled) {
+          setVersions(nextVersions);
+          setVersionsLoaded(true);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          setSaveError(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setVersionsLoading(false);
+        }
+      }
+    };
+
+    void loadVersions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [corpusRef, filePath, versionsLoaded, versionsLoading, viewMode]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingWriteRef.current) {
+        clearTimeout(pendingWriteRef.current);
+      }
+    };
+  }, []);
+
+  const persistWorkingCopy = useCallback(
+    async (nextContent: string) => {
+      if (!corpusRef) {
+        return;
+      }
+
+      await writeCorpusFile(corpusRef, filePath, nextContent);
+    },
+    [corpusRef, filePath],
+  );
+
+  const flushPendingWrite = useCallback(async () => {
+    if (!corpusRef || viewMode !== "published") {
+      return;
+    }
+
+    if (pendingWriteRef.current) {
+      clearTimeout(pendingWriteRef.current);
+      pendingWriteRef.current = null;
+    }
+
+    await persistWorkingCopy(latestContentRef.current);
+  }, [corpusRef, persistWorkingCopy, viewMode]);
+
+  const handleEditorChange = useCallback(
+    (nextContent: string) => {
+      setEditorContent(nextContent);
+      latestContentRef.current = nextContent;
+      setSaveError(null);
+
+      if (!corpusRef || viewMode !== "published") {
+        return;
+      }
+
+      if (pendingWriteRef.current) {
+        clearTimeout(pendingWriteRef.current);
+      }
+
+      pendingWriteRef.current = setTimeout(() => {
+        void (async () => {
+          try {
+            await persistWorkingCopy(nextContent);
+            await refreshDirtyPaths();
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            setSaveError(message);
+          } finally {
+            pendingWriteRef.current = null;
+          }
+        })();
+      }, 250);
+    },
+    [corpusRef, persistWorkingCopy, refreshDirtyPaths, viewMode],
+  );
+
+  const handleDiscardChanges = useCallback(async () => {
+    if (!corpusRef) {
+      return;
+    }
+
+    if (pendingWriteRef.current) {
+      clearTimeout(pendingWriteRef.current);
+      pendingWriteRef.current = null;
+    }
+
+    setEditorContent(committedContent);
+    latestContentRef.current = committedContent;
+    setSaveError(null);
+
+    try {
+      await persistWorkingCopy(committedContent);
+      await refreshDirtyPaths();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSaveError(message);
+    }
+  }, [committedContent, corpusRef, persistWorkingCopy, refreshDirtyPaths]);
+
+  const handlePushChanges = useCallback(async () => {
+    if (!corpusRef) {
+      return;
+    }
+
+    setIsPushing(true);
+    setSaveError(null);
+
+    try {
+      await flushPendingWrite();
+      await pushCorpusFile(corpusRef, filePath, {
+        content: latestContentRef.current,
+        token: sessionToken,
+        authorName,
+        authorEmail,
+        message: `Update ${filePath}`,
+      });
+      setCommittedContent(latestContentRef.current);
+      committedContentRef.current = latestContentRef.current;
+      setVersions([]);
+      setVersionsLoaded(false);
+      await onPushed();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSaveError(message);
+    } finally {
+      setIsPushing(false);
+    }
+  }, [
+    authorEmail,
+    authorName,
+    corpusRef,
+    filePath,
+    flushPendingWrite,
+    onPushed,
+    refreshDirtyPaths,
+    sessionToken,
+  ]);
+
+  const handlePushDraft = useCallback(async () => {
+    if (!corpusRef) {
+      return;
+    }
+
+    setIsSavingDraft(true);
+    setSaveError(null);
+
+    try {
+      await flushPendingWrite();
+      const openDrafts =
+        existingDraft?.id != null ? drafts : await ensureDraftsLoaded();
+      const matchingDraft =
+        existingDraft ??
+        openDrafts.find(
+          (draft) => draft.status === "open" && draft.filePath === filePath,
+        ) ??
+        null;
+      const savedDraft = await saveDraft("", {
+        draftId: matchingDraft?.id,
+        filePath,
+        title: file.name,
+        content: latestContentRef.current,
+        originalContent: committedContentRef.current,
+      });
+      onDraftSaved(savedDraft);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSaveError(message);
+    } finally {
+      setIsSavingDraft(false);
+    }
+  }, [
+    corpusRef,
+    drafts,
+    ensureDraftsLoaded,
+    existingDraft,
+    file.name,
+    filePath,
+    flushPendingWrite,
+    onDraftSaved,
+  ]);
+
+  const handleRestoreVersion = useCallback(
+    async (version: FileVersion) => {
+      if (!version.content || !corpusRef) {
+        return;
+      }
+
+      if (pendingWriteRef.current) {
+        clearTimeout(pendingWriteRef.current);
+        pendingWriteRef.current = null;
+      }
+
+      setEditorContent(version.content);
+      latestContentRef.current = version.content;
+      setSaveError(null);
+      setViewMode("published");
+
+      try {
+        await persistWorkingCopy(version.content);
+        await refreshDirtyPaths();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setSaveError(message);
+      }
+    },
+    [corpusRef, persistWorkingCopy, refreshDirtyPaths],
+  );
 
   return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
+    <div className="h-full min-h-0 rounded-lg border border-border bg-card overflow-hidden flex flex-col">
       <div className="px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <Icon
@@ -1155,8 +2105,9 @@ function FileDetail({ file }: { file: ContextFile }) {
           {file.draft && <DraftBadge />}
         </div>
         <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-          <span>{formatFileSize(file.size)}</span>
+          <span>{formatFileSize(displaySize)}</span>
           <span>Updated {formatDate(file.updatedAt)}</span>
+          <span className="font-mono">{filePath}</span>
           {file.source === "github" && (
             <button className="flex items-center gap-1 hover:text-foreground transition-colors ml-auto">
               <Icon name="github" className="h-3 w-3" />
@@ -1179,86 +2130,149 @@ function FileDetail({ file }: { file: ContextFile }) {
               >
                 Draft
               </LayerToggle>
-              <LayerToggle
-                active={viewMode === "diff"}
-                onClick={() => setViewMode("diff")}
-              >
-                Diff
-              </LayerToggle>
             </>
           )}
           <LayerToggle
             active={viewMode === "history"}
             onClick={() => setViewMode("history")}
           >
-            {file.versions.length} Version
-            {file.versions.length !== 1 && "s"}
+            {versionsLoaded
+              ? `${versions.length} Version${versions.length !== 1 ? "s" : ""}`
+              : "Versions"}
           </LayerToggle>
         </div>
       </div>
 
-      {viewMode === "history" && <VersionHistory file={file} />}
+      {viewMode === "history" && (
+        <VersionHistory
+          fileName={file.name}
+          versions={versions}
+          loading={versionsLoading}
+          onRestoreVersion={handleRestoreVersion}
+        />
+      )}
 
-      {viewMode === "diff" && file.draft?.content && file.content && (
-        <div className="p-4">
-          <DiffView oldText={file.content} newText={file.draft.content} />
+      {viewMode === "published" && (
+        <div className="flex-1 min-h-0 border-b border-border">
+          {isFileLoading ? (
+            <FileEditorSkeleton />
+          ) : (
+            <CorpusDiffEditor
+              original={committedContent}
+              modified={editorContent}
+              path={`published:${filePath}`}
+              className="h-full min-h-0"
+              readOnly={editorReadOnly}
+              onChange={handleEditorChange}
+            />
+          )}
         </div>
       )}
 
-      {viewMode !== "diff" &&
-        viewMode !== "history" &&
-        file.kind === "mcp-docs-config" &&
-        file.config && <ConfigDetail config={file.config} />}
+      {viewMode === "draft" && (
+        <div className="flex-1 min-h-0 border-b border-border">
+          {isFileLoading ? (
+            <FileEditorSkeleton />
+          ) : (
+            <CorpusEditor
+              value={displayContent}
+              path={`${viewMode}:${filePath}`}
+              className="h-full min-h-0"
+              readOnly={editorReadOnly}
+              onChange={handleEditorChange}
+            />
+          )}
+        </div>
+      )}
 
-      {viewMode !== "diff" &&
-        viewMode !== "history" &&
-        file.kind === "skill" &&
-        displayContent && (
-          <div className="p-4">
-            <SkillPreview content={displayContent} compact />
-          </div>
-        )}
+      <div className="shrink-0">
+        <FeedbackPanel filePath={filePath} />
+        <AnnotationsPanel filePath={filePath} />
+      </div>
 
-      {viewMode !== "diff" &&
-        viewMode !== "history" &&
-        file.kind === "markdown" &&
-        displayContent && (
-          <div className="p-4">
-            <pre className="text-xs font-mono whitespace-pre-wrap text-foreground bg-muted/30 rounded-md p-3 overflow-auto max-h-[500px]">
-              {displayContent}
-            </pre>
-          </div>
-        )}
+      <div className="shrink-0 px-4 py-3 border-t border-border flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          {saveError ? (
+            <Type small className="text-destructive">
+              {saveError}
+            </Type>
+          ) : isFileLoading ? (
+            <Type small muted>
+              Loading file content...
+            </Type>
+          ) : viewMode !== "published" ? (
+            <Type small muted>
+              {viewMode === "draft"
+                ? "Draft content is read-only here."
+                : "History is read-only."}
+            </Type>
+          ) : !canEditPublished ? (
+            <Type small muted>
+              Corpus repo is not available for editing yet.
+            </Type>
+          ) : null}
+        </div>
 
-      <FeedbackPanel filePath={file.name} />
-      <AnnotationsPanel filePath={file.name} />
-
-      <div className="px-4 py-3 border-t border-border flex gap-2">
-        {file.draft ? (
-          <>
-            <Button size="sm" className="flex-1">
-              Publish Draft
+        {viewMode === "published" && (
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void handleDiscardChanges()}
+              disabled={
+                !canEditPublished || !isDirty || isPushing || isSavingDraft
+              }
+            >
+              Discard
             </Button>
             <Button
               size="sm"
               variant="outline"
-              className="flex-1 text-destructive"
+              onClick={() => void handlePushDraft()}
+              disabled={
+                !canEditPublished || !isDirty || isPushing || isSavingDraft
+              }
             >
-              Discard
+              {isSavingDraft ? "Pushing Draft..." : "Push Draft"}
             </Button>
-          </>
-        ) : (
-          <>
-            <Button size="sm" variant="outline" className="flex-1">
-              <Icon name="pencil" className="h-3.5 w-3.5 mr-1.5" />
-              Edit
+            <Button
+              size="sm"
+              onClick={() => void handlePushChanges()}
+              disabled={
+                !canEditPublished || !isDirty || isPushing || isSavingDraft
+              }
+            >
+              <GitCommitHorizontalIcon className="h-3.5 w-3.5 mr-1.5" />
+              {isPushing ? "Pushing..." : "Push Live"}
             </Button>
-            <Button size="sm" variant="outline" className="flex-1">
-              <Icon name="download" className="h-3.5 w-3.5 mr-1.5" />
-              Download
-            </Button>
-          </>
+          </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function FileEditorSkeleton() {
+  return (
+    <div className="h-full min-h-0 p-4">
+      <div className="h-full rounded-md border border-border bg-muted/20 p-4">
+        <div className="space-y-3">
+          {Array.from({ length: 16 }).map((_, index) => (
+            <div key={index} className="flex items-center gap-4">
+              <Skeleton className="h-4 w-6 shrink-0" />
+              <Skeleton
+                className={cn(
+                  "h-4",
+                  index % 6 === 0
+                    ? "w-1/4"
+                    : index % 4 === 0
+                      ? "w-3/4"
+                      : "w-1/2",
+                )}
+              />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -1290,175 +2304,175 @@ function LayerToggle({
   );
 }
 
-// ── Diff View ─────────────────────────────────────────────────────────────
-
-function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
-  const lines = useMemo(
-    () => computeLineDiff(oldText, newText),
-    [oldText, newText],
-  );
-
-  return (
-    <div className="rounded-md border border-border overflow-auto max-h-[500px] text-xs font-mono">
-      {lines.map((line, i) => (
-        <DiffLineRow key={i} line={line} />
-      ))}
-    </div>
-  );
-}
-
-function DiffLineRow({ line }: { line: DiffLine }) {
-  const bgClass = {
-    same: "",
-    added: "bg-emerald-500/10",
-    removed: "bg-destructive/10",
-  }[line.type];
-
-  const textClass = {
-    same: "text-foreground",
-    added: "text-emerald-600",
-    removed: "text-destructive",
-  }[line.type];
-
-  const prefix = { same: " ", added: "+", removed: "-" }[line.type];
-
-  return (
-    <div className={cn("flex", bgClass)}>
-      <span
-        className={cn(
-          "w-5 shrink-0 text-right pr-1 select-none",
-          line.type === "same" ? "text-muted-foreground/50" : textClass,
-        )}
-      >
-        {prefix}
-      </span>
-      <span className={cn("flex-1 px-2 py-px whitespace-pre-wrap", textClass)}>
-        {line.content || "\u00A0"}
-      </span>
-    </div>
-  );
-}
-
-function VersionHistory({ file }: { file: ContextFile }) {
+function VersionHistory({
+  fileName,
+  versions,
+  loading,
+  onRestoreVersion,
+}: {
+  fileName: string;
+  versions: FileVersion[];
+  loading: boolean;
+  onRestoreVersion: (version: FileVersion) => Promise<void>;
+}) {
   const [selectedVersion, setSelectedVersion] = useState<FileVersion | null>(
     null,
   );
-  const [viewMode, setViewMode] = useState<"content" | "diff">("content");
 
   const previousVersion = useMemo(() => {
     if (!selectedVersion) return null;
     return (
-      file.versions.find((v) => v.version === selectedVersion.version - 1) ??
-      null
+      versions.find((v) => v.version === selectedVersion.version - 1) ?? null
     );
-  }, [selectedVersion, file.versions]);
+  }, [selectedVersion, versions]);
 
-  const latestVersion = file.versions[0];
+  const latestVersion = versions[0];
+
+  useEffect(() => {
+    if (versions.length === 0) {
+      setSelectedVersion(null);
+      return;
+    }
+
+    setSelectedVersion((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return (
+        versions.find((version) => version.version === current.version) ?? null
+      );
+    });
+  }, [versions]);
 
   return (
     <div className="border-t border-border">
       {/* Version list */}
       <div className="max-h-[240px] overflow-y-auto">
-        {file.versions.map((v) => {
-          const isSelected = selectedVersion?.version === v.version;
-          const prevV = file.versions.find(
-            (pv) => pv.version === v.version - 1,
-          );
-          const wasRenamed = prevV?.path && v.path && prevV.path !== v.path;
+        {loading && (
+          <div className="px-4 py-4 space-y-3">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        )}
+        {!loading &&
+          versions.map((v) => {
+            const isSelected = selectedVersion?.version === v.version;
+            const prevV = versions.find((pv) => pv.version === v.version - 1);
+            const wasRenamed = prevV?.path && v.path && prevV.path !== v.path;
 
-          return (
-            <button
-              type="button"
-              key={v.version}
-              onClick={() => setSelectedVersion(isSelected ? null : v)}
-              className={cn(
-                "w-full flex items-start gap-3 px-4 py-2.5 text-xs border-b border-border last:border-b-0 transition-colors text-left",
-                isSelected
-                  ? "bg-primary/5 border-l-2 border-l-primary"
-                  : "hover:bg-muted/30",
-              )}
-            >
-              {/* Version indicator */}
-              <div className="flex flex-col items-center pt-0.5 shrink-0">
-                <GitCommitHorizontalIcon className="h-3.5 w-3.5 text-muted-foreground" />
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono text-muted-foreground">
-                    v{v.version}
-                  </span>
-                  {v.version === latestVersion?.version && (
-                    <Badge
-                      variant="secondary"
-                      className="text-[10px] px-1 py-0 h-4"
-                    >
-                      latest
-                    </Badge>
-                  )}
-                  {v.agent && (
-                    <span
-                      className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground bg-muted/50 rounded px-1 py-0"
-                      title={`Generated by ${v.agent}`}
-                    >
-                      <BotIcon className="h-2.5 w-2.5" />
-                      {v.agent}
-                    </span>
-                  )}
+            return (
+              <div
+                role="button"
+                tabIndex={0}
+                key={v.version}
+                onClick={() => setSelectedVersion(isSelected ? null : v)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelectedVersion(isSelected ? null : v);
+                  }
+                }}
+                className={cn(
+                  "w-full flex items-start gap-3 px-4 py-2.5 text-xs border-b border-border last:border-b-0 transition-colors text-left",
+                  isSelected
+                    ? "bg-primary/5 border-l-2 border-l-primary"
+                    : "hover:bg-muted/30",
+                )}
+              >
+                {/* Version indicator */}
+                <div className="flex flex-col items-center pt-0.5 shrink-0">
+                  <GitCommitHorizontalIcon className="h-3.5 w-3.5 text-muted-foreground" />
                 </div>
 
-                <span className="text-foreground truncate block mt-0.5">
-                  {v.message}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-muted-foreground">
+                      v{v.version}
+                    </span>
+                    {v.version === latestVersion?.version && (
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] px-1 py-0 h-4"
+                      >
+                        latest
+                      </Badge>
+                    )}
+                    {v.agent && (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground bg-muted/50 rounded px-1 py-0"
+                        title={`Generated by ${v.agent}`}
+                      >
+                        <BotIcon className="h-2.5 w-2.5" />
+                        {v.agent}
+                      </span>
+                    )}
+                  </div>
 
-                {/* Author / Committer */}
-                <div className="flex items-center gap-2 mt-1 text-muted-foreground">
-                  <span
-                    className="inline-flex items-center gap-0.5"
-                    title="Author"
-                  >
-                    <UserIcon className="h-2.5 w-2.5" />
-                    {v.author}
+                  <span className="text-foreground truncate block mt-0.5">
+                    {v.message}
                   </span>
-                  {v.committer && v.committer !== v.author && (
+
+                  {/* Author / Committer */}
+                  <div className="flex items-center gap-2 mt-1 text-muted-foreground">
                     <span
                       className="inline-flex items-center gap-0.5"
-                      title="Committer"
+                      title="Author"
                     >
-                      <GitCommitHorizontalIcon className="h-2.5 w-2.5" />
-                      {v.committer}
+                      <UserIcon className="h-2.5 w-2.5" />
+                      {v.author}
                     </span>
+                    {v.committer && v.committer !== v.author && (
+                      <span
+                        className="inline-flex items-center gap-0.5"
+                        title="Committer"
+                      >
+                        <GitCommitHorizontalIcon className="h-2.5 w-2.5" />
+                        {v.committer}
+                      </span>
+                    )}
+                    <span>&middot;</span>
+                    <span>{formatDate(v.updatedAt)}</span>
+                    <span>&middot;</span>
+                    <span>{formatFileSize(v.size)}</span>
+                  </div>
+
+                  {/* Rename indicator */}
+                  {wasRenamed && (
+                    <div className="flex items-center gap-1 mt-1 text-amber-600 dark:text-amber-400">
+                      <MoveRightIcon className="h-2.5 w-2.5" />
+                      <span className="font-mono truncate">{prevV.path}</span>
+                      <MoveRightIcon className="h-2.5 w-2.5" />
+                      <span className="font-mono truncate">{v.path}</span>
+                    </div>
                   )}
-                  <span>&middot;</span>
-                  <span>{formatDate(v.updatedAt)}</span>
-                  <span>&middot;</span>
-                  <span>{formatFileSize(v.size)}</span>
                 </div>
 
-                {/* Rename indicator */}
-                {wasRenamed && (
-                  <div className="flex items-center gap-1 mt-1 text-amber-600 dark:text-amber-400">
-                    <MoveRightIcon className="h-2.5 w-2.5" />
-                    <span className="font-mono truncate">{prevV.path}</span>
-                    <MoveRightIcon className="h-2.5 w-2.5" />
-                    <span className="font-mono truncate">{v.path}</span>
-                  </div>
+                {v.version !== latestVersion?.version && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2 text-xs shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void onRestoreVersion(v);
+                    }}
+                    disabled={!v.content}
+                  >
+                    Restore
+                  </Button>
                 )}
               </div>
-
-              {v.version !== latestVersion?.version && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 px-2 text-xs shrink-0"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Restore
-                </Button>
-              )}
-            </button>
-          );
-        })}
+            );
+          })}
+        {!loading && versions.length === 0 && (
+          <div className="px-4 py-6">
+            <Type small muted>
+              No published versions found for this file.
+            </Type>
+          </div>
+        )}
       </div>
 
       {/* Selected version detail */}
@@ -1468,35 +2482,87 @@ function VersionHistory({ file }: { file: ContextFile }) {
             <span className="text-xs font-medium text-muted-foreground mr-2">
               v{selectedVersion.version}
             </span>
-            <LayerToggle
-              active={viewMode === "content"}
-              onClick={() => setViewMode("content")}
-            >
-              Content
-            </LayerToggle>
-            {previousVersion?.content && (
-              <LayerToggle
-                active={viewMode === "diff"}
-                onClick={() => setViewMode("diff")}
-              >
-                Diff from v{previousVersion.version}
-              </LayerToggle>
-            )}
+            <span className="text-xs text-muted-foreground">
+              {previousVersion
+                ? `Diff from v${previousVersion.version}`
+                : "Initial version"}
+            </span>
           </div>
-          <div className="p-4">
-            {viewMode === "diff" && previousVersion?.content ? (
-              <DiffView
-                oldText={previousVersion.content}
-                newText={selectedVersion.content}
-              />
-            ) : (
-              <pre className="text-xs font-mono whitespace-pre-wrap text-foreground bg-muted/30 rounded-md p-3 overflow-auto max-h-[400px]">
-                {selectedVersion.content}
-              </pre>
-            )}
-          </div>
+          <ContextDiffPanel
+            title={fileName}
+            subtitle={
+              previousVersion
+                ? `Diff from v${previousVersion.version}`
+                : "Initial version"
+            }
+            original={previousVersion?.content ?? ""}
+            modified={selectedVersion.content}
+            path={
+              previousVersion
+                ? `history:${fileName}:v${previousVersion.version}-v${selectedVersion.version}`
+                : `history:${fileName}:initial-v${selectedVersion.version}`
+            }
+          />
         </div>
       )}
+    </div>
+  );
+}
+
+function ContextDiffPanel({
+  title,
+  subtitle,
+  original,
+  modified,
+  path,
+  loading = false,
+}: {
+  title: string;
+  subtitle: string;
+  original: string;
+  modified: string;
+  path: string;
+  loading?: boolean;
+}) {
+  return (
+    <div className="rounded-md border border-border overflow-hidden bg-muted/10">
+      <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-border bg-muted/20">
+        <div className="min-w-0">
+          <Type small className="font-medium truncate">
+            {title}
+          </Type>
+          <Type small muted className="truncate">
+            {subtitle}
+          </Type>
+        </div>
+      </div>
+      <div className="p-4">
+        {loading ? (
+          <div className="h-[400px] rounded-md border border-border bg-card p-4 space-y-3">
+            {Array.from({ length: 12 }).map((_, index) => (
+              <Skeleton
+                key={index}
+                className={cn(
+                  "h-4",
+                  index % 4 === 0
+                    ? "w-2/3"
+                    : index % 3 === 0
+                      ? "w-5/6"
+                      : "w-1/2",
+                )}
+              />
+            ))}
+          </div>
+        ) : (
+          <CorpusDiffEditor
+            original={original}
+            modified={modified}
+            path={path}
+            height="400px"
+            readOnly
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -1956,14 +3022,22 @@ function FolderDetail({
   folder,
   path,
   config,
+  corpusRemoteURL,
+  projectSlug,
 }: {
   folder: ContextFolder;
   path: string[];
   config: DocsMcpConfig | null;
+  corpusRemoteURL: string | null;
+  projectSlug: string | null;
 }) {
   const counts = countItems(folder);
   const drafts = countDrafts(folder);
   const localConfigFile = findFile(folder, ".docs-mcp.json");
+  const isRootFolder = path.length === 0;
+  const quickStartCommand = corpusRemoteURL
+    ? buildCorpusQuickStart(corpusRemoteURL, projectSlug)
+    : null;
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -1971,7 +3045,7 @@ function FolderDetail({
         <div className="flex items-center gap-2">
           <Icon name="folder" className="h-4 w-4 text-muted-foreground" />
           <Type variant="subheading">
-            {path.length === 0 ? "docs" : path[path.length - 1]}
+            {path.length === 0 ? "Repository" : path[path.length - 1]}
           </Type>
           {drafts > 0 && (
             <Badge
@@ -2027,6 +3101,50 @@ function FolderDetail({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {isRootFolder && corpusRemoteURL && (
+        <div className="p-4 border-b border-border space-y-3">
+          <div className="space-y-1">
+            <Type small muted className="font-medium block">
+              Git Remote
+            </Type>
+            <Type small muted>
+              Clone and push directly against the repo backing this context.
+            </Type>
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-xs text-foreground">
+                {corpusRemoteURL}
+              </code>
+              <CopyButton
+                text={corpusRemoteURL}
+                size="icon-sm"
+                tooltip="Copy remote URL"
+              />
+            </div>
+          </div>
+
+          {quickStartCommand && (
+            <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Type small muted className="font-medium">
+                  Quick Start
+                </Type>
+                <CopyButton
+                  text={quickStartCommand}
+                  size="icon-sm"
+                  tooltip="Copy quick start"
+                />
+              </div>
+              <pre className="overflow-x-auto whitespace-pre-wrap text-xs font-mono text-foreground">
+                {quickStartCommand}
+              </pre>
+            </div>
+          )}
         </div>
       )}
 

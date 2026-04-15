@@ -82,6 +82,12 @@ func uniqueConstraintExists(t *testing.T, conn *pgxpool.Pool, name string) bool 
 		)`, name)
 }
 
+func indexExists(t *testing.T, conn *pgxpool.Pool, name string) bool {
+	t.Helper()
+	return existsQuery(t, conn,
+		"SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = $1)", name)
+}
+
 func TestCorpusTablesExist(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
@@ -162,7 +168,8 @@ func TestCorpusFeedbackSchema(t *testing.T) {
 		"created_at", "updated_at",
 	})
 
-	assert.True(t, uniqueConstraintExists(t, conn, "corpus_feedback_project_id_file_path_user_id_key"))
+	assert.True(t, indexExists(t, conn, "corpus_feedback_project_id_file_path_idx"))
+	assert.True(t, indexExists(t, conn, "corpus_feedback_project_id_file_path_user_id_created_at_idx"))
 }
 
 func TestCorpusFeedbackCommentsSchema(t *testing.T) {

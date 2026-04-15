@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -48,6 +49,7 @@ var validOperations = map[string]bool{
 
 type GitRepo interface {
 	CommitFiles(files map[string][]byte, message string) (string, error)
+	ReadFiles(ref string) (map[string][]byte, error)
 	ReadBlob(ref string, path string) ([]byte, error)
 }
 
@@ -188,9 +190,14 @@ func (s *Service) Publish(ctx context.Context, projectID uuid.UUID, orgID string
 		return "", fmt.Errorf("list drafts by ids: %w", err)
 	}
 
-	// CommitFiles replaces the entire tree. Create/update drafts add content;
-	// delete drafts are excluded so the file disappears from the tree.
-	files := make(map[string][]byte)
+	files, err := s.git.ReadFiles("HEAD")
+	if err != nil {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
+			files = make(map[string][]byte)
+		} else {
+			return "", fmt.Errorf("read current files: %w", err)
+		}
+	}
 
 	for _, d := range draftsToPublish {
 		switch d.Operation {
@@ -199,7 +206,7 @@ func (s *Service) Publish(ctx context.Context, projectID uuid.UUID, orgID string
 				files[d.FilePath] = []byte(d.Content.String)
 			}
 		case OpDelete:
-			// Omit from files map — CommitFiles replaces the tree, so the file is removed
+			delete(files, d.FilePath)
 		}
 	}
 

@@ -14,27 +14,14 @@ INSERT INTO corpus_feedback (
 )
 RETURNING *;
 
--- name: GetVote :one
+-- name: GetLatestVoteForFileByUser :one
 SELECT *
 FROM corpus_feedback
 WHERE project_id = @project_id
   AND file_path = @file_path
-  AND user_id = @user_id;
-
--- name: UpdateVoteDirection :one
-UPDATE corpus_feedback
-SET direction = @direction,
-    updated_at = clock_timestamp()
-WHERE project_id = @project_id
-  AND file_path = @file_path
   AND user_id = @user_id
-RETURNING *;
-
--- name: DeleteVote :exec
-DELETE FROM corpus_feedback
-WHERE project_id = @project_id
-  AND file_path = @file_path
-  AND user_id = @user_id;
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
 
 -- name: ListFeedbackByProject :many
 SELECT
