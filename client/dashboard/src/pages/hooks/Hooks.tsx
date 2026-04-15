@@ -2129,7 +2129,7 @@ function HooksAnalytics({
             : "grid-cols-2 md:grid-cols-3 lg:grid-cols-5",
         )}
       >
-        {summaryPending ? (
+        {summaryPending || !summaryData ? (
           <>
             {Array.from({ length: compact ? 3 : 5 }).map((_, i) => (
               <Skeleton key={i} className="h-[104px] rounded-lg" />
