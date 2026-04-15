@@ -1,5 +1,4 @@
 import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
@@ -30,9 +29,7 @@ export default function OrgAdminSettings() {
         <Page.Header.Title>Super Admin</Page.Header.Title>
       </Page.Header>
       <Page.Body>
-        <RequireScope scope="org:admin" level="page">
-          <OrgAdminSettingsInner />
-        </RequireScope>
+        <OrgAdminSettingsInner />
       </Page.Body>
     </Page>
   );
