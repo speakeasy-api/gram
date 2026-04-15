@@ -14,14 +14,14 @@ func TestBuildWellKnownURL_OriginOnly(t *testing.T) {
 
 func TestBuildWellKnownURL_WithPath(t *testing.T) {
 	t.Parallel()
-	result := buildWellKnownURL("https://app.getgram.ai/mcp/speakeasy-team-snowflake")
-	require.Equal(t, "https://app.getgram.ai/.well-known/oauth-authorization-server/mcp/speakeasy-team-snowflake", result)
+	result := buildWellKnownURL("https://example.com/mcp/my-server")
+	require.Equal(t, "https://example.com/.well-known/oauth-authorization-server/mcp/my-server", result)
 }
 
 func TestBuildWellKnownURL_WithTrailingSlash(t *testing.T) {
 	t.Parallel()
-	result := buildWellKnownURL("https://app.getgram.ai/mcp/speakeasy-team-snowflake/")
-	require.Equal(t, "https://app.getgram.ai/.well-known/oauth-authorization-server/mcp/speakeasy-team-snowflake", result)
+	result := buildWellKnownURL("https://example.com/mcp/my-server/")
+	require.Equal(t, "https://example.com/.well-known/oauth-authorization-server/mcp/my-server", result)
 }
 
 func TestBuildWellKnownResourceURL_OriginOnly(t *testing.T) {
@@ -32,8 +32,8 @@ func TestBuildWellKnownResourceURL_OriginOnly(t *testing.T) {
 
 func TestBuildWellKnownResourceURL_WithPath(t *testing.T) {
 	t.Parallel()
-	result := buildWellKnownResourceURL("https://app.getgram.ai/mcp/speakeasy-team-snowflake")
-	require.Equal(t, "https://app.getgram.ai/.well-known/oauth-protected-resource/mcp/speakeasy-team-snowflake", result)
+	result := buildWellKnownResourceURL("https://example.com/mcp/my-server")
+	require.Equal(t, "https://example.com/.well-known/oauth-protected-resource/mcp/my-server", result)
 }
 
 func TestParseWWWAuthenticate_Empty(t *testing.T) {
