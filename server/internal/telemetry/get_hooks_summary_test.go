@@ -3,6 +3,7 @@ package telemetry_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -304,6 +305,9 @@ func insertHookEvent(t *testing.T, ctx context.Context, p hookEventParams) {
 	attrsJSON, err := json.Marshal(attrs)
 	require.NoError(t, err)
 
+	// trace_id is FixedString(32) — strip hyphens from UUID to get 32 hex chars
+	traceID := strings.ReplaceAll(p.traceID, "-", "")
+
 	err = conn.Exec(ctx, `
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
@@ -311,7 +315,7 @@ func insertHookEvent(t *testing.T, ctx context.Context, p hookEventParams) {
 			gram_project_id, gram_deployment_id, gram_urn, service_name
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), p.timestamp.UnixNano(), p.timestamp.UnixNano(), "INFO", "hook event",
-		p.traceID, nil, string(attrsJSON), "{}",
+		traceID, nil, string(attrsJSON), "{}",
 		p.projectID, p.deploymentID, "hooks:"+p.toolName, "gram-hooks")
 	require.NoError(t, err)
 }
