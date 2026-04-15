@@ -28,10 +28,6 @@ export type PluginServer = {
    */
   displayName: string;
   /**
-   * External MCP server URL.
-   */
-  externalUrl?: string | undefined;
-  /**
    * Unique plugin server identifier.
    */
   id: string;
@@ -40,21 +36,13 @@ export type PluginServer = {
    */
   policy: PluginServerPolicy;
   /**
-   * MCP registry ID, if this server is from a catalog.
-   */
-  registryId?: string | undefined;
-  /**
-   * Registry server specifier (e.g. io.modelcontextprotocol.anonymous/exa).
-   */
-  registryServerSpecifier?: string | undefined;
-  /**
    * Ordering within the plugin.
    */
   sortOrder: number;
   /**
-   * Gram toolset ID, if this server is a first-party toolset.
+   * Gram toolset ID.
    */
-  toolsetId?: string | undefined;
+  toolsetId: string;
 };
 
 /** @internal */
@@ -71,21 +59,15 @@ export const PluginServer$inboundSchema: z.ZodMiniType<PluginServer, unknown> =
         z.transform(v => new Date(v)),
       ),
       display_name: z.string(),
-      external_url: z.optional(z.string()),
       id: z.string(),
       policy: PluginServerPolicy$inboundSchema,
-      registry_id: z.optional(z.string()),
-      registry_server_specifier: z.optional(z.string()),
       sort_order: z.int(),
-      toolset_id: z.optional(z.string()),
+      toolset_id: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
         "created_at": "createdAt",
         "display_name": "displayName",
-        "external_url": "externalUrl",
-        "registry_id": "registryId",
-        "registry_server_specifier": "registryServerSpecifier",
         "sort_order": "sortOrder",
         "toolset_id": "toolsetId",
       });

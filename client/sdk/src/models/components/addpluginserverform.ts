@@ -17,13 +17,13 @@ export type AddPluginServerForm = {
    * Display name for the server.
    */
   displayName: string;
-  externalUrl?: string | undefined;
   pluginId: string;
   policy?: Policy | undefined;
-  registryId?: string | undefined;
-  registryServerSpecifier?: string | undefined;
   sortOrder?: number | undefined;
-  toolsetId?: string | undefined;
+  /**
+   * Gram toolset ID for the MCP server.
+   */
+  toolsetId: string;
 };
 
 /** @internal */
@@ -34,13 +34,10 @@ export const Policy$outboundSchema: z.ZodMiniEnum<typeof Policy> = z.enum(
 /** @internal */
 export type AddPluginServerForm$Outbound = {
   display_name: string;
-  external_url?: string | undefined;
   plugin_id: string;
   policy: string;
-  registry_id?: string | undefined;
-  registry_server_specifier?: string | undefined;
   sort_order: number;
-  toolset_id?: string | undefined;
+  toolset_id: string;
 };
 
 /** @internal */
@@ -50,21 +47,15 @@ export const AddPluginServerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     displayName: z.string(),
-    externalUrl: z.optional(z.string()),
     pluginId: z.string(),
     policy: z._default(Policy$outboundSchema, "required"),
-    registryId: z.optional(z.string()),
-    registryServerSpecifier: z.optional(z.string()),
     sortOrder: z._default(z.int(), 0),
-    toolsetId: z.optional(z.string()),
+    toolsetId: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       displayName: "display_name",
-      externalUrl: "external_url",
       pluginId: "plugin_id",
-      registryId: "registry_id",
-      registryServerSpecifier: "registry_server_specifier",
       sortOrder: "sort_order",
       toolsetId: "toolset_id",
     });
