@@ -59,11 +59,10 @@ const breadcrumbSubstitutions = {
   "add-function": "Add Function",
   "add-from-catalog": "Add from Catalog",
   "agent-sessions": "Agent Sessions",
-  // The URL segments `slack` and `clis` are preserved for backwards
-  // compatibility, but the sidebar/route titles were rebranded — map them
-  // here so breadcrumbs stay in sync with the rest of the UI.
+  // The URL segment `slack` is preserved for backwards compatibility,
+  // but the sidebar/route title was rebranded — map it here so
+  // breadcrumbs stay in sync with the rest of the UI.
   slack: "Assistants",
-  clis: "Skills",
 };
 
 function PageHeaderBreadcrumbs({

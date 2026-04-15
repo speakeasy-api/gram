@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -70,6 +71,8 @@ func newTestSkillsServiceWithCaptureMode(t *testing.T, mode *string) (context.Co
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -78,11 +81,12 @@ func newTestSkillsServiceWithCaptureMode(t *testing.T, mode *string) (context.Co
 	require.NoError(t, err)
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
-	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	storage := assetstest.NewTestBlobStore(t)
-	svc := skills.NewService(logger, tracerProvider, conn, sessionManager, storage, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{})
+	svc := skills.NewService(logger, tracerProvider, conn, sessionManager, storage, accessManager)
 
 	ti := &testInstance{
 		service:        svc,

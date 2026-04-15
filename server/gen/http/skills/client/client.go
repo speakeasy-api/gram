@@ -17,6 +17,20 @@ import (
 
 // Client lists the skills service endpoint HTTP clients.
 type Client struct {
+	// Get Doer is the HTTP client used to make requests to the get endpoint.
+	GetDoer goahttp.Doer
+
+	// List Doer is the HTTP client used to make requests to the list endpoint.
+	ListDoer goahttp.Doer
+
+	// GetSettings Doer is the HTTP client used to make requests to the getSettings
+	// endpoint.
+	GetSettingsDoer goahttp.Doer
+
+	// SetSettings Doer is the HTTP client used to make requests to the setSettings
+	// endpoint.
+	SetSettingsDoer goahttp.Doer
+
 	// Capture Doer is the HTTP client used to make requests to the capture
 	// endpoint.
 	CaptureDoer goahttp.Doer
@@ -41,12 +55,112 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		GetDoer:             doer,
+		ListDoer:            doer,
+		GetSettingsDoer:     doer,
+		SetSettingsDoer:     doer,
 		CaptureDoer:         doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
 		decoder:             dec,
 		encoder:             enc,
+	}
+}
+
+// Get returns an endpoint that makes HTTP requests to the skills service get
+// server.
+func (c *Client) Get() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRequest(c.encoder)
+		decodeResponse = DecodeGetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "get", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// List returns an endpoint that makes HTTP requests to the skills service list
+// server.
+func (c *Client) List() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRequest(c.encoder)
+		decodeResponse = DecodeListResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "list", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSettings returns an endpoint that makes HTTP requests to the skills
+// service getSettings server.
+func (c *Client) GetSettings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSettingsRequest(c.encoder)
+		decodeResponse = DecodeGetSettingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSettingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSettingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "getSettings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetSettings returns an endpoint that makes HTTP requests to the skills
+// service setSettings server.
+func (c *Client) SetSettings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetSettingsRequest(c.encoder)
+		decodeResponse = DecodeSetSettingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetSettingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetSettingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "setSettings", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

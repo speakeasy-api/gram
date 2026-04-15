@@ -77,7 +77,7 @@ func UsageCommands() []string {
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"resources list-resources",
-		"skills capture",
+		"skills (get|list|get-settings|set-settings|capture)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -693,6 +693,24 @@ func ParseEndpoint(
 
 		skillsFlags = flag.NewFlagSet("skills", flag.ContinueOnError)
 
+		skillsGetFlags                = flag.NewFlagSet("get", flag.ExitOnError)
+		skillsGetSlugFlag             = skillsGetFlags.String("slug", "REQUIRED", "")
+		skillsGetSessionTokenFlag     = skillsGetFlags.String("session-token", "", "")
+		skillsGetProjectSlugInputFlag = skillsGetFlags.String("project-slug-input", "", "")
+
+		skillsListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
+		skillsListSessionTokenFlag     = skillsListFlags.String("session-token", "", "")
+		skillsListProjectSlugInputFlag = skillsListFlags.String("project-slug-input", "", "")
+
+		skillsGetSettingsFlags                = flag.NewFlagSet("get-settings", flag.ExitOnError)
+		skillsGetSettingsSessionTokenFlag     = skillsGetSettingsFlags.String("session-token", "", "")
+		skillsGetSettingsProjectSlugInputFlag = skillsGetSettingsFlags.String("project-slug-input", "", "")
+
+		skillsSetSettingsFlags                = flag.NewFlagSet("set-settings", flag.ExitOnError)
+		skillsSetSettingsBodyFlag             = skillsSetSettingsFlags.String("body", "REQUIRED", "")
+		skillsSetSettingsSessionTokenFlag     = skillsSetSettingsFlags.String("session-token", "", "")
+		skillsSetSettingsProjectSlugInputFlag = skillsSetSettingsFlags.String("project-slug-input", "", "")
+
 		skillsCaptureFlags                = flag.NewFlagSet("capture", flag.ExitOnError)
 		skillsCaptureNameFlag             = skillsCaptureFlags.String("name", "REQUIRED", "")
 		skillsCaptureScopeFlag            = skillsCaptureFlags.String("scope", "REQUIRED", "")
@@ -1174,6 +1192,10 @@ func ParseEndpoint(
 	resourcesListResourcesFlags.Usage = resourcesListResourcesUsage
 
 	skillsFlags.Usage = skillsUsage
+	skillsGetFlags.Usage = skillsGetUsage
+	skillsListFlags.Usage = skillsListUsage
+	skillsGetSettingsFlags.Usage = skillsGetSettingsUsage
+	skillsSetSettingsFlags.Usage = skillsSetSettingsUsage
 	skillsCaptureFlags.Usage = skillsCaptureUsage
 
 	slackFlags.Usage = slackUsage
@@ -1743,6 +1765,18 @@ func ParseEndpoint(
 
 		case "skills":
 			switch epn {
+			case "get":
+				epf = skillsGetFlags
+
+			case "list":
+				epf = skillsListFlags
+
+			case "get-settings":
+				epf = skillsGetSettingsFlags
+
+			case "set-settings":
+				epf = skillsSetSettingsFlags
+
 			case "capture":
 				epf = skillsCaptureFlags
 
@@ -2377,6 +2411,18 @@ func ParseEndpoint(
 		case "skills":
 			c := skillsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "get":
+				endpoint = c.Get()
+				data, err = skillsc.BuildGetPayload(*skillsGetSlugFlag, *skillsGetSessionTokenFlag, *skillsGetProjectSlugInputFlag)
+			case "list":
+				endpoint = c.List()
+				data, err = skillsc.BuildListPayload(*skillsListSessionTokenFlag, *skillsListProjectSlugInputFlag)
+			case "get-settings":
+				endpoint = c.GetSettings()
+				data, err = skillsc.BuildGetSettingsPayload(*skillsGetSettingsSessionTokenFlag, *skillsGetSettingsProjectSlugInputFlag)
+			case "set-settings":
+				endpoint = c.SetSettings()
+				data, err = skillsc.BuildSetSettingsPayload(*skillsSetSettingsBodyFlag, *skillsSetSettingsSessionTokenFlag, *skillsSetSettingsProjectSlugInputFlag)
 			case "capture":
 				endpoint = c.Capture()
 				data, err = skillsc.BuildCapturePayload(*skillsCaptureNameFlag, *skillsCaptureScopeFlag, *skillsCaptureDiscoveryRootFlag, *skillsCaptureSourceTypeFlag, *skillsCaptureContentSha256Flag, *skillsCaptureAssetFormatFlag, *skillsCaptureResolutionStatusFlag, *skillsCaptureSkillIDFlag, *skillsCaptureSkillVersionIDFlag, *skillsCaptureContentTypeFlag, *skillsCaptureContentLengthFlag, *skillsCaptureApikeyTokenFlag, *skillsCaptureProjectSlugInputFlag)
@@ -5221,11 +5267,99 @@ func skillsUsage() {
 	fmt.Fprintln(os.Stderr, `Capture skill artifacts and metadata from local hook producers.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] skills COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get: Get a captured skill by slug.`)
+	fmt.Fprintln(os.Stderr, `    list: List captured skills for a project.`)
+	fmt.Fprintln(os.Stderr, `    get-settings: Get capture settings for a project.`)
+	fmt.Fprintln(os.Stderr, `    set-settings: Update capture settings for a project.`)
 	fmt.Fprintln(os.Stderr, `    capture: Capture a skill artifact and associated metadata.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s skills COMMAND --help\n", os.Args[0])
 }
+func skillsGetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills get", os.Args[0])
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a captured skill by slug.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills get --slug \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List captured skills for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills list --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsGetSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills get-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get capture settings for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills get-settings --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsSetSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills set-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update capture settings for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills set-settings --body '{\n      \"capture_project_skills\": false,\n      \"capture_user_skills\": false,\n      \"enabled\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func skillsCaptureUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] skills capture", os.Args[0])

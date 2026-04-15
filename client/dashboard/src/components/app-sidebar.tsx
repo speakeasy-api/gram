@@ -1,3 +1,7 @@
+import {
+  APP_NAV_GROUPS,
+  type AppNavRouteKey,
+} from "@/components/app-navigation";
 import { NavMenu } from "@/components/nav-menu";
 import {
   Sidebar,
@@ -20,34 +24,27 @@ import { FeatureRequestModal } from "./FeatureRequestModal";
 import { Button } from "./ui/button";
 import { Type } from "./ui/type";
 
+function resolveNavGroupItems(
+  routes: ReturnType<typeof useRoutes>,
+): Record<string, AppRoute[]> {
+  return Object.fromEntries(
+    Object.entries(APP_NAV_GROUPS).map(([group, routeKeys]) => [
+      group,
+      routeKeys.map((routeKey) => routes[routeKey as AppNavRouteKey]),
+    ]),
+  ) as Record<string, AppRoute[]>;
+}
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const { orgSlug } = useSlugs();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-  const settingsItems = [routes.settings] as AppRoute[];
-
-  const navGroups = {
-    connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
-    build: [routes.elements, routes.mcp, routes.slackApps, routes.clis],
-    observe: [
-      routes.observability,
-      routes.logs,
-      routes.chatSessions,
-      routes.hooks,
-    ],
-    settings: settingsItems,
-  };
+  const navGroups = resolveNavGroupItems(routes);
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarContent className="pt-2">
-        <SidebarGroup>
-          <SidebarGroupLabel>project</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <NavMenu items={[routes.home]} />
-          </SidebarGroupContent>
-        </SidebarGroup>
         {Object.entries(navGroups).map(([label, items]) => (
           <SidebarGroup key={label}>
             <SidebarGroupLabel>{label}</SidebarGroupLabel>

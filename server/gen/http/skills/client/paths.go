@@ -7,6 +7,26 @@
 
 package client
 
+// GetSkillsPath returns the URL path to the skills service get HTTP endpoint.
+func GetSkillsPath() string {
+	return "/rpc/skills.get"
+}
+
+// ListSkillsPath returns the URL path to the skills service list HTTP endpoint.
+func ListSkillsPath() string {
+	return "/rpc/skills.list"
+}
+
+// GetSettingsSkillsPath returns the URL path to the skills service getSettings HTTP endpoint.
+func GetSettingsSkillsPath() string {
+	return "/rpc/skills.getSettings"
+}
+
+// SetSettingsSkillsPath returns the URL path to the skills service setSettings HTTP endpoint.
+func SetSettingsSkillsPath() string {
+	return "/rpc/skills.setSettings"
+}
+
 // CaptureSkillsPath returns the URL path to the skills service capture HTTP endpoint.
 func CaptureSkillsPath() string {
 	return "/rpc/skills.capture"

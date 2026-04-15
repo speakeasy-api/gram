@@ -11,12 +11,21 @@ import (
 	"context"
 	"io"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
 
 // Capture skill artifacts and metadata from local hook producers.
 type Service interface {
+	// Get a captured skill by slug.
+	Get(context.Context, *GetPayload) (res *Skill, err error)
+	// List captured skills for a project.
+	List(context.Context, *ListPayload) (res *ListSkillsResult, err error)
+	// Get capture settings for a project.
+	GetSettings(context.Context, *GetSettingsPayload) (res *SkillCaptureSettings, err error)
+	// Update capture settings for a project.
+	SetSettings(context.Context, *SetSettingsPayload) (res *SkillCaptureSettings, err error)
 	// Capture a skill artifact and associated metadata.
 	Capture(context.Context, *CaptureSkillForm, io.ReadCloser) (res *CaptureSkillResult, err error)
 }
@@ -41,7 +50,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"capture"}
+var MethodNames = [5]string{"get", "list", "getSettings", "setSettings", "capture"}
 
 type CaptureSkillAsset struct {
 	ID            string
@@ -73,6 +82,88 @@ type CaptureSkillForm struct {
 // CaptureSkillResult is the result type of the skills service capture method.
 type CaptureSkillResult struct {
 	Asset *CaptureSkillAsset
+}
+
+// GetPayload is the payload type of the skills service get method.
+type GetPayload struct {
+	// The slug of the skill
+	Slug             types.Slug
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// GetSettingsPayload is the payload type of the skills service getSettings
+// method.
+type GetSettingsPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListPayload is the payload type of the skills service list method.
+type ListPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListSkillsResult is the result type of the skills service list method.
+type ListSkillsResult struct {
+	Skills []*SkillEntry
+}
+
+// SetSettingsPayload is the payload type of the skills service setSettings
+// method.
+type SetSettingsPayload struct {
+	SessionToken         *string
+	ProjectSlugInput     *string
+	Enabled              bool
+	CaptureProjectSkills bool
+	CaptureUserSkills    bool
+}
+
+// Skill is the result type of the skills service get method.
+type Skill struct {
+	ID              string
+	Name            string
+	Slug            string
+	Description     *string
+	SkillUUID       *string
+	ActiveVersionID *string
+	CreatedAt       string
+	UpdatedAt       string
+}
+
+// SkillCaptureSettings is the result type of the skills service getSettings
+// method.
+type SkillCaptureSettings struct {
+	EffectiveMode             string
+	OrgDefaultMode            *string
+	ProjectOverrideMode       *string
+	Enabled                   bool
+	CaptureProjectSkills      bool
+	CaptureUserSkills         bool
+	InheritedFromOrganization bool
+}
+
+type SkillEntry struct {
+	ID            string
+	Name          string
+	Slug          string
+	Description   *string
+	SkillUUID     *string
+	CreatedAt     string
+	UpdatedAt     string
+	VersionCount  int64
+	ActiveVersion *SkillVersionSummary
+}
+
+type SkillVersionSummary struct {
+	ID            string
+	ContentSha256 string
+	AssetFormat   string
+	SizeBytes     int64
+	AuthorName    *string
+	CreatedAt     string
+	FirstSeenAt   *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

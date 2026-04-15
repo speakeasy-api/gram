@@ -49,6 +49,33 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
+-- name: ListSkillsWithActiveVersion :many
+WITH version_counts AS (
+  SELECT
+    skill_versions.skill_id,
+    COUNT(*)::bigint AS version_count
+  FROM skill_versions
+  GROUP BY skill_versions.skill_id
+)
+SELECT
+  sqlc.embed(skills),
+  active_version.id AS active_version_id,
+  active_version.content_sha256 AS active_version_content_sha256,
+  active_version.asset_format AS active_version_asset_format,
+  active_version.size_bytes AS active_version_size_bytes,
+  active_version.author_name AS active_version_author_name,
+  active_version.created_at AS active_version_created_at,
+  active_version.first_seen_at AS active_version_first_seen_at,
+  coalesce(version_counts.version_count, 0)::bigint AS version_count
+FROM skills
+LEFT JOIN skill_versions AS active_version
+  ON active_version.id = skills.active_version_id
+LEFT JOIN version_counts
+  ON version_counts.skill_id = skills.id
+WHERE skills.project_id = @project_id
+  AND skills.deleted IS FALSE
+ORDER BY skills.created_at DESC;
+
 -- name: UpdateSkill :one
 UPDATE skills
 SET
@@ -232,3 +259,29 @@ SELECT
     (SELECT mode FROM org_default),
     'disabled'
   )::text AS mode;
+
+-- name: GetCaptureSettings :one
+WITH project_override AS (
+  SELECT scp.mode
+  FROM skills_capture_policies scp
+  WHERE scp.organization_id = @organization_id
+    AND scp.project_id = @project_id
+    AND scp.deleted IS FALSE
+  LIMIT 1
+),
+org_default AS (
+  SELECT scp.mode
+  FROM skills_capture_policies scp
+  WHERE scp.organization_id = @organization_id
+    AND scp.project_id IS NULL
+    AND scp.deleted IS FALSE
+  LIMIT 1
+)
+SELECT
+  coalesce((SELECT mode FROM org_default), '')::text AS org_default_mode,
+  coalesce((SELECT mode FROM project_override), '')::text AS project_override_mode,
+  coalesce(
+    (SELECT mode FROM project_override),
+    (SELECT mode FROM org_default),
+    'disabled'
+  )::text AS effective_mode;

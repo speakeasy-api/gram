@@ -18,8 +18,12 @@ import (
 
 // Server lists the skills service endpoint HTTP handlers.
 type Server struct {
-	Mounts  []*MountPoint
-	Capture http.Handler
+	Mounts      []*MountPoint
+	Get         http.Handler
+	List        http.Handler
+	GetSettings http.Handler
+	SetSettings http.Handler
+	Capture     http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -49,9 +53,17 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"Get", "GET", "/rpc/skills.get"},
+			{"List", "GET", "/rpc/skills.list"},
+			{"GetSettings", "GET", "/rpc/skills.getSettings"},
+			{"SetSettings", "POST", "/rpc/skills.setSettings"},
 			{"Capture", "POST", "/rpc/skills.capture"},
 		},
-		Capture: NewCaptureHandler(e.Capture, mux, decoder, encoder, errhandler, formatter),
+		Get:         NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
+		List:        NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
+		GetSettings: NewGetSettingsHandler(e.GetSettings, mux, decoder, encoder, errhandler, formatter),
+		SetSettings: NewSetSettingsHandler(e.SetSettings, mux, decoder, encoder, errhandler, formatter),
+		Capture:     NewCaptureHandler(e.Capture, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -60,6 +72,10 @@ func (s *Server) Service() string { return "skills" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.Get = m(s.Get)
+	s.List = m(s.List)
+	s.GetSettings = m(s.GetSettings)
+	s.SetSettings = m(s.SetSettings)
 	s.Capture = m(s.Capture)
 }
 
@@ -68,12 +84,228 @@ func (s *Server) MethodNames() []string { return skills.MethodNames[:] }
 
 // Mount configures the mux to serve the skills endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountGetHandler(mux, h.Get)
+	MountListHandler(mux, h.List)
+	MountGetSettingsHandler(mux, h.GetSettings)
+	MountSetSettingsHandler(mux, h.SetSettings)
 	MountCaptureHandler(mux, h.Capture)
 }
 
 // Mount configures the mux to serve the skills endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountGetHandler configures the mux to serve the "skills" service "get"
+// endpoint.
+func MountGetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/skills.get", f)
+}
+
+// NewGetHandler creates a HTTP handler which loads the HTTP request and calls
+// the "skills" service "get" endpoint.
+func NewGetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetRequest(mux, decoder)
+		encodeResponse = EncodeGetResponse(encoder)
+		encodeError    = EncodeGetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "get")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListHandler configures the mux to serve the "skills" service "list"
+// endpoint.
+func MountListHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/skills.list", f)
+}
+
+// NewListHandler creates a HTTP handler which loads the HTTP request and calls
+// the "skills" service "list" endpoint.
+func NewListHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListRequest(mux, decoder)
+		encodeResponse = EncodeListResponse(encoder)
+		encodeError    = EncodeListError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "list")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSettingsHandler configures the mux to serve the "skills" service
+// "getSettings" endpoint.
+func MountGetSettingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/skills.getSettings", f)
+}
+
+// NewGetSettingsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "skills" service "getSettings" endpoint.
+func NewGetSettingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSettingsRequest(mux, decoder)
+		encodeResponse = EncodeGetSettingsResponse(encoder)
+		encodeError    = EncodeGetSettingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSettings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetSettingsHandler configures the mux to serve the "skills" service
+// "setSettings" endpoint.
+func MountSetSettingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.setSettings", f)
+}
+
+// NewSetSettingsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "skills" service "setSettings" endpoint.
+func NewSetSettingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetSettingsRequest(mux, decoder)
+		encodeResponse = EncodeSetSettingsResponse(encoder)
+		encodeError    = EncodeSetSettingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setSettings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountCaptureHandler configures the mux to serve the "skills" service
