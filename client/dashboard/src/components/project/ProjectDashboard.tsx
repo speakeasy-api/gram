@@ -9,9 +9,10 @@ import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { useAuditLogs, useGetProjectOverview } from "@gram/client/react-query";
-import { formatDistanceToNow, subDays } from "date-fns";
+import { subDays } from "date-fns";
 import { useMemo } from "react";
 import { Badge } from "@speakeasy-api/moonshine";
+import { ActivityTimelineCard } from "./ActivityTimelineCard";
 
 export function ProjectDashboard() {
   const { projectSlug } = useSlugs();
@@ -195,51 +196,11 @@ export function ProjectDashboard() {
             </DashboardCard>
           </div>
 
-          {/* Row 3: Activity Timeline */}
-          <DashboardCard
-            title="Activity Timeline"
-            action={<ViewAllLink to={orgRoutes.auditLogs.href()} />}
-          >
-            {isAuditLogsPending ? (
-              <div className="space-y-3">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Skeleton key={i} className="h-8 w-full" />
-                ))}
-              </div>
-            ) : recentLogs.length === 0 ? (
-              <EmptyState message="No recent activity" />
-            ) : (
-              <ul className="divide-border divide-y">
-                {recentLogs.map((log) => (
-                  <li
-                    key={log.id}
-                    className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
-                  >
-                    <div className="bg-muted-foreground/30 mt-2 h-1.5 w-1.5 shrink-0 rounded-full" />
-                    <p className="min-w-0 flex-1 text-sm">
-                      <span className="font-medium">
-                        {log.actorDisplayName ?? log.actorSlug ?? "Unknown"}
-                      </span>{" "}
-                      <span className="text-muted-foreground">
-                        {log.action}
-                      </span>
-                      {log.subjectDisplayName && (
-                        <>
-                          {" "}
-                          <span className="font-medium">
-                            {log.subjectDisplayName}
-                          </span>
-                        </>
-                      )}
-                    </p>
-                    <time className="text-muted-foreground shrink-0 text-xs">
-                      {formatDistanceToNow(log.createdAt, { addSuffix: true })}
-                    </time>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </DashboardCard>
+          <ActivityTimelineCard
+            logs={recentLogs}
+            isPending={isAuditLogsPending}
+            viewAllHref={orgRoutes.auditLogs.href()}
+          />
         </div>
       </Page.Section.Body>
     </Page.Section>
