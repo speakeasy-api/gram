@@ -16,7 +16,6 @@ import {
   useCreateEnvironmentMutation,
   useGetMcpMetadata,
   useListEnvironments,
-  useUpdateEnvironmentMutation,
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
@@ -210,7 +209,6 @@ function OAuthWizard({
   });
 
   const createEnvironmentMutation = useCreateEnvironmentMutation();
-  const updateEnvironmentMutation = useUpdateEnvironmentMutation();
   const { data: mcpMetadataData } = useGetMcpMetadata(
     { toolsetSlug },
     undefined,
@@ -245,7 +243,6 @@ function OAuthWizard({
     addOAuthProxyMutation,
     updateOAuthProxyMutation,
     createEnvironmentMutation,
-    updateEnvironmentMutation,
   });
 
   const wizardTitle = state.title;

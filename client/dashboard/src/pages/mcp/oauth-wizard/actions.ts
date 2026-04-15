@@ -2,7 +2,6 @@ import {
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
   useCreateEnvironmentMutation,
-  useUpdateEnvironmentMutation,
   useUpdateOAuthProxyServerMutation,
 } from "@gram/client/react-query";
 import { useCallback } from "react";
@@ -30,7 +29,6 @@ interface StepActionDeps {
     typeof useUpdateOAuthProxyServerMutation
   >;
   createEnvironmentMutation: ReturnType<typeof useCreateEnvironmentMutation>;
-  updateEnvironmentMutation: ReturnType<typeof useUpdateEnvironmentMutation>;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,7 +66,6 @@ export function useStepActions(deps: StepActionDeps): StepActions {
     addOAuthProxyMutation,
     updateOAuthProxyMutation,
     createEnvironmentMutation,
-    updateEnvironmentMutation,
   } = deps;
 
   // --- external_oauth_server_metadata_form ---
@@ -234,58 +231,34 @@ export function useStepActions(deps: StepActionDeps): StepActions {
           createEnvironmentForm: {
             name: envName,
             organizationId: activeOrganizationId,
-            entries: [],
+            entries: [
+              { name: "CLIENT_ID", value: state.clientId },
+              { name: "CLIENT_SECRET", value: state.clientSecret },
+            ],
           },
         },
       },
       {
         onSuccess: (env) => {
-          updateEnvironmentMutation.mutate(
-            {
-              request: {
-                slug: env.slug,
-                updateEnvironmentRequestBody: {
-                  entriesToUpdate: [
-                    { name: "CLIENT_ID", value: state.clientId },
-                    { name: "CLIENT_SECRET", value: state.clientSecret },
+          addOAuthProxyMutation.mutate({
+            request: {
+              slug: toolsetSlug,
+              addOAuthProxyServerRequestBody: {
+                oauthProxyServer: {
+                  providerType: "custom",
+                  slug: proxyFormData.slug,
+                  audience: proxyFormData.audience || undefined,
+                  authorizationEndpoint: proxyFormData.authorizationEndpoint,
+                  tokenEndpoint: proxyFormData.tokenEndpoint,
+                  scopesSupported: scopesArray,
+                  tokenEndpointAuthMethodsSupported: [
+                    proxyFormData.tokenAuthMethod,
                   ],
-                  entriesToRemove: [],
+                  environmentSlug: env.slug,
                 },
               },
             },
-            {
-              onSuccess: () => {
-                addOAuthProxyMutation.mutate({
-                  request: {
-                    slug: toolsetSlug,
-                    addOAuthProxyServerRequestBody: {
-                      oauthProxyServer: {
-                        providerType: "custom",
-                        slug: proxyFormData.slug,
-                        audience: proxyFormData.audience || undefined,
-                        authorizationEndpoint:
-                          proxyFormData.authorizationEndpoint,
-                        tokenEndpoint: proxyFormData.tokenEndpoint,
-                        scopesSupported: scopesArray,
-                        tokenEndpointAuthMethodsSupported: [
-                          proxyFormData.tokenAuthMethod,
-                        ],
-                        environmentSlug: env.slug,
-                      },
-                    },
-                  },
-                });
-              },
-              onError: (error) => {
-                console.error("Failed to store OAuth credentials:", error);
-                dispatch({
-                  type: "SET_RESULT",
-                  success: false,
-                  message: "Failed to store OAuth credentials",
-                });
-              },
-            },
-          );
+          });
         },
         onError: (error) => {
           console.error("Failed to create environment:", error);
@@ -308,14 +281,11 @@ export function useStepActions(deps: StepActionDeps): StepActions {
     environments,
     dispatch,
     createEnvironmentMutation,
-    updateEnvironmentMutation,
     addOAuthProxyMutation,
   ]);
 
   const isProxySubmitting =
-    createEnvironmentMutation.isPending ||
-    updateEnvironmentMutation.isPending ||
-    addOAuthProxyMutation.isPending;
+    createEnvironmentMutation.isPending || addOAuthProxyMutation.isPending;
 
   return {
     external_oauth_server_metadata_form: {
