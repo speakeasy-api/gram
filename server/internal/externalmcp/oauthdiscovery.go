@@ -133,32 +133,29 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 		}
 	}
 
-	// Strategy 3: Probe well-known locations at the server origin
+	// Strategy 3: Probe well-known locations derived from the remote URL
 	if authServerMeta == nil {
-		origin, err := getOrigin(remoteURL)
-		if err == nil {
-			// Try OAuth Protected Resource metadata first
-			prURL := origin + "/.well-known/oauth-protected-resource"
-			meta, err := fetchJSON[protectedResourceMetadata](ctx, logger, guardianPolicy, prURL)
-			if err == nil && meta != nil {
-				resourceMeta = meta
-				// Follow the chain
-				if len(meta.AuthorizationServers) > 0 {
-					asURL := buildWellKnownURL(meta.AuthorizationServers[0])
-					asMeta, _ := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
-					if asMeta != nil {
-						authServerMeta = asMeta
-					}
-				}
-			}
-
-			// Try OAuth Authorization Server metadata directly
-			if authServerMeta == nil {
-				asURL := origin + "/.well-known/oauth-authorization-server"
+		// Try OAuth Protected Resource metadata first
+		prURL := buildWellKnownResourceURL(remoteURL)
+		meta, err := fetchJSON[protectedResourceMetadata](ctx, logger, guardianPolicy, prURL)
+		if err == nil && meta != nil {
+			resourceMeta = meta
+			// Follow the chain
+			if len(meta.AuthorizationServers) > 0 {
+				asURL := buildWellKnownURL(meta.AuthorizationServers[0])
 				asMeta, _ := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
 				if asMeta != nil {
 					authServerMeta = asMeta
 				}
+			}
+		}
+
+		// Try OAuth Authorization Server metadata directly
+		if authServerMeta == nil {
+			asURL := buildWellKnownURL(remoteURL)
+			asMeta, _ := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
+			if asMeta != nil {
+				authServerMeta = asMeta
 			}
 		}
 	}
@@ -220,19 +217,27 @@ func parseWWWAuthenticate(header string) map[string]string {
 	return params
 }
 
-// getOrigin extracts the origin (scheme + host) from a URL.
-func getOrigin(rawURL string) (string, error) {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return "", fmt.Errorf("parse URL: %w", err)
-	}
-	return fmt.Sprintf("%s://%s", u.Scheme, u.Host), nil
+// buildWellKnownURL constructs the well-known OAuth Authorization Server metadata URL.
+// Per RFC 8414 Section 3, the well-known suffix is inserted between the host and the path.
+// e.g. https://example.com/path → https://example.com/.well-known/oauth-authorization-server/path
+func buildWellKnownURL(baseURL string) string {
+	return buildWellKnownSuffixURL(baseURL, "oauth-authorization-server")
 }
 
-// buildWellKnownURL constructs the well-known OAuth Authorization Server metadata URL.
-func buildWellKnownURL(baseURL string) string {
-	baseURL = strings.TrimSuffix(baseURL, "/")
-	return baseURL + "/.well-known/oauth-authorization-server"
+// buildWellKnownResourceURL constructs the well-known OAuth Protected Resource metadata URL.
+// Per RFC 9728, the well-known suffix is inserted between the host and the path.
+// e.g. https://example.com/path → https://example.com/.well-known/oauth-protected-resource/path
+func buildWellKnownResourceURL(baseURL string) string {
+	return buildWellKnownSuffixURL(baseURL, "oauth-protected-resource")
+}
+
+// buildWellKnownSuffixURL inserts a /.well-known/<suffix> between the host and path of a URL.
+func buildWellKnownSuffixURL(baseURL, suffix string) string {
+	u, err := url.Parse(strings.TrimSuffix(baseURL, "/"))
+	if err != nil {
+		return baseURL + "/.well-known/" + suffix
+	}
+	return fmt.Sprintf("%s://%s/.well-known/%s%s", u.Scheme, u.Host, suffix, u.Path)
 }
 
 // fetchJSON fetches JSON from a URL and decodes it into the target.
