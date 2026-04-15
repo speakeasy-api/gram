@@ -31,26 +31,29 @@ CREATE TABLE "plugin_assignments" (
 CREATE UNIQUE INDEX "plugin_assignments_plugin_id_principal_urn_key" ON "plugin_assignments" ("plugin_id", "organization_id", "principal_urn");
 -- Create "plugin_servers" table
 CREATE TABLE "plugin_servers" (
-  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
-  "plugin_id" uuid NOT NULL,
-  "toolset_id" uuid NULL,
-  "registry_id" uuid NULL,
+CREATE TABLE "plugin_servers" (
+  "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "deleted_at" timestamptz NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "display_name" text NOT NULL,
   "registry_server_specifier" text NULL,
-  "external_url" text NULL CHECK (external_url IS NULL OR external_url <> ''),
-  "display_name" text NOT NULL CHECK (display_name <> ''),
+  "external_url" text NULL,
   "policy" text NOT NULL DEFAULT 'required',
   "sort_order" integer NOT NULL DEFAULT 0,
-  "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
-  "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
-  "deleted_at" timestamptz NULL,
+  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
+  "registry_id" uuid NULL,
+  "toolset_id" uuid NULL,
+  "plugin_id" uuid NOT NULL,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
   CONSTRAINT "plugin_servers_plugin_id_fkey" FOREIGN KEY ("plugin_id") REFERENCES "plugins" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "plugin_servers_registry_id_fkey" FOREIGN KEY ("registry_id") REFERENCES "mcp_registries" ("id") ON UPDATE NO ACTION ON DELETE RESTRICT,
   CONSTRAINT "plugin_servers_toolset_id_fkey" FOREIGN KEY ("toolset_id") REFERENCES "toolsets" ("id") ON UPDATE NO ACTION ON DELETE RESTRICT,
+  CONSTRAINT "plugin_servers_display_name_check" CHECK (display_name <> ''::text),
+  CONSTRAINT "plugin_servers_external_url_check" CHECK ((external_url IS NULL) OR (external_url <> ''::text)),
   CONSTRAINT "plugin_servers_policy_check" CHECK (policy = ANY (ARRAY['required'::text, 'optional'::text])),
-  CONSTRAINT "plugin_servers_source_check" CHECK (((((toolset_id IS NOT NULL))::integer + ((registry_id IS NOT NULL))::integer) + ((external_url IS NOT NULL))::integer) = 1),
-  CONSTRAINT "plugin_servers_registry_specifier_check" CHECK (registry_id IS NOT NULL OR registry_server_specifier IS NULL)
+  CONSTRAINT "plugin_servers_registry_specifier_check" CHECK ((registry_id IS NOT NULL) OR (registry_server_specifier IS NULL)),
+  CONSTRAINT "plugin_servers_source_check" CHECK (((((toolset_id IS NOT NULL))::integer + ((registry_id IS NOT NULL))::integer) + ((external_url IS NOT NULL))::integer) = 1)
 );
 -- Create index "plugin_servers_plugin_id_display_name_key" to table: "plugin_servers"
 CREATE UNIQUE INDEX "plugin_servers_plugin_id_display_name_key" ON "plugin_servers" ("plugin_id", "display_name") WHERE (deleted IS FALSE);
