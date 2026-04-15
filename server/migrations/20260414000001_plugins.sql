@@ -23,6 +23,7 @@ CREATE TABLE "plugin_assignments" (
   "organization_id" text NOT NULL,
   "principal_urn" text NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
   CONSTRAINT "plugin_assignments_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "plugin_assignments_plugin_id_fkey" FOREIGN KEY ("plugin_id") REFERENCES "plugins" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
