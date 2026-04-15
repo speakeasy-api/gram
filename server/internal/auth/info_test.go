@@ -238,8 +238,7 @@ func TestService_Info(t *testing.T) {
 
 // TestService_Info_AdminOrgRelationshipUpserted verifies that an admin user who has no
 // pre-existing record in organization_user_relationships gets one created when Info is
-// called. Previously, admins were excluded from the upsert; this test guards against
-// that regression.
+// called for one of their own organizations.
 func TestService_Info_AdminOrgRelationshipUpserted(t *testing.T) {
 	t.Parallel()
 
@@ -295,4 +294,60 @@ func TestService_Info_AdminOrgRelationshipUpserted(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, exists, "expected org-user relationship to be upserted by Info call")
+}
+
+// TestService_Info_AdminVisitingCustomerOrgDoesNotUpsertRelationship verifies that
+// when an admin uses the org override to view a customer org, no relationship row is
+// written for that customer org. Only the admin's own orgs should be upserted.
+func TestService_Info_AdminVisitingCustomerOrgDoesNotUpsertRelationship(t *testing.T) {
+	t.Parallel()
+
+	// adminMockUserInfo gives the admin a single own org: admin-org-123.
+	userInfo := adminMockUserInfo()
+	ctx, instance := newTestAuthService(t, userInfo)
+
+	err := instance.createTestUser(ctx, userInfo)
+	require.NoError(t, err)
+
+	// Create the admin's own org so the projects loop in Info can resolve it.
+	err = instance.createTestOrganization(ctx, userInfo.Organizations[0])
+	require.NoError(t, err)
+
+	// Simulate the admin override: the session's active org is a customer org that
+	// does not appear in the admin's userInfo.Organizations list.
+	const customerOrgID = "customer-org-override-456"
+	session := sessions.Session{
+		SessionID:            "admin-customer-session-id",
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: customerOrgID,
+	}
+	err = instance.sessionManager.StoreSession(ctx, session)
+	require.NoError(t, err)
+
+	authCtx := &contextvalues.AuthContext{
+		SessionID:            &session.SessionID,
+		UserID:               session.UserID,
+		ActiveOrganizationID: session.ActiveOrganizationID,
+		AccountType:          "test",
+		ProjectID:            nil,
+		OrganizationSlug:     "",
+		Email:                &userInfo.Email,
+		ProjectSlug:          nil,
+		APIKeyScopes:         nil,
+	}
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	result, err := instance.service.Info(ctx, &gen.InfoPayload{SessionToken: nil})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.IsAdmin)
+
+	// No relationship row must be created for the customer org.
+	queries := orgRepo.New(instance.conn)
+	exists, err := queries.HasOrganizationUserRelationship(ctx, orgRepo.HasOrganizationUserRelationshipParams{
+		OrganizationID: customerOrgID,
+		UserID:         userInfo.UserID,
+	})
+	require.NoError(t, err)
+	require.False(t, exists, "admin must not be upserted into a customer org's relationship table")
 }
