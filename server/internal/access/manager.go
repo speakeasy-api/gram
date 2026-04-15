@@ -113,7 +113,9 @@ func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
 			attr.SlogUserID(authCtx.UserID),
 			attr.SlogError(err),
 		)
-	} else if roleSlug != "" {
+		return ctx, fmt.Errorf("resolve role slug: %w", err)
+	}
+	if roleSlug != "" {
 		principals = append(principals, urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug))
 	}
 
@@ -140,8 +142,7 @@ func (m *Manager) resolveRoleSlug(ctx context.Context, userID, orgID string) (st
 
 	user, err := usersrepo.New(m.db).GetUser(ctx, userID)
 	if err != nil {
-		m.logger.WarnContext(ctx, "resolve role slug: get user", attr.SlogUserID(userID), attr.SlogError(err))
-		return "", nil
+		return "", fmt.Errorf("get user: %w", err)
 	}
 	if !user.WorkosID.Valid || user.WorkosID.String == "" {
 		return "", nil
@@ -149,8 +150,7 @@ func (m *Manager) resolveRoleSlug(ctx context.Context, userID, orgID string) (st
 
 	org, err := orgrepo.New(m.db).GetOrganizationMetadata(ctx, orgID)
 	if err != nil {
-		m.logger.WarnContext(ctx, "resolve role slug: get org", attr.SlogOrganizationID(orgID), attr.SlogError(err))
-		return "", nil
+		return "", fmt.Errorf("get org: %w", err)
 	}
 	if !org.WorkosID.Valid || org.WorkosID.String == "" {
 		return "", nil
