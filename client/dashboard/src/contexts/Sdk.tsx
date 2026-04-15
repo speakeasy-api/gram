@@ -12,6 +12,14 @@ import { createContext, useContext, useEffect, useMemo, useRef } from "react";
 import { useLocation, useParams } from "react-router";
 import { useTelemetry } from "./Telemetry";
 
+// Mutable ref updated by AuthHandler once isAdmin is known from the session.
+// SdkProvider cannot call useIsAdmin() directly because it wraps AuthProvider
+// (AuthProvider needs QueryClientProvider which SdkProvider supplies).
+const _isAdminRef = { current: false };
+export function setFetcherIsAdmin(value: boolean): void {
+  _isAdminRef.current = value;
+}
+
 export const SdkContext = createContext<Gram>({} as Gram);
 
 export const useSdkClient = () => {
@@ -75,7 +83,9 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
           newRequest.headers.set("gram-project", projectSlug);
         }
 
-        const scopeOverride = getRBACScopeOverrideHeader();
+        const scopeOverride = getRBACScopeOverrideHeader(
+          import.meta.env.DEV || _isAdminRef.current,
+        );
         if (scopeOverride) {
           newRequest.headers.set("X-Gram-Scope-Override", scopeOverride);
         }
