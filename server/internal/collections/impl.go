@@ -160,6 +160,9 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 
 	collections, err := s.repo.ListOrganizationMcpCollections(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return &gen.ListResult{Collections: []*types.MCPCollection{}}, nil
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list collections").Log(ctx, s.logger)
 	}
 
@@ -480,21 +483,10 @@ func (s *Service) ensureDefaultRegistryCollection(ctx context.Context, organizat
 		Visibility:     defaultVisibility,
 	})
 	if createErr != nil {
-		if !isUniqueViolation(createErr) {
-			return oops.E(oops.CodeUnexpected, createErr, "error creating default registry collection").Log(ctx, s.logger)
-		}
-
-		collection, err = tx.GetOrganizationMcpCollectionBySlugAndOrg(ctx, repo.GetOrganizationMcpCollectionBySlugAndOrgParams{
-			Slug:           defaultCollectionSlug,
-			OrganizationID: organizationID,
-		})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "error getting default registry collection").Log(ctx, s.logger)
-		}
-	} else {
-		collection = repo.GetOrganizationMcpCollectionBySlugAndOrgRow(created)
+		return oops.E(oops.CodeUnexpected, createErr, "error creating default registry collection").Log(ctx, s.logger)
 	}
 
+	collection = repo.GetOrganizationMcpCollectionBySlugAndOrgRow(created)
 	if _, regErr := tx.GetOrganizationMcpCollectionRegistryByID(ctx, collection.ID); regErr == nil {
 		return nil
 	} else if !errors.Is(regErr, pgx.ErrNoRows) {
@@ -506,11 +498,6 @@ func (s *Service) ensureDefaultRegistryCollection(ctx context.Context, organizat
 		Namespace:    namespace,
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
-			if _, getErr := tx.GetOrganizationMcpCollectionRegistryByID(ctx, collection.ID); getErr == nil {
-				return nil
-			}
-		}
 		return oops.E(oops.CodeUnexpected, err, "error creating default registry namespace").Log(ctx, s.logger)
 	}
 
@@ -528,11 +515,6 @@ func defaultRegistryNamespace(organizationSlug, organizationID string) string {
 	}
 
 	return fmt.Sprintf("com.speakeasy.%s.registry", suffix)
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
 
 func toMCPCollection(c repo.CreateOrganizationMcpCollectionRow, namespace string) *types.MCPCollection {

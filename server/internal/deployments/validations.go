@@ -16,11 +16,11 @@ const (
 )
 
 var (
-	ErrRequired          = errors.New("field is required")
-	ErrSlug              = errors.New(constants.SlugMessage)
-	ErrTooLong           = errors.New("field is too long")
-	ErrUnsupported       = errors.New("field value is unsupported")
-	ErrMutuallyExclusive = errors.New("exactly one must be provided")
+	ErrRequired           = errors.New("field is required")
+	ErrSlug               = errors.New(constants.SlugMessage)
+	ErrTooLong            = errors.New("field is too long")
+	ErrUnsupported        = errors.New("field value is unsupported")
+	ErrExactlyOneRequired = errors.New("one of these fields must be provided, but not both")
 )
 
 type maskingError struct {
@@ -93,7 +93,7 @@ func validateUpserts(
 		err = requireFieldsOrElse(err, node,
 			[]string{"registry_id", "organization_mcp_collection_registry_id"},
 			e.registryID.Valid != e.organizationMcpCollectionRegistryID.Valid,
-			ErrMutuallyExclusive)
+			ErrExactlyOneRequired)
 	}
 
 	return err

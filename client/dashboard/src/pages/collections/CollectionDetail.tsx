@@ -38,6 +38,11 @@ import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { Server as CatalogServer } from "@/pages/catalog/hooks";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function CollectionDetailRoot() {
   return <Outlet />;
@@ -172,6 +177,22 @@ export default function CollectionDetail() {
   }));
 
   const totalTools = servers.reduce((sum, s) => sum + s.toolCount, 0);
+  const isInstallDisabled = isLoading || rawServers.length === 0;
+  const installDisabledReason = isLoading
+    ? "Loading collection servers..."
+    : "Add at least one MCP server to this collection before installing it.";
+  const installButton = (
+    <Button
+      size="sm"
+      onClick={() => setShowProjectPicker(true)}
+      disabled={isInstallDisabled}
+    >
+      <Button.Icon>
+        <Download />
+      </Button.Icon>
+      <Button.Text>Install</Button.Text>
+    </Button>
+  );
 
   if (!collection) {
     return (
@@ -207,8 +228,8 @@ export default function CollectionDetail() {
               <div className="bg-muted flex h-14 w-14 items-center justify-center rounded-lg border">
                 <Monitor className="text-muted-foreground h-7 w-7" />
               </div>
-              <div>
-                <div className="mb-1 flex items-center gap-2">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
                   <h1 className="text-2xl font-semibold">{collection.name}</h1>
                   <Badge variant="outline" className="text-xs">
                     {collection.visibility === "private" ? (
@@ -225,21 +246,21 @@ export default function CollectionDetail() {
                   </Badge>
                 </div>
                 {collection.description && (
-                  <p className="text-muted-foreground mb-3 text-sm">
+                  <p className="text-muted-foreground text-sm">
                     {collection.description}
                   </p>
                 )}
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => setShowProjectPicker(true)}
-                    disabled={rawServers.length === 0}
-                  >
-                    <Button.Icon>
-                      <Download />
-                    </Button.Icon>
-                    <Button.Text>Install</Button.Text>
-                  </Button>
+                  {isInstallDisabled ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-block">{installButton}</span>
+                      </TooltipTrigger>
+                      <TooltipContent>{installDisabledReason}</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    installButton
+                  )}
                   <Button
                     size="sm"
                     variant="secondary"

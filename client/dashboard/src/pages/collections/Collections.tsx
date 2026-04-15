@@ -1,6 +1,8 @@
 import { Page } from "@/components/page-layout";
-import { Button, Input, Stack } from "@speakeasy-api/moonshine";
-import { Plus, Search, SearchX, X } from "lucide-react";
+import { CreateResourceCard } from "@/components/create-resource-card";
+import { Type } from "@/components/ui/type";
+import { Input, Stack } from "@speakeasy-api/moonshine";
+import { Search, X } from "lucide-react";
 import { useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { useCollections } from "./hooks";
@@ -15,6 +17,7 @@ export default function Collections() {
   const [searchQuery, setSearchQuery] = useState("");
   const { data: collections } = useCollections(searchQuery);
   const navigate = useNavigate();
+  const handleCreateCollection = () => navigate("create");
 
   return (
     <Page>
@@ -51,15 +54,13 @@ export default function Collections() {
                     </button>
                   )}
                 </div>
-                <Button onClick={() => navigate("create")}>
-                  <Button.Icon>
-                    <Plus />
-                  </Button.Icon>
-                  <Button.Text>Create Collection</Button.Text>
-                </Button>
               </div>
 
-              <CollectionGrid collections={collections} />
+              <CollectionGrid
+                collections={collections}
+                searchQuery={searchQuery}
+                onCreate={handleCreateCollection}
+              />
             </Stack>
           </Page.Section.Body>
         </Page.Section>
@@ -68,14 +69,34 @@ export default function Collections() {
   );
 }
 
-function CollectionGrid({ collections }: { collections: Collection[] }) {
+function CollectionGrid({
+  collections,
+  searchQuery,
+  onCreate,
+}: {
+  collections: Collection[];
+  searchQuery: string;
+  onCreate: () => void;
+}) {
+  const createCard = (
+    <CreateResourceCard
+      title="New Collection"
+      description="Create a reusable collection of MCP servers for your organization"
+      onClick={onCreate}
+    />
+  );
+
   if (collections.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <SearchX className="text-muted-foreground mb-3 h-10 w-10" />
-        <p className="text-muted-foreground text-sm">
-          No collections found. Try a different search.
-        </p>
+      <div className="space-y-8 pt-6">
+        {searchQuery ? (
+          <Type muted className="text-center">
+            No collections matching &ldquo;{searchQuery}&rdquo;
+          </Type>
+        ) : null}
+        <div className="flex justify-center">
+          <div className="w-full max-w-md">{createCard}</div>
+        </div>
       </div>
     );
   }
@@ -85,6 +106,7 @@ function CollectionGrid({ collections }: { collections: Collection[] }) {
       {collections.map((collection) => (
         <CollectionCard key={collection.id} collection={collection} />
       ))}
+      {createCard}
     </div>
   );
 }

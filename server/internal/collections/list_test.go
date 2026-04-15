@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/server/gen/collections"
 	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
+	gen "github.com/speakeasy-api/gram/server/gen/collections"
 	collectionsRepo "github.com/speakeasy-api/gram/server/internal/collections/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
