@@ -9,6 +9,7 @@ import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { useAuditLogs, useGetProjectOverview } from "@gram/client/react-query";
+import { cn } from "@/lib/utils";
 import { subDays } from "date-fns";
 import { useMemo } from "react";
 import { Badge } from "@speakeasy-api/moonshine";
@@ -139,7 +140,7 @@ export function ProjectDashboard() {
           {/* Row 2: Sessions */}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <DashboardCard
-              title="Agent Sessions by User"
+              title="MostAgent Sessions by User"
               action={<ViewAllLink to={routes.chatSessions.href()} />}
             >
               {isOverviewPending ? (
@@ -150,13 +151,18 @@ export function ProjectDashboard() {
                 <ul className="divide-border divide-y">
                   {(overview?.summary.topUsers ?? [])
                     .slice(0, 5)
-                    .map((user) => (
+                    .map((user, i) => (
                       <li
                         key={user.userId}
                         className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
                       >
                         <Avatar className="size-8 shrink-0">
-                          <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                          <AvatarFallback
+                            className={cn(
+                              "text-xs font-medium",
+                              avatarColor(i),
+                            )}
+                          >
                             {emailInitials(user.userId)}
                           </AvatarFallback>
                         </Avatar>
@@ -262,6 +268,18 @@ function SkeletonList() {
 
 function EmptyState({ message }: { message: string }) {
   return <p className="text-muted-foreground text-sm">{message}</p>;
+}
+
+const AVATAR_COLORS = [
+  "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
+  "bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300",
+  "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+  "bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300",
+] as const;
+
+function avatarColor(index: number): string {
+  return AVATAR_COLORS[index % AVATAR_COLORS.length]!;
 }
 
 function emailInitials(email: string): string {
