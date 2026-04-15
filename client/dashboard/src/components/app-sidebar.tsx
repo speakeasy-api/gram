@@ -1,4 +1,4 @@
-import { NavMenu } from "@/components/nav-menu";
+import { NavButton, NavMenu } from "@/components/nav-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -6,16 +6,17 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useSlugs } from "@/contexts/Sdk";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
-import { MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
+import { Building2Icon, MinusIcon, TestTube2Icon } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
-import { Link } from "react-router";
+import { RequireScope } from "./require-scope";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { Button } from "./ui/button";
 import { Type } from "./ui/type";
@@ -36,7 +37,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       routes.chatSessions,
       routes.hooks,
     ],
-    settings: settingsItems,
   };
 
   return (
@@ -56,15 +56,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
-        <div className="mt-auto px-2 py-3">
-          <Link
-            to={`/${orgSlug}`}
-            className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 px-2 py-1 text-sm transition-colors hover:no-underline"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-            <span>Back to org</span>
-          </Link>
-        </div>
+        <SidebarGroup>
+          <SidebarGroupLabel>settings</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <NavMenu items={settingsItems}>
+              <RequireScope scope={["org:read", "org:admin"]} level="section">
+                <SidebarMenuItem>
+                  <NavButton
+                    title="Organization settings"
+                    href={`/${orgSlug}`}
+                    Icon={Building2Icon}
+                  />
+                </SidebarMenuItem>
+              </RequireScope>
+            </NavMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
         <FreeTierExceededNotification />

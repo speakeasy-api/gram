@@ -1,20 +1,20 @@
 import { Page } from "@/components/page-layout";
+import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
-import { Dialog } from "@/components/ui/dialog";
 import { useIsAdmin, useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { Building2, ArrowRightLeft, ShieldCheck, Loader2 } from "lucide-react";
+import {
+  useDisableRBACMutation,
+  useEnableRBACMutation,
+  useRbacStatus,
+} from "@gram/client/react-query";
+import { invalidateAllRbacStatus } from "@gram/client/react-query/rbacStatus.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { ArrowRightLeft, Building2, Loader2, ShieldCheck } from "lucide-react";
 import { useState } from "react";
-import {
-  useRbacStatus,
-  invalidateAllRbacStatus,
-} from "@gram/client/react-query/rbacStatus.js";
-import { useEnableRBACMutation } from "@gram/client/react-query/enableRBAC.js";
-import { useDisableRBACMutation } from "@gram/client/react-query/disableRBAC.js";
 
 function RBACManagementSection() {
   const queryClient = useQueryClient();
@@ -159,9 +159,7 @@ function RBACManagementSection() {
 }
 
 export default function OrgAdminSettings() {
-  const organization = useOrganization();
   const isAdmin = useIsAdmin();
-  const client = useSdkClient();
 
   if (!isAdmin) {
     return (
@@ -182,108 +180,119 @@ export default function OrgAdminSettings() {
         <Page.Header.Title>Super Admin</Page.Header.Title>
       </Page.Header>
       <Page.Body>
-        <Heading variant="h4" className="mb-2">
-          Organization Info
-        </Heading>
-        <Type muted small className="mb-4">
-          Details about the current organization.
-        </Type>
-        <div className="border-border bg-card mb-8 rounded-lg border p-4">
-          <Stack direction="horizontal" align="center" gap={2} className="mb-3">
-            <Building2 className="text-muted-foreground h-4 w-4" />
-            <Type variant="body" className="font-medium">
-              Organization
+        <OrgAdminSettingsInner />
+      </Page.Body>
+    </Page>
+  );
+}
+
+export function OrgAdminSettingsInner() {
+  const organization = useOrganization();
+  const client = useSdkClient();
+
+  return (
+    <>
+      <Heading variant="h4" className="mb-2">
+        Organization Info
+      </Heading>
+      <Type muted small className="mb-4">
+        Details about the current organization.
+      </Type>
+      <div className="border-border bg-card mb-8 rounded-lg border p-4">
+        <Stack direction="horizontal" align="center" gap={2} className="mb-3">
+          <Building2 className="text-muted-foreground h-4 w-4" />
+          <Type variant="body" className="font-medium">
+            Organization
+          </Type>
+        </Stack>
+        <div className="ml-6 space-y-1">
+          <div className="flex gap-3">
+            <Type variant="body" className="text-muted-foreground text-sm">
+              Slug
             </Type>
-          </Stack>
-          <div className="ml-6 space-y-1">
-            <div className="flex gap-3">
-              <Type variant="body" className="text-muted-foreground text-sm">
-                Slug
-              </Type>
-              <Type variant="body" className="font-mono text-sm">
-                {organization.slug}
-              </Type>
-            </div>
-            <div className="flex gap-3">
-              <Type variant="body" className="text-muted-foreground text-sm">
-                ID
-              </Type>
-              <Type variant="body" className="font-mono text-sm">
-                {organization.id}
-              </Type>
-            </div>
+            <Type variant="body" className="font-mono text-sm">
+              {organization.slug}
+            </Type>
+          </div>
+          <div className="flex gap-3">
+            <Type variant="body" className="text-muted-foreground text-sm">
+              ID
+            </Type>
+            <Type variant="body" className="font-mono text-sm">
+              {organization.id}
+            </Type>
           </div>
         </div>
+      </div>
 
-        <Heading variant="h4" className="mb-2">
-          Organization Override
-        </Heading>
-        <Type muted small className="mb-4">
-          Impersonate a different organization by switching to its slug. This
-          will log you out and redirect you to the target organization.
-        </Type>
-        <div className="border-border bg-card mb-8 rounded-lg border p-4">
-          <Stack direction="horizontal" align="center" gap={2} className="mb-4">
-            <ArrowRightLeft className="text-muted-foreground h-4 w-4" />
-            <Type variant="body" className="font-medium">
-              Switch Organization
-            </Type>
-          </Stack>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              const val = formData.get("gram_admin_override");
-              if (typeof val !== "string" || !val.trim()) {
-                return;
-              }
+      <Heading variant="h4" className="mb-2">
+        Organization Override
+      </Heading>
+      <Type muted small className="mb-4">
+        Impersonate a different organization by switching to its slug. This will
+        log you out and redirect you to the target organization.
+      </Type>
+      <div className="border-border bg-card mb-8 rounded-lg border p-4">
+        <Stack direction="horizontal" align="center" gap={2} className="mb-4">
+          <ArrowRightLeft className="text-muted-foreground h-4 w-4" />
+          <Type variant="body" className="font-medium">
+            Switch Organization
+          </Type>
+        </Stack>
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.currentTarget);
+            const val = formData.get("gram_admin_override");
+            if (typeof val !== "string" || !val.trim()) {
+              return;
+            }
 
-              document.cookie = `gram_admin_override=${val.trim()}; path=/; max-age=31536000;`;
+            document.cookie = `gram_admin_override=${val.trim()}; path=/; max-age=31536000;`;
+            await client.auth.logout();
+            window.location.href = "/login";
+          }}
+          className="ml-6 flex max-w-md gap-2"
+        >
+          <Input
+            placeholder="organization-slug"
+            name="gram_admin_override"
+            className="flex-1"
+            required
+          />
+          <Button type="submit">Go to Org</Button>
+          <Button
+            variant="secondary"
+            type="button"
+            onClick={async () => {
+              document.cookie = `gram_admin_override=; path=/; max-age=0;`;
               await client.auth.logout();
               window.location.href = "/login";
             }}
-            className="ml-6 flex max-w-md gap-2"
           >
-            <Input
-              placeholder="organization-slug"
-              name="gram_admin_override"
-              className="flex-1"
-              required
-            />
-            <Button type="submit">Go to Org</Button>
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={async () => {
-                document.cookie = `gram_admin_override=; path=/; max-age=0;`;
-                await client.auth.logout();
-                window.location.href = "/login";
-              }}
-            >
-              Clear override
-            </Button>
-          </form>
-        </div>
+            Clear override
+          </Button>
+        </form>
+      </div>
 
-        <Heading variant="h4" className="mb-2">
-          RBAC Management
-        </Heading>
-        <Type muted small className="mb-4">
-          Manage role-based access control for this organization. Ensure all
-          members have roles assigned before enabling.
-        </Type>
-        <div className="border-border bg-card rounded-lg border p-4">
-          <Stack direction="horizontal" align="center" gap={2} className="mb-4">
-            <ShieldCheck className="text-muted-foreground h-4 w-4" />
-            <Type variant="body" className="font-medium">
-              Access Control
-            </Type>
-          </Stack>
-          <div className="ml-6">
-            <RBACManagementSection />
-          </div>
+      <Heading variant="h4" className="mb-2">
+        RBAC Management
+      </Heading>
+      <Type muted small className="mb-4">
+        Manage role-based access control for this organization. Ensure all
+        members have roles assigned before enabling.
+      </Type>
+      <div className="border-border bg-card rounded-lg border p-4">
+        <Stack direction="horizontal" align="center" gap={2} className="mb-4">
+          <ShieldCheck className="text-muted-foreground h-4 w-4" />
+          <Type variant="body" className="font-medium">
+            Access Control
+          </Type>
+        </Stack>
+        <div className="ml-6">
+          <RBACManagementSection />
         </div>
-      </Page.Body>
-    </Page>
+      </div>
+    </>
   );
 }

@@ -138,7 +138,7 @@ function AppContent() {
           </>
         )}
         <RouteProvider />
-        {import.meta.env.DEV && <RBACDevToolbar />}
+        <RBACDevToolbar />
       </ProjectProvider>
     </AuthProvider>
   );

@@ -442,7 +442,14 @@ func newWorkerCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
 
 			// we don't require a real workOS client for workers as they bypass RBAC
-			accessManager := access.NewManager(logger, db, productFeatures, workos.NewStubClient(), cache.NewRedisCacheAdapter(redisClient))
+			accessManager := access.NewManager(
+				logger,
+				db,
+				productFeatures,
+				workos.NewStubClient(),
+				cache.NewRedisCacheAdapter(redisClient),
+				access.ManagerOpts{DevMode: c.String("environment") == "local"},
+			)
 
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)

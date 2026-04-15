@@ -589,7 +589,14 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create access role provider: %w", err)
 			}
-			accessManager := access.NewManager(logger, db, productFeatures, roleClient, cache.NewRedisCacheAdapter(redisClient))
+			accessManager := access.NewManager(
+				logger,
+				db,
+				productFeatures,
+				roleClient,
+				cache.NewRedisCacheAdapter(redisClient),
+				access.ManagerOpts{DevMode: c.String("environment") == "local"},
+			)
 
 			telemLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
@@ -693,7 +700,7 @@ func newStartCommand() *cli.Command {
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
-			mux.Use(middleware.RBACOverrideMiddleware(c.String("environment")))
+			mux.Use(middleware.RBACOverrideMiddleware())
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient, accessManager, productFeatures))
