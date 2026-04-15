@@ -130,7 +130,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		chatSessions,
 		logsEnabled,
 		posthog,
-		access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}),
+		access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, true),
 	)
 
 	temporalEnv, _ := infra.NewTemporalEnv(t)
@@ -138,7 +138,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, featClient, vectorToolStore, nil, temporalEnv, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, featClient, vectorToolStore, nil, temporalEnv, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, true))
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -156,7 +156,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 // createTestAPIKey creates an API key for the test context project
 func (ti *testInstance) createTestAPIKey(ctx context.Context, t *testing.T) string {
 	t.Helper()
-	keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, true))
 
 	key, err := keysService.CreateKey(ctx, &keys_gen.CreateKeyPayload{
 		Name:   "test-key",

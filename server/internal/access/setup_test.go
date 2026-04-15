@@ -82,7 +82,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	roles := newMockRoleProvider(t)
 
-	svc := NewService(logger, tracerProvider, conn, sessionManager, roles, NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	svc := NewService(logger, tracerProvider, conn, sessionManager, roles, NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, true))
 
 	return ctx, &testInstance{
 		service: svc,

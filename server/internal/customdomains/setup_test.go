@@ -83,7 +83,7 @@ func newTestCustomDomainsService(t *testing.T) (context.Context, *serviceTestIns
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	temporal := &stubTemporalClient{}
-	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{})
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, true)
 	svc := customdomains.NewService(logger, tracerProvider, conn, sessionManager, temporal, accessManager)
 
 	return ctx, &serviceTestInstance{service: svc, conn: conn, sessionManager: sessionManager, temporal: temporal, repo: cdrepo.New(conn)}

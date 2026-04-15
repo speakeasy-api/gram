@@ -67,7 +67,7 @@ func newTestAuditService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{})
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, true)
 
 	return ctx, &testInstance{
 		service: audit.NewService(logger, tracerProvider, conn, sessionManager, accessManager, func(ctx context.Context, organizationID string) error {

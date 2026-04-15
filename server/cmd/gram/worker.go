@@ -440,7 +440,7 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
 
-			accessManager := access.NewManager(logger, db, productFeatures)
+			accessManager := access.NewManager(logger, db, productFeatures, c.String("environment") == "local")
 
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)

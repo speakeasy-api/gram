@@ -110,7 +110,7 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 
 	orgs := newMockOrganizationProvider(t)
 
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeatures{}, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeatures{}, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, true))
 
 	return ctx, &testInstance{
 		service: svc,
@@ -159,7 +159,7 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 
 	orgs := newMockOrganizationProvider(t)
 
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeaturesEnabled{}, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeaturesEnabled{}, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, true))
 
 	return ctx, &testInstance{
 		service: svc,

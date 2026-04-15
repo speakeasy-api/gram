@@ -28,7 +28,7 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 		testInstance.serverURL,
 		testInstance.siteURL,
 		testInstance.cacheAdapter,
-		access.NewManager(testInstance.logger, testInstance.conn, nil),
+		access.NewManager(testInstance.logger, testInstance.conn, nil, true),
 	)
 
 	tests := []struct {

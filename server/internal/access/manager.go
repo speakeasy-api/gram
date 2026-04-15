@@ -23,14 +23,27 @@ type Manager struct {
 	logger   *slog.Logger
 	db       accessrepo.DBTX
 	features FeatureChecker
+	isDev    bool
 }
 
-func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker) *Manager {
+func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker, isDev bool) *Manager {
 	return &Manager{
 		logger:   logger.With(attr.SlogComponent("access")),
 		db:       db,
 		features: features,
+		isDev:    isDev,
 	}
+}
+
+// canUseOverride reports whether the scope override header is honoured for the
+// current request. In local dev any authenticated user can use it; in all other
+// environments only superadmins can.
+func (m *Manager) canUseOverride(ctx context.Context) bool {
+	if m.isDev {
+		return true
+	}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	return ok && authCtx != nil && authCtx.IsAdmin
 }
 
 func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
@@ -43,9 +56,10 @@ func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 
-	// Allow scope overrides only for admins. The middleware forwards the header
-	// for all requests; the admin check here prevents non-admins from using it.
-	if overrides, ok := getScopeOverrides(ctx); ok && authCtx.IsAdmin {
+	// Apply scope overrides when the request is authorised to use them (local dev
+	// or superadmin in production). The middleware blindly forwards the header;
+	// canUseOverride is the single gate that enforces who may actually use it.
+	if overrides, ok := getScopeOverrides(ctx); ok && m.canUseOverride(ctx) {
 		grants := grantsFromOverrides(overrides)
 		return GrantsToContext(ctx, grants), nil
 	}
@@ -171,11 +185,11 @@ func (m *Manager) shouldEnforce(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	// When the scope override header is present for an admin, enforce so the
-	// override scopes take effect regardless of account type or feature flag.
-	// Checked after API key exclusion so the toolbar doesn't interfere
-	// with API key auth flows.
-	if _, ok := getScopeOverrides(ctx); ok && authCtx.IsAdmin {
+	// When the scope override header is present and the caller is authorised to
+	// use it, enforce so the override scopes take effect regardless of account
+	// type or feature flag. Checked after API key exclusion so the toolbar
+	// doesn't interfere with API key auth flows.
+	if _, ok := getScopeOverrides(ctx); ok && m.canUseOverride(ctx) {
 		return true, nil
 	}
 

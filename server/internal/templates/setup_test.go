@@ -81,7 +81,7 @@ func newTestTemplateService(t *testing.T) (context.Context, *testInstance) {
 			return nil
 		},
 	}
-	svc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	svc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, true))
 
 	return ctx, &testInstance{
 		service:        svc,
