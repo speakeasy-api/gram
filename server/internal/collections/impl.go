@@ -126,10 +126,10 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*type
 	for _, idStr := range payload.ToolsetIds {
 		toolsetID, parseErr := uuid.Parse(idStr)
 		if parseErr != nil {
-			continue
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid toolset_id").Log(ctx, s.logger)
 		}
 		if err := s.attachServerToCollection(ctx, cr, collection.ID, toolsetID, authCtx.ActiveOrganizationID, authCtx.UserID); err != nil {
-			return nil, err
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to attach toolset to collection").Log(ctx, s.logger)
 		}
 	}
 
