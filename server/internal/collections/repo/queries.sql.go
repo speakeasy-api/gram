@@ -56,7 +56,8 @@ func (q *Queries) AttachServerToOrganizationMcpCollection(ctx context.Context, a
 
 const createOrganizationMcpCollection = `-- name: CreateOrganizationMcpCollection :one
 INSERT INTO organization_mcp_collections (organization_id, name, description, slug, visibility)
-VALUES ($1, $2, $3, $4, $5)
+VALUES
+  ($1, $2, $3, $4, $5)
 RETURNING id, organization_id, name, description, slug, visibility, created_at, updated_at
 `
 
@@ -256,7 +257,10 @@ func (q *Queries) GetOrganizationMcpCollectionByID(ctx context.Context, arg GetO
 const getOrganizationMcpCollectionBySlugAndOrg = `-- name: GetOrganizationMcpCollectionBySlugAndOrg :one
 SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections
-WHERE slug = $1 AND organization_id = $2 AND deleted IS FALSE
+WHERE
+  slug = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
 `
 
 type GetOrganizationMcpCollectionBySlugAndOrgParams struct {
@@ -457,7 +461,9 @@ func (q *Queries) ListOrganizationMcpCollectionServerAttachments(ctx context.Con
 const listOrganizationMcpCollections = `-- name: ListOrganizationMcpCollections :many
 SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections
-WHERE organization_id = $1 AND deleted IS FALSE
+WHERE
+  organization_id = $1
+  AND deleted IS FALSE
 ORDER BY name ASC
 `
 
