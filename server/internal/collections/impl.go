@@ -436,8 +436,9 @@ func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Qu
 		PublishedBy:  conv.PtrToPGTextEmpty(&userID),
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
-			return oops.E(oops.CodeConflict, err, "toolset already attached to collection")
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return oops.E(oops.CodeConflict, err, "toolset already attached to collection").Log(ctx, s.logger, attr.SlogOrganizationID(organizationID), attr.SlogToolsetID(toolsetID.String()))
 		}
 		return oops.E(oops.CodeUnexpected, err, "failed to attach server to collection").Log(ctx, s.logger, attr.SlogOrganizationID(organizationID), attr.SlogToolsetID(toolsetID.String()))
 	}
