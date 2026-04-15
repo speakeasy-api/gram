@@ -494,9 +494,9 @@ func (s *Service) createDefaultProject(ctx context.Context, organizationID strin
 		Name:           "Default",
 		Slug:           "default",
 	})
-	var pgErr *pgconn.PgError
 	var empty projectsRepo.Project
 	if err != nil {
+		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return empty, oops.E(oops.CodeConflict, nil, "project already exists")
 		}

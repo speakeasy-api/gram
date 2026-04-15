@@ -460,17 +460,21 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 
 	newExternalMCPs := make([]upsertExternalMCP, 0, len(form.ExternalMcps))
 	for _, add := range form.ExternalMcps {
-		registryID, err := uuid.Parse(add.RegistryID)
+		registryID, err := conv.PtrToNullUUID(add.RegistryID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "error parsing external mcp registry id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
 		}
-
+		collectionRegistryID, err := conv.PtrToNullUUID(add.OrganizationMcpCollectionRegistryID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid organization_mcp_collection_registry_id").Log(ctx, s.logger)
+		}
 		newExternalMCPs = append(newExternalMCPs, upsertExternalMCP{
-			registryID:              registryID,
-			name:                    add.Name,
-			slug:                    string(add.Slug),
-			registryServerSpecifier: add.RegistryServerSpecifier,
-			selectedRemotes:         add.SelectedRemotes,
+			registryID:                          registryID,
+			organizationMcpCollectionRegistryID: collectionRegistryID,
+			name:                                add.Name,
+			slug:                                string(add.Slug),
+			registryServerSpecifier:             add.RegistryServerSpecifier,
+			selectedRemotes:                     add.SelectedRemotes,
 		})
 	}
 
@@ -659,17 +663,21 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 
 	externalMCPsToUpsert := make([]upsertExternalMCP, 0, len(form.UpsertExternalMcps))
 	for _, add := range form.UpsertExternalMcps {
-		registryID, err := uuid.Parse(add.RegistryID)
+		registryID, err := conv.PtrToNullUUID(add.RegistryID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "error parsing external mcp registry id to upsert").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
 		}
-
+		collectionRegistryID, err := conv.PtrToNullUUID(add.OrganizationMcpCollectionRegistryID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid organization_mcp_collection_registry_id").Log(ctx, s.logger)
+		}
 		externalMCPsToUpsert = append(externalMCPsToUpsert, upsertExternalMCP{
-			registryID:              registryID,
-			name:                    add.Name,
-			slug:                    string(add.Slug),
-			registryServerSpecifier: add.RegistryServerSpecifier,
-			selectedRemotes:         add.SelectedRemotes,
+			registryID:                          registryID,
+			organizationMcpCollectionRegistryID: collectionRegistryID,
+			name:                                add.Name,
+			slug:                                string(add.Slug),
+			registryServerSpecifier:             add.RegistryServerSpecifier,
+			selectedRemotes:                     add.SelectedRemotes,
 		})
 	}
 

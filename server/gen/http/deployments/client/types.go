@@ -1720,8 +1720,10 @@ type DeploymentPackageResponseBody struct {
 type DeploymentExternalMCPResponseBody struct {
 	// The ID of the deployment external MCP record.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The ID of the MCP registry the server is from.
+	// The ID of the external MCP registry the server is from.
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
+	// The ID of the internal collection registry the server is from.
+	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// The display name for the external MCP server.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-friendly identifier used for tool prefixing.
@@ -1814,8 +1816,10 @@ type AddDeploymentPackageFormRequestBody struct {
 
 // AddExternalMCPFormRequestBody is used to define fields on request body types.
 type AddExternalMCPFormRequestBody struct {
-	// The ID of the MCP registry the server is from.
-	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
+	// The ID of the external MCP registry the server is from.
+	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
+	// The ID of the internal collection registry the server is from.
+	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// The display name for the external MCP server.
 	Name string `form:"name" json:"name" xml:"name"`
 	// A URL-friendly identifier used for tool prefixing (e.g., 'exa').
@@ -5523,9 +5527,6 @@ func ValidateDeploymentExternalMCPResponseBody(body *DeploymentExternalMCPRespon
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.RegistryID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("registry_id", "body"))
-	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5639,7 +5640,12 @@ func ValidateAddFunctionsFormRequestBody(body *AddFunctionsFormRequestBody) (err
 // ValidateAddExternalMCPFormRequestBody runs the validations defined on
 // AddExternalMCPFormRequestBody
 func ValidateAddExternalMCPFormRequestBody(body *AddExternalMCPFormRequestBody) (err error) {
-	err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", body.RegistryID, goa.FormatUUID))
+	if body.RegistryID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
+	}
+	if body.OrganizationMcpCollectionRegistryID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_mcp_collection_registry_id", *body.OrganizationMcpCollectionRegistryID, goa.FormatUUID))
+	}
 	err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z0-9_-]{1,128}$"))
 	if utf8.RuneCountInString(body.Slug) > 40 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))

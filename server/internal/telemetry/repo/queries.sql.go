@@ -1823,7 +1823,7 @@ type GetLLMClientBreakdownParams struct {
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
 	ToolsetSlug    string // Optional filter
-	SessionMode    bool // If true, count messages; if false, count tool calls
+	SessionMode    bool   // If true, count messages; if false, count tool calls
 }
 
 // GetLLMClientBreakdown retrieves usage breakdown by LLM client/agent.
@@ -1896,7 +1896,7 @@ type GetActiveCountsParams struct {
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
 	ToolsetSlug    string // Optional filter
-	SessionMode    bool // If true, count by messages; if false, count by tool calls
+	SessionMode    bool   // If true, count by messages; if false, count by tool calls
 }
 
 // ActiveCounts represents active server and user counts.
