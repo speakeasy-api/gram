@@ -8,14 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
-import {
-  useAuditLogs,
-  useGetHooksSummary,
-  useGetPeriodUsage,
-  useGetProjectMetricsSummary,
-  useListFilterOptions,
-} from "@gram/client/react-query";
-import { FilterType } from "@gram/client/models/components/listfilteroptionspayload";
+import { useAuditLogs, useGetProjectOverview } from "@gram/client/react-query";
 import { formatDistanceToNow, subDays } from "date-fns";
 import { useMemo } from "react";
 import { Badge } from "@speakeasy-api/moonshine";
@@ -29,58 +22,14 @@ export function ProjectDashboard() {
   const to = useMemo(() => new Date(), []);
   const from = useMemo(() => subDays(to, 7), [to]);
 
-  const { data: periodUsage, isPending: isPeriodUsagePending } =
-    useGetPeriodUsage();
-
-  const { data: metricsData, isPending: isMetricsPending } =
-    useGetProjectMetricsSummary({
+  const { data: overview, isPending: isOverviewPending } =
+    useGetProjectOverview({
       getProjectMetricsSummaryPayload: { from, to },
     });
-
-  const { data: filterOptionsData, isPending: isFilterOptionsPending } =
-    useListFilterOptions({
-      listFilterOptionsPayload: { filterType: FilterType.User, from, to },
-    });
-
-  const { data: hooksSummary, isPending: isHooksPending } = useGetHooksSummary({
-    getProjectMetricsSummaryPayload: { from, to },
-  });
 
   const { data: auditLogsData, isPending: isAuditLogsPending } = useAuditLogs({
     projectSlug,
   });
-
-  const topUsers = useMemo(
-    () =>
-      [...(filterOptionsData?.options ?? [])]
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5),
-    [filterOptionsData],
-  );
-
-  const topServers = useMemo(
-    () =>
-      [...(hooksSummary?.servers ?? [])]
-        .sort((a, b) => b.eventCount - a.eventCount)
-        .slice(0, 5),
-    [hooksSummary],
-  );
-
-  const topUsersByHooks = useMemo(
-    () =>
-      [...(hooksSummary?.users ?? [])]
-        .sort((a, b) => b.eventCount - a.eventCount)
-        .slice(0, 5),
-    [hooksSummary],
-  );
-
-  const topModels = useMemo(
-    () =>
-      [...(metricsData?.metrics.models ?? [])]
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5),
-    [metricsData],
-  );
 
   const recentLogs = useMemo(
     () => (auditLogsData?.result.logs ?? []).slice(0, 10),
@@ -103,39 +52,39 @@ export function ProjectDashboard() {
         <div className="space-y-8">
           {/* Row 0: KPI Cards */}
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            {isPeriodUsagePending ? (
+            {isOverviewPending ? (
               <Skeleton className="h-[100px] rounded-lg" />
             ) : (
               <MetricCard
                 title="Active Servers"
-                value={periodUsage?.actualEnabledServerCount ?? 0}
+                value={overview?.summary.activeServersCount ?? 0}
                 icon="server"
               />
             )}
-            {isMetricsPending ? (
+            {isOverviewPending ? (
               <Skeleton className="h-[100px] rounded-lg" />
             ) : (
               <MetricCard
                 title="Tool Calls"
-                value={metricsData?.metrics.totalToolCalls ?? 0}
+                value={overview?.summary.totalToolCalls ?? 0}
                 icon="wrench"
               />
             )}
-            {isFilterOptionsPending ? (
+            {isOverviewPending ? (
               <Skeleton className="h-[100px] rounded-lg" />
             ) : (
               <MetricCard
                 title="End Users"
-                value={filterOptionsData?.options.length ?? 0}
+                value={overview?.summary.activeUsersCount ?? 0}
                 icon="users"
               />
             )}
-            {isMetricsPending ? (
+            {isOverviewPending ? (
               <Skeleton className="h-[100px] rounded-lg" />
             ) : (
               <MetricCard
                 title="Sessions"
-                value={metricsData?.metrics.totalChats ?? 0}
+                value={overview?.summary.totalChats ?? 0}
                 icon="message-circle"
               />
             )}
@@ -147,17 +96,19 @@ export function ProjectDashboard() {
               title="Top Users"
               action={<ViewAllLink to={routes.hooks.href()} />}
             >
-              {isFilterOptionsPending ? (
+              {isOverviewPending ? (
                 <SkeletonList />
-              ) : topUsers.length === 0 ? (
+              ) : (overview?.summary.topUsers.length ?? 0) === 0 ? (
                 <EmptyState message="No user activity recorded" />
               ) : (
                 <RankedBarList
-                  items={topUsers.map((u) => ({
-                    key: u.id,
-                    label: u.label,
-                    value: u.count,
-                  }))}
+                  items={(overview?.summary.topUsers ?? [])
+                    .slice(0, 5)
+                    .map((u) => ({
+                      key: u.userId,
+                      label: u.userId,
+                      value: u.activityCount,
+                    }))}
                 />
               )}
             </DashboardCard>
@@ -166,17 +117,19 @@ export function ProjectDashboard() {
               title="Top Servers"
               action={<ViewAllLink to={routes.observability.href()} />}
             >
-              {isHooksPending ? (
+              {isOverviewPending ? (
                 <SkeletonList />
-              ) : topServers.length === 0 ? (
+              ) : (overview?.summary.topServers.length ?? 0) === 0 ? (
                 <EmptyState message="No server activity recorded" />
               ) : (
                 <RankedBarList
-                  items={topServers.map((s) => ({
-                    key: s.serverName,
-                    label: s.serverName,
-                    value: s.eventCount,
-                  }))}
+                  items={(overview?.summary.topServers ?? [])
+                    .slice(0, 5)
+                    .map((s) => ({
+                      key: s.serverName,
+                      label: s.serverName,
+                      value: s.toolCallCount,
+                    }))}
                 />
               )}
             </DashboardCard>
@@ -188,33 +141,34 @@ export function ProjectDashboard() {
               title="Agent Sessions by User"
               action={<ViewAllLink to={routes.chatSessions.href()} />}
             >
-              {isHooksPending ? (
+              {isOverviewPending ? (
                 <SkeletonList />
-              ) : topUsersByHooks.length === 0 ? (
+              ) : (overview?.summary.topUsers.length ?? 0) === 0 ? (
                 <EmptyState message="No session activity recorded" />
               ) : (
                 <ul className="divide-border divide-y">
-                  {topUsersByHooks.map((user) => (
-                    <li
-                      key={user.userEmail}
-                      className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
-                    >
-                      <Avatar className="size-8 shrink-0">
-                        <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
-                          {emailInitials(user.userEmail)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {user.userEmail}
-                        </p>
-                        <p className="text-muted-foreground text-xs">
-                          {user.eventCount.toLocaleString()} calls &middot;{" "}
-                          {user.uniqueTools} tools
-                        </p>
-                      </div>
-                    </li>
-                  ))}
+                  {(overview?.summary.topUsers ?? [])
+                    .slice(0, 5)
+                    .map((user) => (
+                      <li
+                        key={user.userId}
+                        className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+                      >
+                        <Avatar className="size-8 shrink-0">
+                          <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                            {emailInitials(user.userId)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {user.userId}
+                          </p>
+                          <p className="text-muted-foreground text-xs">
+                            {user.activityCount.toLocaleString()} calls
+                          </p>
+                        </div>
+                      </li>
+                    ))}
                 </ul>
               )}
             </DashboardCard>
@@ -223,17 +177,19 @@ export function ProjectDashboard() {
               title="Most Used LLM Clients"
               action={<ViewAllLink to={routes.observability.href()} />}
             >
-              {isMetricsPending ? (
+              {isOverviewPending ? (
                 <SkeletonList />
-              ) : topModels.length === 0 ? (
+              ) : (overview?.summary.llmClientBreakdown.length ?? 0) === 0 ? (
                 <EmptyState message="No LLM activity recorded" />
               ) : (
                 <RankedBarList
-                  items={topModels.map((m) => ({
-                    key: m.name,
-                    label: m.name,
-                    value: m.count,
-                  }))}
+                  items={(overview?.summary.llmClientBreakdown ?? [])
+                    .slice(0, 5)
+                    .map((m) => ({
+                      key: m.clientName,
+                      label: m.clientName,
+                      value: m.activityCount,
+                    }))}
                 />
               )}
             </DashboardCard>
