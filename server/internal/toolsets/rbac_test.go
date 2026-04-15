@@ -136,6 +136,29 @@ func TestToolsets_RBAC_Create_AllowedWithProjectWriteGrant(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestToolsets_RBAC_CloneToolset_DeniedWithProjectWriteButNoSourceRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-clone-source-read-test")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeMCPWrite, Resource: authCtx.ProjectID.String()})
+
+	_, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Slug:             toolset.Slug,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
 func TestToolsets_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
 	t.Parallel()
 
@@ -262,6 +285,32 @@ func TestToolsets_RBAC_UpdateOAuthProxyServer_DeniedWithReadOnlyGrant(t *testing
 		OauthProxyServer: &types.OAuthProxyServerUpdateForm{
 			Audience: &audience,
 		},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestToolsets_RBAC_UpdateOAuthProxyServer_EmptyForm_DeniedWithNoGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	ctx = withProAccount(t, ctx)
+	toolset := createPublicToolsetWithCustomOAuthProxy(
+		t, ctx, ti,
+		"RBAC Empty Form OAuth Proxy Toolset",
+		"rbac-empty-form-env",
+		"rbac-empty-form-proxy",
+	)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn)
+
+	_, err := ti.service.UpdateOAuthProxyServer(ctx, &gen.UpdateOAuthProxyServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Slug:             toolset.Slug,
+		OauthProxyServer: &types.OAuthProxyServerUpdateForm{},
 	})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)

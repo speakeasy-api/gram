@@ -608,10 +608,6 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
-		return nil, err
-	}
-
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
 
 	dbtx, err := s.db.Begin(ctx)
@@ -629,6 +625,14 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
+	}
+
+	if err := s.access.Require(
+		ctx,
+		access.Check{Scope: access.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()},
+		access.Check{Scope: access.ScopeMCPRead, ResourceID: originalToolset.ID.String()},
+	); err != nil {
+		return nil, err
 	}
 
 	// Generate new slug with _copy suffix

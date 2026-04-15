@@ -31,6 +31,15 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 
 	form := payload.OauthProxyServer
 
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: toolsetDetails.ID}); err != nil {
+		return nil, err
+	}
+
 	// No-op short-circuit: if the caller sent nothing, return the current state
 	// without opening a transaction or emitting an audit event.
 	if form == nil ||
@@ -40,7 +49,7 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 			form.ScopesSupported == nil &&
 			form.TokenEndpointAuthMethodsSupported == nil &&
 			form.EnvironmentSlug == nil) {
-		return mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
+		return toolsetDetails, nil
 	}
 
 	// Validate token_endpoint_auth_methods_supported values if provided.
@@ -83,13 +92,9 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	// Load the toolset; we need its ID and the attached OAuth proxy server reference.
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
+	// Load the toolset inside the transaction so the returned view reflects a consistent snapshot.
+	toolsetDetails, err = mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
 	if err != nil {
-		return nil, err
-	}
-
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: toolsetDetails.ID}); err != nil {
 		return nil, err
 	}
 
