@@ -12,13 +12,14 @@ import { createContext, useContext, useEffect, useMemo, useRef } from "react";
 import { useLocation, useParams } from "react-router";
 import { useTelemetry } from "./Telemetry";
 
-// Mutable ref updated by AuthHandler once isAdmin is known from the session.
 // SdkProvider cannot call useIsAdmin() directly because it wraps AuthProvider
-// (AuthProvider needs QueryClientProvider which SdkProvider supplies).
-const _isAdminRef = { current: false };
-export function setFetcherIsAdmin(value: boolean): void {
-  _isAdminRef.current = value;
-}
+// (AuthProvider needs QueryClientProvider which SdkProvider supplies). Instead,
+// SdkProvider owns a ref and exposes it via context so AuthHandler can write isAdmin
+// into it, making the current value available to the fetcher on every request.
+const IsAdminContext = createContext<React.MutableRefObject<boolean>>({
+  current: false,
+});
+export const useIsAdminRef = () => useContext(IsAdminContext);
 
 export const SdkContext = createContext<Gram>({} as Gram);
 
@@ -69,6 +70,7 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
   const { projectSlug } = useSlugs();
   const telemetry = useTelemetry();
 
+  const isAdminRef = useRef(false);
   const previousProjectSlug = useRef(projectSlug);
 
   // Memoize the httpClient and gram instances
@@ -84,7 +86,7 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         const scopeOverride = getRBACScopeOverrideHeader(
-          import.meta.env.DEV || _isAdminRef.current,
+          import.meta.env.DEV || isAdminRef.current,
         );
         if (scopeOverride) {
           newRequest.headers.set("X-Gram-Scope-Override", scopeOverride);
@@ -139,11 +141,13 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
   }, [projectSlug, queryClient]);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <GramProvider client={gram}>
-        <SdkContext.Provider value={gram}>{children}</SdkContext.Provider>
-      </GramProvider>
-    </QueryClientProvider>
+    <IsAdminContext.Provider value={isAdminRef}>
+      <QueryClientProvider client={queryClient}>
+        <GramProvider client={gram}>
+          <SdkContext.Provider value={gram}>{children}</SdkContext.Provider>
+        </GramProvider>
+      </QueryClientProvider>
+    </IsAdminContext.Provider>
   );
 };
 
