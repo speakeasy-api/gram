@@ -1,4 +1,5 @@
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar";
+import { useIsAdmin } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
@@ -15,17 +16,21 @@ export type { Scope };
  */
 export function useRBAC() {
   const telemetry = useTelemetry();
+  const isAdmin = useIsAdmin();
   const featureFlagEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
-  const devOverrideActive = getRBACScopeOverrideHeader() !== null;
+  // Toolbar is accessible in dev or for admins; only check localStorage in those cases.
+  const devOverrideActive =
+    (import.meta.env.DEV || isAdmin) && getRBACScopeOverrideHeader() !== null;
   const isRbacEnabled = featureFlagEnabled || devOverrideActive;
 
   // Re-render when the toolbar changes scopes in localStorage.
   const [overrideVersion, setOverrideVersion] = useState(0);
   useEffect(() => {
+    if (!import.meta.env.DEV && !isAdmin) return;
     const handler = () => setOverrideVersion((v) => v + 1);
     window.addEventListener("rbac-override-change", handler);
     return () => window.removeEventListener("rbac-override-change", handler);
-  }, []);
+  }, [isAdmin]);
 
   // Fetch grants from the server. When dev override is active the SDK fetcher
   // attaches X-Gram-Scope-Override so the server returns the filtered grant set.
