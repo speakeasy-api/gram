@@ -3,6 +3,7 @@ package plugins
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 )
 
 // PluginServerInfo contains the resolved information for a single MCP server.
@@ -85,22 +86,22 @@ func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform
 }
 
 func generateClaudePluginFlat(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
-	return generateClaudePluginWithPrefix(files, "", p, cfg)
+	return generateClaudePluginInDir(files, "", p, cfg)
 }
 
 func generateCursorPluginFlat(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
-	return generateCursorPluginWithPrefix(files, "", p.Slug, p, cfg)
+	return generateCursorPluginInDir(files, "", p.Slug, p, cfg)
 }
 
 func generateClaudePlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
-	return generateClaudePluginWithPrefix(files, p.Slug+"/", p, cfg)
+	return generateClaudePluginInDir(files, p.Slug, p, cfg)
 }
 
 func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
-	return generateCursorPluginWithPrefix(files, p.Slug+"-cursor/", p.Slug+"-cursor", p, cfg)
+	return generateCursorPluginInDir(files, p.Slug+"-cursor", p.Slug+"-cursor", p, cfg)
 }
 
-func generateClaudePluginWithPrefix(files map[string][]byte, prefix string, p PluginInfo, cfg GenerateConfig) error {
+func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {
 	userConfig := map[string]userConfigEntry{
 		"GRAM_API_KEY": {
 			Description: "Your Gram API key for authenticating MCP server connections",
@@ -119,7 +120,7 @@ func generateClaudePluginWithPrefix(files map[string][]byte, prefix string, p Pl
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
 	}
-	files[prefix+".claude-plugin/plugin.json"] = pluginJSON
+	files[path.Join(subdir, ".claude-plugin/plugin.json")] = pluginJSON
 
 	mcpServers := make(map[string]claudeMCPServer)
 	for _, s := range p.Servers {
@@ -135,14 +136,14 @@ func generateClaudePluginWithPrefix(files map[string][]byte, prefix string, p Pl
 	if err != nil {
 		return fmt.Errorf("marshal .mcp.json: %w", err)
 	}
-	files[prefix+".mcp.json"] = mcpJSON
+	files[path.Join(subdir, ".mcp.json")] = mcpJSON
 
 	return nil
 }
 
-func generateCursorPluginWithPrefix(files map[string][]byte, prefix, name string, p PluginInfo, cfg GenerateConfig) error {
+func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p PluginInfo, cfg GenerateConfig) error {
 	displayName := p.Name
-	if prefix != "" {
+	if subdir != "" {
 		displayName = p.Name + " (Cursor)"
 	}
 
@@ -157,7 +158,7 @@ func generateCursorPluginWithPrefix(files map[string][]byte, prefix, name string
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
 	}
-	files[prefix+".cursor-plugin/plugin.json"] = pluginJSON
+	files[path.Join(subdir, ".cursor-plugin/plugin.json")] = pluginJSON
 
 	mcpServers := make(map[string]cursorMCPServer)
 	for _, s := range p.Servers {
@@ -172,7 +173,7 @@ func generateCursorPluginWithPrefix(files map[string][]byte, prefix, name string
 	if err != nil {
 		return fmt.Errorf("marshal mcp.json: %w", err)
 	}
-	files[prefix+"mcp.json"] = mcpJSON
+	files[path.Join(subdir, "mcp.json")] = mcpJSON
 
 	return nil
 }

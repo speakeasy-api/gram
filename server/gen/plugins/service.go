@@ -86,6 +86,8 @@ type CreatePluginPayload struct {
 	ProjectSlugInput *string
 	// Display name for the plugin.
 	Name string
+	// Optional URL-safe identifier. Auto-generated from name if omitted.
+	Slug *string
 	// Optional description.
 	Description *string
 }

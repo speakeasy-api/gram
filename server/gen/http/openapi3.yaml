@@ -17703,6 +17703,9 @@ components:
                 name:
                     type: string
                     description: Display name for the plugin.
+                slug:
+                    type: string
+                    description: Optional URL-safe identifier. Auto-generated from name if omitted.
             required:
                 - name
         CreateProjectForm:

@@ -176,7 +176,15 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, err
 	}
 
-	slug := conv.ToSlug(payload.Name)
+	var slug string
+	if payload.Slug != nil && *payload.Slug != "" {
+		slug = conv.ToSlug(*payload.Slug)
+		if slug != *payload.Slug {
+			return nil, oops.E(oops.CodeBadRequest, nil, "invalid slug: must be non-empty and contain only lowercase alphanumeric characters and hyphens")
+		}
+	} else {
+		slug = conv.ToSlug(payload.Name)
+	}
 	if slug == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "plugin name must produce a valid slug")
 	}

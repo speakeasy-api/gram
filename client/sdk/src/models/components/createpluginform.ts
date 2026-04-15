@@ -13,12 +13,17 @@ export type CreatePluginForm = {
    * Display name for the plugin.
    */
   name: string;
+  /**
+   * Optional URL-safe identifier. Auto-generated from name if omitted.
+   */
+  slug?: string | undefined;
 };
 
 /** @internal */
 export type CreatePluginForm$Outbound = {
   description?: string | undefined;
   name: string;
+  slug?: string | undefined;
 };
 
 /** @internal */
@@ -28,6 +33,7 @@ export const CreatePluginForm$outboundSchema: z.ZodMiniType<
 > = z.object({
   description: z.optional(z.string()),
   name: z.string(),
+  slug: z.optional(z.string()),
 });
 
 export function createPluginFormToJSON(

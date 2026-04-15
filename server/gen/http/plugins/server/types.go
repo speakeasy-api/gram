@@ -17,6 +17,8 @@ import (
 type CreatePluginRequestBody struct {
 	// Display name for the plugin.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional URL-safe identifier. Auto-generated from name if omitted.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 }
@@ -3697,6 +3699,7 @@ func NewGetPluginPayload(id string, sessionToken *string, projectSlugInput *stri
 func NewCreatePluginPayload(body *CreatePluginRequestBody, sessionToken *string, projectSlugInput *string) *plugins.CreatePluginPayload {
 	v := &plugins.CreatePluginPayload{
 		Name:        *body.Name,
+		Slug:        body.Slug,
 		Description: body.Description,
 	}
 	v.SessionToken = sessionToken

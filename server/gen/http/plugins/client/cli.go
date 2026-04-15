@@ -77,7 +77,7 @@ func BuildCreatePluginPayload(pluginsCreatePluginBody string, pluginsCreatePlugi
 	{
 		err = json.Unmarshal([]byte(pluginsCreatePluginBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -94,6 +94,7 @@ func BuildCreatePluginPayload(pluginsCreatePluginBody string, pluginsCreatePlugi
 	}
 	v := &plugins.CreatePluginPayload{
 		Name:        body.Name,
+		Slug:        body.Slug,
 		Description: body.Description,
 	}
 	v.SessionToken = sessionToken

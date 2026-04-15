@@ -1691,8 +1691,7 @@ ON remote_mcp_server_headers (remote_mcp_server_id, name)
 WHERE deleted IS FALSE;
 
 -- Plugin definitions: project-scoped distributable bundles of MCP servers.
--- Admins create plugins, assign them to roles, and publish them to platform
--- marketplaces (Claude Code, Cursor) via a connected GitHub repository.
+-- Admins create plugins and assign them to roles for distribution.
 CREATE TABLE IF NOT EXISTS plugins (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,

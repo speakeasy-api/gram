@@ -17,6 +17,8 @@ import (
 type CreatePluginRequestBody struct {
 	// Display name for the plugin.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Optional URL-safe identifier. Auto-generated from name if omitted.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 }
@@ -2069,6 +2071,7 @@ type PluginAssignmentResponseBody struct {
 func NewCreatePluginRequestBody(p *plugins.CreatePluginPayload) *CreatePluginRequestBody {
 	body := &CreatePluginRequestBody{
 		Name:        p.Name,
+		Slug:        p.Slug,
 		Description: p.Description,
 	}
 	return body

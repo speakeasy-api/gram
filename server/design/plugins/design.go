@@ -345,6 +345,7 @@ var CreatePluginForm = Type("CreatePluginForm", func() {
 	Required("name")
 
 	Attribute("name", String, "Display name for the plugin.")
+	Attribute("slug", String, "Optional URL-safe identifier. Auto-generated from name if omitted.")
 	Attribute("description", String, "Optional description.")
 })
 
