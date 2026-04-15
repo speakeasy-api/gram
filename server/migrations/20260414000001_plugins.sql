@@ -4,7 +4,7 @@ CREATE TABLE "plugins" (
   "organization_id" text NOT NULL,
   "project_id" uuid NOT NULL,
   "name" text NOT NULL CHECK (name <> ''),
-  "slug" text NOT NULL CHECK (slug <> ''),
+  "slug" text NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
   "description" text NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),

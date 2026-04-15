@@ -1697,7 +1697,7 @@ CREATE TABLE IF NOT EXISTS plugins (
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   name TEXT NOT NULL CHECK (name <> ''),
-  slug TEXT NOT NULL CHECK (slug <> ''),
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
   description TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
