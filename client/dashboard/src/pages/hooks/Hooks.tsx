@@ -5,6 +5,7 @@ import { InsightsConfig } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
 import { ErrorAlert } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -410,7 +411,7 @@ function HooksContent() {
   }, [tracesData]);
 
   // Fetch complete aggregated summary for accurate analytics (not limited by pagination)
-  const { data: summaryData } = useQuery({
+  const { data: summaryData, isPending: summaryPending } = useQuery({
     queryKey: [
       "hooks-summary",
       from.toISOString(),
@@ -668,6 +669,7 @@ function HooksContent() {
                   projectSlug={projectSlug}
                   serverNameMappings={serverNameMappings}
                   summaryData={summaryData}
+                  summaryPending={summaryPending}
                 />
               </EnterpriseGate>
             </Page.Body>
@@ -710,6 +712,7 @@ function HooksInnerContent({
   projectSlug,
   serverNameMappings,
   summaryData,
+  summaryPending,
 }: {
   isLogsDisabled: boolean;
   isLoading: boolean;
@@ -744,6 +747,7 @@ function HooksInnerContent({
   projectSlug?: string;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   summaryData: GetHooksSummaryResult | undefined;
+  summaryPending: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
   const { from, to } = useMemo(
@@ -868,6 +872,7 @@ function HooksInnerContent({
                   addFilter={addFilter}
                   onHookTypesChange={onHookTypesChange}
                   summaryData={summaryData}
+                  summaryPending={summaryPending}
                 />
               )}
             </div>
@@ -2032,6 +2037,7 @@ function HooksAnalytics({
   addFilter,
   onHookTypesChange,
   summaryData,
+  summaryPending,
 }: {
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
@@ -2040,6 +2046,7 @@ function HooksAnalytics({
   addFilter: (chip: FilterChip) => void;
   onHookTypesChange: (types: TypesToInclude[]) => void;
   summaryData: GetHooksSummaryResult | undefined;
+  summaryPending: boolean;
 }) {
   const breakdown = summaryData?.breakdown ?? [];
   const timeSeries = summaryData?.timeSeries ?? [];
@@ -2122,37 +2129,47 @@ function HooksAnalytics({
             : "grid-cols-2 md:grid-cols-3 lg:grid-cols-5",
         )}
       >
-        <MetricCard
-          title="Avg Success Rate"
-          value={kpis?.avgSuccessRate ?? 0}
-          format="percent"
-          icon="circle-check"
-          accentColor="green"
-        />
-        <MetricCard
-          title="Total Events"
-          value={kpis?.totalEvents ?? 0}
-          icon="activity"
-          accentColor="purple"
-        />
-        <MetricCard
-          title="Active Users"
-          value={kpis?.activeUsers ?? 0}
-          icon="users"
-          accentColor="yellow"
-        />
-        <MetricCard
-          title="Active Sources"
-          value={kpis?.activeSources ?? 0}
-          icon="monitor"
-          accentColor="blue"
-        />
-        <MetricCard
-          title="Unique Tools"
-          value={kpis?.uniqueTools ?? 0}
-          icon="wrench"
-          accentColor="orange"
-        />
+        {summaryPending ? (
+          <>
+            {Array.from({ length: compact ? 3 : 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-[104px] rounded-lg" />
+            ))}
+          </>
+        ) : (
+          <>
+            <MetricCard
+              title="Avg Success Rate"
+              value={kpis?.avgSuccessRate ?? 0}
+              format="percent"
+              icon="circle-check"
+              accentColor="green"
+            />
+            <MetricCard
+              title="Total Events"
+              value={kpis?.totalEvents ?? 0}
+              icon="activity"
+              accentColor="purple"
+            />
+            <MetricCard
+              title="Active Users"
+              value={kpis?.activeUsers ?? 0}
+              icon="users"
+              accentColor="yellow"
+            />
+            <MetricCard
+              title="Active Sources"
+              value={kpis?.activeSources ?? 0}
+              icon="monitor"
+              accentColor="blue"
+            />
+            <MetricCard
+              title="Unique Tools"
+              value={kpis?.uniqueTools ?? 0}
+              icon="wrench"
+              accentColor="orange"
+            />
+          </>
+        )}
       </div>
 
       {/* Bar Charts */}
