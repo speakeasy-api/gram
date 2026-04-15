@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -44,9 +45,11 @@ import { ShareChatButton } from "./ShareChatButton";
 
 export default function Playground() {
   return (
-    <ChatProvider>
-      <PlaygroundInner />
-    </ChatProvider>
+    <RequireScope scope={["mcp:read", "mcp:write", "mcp:connect"]} level="page">
+      <ChatProvider>
+        <PlaygroundInner />
+      </ChatProvider>
+    </RequireScope>
   );
 }
 

@@ -1,5 +1,6 @@
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
 import { Card, Cards } from "@/components/ui/card";
 import { UpdatedAt } from "@/components/updated-at";
@@ -19,9 +20,25 @@ export function EnvironmentsRoot() {
 }
 
 export default function Environments() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <RequireScope scope={["build:read", "build:write"]} level="page">
+          <EnvironmentsInner />
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
+}
+
+function EnvironmentsInner() {
   const session = useSession();
   const routes = useRoutes();
   const telemetry = useTelemetry();
+  const environments = useEnvironments();
 
   const [createEnvironmentDialogOpen, setCreateEnvironmentDialogOpen] =
     useState(false);
@@ -58,52 +75,44 @@ export default function Environments() {
   };
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Environments</Page.Section.Title>
-          <Page.Section.Description>
-            Use environments to manage API keys, allowing Gram to handle
-            authentication for you
-          </Page.Section.Description>
-          <Page.Section.CTA>
-            <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
-              <Button.LeftIcon>
-                <Plus className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>New Environment</Button.Text>
-            </Button>
-          </Page.Section.CTA>
-          <Page.Section.Body>
-            <Cards>
-              {useEnvironments().map((environment) => (
-                <EnvironmentCard
-                  key={environment.id}
-                  environment={environment}
-                />
-              ))}
-            </Cards>
-          </Page.Section.Body>
-        </Page.Section>
-        <InputDialog
-          open={createEnvironmentDialogOpen}
-          onOpenChange={setCreateEnvironmentDialogOpen}
-          title="Create an Environment"
-          description="Give your environment a name."
-          inputs={{
-            label: "Environment name",
-            placeholder: "Environment name",
-            value: environmentName,
-            onChange: (value) => setEnvironmentName(value),
-            onSubmit: createEnvironment,
-            validate: (value) => value.length > 0,
-          }}
-        />
-      </Page.Body>
-    </Page>
+    <>
+      <Page.Section>
+        <Page.Section.Title>Environments</Page.Section.Title>
+        <Page.Section.Description>
+          Use environments to manage API keys, allowing Gram to handle
+          authentication for you
+        </Page.Section.Description>
+        <Page.Section.CTA>
+          <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
+            <Button.LeftIcon>
+              <Plus className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>New Environment</Button.Text>
+          </Button>
+        </Page.Section.CTA>
+        <Page.Section.Body>
+          <Cards>
+            {environments.map((environment) => (
+              <EnvironmentCard key={environment.id} environment={environment} />
+            ))}
+          </Cards>
+        </Page.Section.Body>
+      </Page.Section>
+      <InputDialog
+        open={createEnvironmentDialogOpen}
+        onOpenChange={setCreateEnvironmentDialogOpen}
+        title="Create an Environment"
+        description="Give your environment a name."
+        inputs={{
+          label: "Environment name",
+          placeholder: "Environment name",
+          value: environmentName,
+          onChange: (value) => setEnvironmentName(value),
+          onSubmit: createEnvironment,
+          validate: (value) => value.length > 0,
+        }}
+      />
+    </>
   );
 }
 
