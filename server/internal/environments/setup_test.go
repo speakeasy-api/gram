@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -77,7 +78,7 @@ func newTestEnvironmentService(t *testing.T) (context.Context, *testInstance) {
 
 	enc := testenv.NewEncryptionClient(t)
 
-	svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache))
 
 	return ctx, &testInstance{
 		service:        svc,

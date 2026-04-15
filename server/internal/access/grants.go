@@ -20,6 +20,37 @@ type RoleGrant struct {
 	Resources []string
 }
 
+// SystemRoleGrants defines the canonical grant sets for the built-in system
+// roles. These are seeded when RBAC is enabled and replace any existing grants
+// for these roles (idempotent, won't clobber custom roles).
+var SystemRoleGrants = map[string][]*RoleGrant{
+	"admin": {
+		{Scope: string(ScopeOrgAdmin)},
+		{Scope: string(ScopeOrgRead)},
+		{Scope: string(ScopeBuildRead)},
+		{Scope: string(ScopeBuildWrite)},
+		{Scope: string(ScopeMCPRead)},
+		{Scope: string(ScopeMCPWrite)},
+		{Scope: string(ScopeMCPConnect)},
+	},
+	"member": {
+		{Scope: string(ScopeOrgRead)},
+		{Scope: string(ScopeBuildRead)},
+		{Scope: string(ScopeMCPRead)},
+		{Scope: string(ScopeMCPConnect)},
+	},
+}
+
+// SeedSystemRoleGrants upserts the fixed grant sets for all system roles.
+func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
+	for roleSlug, grants := range SystemRoleGrants {
+		if err := syncGrants(ctx, logger, db, organizationID, roleSlug, grants); err != nil {
+			return fmt.Errorf("seed %s grants: %w", roleSlug, err)
+		}
+	}
+	return nil
+}
+
 const WildcardResource = "*"
 
 type Grant struct {

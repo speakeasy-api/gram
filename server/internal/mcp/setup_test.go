@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 var (
@@ -72,6 +73,7 @@ type testInstance struct {
 	tracerProvider trace.TracerProvider
 	cacheAdapter   cache.Cache
 	enc            *encryption.Client
+	accessManager  *access.Manager
 }
 
 func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
@@ -120,6 +122,8 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+
 	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled)
 	telemService := telemetry.NewService(
 		logger,
@@ -130,7 +134,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		chatSessions,
 		logsEnabled,
 		posthog,
-		access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}),
+		accessManager,
 	)
 
 	temporalEnv, _ := infra.NewTemporalEnv(t)
@@ -138,7 +142,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, featClient, vectorToolStore, nil, temporalEnv, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, featClient, vectorToolStore, nil, temporalEnv, accessManager)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -150,13 +154,14 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		tracerProvider: tracerProvider,
 		cacheAdapter:   cacheAdapter,
 		enc:            enc,
+		accessManager:  accessManager,
 	}
 }
 
 // createTestAPIKey creates an API key for the test context project
 func (ti *testInstance) createTestAPIKey(ctx context.Context, t *testing.T) string {
 	t.Helper()
-	keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.accessManager)
 
 	key, err := keysService.CreateKey(ctx, &keys_gen.CreateKeyPayload{
 		Name:   "test-key",

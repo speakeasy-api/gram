@@ -12,9 +12,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -25,7 +27,7 @@ func TestServePublic_RBAC_PrivateMCP_DeniedWithNoGrants(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-denied-"+uuid.NewString()[:8])
 
-	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{})
+	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
 	ctx = withExactAccessGrants(t, ctx, ti)
 
 	err := accessManager.Require(ctx, access.Check{Scope: access.ScopeMCPConnect, ResourceID: toolset.ID.String()})
@@ -40,7 +42,7 @@ func TestServePublic_RBAC_PrivateMCP_DeniedWithUnrelatedGrant(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-unrelated-"+uuid.NewString()[:8])
 
-	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{})
+	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
 	ctx = withExactAccessGrants(t, ctx, ti, access.Grant{Scope: access.ScopeMCPConnect, Resource: uuid.NewString()})
 
 	err := accessManager.Require(ctx, access.Check{Scope: access.ScopeMCPConnect, ResourceID: toolset.ID.String()})
@@ -55,7 +57,7 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithWriteGrant(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-write-implies-connect-"+uuid.NewString()[:8])
 
-	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{})
+	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
 	ctx = withExactAccessGrants(t, ctx, ti, access.Grant{Scope: access.ScopeMCPWrite, Resource: toolset.ID.String()})
 
 	err := accessManager.Require(ctx, access.Check{Scope: access.ScopeMCPConnect, ResourceID: toolset.ID.String()})
@@ -68,7 +70,7 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithConnectGrant(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-allowed-"+uuid.NewString()[:8])
 
-	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{})
+	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
 	ctx = withExactAccessGrants(t, ctx, ti, access.Grant{Scope: access.ScopeMCPConnect, Resource: toolset.ID.String()})
 
 	err := accessManager.Require(ctx, access.Check{Scope: access.ScopeMCPConnect, ResourceID: toolset.ID.String()})

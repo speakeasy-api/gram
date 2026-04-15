@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -120,10 +121,11 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
-	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
-	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	svc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, accessManager)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, accessManager)
+	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", accessManager)
+	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, accessManager)
 
 	return ctx, &testInstance{
 		service:        svc,

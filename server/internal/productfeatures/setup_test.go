@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 var (
@@ -70,7 +71,7 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{})
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
 	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, accessManager, func(ctx context.Context, organizationID string) error {
 		return accessManager.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: organizationID})
 	}, func(ctx context.Context, organizationID string) error {

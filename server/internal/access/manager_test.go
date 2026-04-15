@@ -2,15 +2,21 @@ package access
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 type stubFeatureChecker struct {
@@ -29,7 +35,7 @@ func (s stubFeatureChecker) IsFeatureEnabled(_ context.Context, _ string, _ prod
 func TestManagerRequire_requiresAuthContext(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
 	err := manager.Require(t.Context(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnauthorized)
@@ -38,7 +44,7 @@ func TestManagerRequire_requiresAuthContext(t *testing.T) {
 func TestManagerRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache)
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	require.NoError(t, err)
@@ -47,7 +53,7 @@ func TestManagerRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
 func TestManagerRequire_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: nil})
 
 	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
@@ -57,7 +63,7 @@ func TestManagerRequire_mapsDeniedToForbidden(t *testing.T) {
 func TestManagerRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnexpected)
@@ -67,16 +73,39 @@ func TestManagerRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 func TestManagerRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{err: errors.New("boom")})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{err: errors.New("boom")}, workos.NewStubClient(), cache.NoopCache)
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	requireOopsCode(t, err, oops.CodeUnexpected)
 }
 
+func TestResolveRoleSlug_cachesEmptyMembershipResult(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "test@example.com", "Test User", "user_workos_test", "membership_test")
+
+	membership := &countingMembershipFetcher{}
+	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true}, membership, newMapCache())
+
+	roleSlug, err := manager.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Empty(t, roleSlug)
+
+	roleSlug, err = manager.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Empty(t, roleSlug)
+	require.Equal(t, 1, membership.calls)
+}
+
 func TestManagerRequireAny_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: []Grant{{Scope: ScopeMCPConnect, Resource: "tool_a"}}})
 
 	err := manager.RequireAny(ctx,
@@ -89,7 +118,7 @@ func TestManagerRequireAny_mapsDeniedToForbidden(t *testing.T) {
 func TestManagerFilter_returnsAllowedSubset(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: []Grant{{Scope: ScopeBuildRead, Resource: "proj_123"}}})
 
 	resourceIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
@@ -100,7 +129,7 @@ func TestManagerFilter_returnsAllowedSubset(t *testing.T) {
 func TestManagerRequire_rejectsInvalidCheck(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: []Grant{{Scope: ScopeBuildRead, Resource: WildcardResource}}})
 
 	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: ""})
@@ -111,7 +140,7 @@ func TestManagerRequire_rejectsInvalidCheck(t *testing.T) {
 func TestManagerRequire_requiresChecks(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: []Grant{{Scope: ScopeBuildRead, Resource: WildcardResource}}})
 
 	err := manager.Require(ctx)
@@ -122,7 +151,7 @@ func TestManagerRequire_requiresChecks(t *testing.T) {
 func TestManagerRequire_skipsForAPIKeyAuth(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	sessionID := "session_123"
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org_123",
@@ -147,7 +176,7 @@ func TestManagerRequire_skipsForAPIKeyAuth(t *testing.T) {
 func TestManagerFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	sessionID := "session_123"
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org_123",
@@ -168,6 +197,69 @@ func TestManagerFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 	resourceIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
+}
+
+type countingMembershipFetcher struct {
+	calls int
+}
+
+func (c *countingMembershipFetcher) GetOrgMembership(context.Context, string, string) (*workos.Member, error) {
+	c.calls++
+	return nil, nil
+}
+
+type mapCache struct {
+	items map[string][]byte
+}
+
+func newMapCache() *mapCache {
+	return &mapCache{items: map[string][]byte{}}
+}
+
+func (m *mapCache) Get(_ context.Context, key string, value any) error {
+	item, ok := m.items[key]
+	if !ok {
+		return errors.New("cache miss")
+	}
+	if err := json.Unmarshal(item, value); err != nil {
+		return fmt.Errorf("unmarshal cache item: %w", err)
+	}
+	return nil
+}
+
+func (m *mapCache) Set(_ context.Context, key string, value any, _ time.Duration) error {
+	item, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("marshal cache item: %w", err)
+	}
+	m.items[key] = item
+	return nil
+}
+
+func (m *mapCache) Update(ctx context.Context, key string, value any) error {
+	return m.Set(ctx, key, value, 0)
+}
+
+func (m *mapCache) Delete(_ context.Context, key string) error {
+	delete(m.items, key)
+	return nil
+}
+
+func (m *mapCache) ListAppend(context.Context, string, any, time.Duration) error {
+	return errors.New("not implemented")
+}
+
+func (m *mapCache) ListRange(context.Context, string, int64, int64, any) error {
+	return errors.New("not implemented")
+}
+
+func (m *mapCache) DeleteByPrefix(_ context.Context, prefix string) error {
+	for key := range m.items {
+		if strings.HasPrefix(key, prefix) {
+			delete(m.items, key)
+		}
+	}
+	return nil
 }
 
 func enterpriseSessionCtx(t *testing.T) context.Context {
@@ -219,7 +311,7 @@ func scopeOverrideCtx(t *testing.T, isAdmin bool, accountType string) context.Co
 // can activate the scope override.
 func TestCanUseOverride_devPlusAdmin(t *testing.T) {
 	t.Parallel()
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, ManagerOpts{DevMode: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache, ManagerOpts{DevMode: true})
 	ctx := scopeOverrideCtx(t, true, "pro")
 
 	enforce, err := manager.shouldEnforce(ctx)
@@ -231,7 +323,7 @@ func TestCanUseOverride_devPlusAdmin(t *testing.T) {
 // can activate the scope override — the admin check is bypassed.
 func TestCanUseOverride_devPlusNonAdmin(t *testing.T) {
 	t.Parallel()
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, ManagerOpts{DevMode: true})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache, ManagerOpts{DevMode: true})
 	ctx := scopeOverrideCtx(t, false, "pro")
 
 	enforce, err := manager.shouldEnforce(ctx)
@@ -243,7 +335,7 @@ func TestCanUseOverride_devPlusNonAdmin(t *testing.T) {
 // activate the scope override.
 func TestCanUseOverride_prodPlusAdmin(t *testing.T) {
 	t.Parallel()
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache)
 	ctx := scopeOverrideCtx(t, true, "pro")
 
 	enforce, err := manager.shouldEnforce(ctx)
@@ -255,7 +347,7 @@ func TestCanUseOverride_prodPlusAdmin(t *testing.T) {
 // cannot activate the scope override even when the header is present.
 func TestCanUseOverride_prodPlusNonAdmin(t *testing.T) {
 	t.Parallel()
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache)
 	ctx := scopeOverrideCtx(t, false, "pro")
 
 	// Non-enterprise + no feature flag + not admin → RBAC not enforced (all allowed).
@@ -275,4 +367,9 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 func testLogger(t *testing.T) *slog.Logger {
 	t.Helper()
 	return slog.New(slog.DiscardHandler)
+}
+
+type noopFeatureCacheWriter struct{}
+
+func (noopFeatureCacheWriter) UpdateFeatureCache(_ context.Context, _ string, _ productfeatures.Feature, _ bool) {
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -75,7 +76,7 @@ func newTestExternalMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
-	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{})
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
 	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, mcpRegistryClient, accessManager, func(ctx context.Context, resourceID string) error {
 		return accessManager.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: resourceID})
 	})
