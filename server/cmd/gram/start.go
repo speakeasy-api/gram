@@ -585,10 +585,7 @@ func newStartCommand() *cli.Command {
 
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
-			accessManager := access.NewManager(logger, db, productFeatures)
-			if c.String("environment") == "local" {
-				accessManager.SetDevMode()
-			}
+			accessManager := access.NewManager(logger, db, productFeatures, access.ManagerOpts{DevMode: c.String("environment") == "local"})
 
 			telemLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)

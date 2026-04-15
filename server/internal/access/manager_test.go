@@ -219,8 +219,7 @@ func scopeOverrideCtx(t *testing.T, isAdmin bool, accountType string) context.Co
 // can activate the scope override.
 func TestCanUseOverride_devPlusAdmin(t *testing.T) {
 	t.Parallel()
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false})
-	manager.SetDevMode()
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, ManagerOpts{DevMode: true})
 	ctx := scopeOverrideCtx(t, true, "pro")
 
 	enforce, err := manager.shouldEnforce(ctx)
@@ -232,8 +231,7 @@ func TestCanUseOverride_devPlusAdmin(t *testing.T) {
 // can activate the scope override — the admin check is bypassed.
 func TestCanUseOverride_devPlusNonAdmin(t *testing.T) {
 	t.Parallel()
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false})
-	manager.SetDevMode()
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, ManagerOpts{DevMode: true})
 	ctx := scopeOverrideCtx(t, false, "pro")
 
 	enforce, err := manager.shouldEnforce(ctx)

@@ -19,6 +19,10 @@ type FeatureChecker interface {
 	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
+type ManagerOpts struct {
+	DevMode bool
+}
+
 type Manager struct {
 	logger   *slog.Logger
 	db       accessrepo.DBTX
@@ -26,31 +30,36 @@ type Manager struct {
 	isDev    bool
 }
 
-func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker) *Manager {
+func NewManager(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker, opts ...ManagerOpts) *Manager {
+	var devMode bool
+	if len(opts) > 0 {
+		devMode = opts[0].DevMode
+	}
 	return &Manager{
 		logger:   logger.With(attr.SlogComponent("access")),
 		db:       db,
 		features: features,
-		isDev:    false,
+		isDev:    devMode,
 	}
 }
 
-// SetDevMode enables the local-dev override behaviour where any authenticated
-// user (not just superadmins) can use the scope override header. Should be
-// called once at startup when the environment is "local".
-func (m *Manager) SetDevMode() {
-	m.isDev = true
-}
-
-// canUseOverride reports whether the scope override header is honoured for the
-// current request. In local dev any authenticated user can use it; in all other
-// environments only superadmins can.
-func (m *Manager) canUseOverride(ctx context.Context) bool {
+// getScopeOverrides returns the parsed scope overrides from the request context
+// if they are present AND the caller is authorised to use them. In local dev
+// any authenticated user may use the override header; in production only
+// superadmins can. Returns nil, false when overrides are absent or disallowed.
+func (m *Manager) getScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
+	overrides, ok := readScopeOverrides(ctx)
+	if !ok {
+		return nil, false
+	}
 	if m.isDev {
-		return true
+		return overrides, true
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	return ok && authCtx != nil && authCtx.IsAdmin
+	if !ok || authCtx == nil || !authCtx.IsAdmin {
+		return nil, false
+	}
+	return overrides, true
 }
 
 func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
@@ -63,10 +72,7 @@ func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 
-	// Apply scope overrides when the request is authorised to use them (local dev
-	// or superadmin in production). The middleware blindly forwards the header;
-	// canUseOverride is the single gate that enforces who may actually use it.
-	if overrides, ok := getScopeOverrides(ctx); ok && m.canUseOverride(ctx) {
+	if overrides, ok := m.getScopeOverrides(ctx); ok {
 		grants := grantsFromOverrides(overrides)
 		return GrantsToContext(ctx, grants), nil
 	}
@@ -192,11 +198,10 @@ func (m *Manager) shouldEnforce(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	// When the scope override header is present and the caller is authorised to
-	// use it, enforce so the override scopes take effect regardless of account
-	// type or feature flag. Checked after API key exclusion so the toolbar
-	// doesn't interfere with API key auth flows.
-	if _, ok := getScopeOverrides(ctx); ok && m.canUseOverride(ctx) {
+	// When the caller has active scope overrides, enforce so the override scopes
+	// take effect regardless of account type or feature flag. Checked after
+	// API key exclusion so the toolbar doesn't interfere with API key auth flows.
+	if _, ok := m.getScopeOverrides(ctx); ok {
 		return true, nil
 	}
 

@@ -7,10 +7,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
-// getScopeOverrides reads the raw override header from context and parses it
+// readScopeOverrides reads the raw override header from context and parses it
 // into structured overrides. Returns nil, false if no override is present.
 // Each override is represented as a RoleGrant since the shape is identical.
-func getScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
+func readScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
 	raw, ok := contextvalues.GetRBACScopeOverride(ctx)
 	if !ok {
 		return nil, false
