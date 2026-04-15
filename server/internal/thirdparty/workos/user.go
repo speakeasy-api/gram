@@ -132,9 +132,13 @@ func (wc *Client) ListUserMemberships(ctx context.Context, userID string) ([]Mem
 
 	for {
 		resp, err := wc.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
-			UserID: userID,
-			Limit:  100,
-			After:  after,
+			OrganizationID: "",
+			UserID:         userID,
+			Statuses:       nil,
+			Limit:          100,
+			Order:          "",
+			Before:         "",
+			After:          after,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("list user memberships: %w", err)
