@@ -24,6 +24,7 @@
     "@gram/client": "workspace:*",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^24.10.1",
+    "@workos-inc/node": "^8.12.1",
     "confbox": "^0.2.2",
     "get-port-please": "^3.2.0",
     "oxfmt": "^0.36.0",
