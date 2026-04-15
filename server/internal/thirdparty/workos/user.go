@@ -124,6 +124,35 @@ func (wc *Client) GetUser(ctx context.Context, userID string) (*User, error) {
 	return &user, nil
 }
 
+// ListUserMemberships returns all organization memberships for a user across all orgs.
+// This is more efficient than calling GetOrgMembership per org since it batches the lookup.
+func (wc *Client) ListUserMemberships(ctx context.Context, userID string) ([]Member, error) {
+	var all []Member
+	after := ""
+
+	for {
+		resp, err := wc.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
+			UserID: userID,
+			Limit:  100,
+			After:  after,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list user memberships: %w", err)
+		}
+
+		for _, m := range resp.Data {
+			all = append(all, convertMember(m))
+		}
+
+		if resp.ListMetadata.After == "" {
+			break
+		}
+		after = resp.ListMetadata.After
+	}
+
+	return all, nil
+}
+
 // GetOrgMembership returns the first membership matching a user and organization.
 func (wc *Client) GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*Member, error) {
 	resp, err := wc.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
