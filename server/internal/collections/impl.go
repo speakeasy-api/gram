@@ -112,8 +112,9 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*type
 	}
 
 	_, err = cr.CreateOrganizationMcpCollectionRegistry(ctx, repo.CreateOrganizationMcpCollectionRegistryParams{
-		CollectionID: collection.ID,
-		Namespace:    payload.McpRegistryNamespace,
+		CollectionID:   collection.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Namespace:      payload.McpRegistryNamespace,
 	})
 	if err != nil {
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
@@ -168,7 +169,10 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 
 	result := make([]*types.MCPCollection, 0, len(collections))
 	for _, c := range collections {
-		reg, err := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, c.ID)
+		reg, err := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, repo.GetOrganizationMcpCollectionRegistryByIDParams{
+			CollectionID:   c.ID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error accessing collection registry").Log(ctx, s.logger)
 		}
@@ -189,17 +193,6 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid collection_id").Log(ctx, s.logger)
 	}
 
-	_, err = s.repo.GetOrganizationMcpCollectionByID(ctx, repo.GetOrganizationMcpCollectionByIDParams{
-		ID:             collectionID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.C(oops.CodeNotFound)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collection").Log(ctx, s.logger)
-	}
-
 	updated, err := s.repo.UpdateOrganizationMcpCollection(ctx, repo.UpdateOrganizationMcpCollectionParams{
 		ID:             collectionID,
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -208,10 +201,16 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		Visibility:     conv.PtrToPGTextEmpty(payload.Visibility),
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to update collection").Log(ctx, s.logger)
 	}
 
-	reg, err := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, collectionID)
+	reg, err := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, repo.GetOrganizationMcpCollectionRegistryByIDParams{
+		CollectionID:   collectionID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collection registry").Log(ctx, s.logger)
 	}
@@ -253,10 +252,16 @@ func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error 
 		return oops.E(oops.CodeInvalid, nil, "cannot delete the default registry collection")
 	}
 
-	if err := tx.DeleteOrganizationMcpCollectionRegistriesByID(ctx, collectionID); err != nil {
+	if err := tx.DeleteOrganizationMcpCollectionRegistriesByID(ctx, repo.DeleteOrganizationMcpCollectionRegistriesByIDParams{
+		CollectionID:   collectionID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to delete collection registries").Log(ctx, s.logger)
 	}
-	if err := tx.DeleteOrganizationMcpCollectionServerAttachmentsByID(ctx, collectionID); err != nil {
+	if err := tx.DeleteOrganizationMcpCollectionServerAttachmentsByID(ctx, repo.DeleteOrganizationMcpCollectionServerAttachmentsByIDParams{
+		CollectionID:   collectionID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to delete collection server attachments").Log(ctx, s.logger)
 	}
 	if err := tx.DeleteOrganizationMcpCollection(ctx, repo.DeleteOrganizationMcpCollectionParams{
@@ -304,7 +309,10 @@ func (s *Service) AttachServer(ctx context.Context, payload *gen.AttachServerPay
 		return nil, err
 	}
 
-	reg, err := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, collectionID)
+	reg, err := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, repo.GetOrganizationMcpCollectionRegistryByIDParams{
+		CollectionID:   collectionID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collection registry").Log(ctx, s.logger)
 	}
@@ -340,8 +348,9 @@ func (s *Service) DetachServer(ctx context.Context, payload *gen.DetachServerPay
 	}
 
 	if err := s.repo.DetachServerFromOrganizationMcpCollection(ctx, repo.DetachServerFromOrganizationMcpCollectionParams{
-		CollectionID: collectionID,
-		ToolsetID:    toolsetID,
+		CollectionID:   collectionID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ToolsetID:      toolsetID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to detach server from collection").Log(ctx, s.logger)
 	}
@@ -366,12 +375,18 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collection").Log(ctx, s.logger)
 	}
 
-	registry, err := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, collection.ID)
+	registry, err := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, repo.GetOrganizationMcpCollectionRegistryByIDParams{
+		CollectionID:   collection.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collection registry").Log(ctx, s.logger)
 	}
 
-	toolsets, err := s.repo.ListOrganizationMcpCollectionServerAttachments(ctx, collection.ID)
+	toolsets, err := s.repo.ListOrganizationMcpCollectionServerAttachments(ctx, repo.ListOrganizationMcpCollectionServerAttachmentsParams{
+		CollectionID:   collection.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list collection servers").Log(ctx, s.logger)
 	}
@@ -431,9 +446,10 @@ func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Qu
 	}
 
 	_, err = queries.AttachServerToOrganizationMcpCollection(ctx, repo.AttachServerToOrganizationMcpCollectionParams{
-		CollectionID: collectionID,
-		ToolsetID:    toolsetID,
-		PublishedBy:  conv.PtrToPGTextEmpty(&userID),
+		CollectionID:   collectionID,
+		OrganizationID: organizationID,
+		ToolsetID:      toolsetID,
+		PublishedBy:    conv.PtrToPGTextEmpty(&userID),
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -459,7 +475,10 @@ func (s *Service) ensureDefaultRegistryCollection(ctx context.Context, organizat
 	})
 	if err == nil {
 		existing = &existingRow
-		if _, regErr := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, existing.ID); regErr == nil {
+		if _, regErr := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, repo.GetOrganizationMcpCollectionRegistryByIDParams{
+			CollectionID:   existing.ID,
+			OrganizationID: organizationID,
+		}); regErr == nil {
 			return nil
 		} else if !errors.Is(regErr, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, regErr, "error getting default registry namespace").Log(ctx, s.logger)
@@ -503,15 +522,19 @@ func (s *Service) ensureDefaultRegistryCollection(ctx context.Context, organizat
 		collectionID = created.ID
 	}
 
-	if _, regErr := tx.GetOrganizationMcpCollectionRegistryByID(ctx, collectionID); regErr == nil {
+	if _, regErr := tx.GetOrganizationMcpCollectionRegistryByID(ctx, repo.GetOrganizationMcpCollectionRegistryByIDParams{
+		CollectionID:   collectionID,
+		OrganizationID: organizationID,
+	}); regErr == nil {
 		return nil
 	} else if !errors.Is(regErr, pgx.ErrNoRows) {
 		return oops.E(oops.CodeUnexpected, regErr, "error getting default registry namespace").Log(ctx, s.logger)
 	}
 
 	_, err = tx.CreateOrganizationMcpCollectionRegistry(ctx, repo.CreateOrganizationMcpCollectionRegistryParams{
-		CollectionID: collectionID,
-		Namespace:    namespace,
+		CollectionID:   collectionID,
+		OrganizationID: organizationID,
+		Namespace:      namespace,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError

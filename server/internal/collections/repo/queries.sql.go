@@ -13,21 +13,32 @@ import (
 )
 
 const attachServerToOrganizationMcpCollection = `-- name: AttachServerToOrganizationMcpCollection :one
+WITH org_collection AS (
+  SELECT omc.id FROM organization_mcp_collections omc
+  WHERE omc.id = $3 AND omc.organization_id = $4 AND omc.deleted IS FALSE
+)
 INSERT INTO organization_mcp_collection_server_attachments (collection_id, toolset_id, published_by)
-VALUES ($1, $2, $3)
+SELECT id, $1, $2
+FROM org_collection
 ON CONFLICT (collection_id, toolset_id) WHERE deleted IS FALSE DO UPDATE
 SET published_by = EXCLUDED.published_by, published_at = clock_timestamp(), deleted_at = NULL, updated_at = clock_timestamp()
 RETURNING published_at, created_at, updated_at, deleted_at, published_by, id, collection_id, toolset_id, deleted
 `
 
 type AttachServerToOrganizationMcpCollectionParams struct {
-	CollectionID uuid.UUID
-	ToolsetID    uuid.UUID
-	PublishedBy  pgtype.Text
+	ToolsetID      uuid.UUID
+	PublishedBy    pgtype.Text
+	CollectionID   uuid.UUID
+	OrganizationID string
 }
 
 func (q *Queries) AttachServerToOrganizationMcpCollection(ctx context.Context, arg AttachServerToOrganizationMcpCollectionParams) (OrganizationMcpCollectionServerAttachment, error) {
-	row := q.db.QueryRow(ctx, attachServerToOrganizationMcpCollection, arg.CollectionID, arg.ToolsetID, arg.PublishedBy)
+	row := q.db.QueryRow(ctx, attachServerToOrganizationMcpCollection,
+		arg.ToolsetID,
+		arg.PublishedBy,
+		arg.CollectionID,
+		arg.OrganizationID,
+	)
 	var i OrganizationMcpCollectionServerAttachment
 	err := row.Scan(
 		&i.PublishedAt,
@@ -91,18 +102,24 @@ func (q *Queries) CreateOrganizationMcpCollection(ctx context.Context, arg Creat
 }
 
 const createOrganizationMcpCollectionRegistry = `-- name: CreateOrganizationMcpCollectionRegistry :one
+WITH org_collection AS (
+  SELECT omc.id FROM organization_mcp_collections omc
+  WHERE omc.id = $2 AND omc.organization_id = $3 AND omc.deleted IS FALSE
+)
 INSERT INTO organization_mcp_collection_registries (collection_id, namespace)
-VALUES ($1, $2)
+SELECT id, $1
+FROM org_collection
 RETURNING id, collection_id, namespace, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOrganizationMcpCollectionRegistryParams struct {
-	CollectionID uuid.UUID
-	Namespace    string
+	Namespace      string
+	CollectionID   uuid.UUID
+	OrganizationID string
 }
 
 func (q *Queries) CreateOrganizationMcpCollectionRegistry(ctx context.Context, arg CreateOrganizationMcpCollectionRegistryParams) (OrganizationMcpCollectionRegistry, error) {
-	row := q.db.QueryRow(ctx, createOrganizationMcpCollectionRegistry, arg.CollectionID, arg.Namespace)
+	row := q.db.QueryRow(ctx, createOrganizationMcpCollectionRegistry, arg.Namespace, arg.CollectionID, arg.OrganizationID)
 	var i OrganizationMcpCollectionRegistry
 	err := row.Scan(
 		&i.ID,
@@ -135,37 +152,63 @@ func (q *Queries) DeleteOrganizationMcpCollection(ctx context.Context, arg Delet
 }
 
 const deleteOrganizationMcpCollectionRegistriesByID = `-- name: DeleteOrganizationMcpCollectionRegistriesByID :exec
+WITH org_collection AS (
+  SELECT omc.id FROM organization_mcp_collections omc
+  WHERE omc.id = $1 AND omc.organization_id = $2 AND omc.deleted IS FALSE
+)
 UPDATE organization_mcp_collection_registries SET deleted_at = clock_timestamp()
-WHERE collection_id = $1 AND deleted IS FALSE
+WHERE collection_id = (SELECT id FROM org_collection) AND deleted IS FALSE
 `
 
-func (q *Queries) DeleteOrganizationMcpCollectionRegistriesByID(ctx context.Context, collectionID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteOrganizationMcpCollectionRegistriesByID, collectionID)
+type DeleteOrganizationMcpCollectionRegistriesByIDParams struct {
+	CollectionID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteOrganizationMcpCollectionRegistriesByID(ctx context.Context, arg DeleteOrganizationMcpCollectionRegistriesByIDParams) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationMcpCollectionRegistriesByID, arg.CollectionID, arg.OrganizationID)
 	return err
 }
 
 const deleteOrganizationMcpCollectionServerAttachmentsByID = `-- name: DeleteOrganizationMcpCollectionServerAttachmentsByID :exec
+WITH org_collection AS (
+  SELECT omc.id FROM organization_mcp_collections omc
+  WHERE omc.id = $1 AND omc.organization_id = $2 AND omc.deleted IS FALSE
+)
 UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
-WHERE collection_id = $1 AND deleted IS FALSE
+WHERE collection_id = (SELECT id FROM org_collection) AND deleted IS FALSE
 `
 
-func (q *Queries) DeleteOrganizationMcpCollectionServerAttachmentsByID(ctx context.Context, collectionID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteOrganizationMcpCollectionServerAttachmentsByID, collectionID)
+type DeleteOrganizationMcpCollectionServerAttachmentsByIDParams struct {
+	CollectionID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteOrganizationMcpCollectionServerAttachmentsByID(ctx context.Context, arg DeleteOrganizationMcpCollectionServerAttachmentsByIDParams) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationMcpCollectionServerAttachmentsByID, arg.CollectionID, arg.OrganizationID)
 	return err
 }
 
 const detachServerFromOrganizationMcpCollection = `-- name: DetachServerFromOrganizationMcpCollection :exec
+WITH org_collection AS (
+  SELECT omc.id FROM organization_mcp_collections omc
+  WHERE omc.id = $2 AND omc.organization_id = $3 AND omc.deleted IS FALSE
+)
 UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
-WHERE collection_id = $1 AND toolset_id = $2 AND deleted IS FALSE
+WHERE
+  collection_id = (SELECT id FROM org_collection)
+  AND toolset_id = $1
+  AND deleted IS FALSE
 `
 
 type DetachServerFromOrganizationMcpCollectionParams struct {
-	CollectionID uuid.UUID
-	ToolsetID    uuid.UUID
+	ToolsetID      uuid.UUID
+	CollectionID   uuid.UUID
+	OrganizationID string
 }
 
 func (q *Queries) DetachServerFromOrganizationMcpCollection(ctx context.Context, arg DetachServerFromOrganizationMcpCollectionParams) error {
-	_, err := q.db.Exec(ctx, detachServerFromOrganizationMcpCollection, arg.CollectionID, arg.ToolsetID)
+	_, err := q.db.Exec(ctx, detachServerFromOrganizationMcpCollection, arg.ToolsetID, arg.CollectionID, arg.OrganizationID)
 	return err
 }
 
@@ -249,12 +292,22 @@ func (q *Queries) GetOrganizationMcpCollectionBySlugAndOrg(ctx context.Context, 
 }
 
 const getOrganizationMcpCollectionRegistryByID = `-- name: GetOrganizationMcpCollectionRegistryByID :one
-SELECT id, collection_id, namespace, created_at, updated_at, deleted_at, deleted FROM organization_mcp_collection_registries
-WHERE collection_id = $1 AND deleted IS FALSE
+SELECT r.id, r.collection_id, r.namespace, r.created_at, r.updated_at, r.deleted_at, r.deleted FROM organization_mcp_collection_registries r
+JOIN organization_mcp_collections c ON c.id = r.collection_id
+WHERE
+  r.collection_id = $1
+  AND c.organization_id = $2
+  AND c.deleted IS FALSE
+  AND r.deleted IS FALSE
 `
 
-func (q *Queries) GetOrganizationMcpCollectionRegistryByID(ctx context.Context, collectionID uuid.UUID) (OrganizationMcpCollectionRegistry, error) {
-	row := q.db.QueryRow(ctx, getOrganizationMcpCollectionRegistryByID, collectionID)
+type GetOrganizationMcpCollectionRegistryByIDParams struct {
+	CollectionID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetOrganizationMcpCollectionRegistryByID(ctx context.Context, arg GetOrganizationMcpCollectionRegistryByIDParams) (OrganizationMcpCollectionRegistry, error) {
+	row := q.db.QueryRow(ctx, getOrganizationMcpCollectionRegistryByID, arg.CollectionID, arg.OrganizationID)
 	var i OrganizationMcpCollectionRegistry
 	err := row.Scan(
 		&i.ID,
@@ -269,12 +322,22 @@ func (q *Queries) GetOrganizationMcpCollectionRegistryByID(ctx context.Context, 
 }
 
 const getOrganizationMcpCollectionRegistryByNamespace = `-- name: GetOrganizationMcpCollectionRegistryByNamespace :one
-SELECT id, collection_id, namespace, created_at, updated_at, deleted_at, deleted FROM organization_mcp_collection_registries
-WHERE namespace = $1 AND deleted IS FALSE
+SELECT r.id, r.collection_id, r.namespace, r.created_at, r.updated_at, r.deleted_at, r.deleted FROM organization_mcp_collection_registries r
+JOIN organization_mcp_collections c ON c.id = r.collection_id
+WHERE
+  r.namespace = $1
+  AND c.organization_id = $2
+  AND c.deleted IS FALSE
+  AND r.deleted IS FALSE
 `
 
-func (q *Queries) GetOrganizationMcpCollectionRegistryByNamespace(ctx context.Context, namespace string) (OrganizationMcpCollectionRegistry, error) {
-	row := q.db.QueryRow(ctx, getOrganizationMcpCollectionRegistryByNamespace, namespace)
+type GetOrganizationMcpCollectionRegistryByNamespaceParams struct {
+	Namespace      string
+	OrganizationID string
+}
+
+func (q *Queries) GetOrganizationMcpCollectionRegistryByNamespace(ctx context.Context, arg GetOrganizationMcpCollectionRegistryByNamespaceParams) (OrganizationMcpCollectionRegistry, error) {
+	row := q.db.QueryRow(ctx, getOrganizationMcpCollectionRegistryByNamespace, arg.Namespace, arg.OrganizationID)
 	var i OrganizationMcpCollectionRegistry
 	err := row.Scan(
 		&i.ID,
@@ -290,18 +353,25 @@ func (q *Queries) GetOrganizationMcpCollectionRegistryByNamespace(ctx context.Co
 
 const isServerAttachedToOrganizationMcpCollection = `-- name: IsServerAttachedToOrganizationMcpCollection :one
 SELECT EXISTS (
-  SELECT 1 FROM organization_mcp_collection_server_attachments
-  WHERE collection_id = $1 AND toolset_id = $2 AND deleted IS FALSE
+  SELECT 1 FROM organization_mcp_collection_server_attachments a
+  JOIN organization_mcp_collections c ON c.id = a.collection_id
+  WHERE
+    a.collection_id = $1
+    AND c.organization_id = $2
+    AND c.deleted IS FALSE
+    AND a.toolset_id = $3
+    AND a.deleted IS FALSE
 )
 `
 
 type IsServerAttachedToOrganizationMcpCollectionParams struct {
-	CollectionID uuid.UUID
-	ToolsetID    uuid.UUID
+	CollectionID   uuid.UUID
+	OrganizationID string
+	ToolsetID      uuid.UUID
 }
 
 func (q *Queries) IsServerAttachedToOrganizationMcpCollection(ctx context.Context, arg IsServerAttachedToOrganizationMcpCollectionParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isServerAttachedToOrganizationMcpCollection, arg.CollectionID, arg.ToolsetID)
+	row := q.db.QueryRow(ctx, isServerAttachedToOrganizationMcpCollection, arg.CollectionID, arg.OrganizationID, arg.ToolsetID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -329,12 +399,24 @@ func (q *Queries) IsToolsetInstalledFromCatalog(ctx context.Context, toolsetID u
 const listOrganizationMcpCollectionServerAttachments = `-- name: ListOrganizationMcpCollectionServerAttachments :many
 SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.created_at, t.updated_at, t.deleted_at, t.deleted FROM toolsets t
 JOIN organization_mcp_collection_server_attachments rt ON t.id = rt.toolset_id
-WHERE rt.collection_id = $1 AND rt.deleted IS FALSE AND t.mcp_enabled IS TRUE AND t.deleted IS FALSE
+JOIN organization_mcp_collections c ON c.id = rt.collection_id
+WHERE
+  rt.collection_id = $1
+  AND c.organization_id = $2
+  AND c.deleted IS FALSE
+  AND rt.deleted IS FALSE
+  AND t.mcp_enabled IS TRUE
+  AND t.deleted IS FALSE
 ORDER BY rt.published_at DESC
 `
 
-func (q *Queries) ListOrganizationMcpCollectionServerAttachments(ctx context.Context, collectionID uuid.UUID) ([]Toolset, error) {
-	rows, err := q.db.Query(ctx, listOrganizationMcpCollectionServerAttachments, collectionID)
+type ListOrganizationMcpCollectionServerAttachmentsParams struct {
+	CollectionID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ListOrganizationMcpCollectionServerAttachments(ctx context.Context, arg ListOrganizationMcpCollectionServerAttachmentsParams) ([]Toolset, error) {
+	rows, err := q.db.Query(ctx, listOrganizationMcpCollectionServerAttachments, arg.CollectionID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}

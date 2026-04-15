@@ -496,18 +496,14 @@ func (s *Service) createDefaultProject(ctx context.Context, organizationID strin
 	})
 	var empty projectsRepo.Project
 	if err != nil {
-		if isUniqueViolation(err) {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return empty, oops.E(oops.CodeConflict, nil, "project already exists")
 		}
 		return empty, oops.E(oops.CodeUnexpected, err, "error creating default project").Log(ctx, s.logger)
 	}
 
 	return project, nil
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
 
 type loginState struct {
