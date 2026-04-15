@@ -54,6 +54,9 @@ const CATEGORY_LABELS: Record<DlpCategory, string> = {
   government_id: "Government IDs",
   healthcare: "Healthcare",
   contact_info: "Contact Info",
+  prompt_attack: "Prompt Attack",
+  prompt_injection: "Prompt Injection",
+  off_policy: "Off-Policy",
 };
 
 const CATEGORY_COLORS: Record<DlpCategory, string> = {
@@ -62,6 +65,9 @@ const CATEGORY_COLORS: Record<DlpCategory, string> = {
   government_id: "rgb(245, 158, 11)",
   healthcare: "rgb(168, 85, 247)",
   contact_info: "rgb(34, 197, 94)",
+  prompt_attack: "rgb(220, 38, 38)",
+  prompt_injection: "rgb(249, 115, 22)",
+  off_policy: "rgb(14, 165, 233)",
 };
 
 const EVENT_TYPE_LABELS: Record<EventType, string> = {

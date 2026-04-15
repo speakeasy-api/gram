@@ -13,6 +13,9 @@ export type RuleCategory =
   | "pii"
   | "government_ids"
   | "healthcare"
+  | "prompt_attacks"
+  | "prompt_injection"
+  | "off_policy"
   | "custom";
 
 export type DetectionRule = {
@@ -72,6 +75,22 @@ export const RULE_CATEGORY_META: Record<
     label: "Healthcare Information",
     description: "Medical record numbers, patient data, Medicare IDs",
     icon: "heart-pulse",
+  },
+  prompt_attacks: {
+    label: "Prompt Attacks",
+    description: "Jailbreak attempts, role overrides, safety bypasses",
+    icon: "shield-alert",
+  },
+  prompt_injection: {
+    label: "Prompt Injection",
+    description: "Indirect injection via tool outputs, hidden instructions",
+    icon: "syringe",
+  },
+  off_policy: {
+    label: "Off-Policy Content",
+    description:
+      "Requests that violate usage policies or acceptable use guidelines",
+    icon: "ban",
   },
   custom: {
     label: "Custom Patterns",
@@ -354,6 +373,72 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
     {
       id: "MEDICAL_FAMILY_HISTORY",
       description: "Family medical history reference",
+      source: "presidio",
+    },
+  ],
+  prompt_attacks: [
+    {
+      id: "jailbreak-attempt",
+      description: "Jailbreak / safety bypass attempt",
+      source: "presidio",
+    },
+    {
+      id: "role-override",
+      description: "Role or persona override attempt",
+      source: "presidio",
+    },
+    {
+      id: "system-prompt-extraction",
+      description: "System prompt extraction attempt",
+      source: "presidio",
+    },
+    {
+      id: "multi-turn-manipulation",
+      description: "Multi-turn conversation manipulation",
+      source: "presidio",
+    },
+  ],
+  prompt_injection: [
+    {
+      id: "indirect-injection",
+      description: "Indirect prompt injection via external content",
+      source: "presidio",
+    },
+    {
+      id: "tool-output-injection",
+      description: "Malicious instructions embedded in tool responses",
+      source: "presidio",
+    },
+    {
+      id: "hidden-instruction",
+      description: "Hidden instructions in user-provided data",
+      source: "presidio",
+    },
+    {
+      id: "encoding-evasion",
+      description: "Encoded or obfuscated injection payloads",
+      source: "presidio",
+    },
+  ],
+  off_policy: [
+    {
+      id: "harmful-content-request",
+      description: "Request to generate harmful or dangerous content",
+      source: "presidio",
+    },
+    {
+      id: "policy-violation",
+      description: "Request that violates acceptable use policy",
+      source: "presidio",
+    },
+    {
+      id: "unauthorized-action",
+      description: "Attempt to perform unauthorized actions",
+      source: "presidio",
+    },
+    {
+      id: "topic-boundary-violation",
+      description: "Request outside permitted topic boundaries",
       source: "presidio",
     },
   ],
