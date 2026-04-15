@@ -215,8 +215,8 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 	}
 
 	slug := conv.ToSlug(payload.Slug)
-	if slug != payload.Slug {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid slug: must contain only lowercase alphanumeric characters and hyphens")
+	if slug == "" || slug != payload.Slug {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid slug: must be non-empty and contain only lowercase alphanumeric characters and hyphens")
 	}
 
 	plugin, err := s.repo.UpdatePlugin(ctx, repo.UpdatePluginParams{
