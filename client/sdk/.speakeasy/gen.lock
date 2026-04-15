@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 99a84e2a0abd837eeaf4043ce2591395
+  docChecksum: ec36c942a68e86758cc11314841a3392
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.56
-  configChecksum: a438a9026cc3804815ead06700956108
+  releaseVersion: 0.32.58
+  configChecksum: 93537aa2a1eecf7abfa809facc9e7a42
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -59,7 +59,7 @@ trackedFiles:
     pristine_git_object: 8eeba3e998d952373a809a56e83a247e62e6d3b8
   REACT_QUERY.md:
     id: 43d3a3ba4147
-    last_write_checksum: sha1:cb698736176a14e85acf3c04f0c1f29d3436c29d
+    last_write_checksum: sha1:61b0005cd62904cc04864bc442646ccea5bf586e
     pristine_git_object: 83cffde0bac1e22d4328f72d0efa12a1b94db9cf
   RUNTIMES.md:
     id: 620c490847b6
@@ -495,6 +495,8 @@ trackedFiles:
     last_write_checksum: sha1:369d49946258842024ed5b498d52f345735ed812
   docs/models/components/publishpackageresult.md:
     last_write_checksum: sha1:b06c211b183e9238064e6093bba7a2a5aadaf47b
+  docs/models/components/rbacstatus.md:
+    last_write_checksum: sha1:a1751e0bc4882c9845778fd6d849acc58031c82e
   docs/models/components/redeployrequestbody.md:
     last_write_checksum: sha1:ce5975e0572331dee1ef25b019656fce4aaebf3a
   docs/models/components/redeployresult.md:
@@ -977,6 +979,14 @@ trackedFiles:
     last_write_checksum: sha1:140835253fdabdaef7c51ea82d578bdcbdcb494c
   docs/models/operations/detachserverfromcollectionsecurityoption2.md:
     last_write_checksum: sha1:b481c46b78d2210b619c7e2f319210c8d421385a
+  docs/models/operations/disablerbacrequest.md:
+    last_write_checksum: sha1:79cca57aa0f56e268aeb59f192d42c67136fa35f
+  docs/models/operations/disablerbacsecurity.md:
+    last_write_checksum: sha1:008299956482613d350579e2cf1b4077227720d4
+  docs/models/operations/enablerbacrequest.md:
+    last_write_checksum: sha1:a246fc979c185e5711f4efe07c586752202ec7f2
+  docs/models/operations/enablerbacsecurity.md:
+    last_write_checksum: sha1:dcadc4f44cf6dda9e7a109b2cc6c766e2a280b81
   docs/models/operations/evolvedeploymentrequest.md:
     last_write_checksum: sha1:0bbd61b2374e44e59476df5d7c7016434f2fccca
   docs/models/operations/evolvedeploymentsecurity.md:
@@ -1119,6 +1129,10 @@ trackedFiles:
     last_write_checksum: sha1:fdb511ef65c3c25d5d678349c1908093b8ac1128
   docs/models/operations/getprojectsecurity.md:
     last_write_checksum: sha1:7afeae530f79fdd7c147f3c27217eb4386a193da
+  docs/models/operations/getrbacstatusrequest.md:
+    last_write_checksum: sha1:352fb6123d9acb1f9f0355f6dde289fc712857e3
+  docs/models/operations/getrbacstatussecurity.md:
+    last_write_checksum: sha1:650654edfaef0432b354af09e9bbccbc9d7fc4a7
   docs/models/operations/getrolerequest.md:
     last_write_checksum: sha1:1c43a6023513f2280a60b25161106740adb42afc
   docs/models/operations/getrolesecurity.md:
@@ -1736,7 +1750,7 @@ trackedFiles:
   docs/models/operations/validateapikeysecurity.md:
     last_write_checksum: sha1:e62caf16f73dad337d51e180798d0a150fab3a71
   docs/sdks/access/README.md:
-    last_write_checksum: sha1:ebfca46b79d17e49b4763fd3a90b95b69a8d49cf
+    last_write_checksum: sha1:eede50a33755ce1ae5afcab44d8f6fcaca211088
   docs/sdks/assets/README.md:
     last_write_checksum: sha1:e1884c390454dd09faad4702a812833f9fdf068a
   docs/sdks/auditlogs/README.md:
@@ -1815,11 +1829,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:94066b15050b1785bfcbe514d006e4972efce820
+    last_write_checksum: sha1:2db531f97121f41b5df7b712666dafdce26d3cca
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:78a5b4f85f8d2bb25ec8d2877df9fd3883e96ede
+    last_write_checksum: sha1:4420567248061cdc7fb71162e5ff887e898985a4
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -1829,6 +1843,12 @@ trackedFiles:
     last_write_checksum: sha1:58c02d9b8748fc48ca47749335143eb7fbe4fe4b
   src/funcs/accessDeleteRole.ts:
     last_write_checksum: sha1:84196b7b2a4426020b722642252b5a2f38a7043c
+  src/funcs/accessDisableRBAC.ts:
+    last_write_checksum: sha1:5ecb338deb2eca880be247a39265790a4b0bcfaf
+  src/funcs/accessEnableRBAC.ts:
+    last_write_checksum: sha1:e74b192fc77d0d33d877b3b2cb6dd1c83cae3dcc
+  src/funcs/accessGetRBACStatus.ts:
+    last_write_checksum: sha1:716ce73c3761164903eb1d8ef0477cd7b7f94ad4
   src/funcs/accessGetRole.ts:
     last_write_checksum: sha1:ecf9b68b48155a4a2b4eea6ec57d3dcbbd1246e2
   src/funcs/accessListGrants.ts:
@@ -2365,7 +2385,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:04966e4d392ebb0b101c88f58a445adb3f5691e1
+    last_write_checksum: sha1:a1759075675a5be1fc21ad739205506848dda177
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2755,7 +2775,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:193237dfe19ef47ef743c16ea511102d355cba5e
+    last_write_checksum: sha1:3db409920ad1ab6bd55066120a90b3a1f224420d
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3013,6 +3033,8 @@ trackedFiles:
     id: 42c7707b7b40
     last_write_checksum: sha1:29ee63335536c762cbfea53df8e14d897e1fd05f
     pristine_git_object: 5925d0851ae96e98d6ba713ec38281447c64f5f4
+  src/models/components/rbacstatus.ts:
+    last_write_checksum: sha1:16621be3d302c1526dbd21d165453c9028f1bcfd
   src/models/components/redeployrequestbody.ts:
     id: a4d7dd799605
     last_write_checksum: sha1:f0a8f4277c6d540cfec34506d35e843676094ed7
@@ -3449,6 +3471,10 @@ trackedFiles:
     last_write_checksum: sha1:182c77dff05475e93ddfe51ebc3c47ee9a4ab3db
   src/models/operations/detachserverfromcollection.ts:
     last_write_checksum: sha1:3779ee961227820cd7ddc58d0563cfd9a80515aa
+  src/models/operations/disablerbac.ts:
+    last_write_checksum: sha1:0d557ade2a9e135cf1c14c6f97b1e55a7d0347e5
+  src/models/operations/enablerbac.ts:
+    last_write_checksum: sha1:8ecdbe0fff94b4827671b8f8806feaebe6d9441d
   src/models/operations/evolvedeployment.ts:
     id: 327da60eca88
     last_write_checksum: sha1:b56cfe5ac466a55c4596b8d7bf9fa17c845fb5ba
@@ -3513,6 +3539,8 @@ trackedFiles:
     last_write_checksum: sha1:b88cd3f545af9ec5738e70e1db136e3da11fb47c
   src/models/operations/getprojectoverview.ts:
     last_write_checksum: sha1:b6e3e0624a2e0fa638dafc8c997ca0e54a6317de
+  src/models/operations/getrbacstatus.ts:
+    last_write_checksum: sha1:38ec5673f759511858d9c1672383342d96570bca
   src/models/operations/getrole.ts:
     last_write_checksum: sha1:abc068429f77a080d7d1b7f55db371b84f858760
   src/models/operations/getslackapp.ts:
@@ -3543,7 +3571,7 @@ trackedFiles:
     last_write_checksum: sha1:4a0ef004b5f7db12dc269786c10dea7f9af79b1d
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:7faf39a9c3922e599c9af5580337ff5f5e471f7d
+    last_write_checksum: sha1:37c0d3044322f47ecb6dd35d58f70645942c098e
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -4005,6 +4033,10 @@ trackedFiles:
     id: 6c1dfc7ddcf4
     last_write_checksum: sha1:595dbad38418a9597fb50c5d937fd5b1d7e8e9e0
     pristine_git_object: c44ea770cea09be89ae6d5133131f92c7a5274dc
+  src/react-query/disableRBAC.ts:
+    last_write_checksum: sha1:87416ad89eee7088281956bd886437480bc70c34
+  src/react-query/enableRBAC.ts:
+    last_write_checksum: sha1:2bd979ac77780bbea2d588e97b5b9cef9c24f69a
   src/react-query/evolveDeployment.ts:
     id: cbcdca6b91d0
     last_write_checksum: sha1:c7cc83bf44fa38d0b5f392932d8e56ef1e9c45bf
@@ -4135,7 +4167,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:c863834374d148369bae19564e7f87ece25529a3
+    last_write_checksum: sha1:fdcad798822ea73df9f63fcedd26b077a04eb7a0
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -4359,6 +4391,10 @@ trackedFiles:
     id: 64a2809e7fef
     last_write_checksum: sha1:e859c3daed2b76bee3b73dfa8629aeaea794e668
     pristine_git_object: d841e0e3a0488de0e26f680df3a41f65089c3c92
+  src/react-query/rbacStatus.core.ts:
+    last_write_checksum: sha1:dea03ec66111da052e4d354b404ee2c731022935
+  src/react-query/rbacStatus.ts:
+    last_write_checksum: sha1:10db901756353990484baf6a8a8fd06f259ed6ef
   src/react-query/redeployDeployment.ts:
     id: b2922b1dc400
     last_write_checksum: sha1:b1be773168e608d25e0ad749e5e14592f2b627bd
@@ -4590,7 +4626,7 @@ trackedFiles:
     last_write_checksum: sha1:b4caae676913cbb7094eeb72f440a6b82a98b769
     pristine_git_object: 5329eedfb7bfe97abac782e76cbbc880737fc9fa
   src/sdk/access.ts:
-    last_write_checksum: sha1:0783662bd0990d0b87e3a582e2e200a92eec994c
+    last_write_checksum: sha1:6209b4f424b64d38754b69f9a75304a3c3366c12
   src/sdk/assets.ts:
     id: 43fd5a73edb9
     last_write_checksum: sha1:60ccd4abcd9e1b51f7f5542c97336b5a5847b570
@@ -6583,90 +6619,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  attachServerToCollection:
-    speakeasy-default-attach-server-to-collection:
-      requestBody:
-        application/json: {"collection_id": "2fdd70d5-25bb-4a8c-9c5b-26617709dd8c", "toolset_id": "a7b81e5e-7f92-457c-b660-e94aa9cad651"}
-      responses:
-        "200":
-          application/json: {"id": "9976aeea-7df2-4ac1-b6c4-12fdbe3d6b1b", "name": "<value>", "slug": "<value>", "visibility": "private"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  createCollection:
-    speakeasy-default-create-collection:
-      requestBody:
-        application/json: {"mcp_registry_namespace": "<value>", "name": "<value>", "slug": "<value>", "visibility": "private"}
-      responses:
-        "201":
-          application/json: {"id": "1970ac99-54b6-498d-bbfc-5b232e00a6a8", "name": "<value>", "slug": "<value>", "visibility": "private"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  deleteCollection:
-    speakeasy-default-delete-collection:
-      parameters:
-        query:
-          collection_id: "4a7ea295-8925-4130-8a89-785e58e8d25c"
-      responses:
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  detachServerFromCollection:
-    speakeasy-default-detach-server-from-collection:
-      requestBody:
-        application/json: {"collection_id": "59547aeb-f8f7-4066-a521-667aea864446", "toolset_id": "c08b71fe-ab98-4960-97bd-5cc6d815d8c4"}
-      responses:
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  listCollections:
-    speakeasy-default-list-collections:
-      responses:
-        "200":
-          application/json: {"collections": []}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  listCollectionServers:
-    speakeasy-default-list-collection-servers:
-      parameters:
-        query:
-          collection_slug: "<value>"
-      responses:
-        "200":
-          application/json: {"servers": [{"description": "hourly times dazzling", "registry_specifier": "io.modelcontextprotocol.anonymous/exa", "version": "1.0.0"}]}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  updateCollection:
-    speakeasy-default-update-collection:
-      requestBody:
-        application/json: {"collection_id": "de2fae04-2616-49ca-8f6f-6e39c1a59187"}
-      responses:
-        "200":
-          application/json: {"id": "b1172819-c514-4b3e-8b68-dafc4aba3ae3", "name": "<value>", "slug": "<value>", "visibility": "private"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   createTriggerInstance:
     speakeasy-default-create-trigger-instance:
       requestBody:
         application/json: {"config": {"key": "<value>", "key1": "<value>"}, "definition_slug": "<value>", "name": "<value>", "target_display": "<value>", "target_kind": "assistant", "target_ref": "<value>"}
       responses:
         "200":
-          application/json: {"config": {"key": "<value>"}, "created_at": "2025-06-08T17:44:10.361Z", "definition_slug": "<value>", "id": "1b397c6c-6801-4b06-9b03-12fae8c4d727", "name": "<value>", "project_id": "27eb8f19-c4f8-4b8d-b742-1f819b748276", "status": "active", "target_display": "<value>", "target_kind": "<value>", "target_ref": "<value>", "updated_at": "2026-09-11T05:46:03.310Z"}
+          application/json: {"config": {}, "created_at": "2025-05-10T01:13:07.382Z", "definition_slug": "<value>", "id": "427eb8f1-9c4f-48b8-9d74-21f819b74827", "name": "<value>", "project_id": "c0e668d0-8c51-428d-b261-890baf97effd", "status": "paused", "target_display": "<value>", "target_kind": "<value>", "target_ref": "<value>", "updated_at": "2024-08-08T03:59:01.626Z"}
         "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listTriggerDefinitions:
     speakeasy-default-list-trigger-definitions:
       responses:
@@ -6753,6 +6716,102 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  disableRBAC:
+    speakeasy-default-disable-RBAC:
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  enableRBAC:
+    speakeasy-default-enable-RBAC:
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getRBACStatus:
+    speakeasy-default-get-RBAC-status:
+      responses:
+        "200":
+          application/json: {"rbac_enabled": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  attachServerToCollection:
+    speakeasy-default-attach-server-to-collection:
+      requestBody:
+        application/json: {"collection_id": "2fdd70d5-25bb-4a8c-9c5b-26617709dd8c", "toolset_id": "a7b81e5e-7f92-457c-b660-e94aa9cad651"}
+      responses:
+        "200":
+          application/json: {"id": "9976aeea-7df2-4ac1-b6c4-12fdbe3d6b1b", "name": "<value>", "slug": "<value>", "visibility": "private"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createCollection:
+    speakeasy-default-create-collection:
+      requestBody:
+        application/json: {"mcp_registry_namespace": "<value>", "name": "<value>", "slug": "<value>", "visibility": "private"}
+      responses:
+        "201":
+          application/json: {"id": "1970ac99-54b6-498d-bbfc-5b232e00a6a8", "name": "<value>", "slug": "<value>", "visibility": "private"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  deleteCollection:
+    speakeasy-default-delete-collection:
+      parameters:
+        query:
+          collection_id: "4a7ea295-8925-4130-8a89-785e58e8d25c"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  detachServerFromCollection:
+    speakeasy-default-detach-server-from-collection:
+      requestBody:
+        application/json: {"collection_id": "59547aeb-f8f7-4066-a521-667aea864446", "toolset_id": "c08b71fe-ab98-4960-97bd-5cc6d815d8c4"}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listCollections:
+    speakeasy-default-list-collections:
+      responses:
+        "200":
+          application/json: {"collections": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listCollectionServers:
+    speakeasy-default-list-collection-servers:
+      parameters:
+        query:
+          collection_slug: "<value>"
+      responses:
+        "200":
+          application/json: {"servers": [{"description": "hourly times dazzling", "registry_specifier": "io.modelcontextprotocol.anonymous/exa", "version": "1.0.0"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  updateCollection:
+    speakeasy-default-update-collection:
+      requestBody:
+        application/json: {"collection_id": "de2fae04-2616-49ca-8f6f-6e39c1a59187"}
+      responses:
+        "200":
+          application/json: {"id": "b1172819-c514-4b3e-8b68-dafc4aba3ae3", "name": "<value>", "slug": "<value>", "visibility": "private"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

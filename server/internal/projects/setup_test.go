@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -97,7 +98,7 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 	// Create test asset storage for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
 
-	svc := projects.NewService(logger, tracerProvider, conn, sessionManager, access.NewManager(logger, conn, stubFeatureChecker{enabled: enableRBAC}))
+	svc := projects.NewService(logger, tracerProvider, conn, sessionManager, access.NewManager(logger, conn, stubFeatureChecker{enabled: enableRBAC}, workos.NewStubClient(), cache.NoopCache))
 
 	return ctx, &testInstance{
 		service:        svc,

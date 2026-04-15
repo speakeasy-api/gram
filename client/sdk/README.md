@@ -136,6 +136,9 @@ run();
 
 * [createRole](docs/sdks/access/README.md#createrole) - createRole access
 * [deleteRole](docs/sdks/access/README.md#deleterole) - deleteRole access
+* [disableRBAC](docs/sdks/access/README.md#disablerbac) - disableRBAC access
+* [enableRBAC](docs/sdks/access/README.md#enablerbac) - enableRBAC access
+* [getRBACStatus](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
 * [getRole](docs/sdks/access/README.md#getrole) - getRole access
 * [listGrants](docs/sdks/access/README.md#listgrants) - listGrants access
 * [listMembers](docs/sdks/access/README.md#listmembers) - listMembers access
@@ -404,6 +407,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 - [`accessCreateRole`](docs/sdks/access/README.md#createrole) - createRole access
 - [`accessDeleteRole`](docs/sdks/access/README.md#deleterole) - deleteRole access
+- [`accessDisableRBAC`](docs/sdks/access/README.md#disablerbac) - disableRBAC access
+- [`accessEnableRBAC`](docs/sdks/access/README.md#enablerbac) - enableRBAC access
+- [`accessGetRBACStatus`](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
 - [`accessGetRole`](docs/sdks/access/README.md#getrole) - getRole access
 - [`accessListGrants`](docs/sdks/access/README.md#listgrants) - listGrants access
 - [`accessListMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
@@ -635,6 +641,8 @@ To learn about this feature and how to get started, check
 - [`useDeleteTriggerMutation`](docs/sdks/triggers/README.md#delete) - deleteTriggerInstance triggers
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
+- [`useDisableRBACMutation`](docs/sdks/access/README.md#disablerbac) - disableRBAC access
+- [`useEnableRBACMutation`](docs/sdks/access/README.md#enablerbac) - enableRBAC access
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useExportMcpMetadataMutation`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 - [`useFeaturesGet`](docs/sdks/features/README.md#get) - getProductFeatures features
@@ -700,6 +708,7 @@ To learn about this feature and how to get started, check
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
+- [`useRbacStatus`](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth

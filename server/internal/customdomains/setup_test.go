@@ -21,6 +21,7 @@ import (
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -83,7 +84,7 @@ func newTestCustomDomainsService(t *testing.T) (context.Context, *serviceTestIns
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	temporal := &stubTemporalClient{}
-	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{})
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
 	svc := customdomains.NewService(logger, tracerProvider, conn, sessionManager, temporal, accessManager)
 
 	return ctx, &serviceTestInstance{service: svc, conn: conn, sessionManager: sessionManager, temporal: temporal, repo: cdrepo.New(conn)}
