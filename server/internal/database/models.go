@@ -783,7 +783,6 @@ type PromptTemplate struct {
 	Deleted       bool
 }
 
-<<<<<<< HEAD
 type RemoteMcpServer struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
@@ -808,7 +807,8 @@ type RemoteMcpServerHeader struct {
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
 	Deleted                bool
-=======
+}
+
 type Skill struct {
 	ID              uuid.UUID
 	OrganizationID  string
@@ -841,7 +841,6 @@ type SkillVersion struct {
 	FirstSeenAt        pgtype.Timestamptz
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
->>>>>>> 18a4d7636 (add skills registry schema and sqlc scaffolding)
 }
 
 type SlackApp struct {
