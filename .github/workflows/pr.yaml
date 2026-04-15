@@ -1169,15 +1169,24 @@ jobs:
       - atlas-push
     steps:
       - name: Check results
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
-          results="${{ join(needs.*.result, ' ') }}"
-          for result in $results; do
-            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
-              echo "CI failed: found job with result '$result'"
-              exit 1
-            fi
-          done
-          echo "All CI checks passed or were skipped."
+          failed_output=$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | "❌ \(.key) (\(.value.result))"') || { echo "Error: jq command failed"; exit 1; }
+          failed=()
+          while IFS= read -r line; do
+            [[ -n "$line" ]] && failed+=("$line")
+          done <<< "$failed_output"
+
+          if [[ ${#failed[@]} -gt 0 ]]; then
+            echo "CI failed. The following checks did not pass:"
+            for item in "${failed[@]}"; do
+              echo "  $item"
+            done
+            exit 1
+          fi
+
+          echo "✅ All CI checks passed or were skipped."
 
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404

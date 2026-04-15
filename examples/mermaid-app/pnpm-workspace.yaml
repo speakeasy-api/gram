@@ -1,0 +1,4 @@
+# Present so pnpm treats this directory as the workspace root and does not
+# walk up into the monorepo's pnpm-workspace.yaml.
+packages:
+  - "."

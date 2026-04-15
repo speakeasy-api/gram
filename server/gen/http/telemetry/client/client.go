@@ -49,6 +49,10 @@ type Client struct {
 	// the getObservabilityOverview endpoint.
 	GetObservabilityOverviewDoer goahttp.Doer
 
+	// GetProjectOverview Doer is the HTTP client used to make requests to the
+	// getProjectOverview endpoint.
+	GetProjectOverviewDoer goahttp.Doer
+
 	// ListFilterOptions Doer is the HTTP client used to make requests to the
 	// listFilterOptions endpoint.
 	ListFilterOptionsDoer goahttp.Doer
@@ -93,6 +97,7 @@ func NewClient(
 		GetProjectMetricsSummaryDoer: doer,
 		GetUserMetricsSummaryDoer:    doer,
 		GetObservabilityOverviewDoer: doer,
+		GetProjectOverviewDoer:       doer,
 		ListFilterOptionsDoer:        doer,
 		ListAttributeKeysDoer:        doer,
 		GetHooksSummaryDoer:          doer,
@@ -292,6 +297,30 @@ func (c *Client) GetObservabilityOverview() goa.Endpoint {
 		resp, err := c.GetObservabilityOverviewDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getObservabilityOverview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetProjectOverview returns an endpoint that makes HTTP requests to the
+// telemetry service getProjectOverview server.
+func (c *Client) GetProjectOverview() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetProjectOverviewRequest(c.encoder)
+		decodeResponse = DecodeGetProjectOverviewResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetProjectOverviewRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetProjectOverviewDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getProjectOverview", err)
 		}
 		return decodeResponse(resp)
 	}

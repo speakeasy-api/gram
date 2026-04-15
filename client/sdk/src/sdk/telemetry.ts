@@ -6,6 +6,7 @@ import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
 import { telemetryGetHooksSummary } from "../funcs/telemetryGetHooksSummary.js";
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
+import { telemetryGetProjectOverview } from "../funcs/telemetryGetProjectOverview.js";
 import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetricsSummary.js";
 import { telemetryListAttributeKeys } from "../funcs/telemetryListAttributeKeys.js";
 import { telemetryListFilterOptions } from "../funcs/telemetryListFilterOptions.js";
@@ -89,6 +90,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.GetMetricsSummaryResult> {
     return unwrapAsync(telemetryGetProjectMetricsSummary(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getProjectOverview telemetry
+   *
+   * @remarks
+   * Get project-level overview including total chats, tool calls, active servers/users, and top lists
+   */
+  async getProjectOverview(
+    request: operations.GetProjectOverviewRequest,
+    security?: operations.GetProjectOverviewSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetProjectOverviewResult> {
+    return unwrapAsync(telemetryGetProjectOverview(
       this,
       request,
       security,

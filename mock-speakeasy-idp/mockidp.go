@@ -452,6 +452,7 @@ func (s *server) handleOidcCallback(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[oidc/callback] authenticated sub=%s email=%s org=%s", claims.Sub, claims.Email, claims.OrgID)
 
 	userSess := mapClaimsToSession(claims)
+	userSess.User.Admin = s.cfg.User.Admin
 
 	// Extract the WorkOS session ID from the access token (JWT) for logout.
 	var workosSessionID string
@@ -540,6 +541,7 @@ func (s *server) handleInviteAuthCallback(w http.ResponseWriter, r *http.Request
 	log.Printf("[invite/callback] authenticated sub=%s email=%s org=%s", claims.Sub, claims.Email, claims.OrgID)
 
 	userSess := mapClaimsToSession(claims)
+	userSess.User.Admin = s.cfg.User.Admin
 	var workosSessionID string
 	if sid, err := extractJWTClaim(authResp.AccessToken, "sid"); err == nil {
 		workosSessionID = sid
