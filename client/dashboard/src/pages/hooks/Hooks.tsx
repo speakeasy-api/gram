@@ -2050,8 +2050,10 @@ function HooksAnalytics({
 
     const totalEvents = summaryData.totalEvents;
     const totalSuccesses = servers.reduce((s, r) => s + r.successCount, 0);
+    const totalFailures = servers.reduce((s, r) => s + r.failureCount, 0);
+    const completedEvents = totalSuccesses + totalFailures;
     const avgSuccessRate =
-      totalEvents > 0 ? (totalSuccesses / totalEvents) * 100 : null;
+      completedEvents > 0 ? (totalSuccesses / completedEvents) * 100 : null;
 
     const activeUsers = users.length;
     const activeSources = new Set(bd.map((r) => r.hookSource).filter(Boolean))
