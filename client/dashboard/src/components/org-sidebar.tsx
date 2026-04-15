@@ -12,6 +12,7 @@ import {
 import { useIsAdmin, useOrganization } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope } from "@/hooks/useRBAC";
+import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes } from "@/routes";
 import { Icon } from "@speakeasy-api/moonshine";
 import { ExternalLink } from "lucide-react";
@@ -48,7 +49,10 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const organization = useOrganization();
   const isAdmin = useIsAdmin();
   const telemetry = useTelemetry();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
+  const productTier = useProductTier();
+  const isRbacEnabled =
+    (telemetry.isFeatureEnabled("gram-rbac") ?? false) &&
+    productTier === "enterprise";
   const isTeamPageEnabled =
     telemetry.isFeatureEnabled("gram-team-page") ?? false;
 
