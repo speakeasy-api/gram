@@ -1,3 +1,4 @@
+import { InsightsTrigger } from "@/components/insights-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useSlugs } from "@/contexts/Sdk.tsx";
@@ -27,6 +28,11 @@ function PageHeaderComponent({
           className="data-[orientation=vertical]:h-4"
         />
         {children}
+        {/* Insights trigger is pinned to the far right of the bar,
+            outside the breadcrumb's max-width container so it lands at
+            the true right edge on wide viewports. Self-hides when no
+            InsightsSidebar ancestor exists. */}
+        <InsightsTrigger className="ml-auto shrink-0" />
       </div>
     </header>
   );
