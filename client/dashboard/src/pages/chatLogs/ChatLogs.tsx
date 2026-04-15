@@ -1,4 +1,4 @@
-import { InsightsSidebar } from "@/components/insights-sidebar";
+import { InsightsConfig } from "@/components/insights-sidebar";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
@@ -327,33 +327,34 @@ export default function ChatLogs() {
   }, [timeRange.from, timeRange.to, resolutionStatus, searchQuery]);
 
   return (
-    <InsightsSidebar
-      mcpConfig={mcpConfig}
-      title="How can I help you debug?"
-      subtitle="Search agent sessions, analyze failures, or explore logs"
-      contextInfo={dateRangeContext}
-      hideTrigger={isLogsDisabled}
-      suggestions={[
-        {
-          title: "Failed Chats",
-          label: "Analyze failed chats",
-          prompt:
-            "Show me recent agent sessions that failed. What patterns do you see in the failures?",
-        },
-        {
-          title: "Search Logs",
-          label: "Search raw logs",
-          prompt:
-            "Search the raw telemetry logs for errors or warnings in the current period",
-        },
-        {
-          title: "Debug Session",
-          label: "Debug a specific chat",
-          prompt:
-            "Help me debug an agent session. Search both the chat data and raw logs to understand what happened.",
-        },
-      ]}
-    >
+    <>
+      <InsightsConfig
+        mcpConfig={mcpConfig}
+        title="How can I help you debug?"
+        subtitle="Search agent sessions, analyze failures, or explore logs"
+        contextInfo={dateRangeContext}
+        hideTrigger={isLogsDisabled}
+        suggestions={[
+          {
+            title: "Failed Chats",
+            label: "Analyze failed chats",
+            prompt:
+              "Show me recent agent sessions that failed. What patterns do you see in the failures?",
+          },
+          {
+            title: "Search Logs",
+            label: "Search raw logs",
+            prompt:
+              "Search the raw telemetry logs for errors or warnings in the current period",
+          },
+          {
+            title: "Debug Session",
+            label: "Debug a specific chat",
+            prompt:
+              "Help me debug an agent session. Search both the chat data and raw logs to understand what happened.",
+          },
+        ]}
+      />
       <ChatLogsContent
         dateRange={dateRange}
         setDateRangeParam={setDateRangeParam}
@@ -382,7 +383,7 @@ export default function ChatLogs() {
         total={total}
         onDeleteChat={handleDeleteChat}
       />
-    </InsightsSidebar>
+    </>
   );
 }
 

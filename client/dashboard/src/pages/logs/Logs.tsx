@@ -1,5 +1,5 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
-import { InsightsSidebar } from "@/components/insights-sidebar";
+import { InsightsConfig } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
@@ -534,29 +534,31 @@ function LogsContent() {
     !!selectedServer || !!searchQuery || logFilters.length > 0;
 
   return (
-    <InsightsSidebar
-      mcpConfig={mcpConfig}
-      title="Explore Logs"
-      subtitle="Ask me about your logs! Powered by Elements + Gram MCP"
-      hideTrigger={isLogsDisabled}
-      suggestions={[
-        {
-          title: "Failing Tool Calls",
-          label: "Summarize failing tool calls",
-          prompt: "Summarize failing tool calls",
-        },
-        {
-          title: "Visualize top tool calls",
-          label: "Plot tool call counts",
-          prompt: "Plot a chart of the top tool calls and their counts",
-        },
-        {
-          title: "Recent Errors",
-          label: "Find recent errors",
-          prompt: "Search for recent error logs and summarize what's happening",
-        },
-      ]}
-    >
+    <>
+      <InsightsConfig
+        mcpConfig={mcpConfig}
+        title="Explore Logs"
+        subtitle="Ask me about your logs! Powered by Elements + Gram MCP"
+        hideTrigger={isLogsDisabled}
+        suggestions={[
+          {
+            title: "Failing Tool Calls",
+            label: "Summarize failing tool calls",
+            prompt: "Summarize failing tool calls",
+          },
+          {
+            title: "Visualize top tool calls",
+            label: "Plot tool call counts",
+            prompt: "Plot a chart of the top tool calls and their counts",
+          },
+          {
+            title: "Recent Errors",
+            label: "Find recent errors",
+            prompt:
+              "Search for recent error logs and summarize what's happening",
+          },
+        ]}
+      />
       <LogsInnerContent
         isLogsDisabled={isLogsDisabled}
         isLoading={isLoading}
@@ -596,7 +598,7 @@ function LogsContent() {
         isLoadingAttributeKeys={isLoadingAttributeKeys}
         hasActiveFilters={hasActiveFilters}
       />
-    </InsightsSidebar>
+    </>
   );
 }
 

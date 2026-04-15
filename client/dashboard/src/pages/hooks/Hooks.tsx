@@ -1,7 +1,7 @@
 import { EditServerNameDialog } from "./EditServerNameDialog";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
-import { InsightsSidebar } from "@/components/insights-sidebar";
+import { InsightsConfig } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
 import { ErrorAlert } from "@/components/ui/alert";
@@ -570,12 +570,13 @@ function HooksContent() {
   const isLoading = isFetching && groupedTraces.length === 0;
 
   return (
-    <InsightsSidebar
-      mcpConfig={mcpConfig}
-      title="Explore Hooks"
-      subtitle="Ask me about your hooks! Powered by Elements + Gram MCP"
-      hideTrigger={isLogsDisabled}
-    >
+    <>
+      <InsightsConfig
+        mcpConfig={mcpConfig}
+        title="Explore Hooks"
+        subtitle="Ask me about your hooks! Powered by Elements + Gram MCP"
+        hideTrigger={isLogsDisabled}
+      />
       <div className="flex h-full flex-col overflow-hidden">
         <Page>
           <Page.Header>
@@ -644,7 +645,7 @@ function HooksContent() {
           )}
         </Page>
       </div>
-    </InsightsSidebar>
+    </>
   );
 }
 

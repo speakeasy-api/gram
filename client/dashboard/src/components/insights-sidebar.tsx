@@ -2,28 +2,55 @@ import type { ElementsConfig } from "@gram-ai/elements";
 import { Chat, GramElementsProvider } from "@gram-ai/elements";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Wand2, ChevronRight, Sparkles, Terminal } from "lucide-react";
-import { useState, useMemo, createContext, useContext } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { cn } from "@/lib/utils";
 import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
 
-// Context for sidebar state. `available` lets descendants detect whether
-// they're inside an InsightsSidebar provider — so a page-header-level
-// trigger can self-hide on pages that aren't wrapped.
-const InsightsContext = createContext<{
+/**
+ * Per-page overrides for the global AI Insights panel. Pages mount
+ * <InsightsConfig {...} /> to register custom title/subtitle/suggestions
+ * /context/mcpConfig; on unmount, the global defaults take over again.
+ */
+export interface InsightsConfigOptions {
+  mcpConfig?: Omit<ElementsConfig, "variant" | "welcome" | "theme">;
+  title?: string;
+  subtitle?: string;
+  suggestions?: Array<{
+    title: string;
+    label: string;
+    prompt: string;
+  }>;
+  contextInfo?: string;
+  /** Hide the trigger button (e.g., when logs are disabled on this page). */
+  hideTrigger?: boolean;
+}
+
+interface InsightsContextValue {
   available: boolean;
   isExpanded: boolean;
   setIsExpanded: (expanded: boolean) => void;
-}>({
+  /** Pages call this to register a per-page config override. Pass null to
+   *  clear (typically on unmount of <InsightsConfig />). */
+  setOverride: (override: InsightsConfigOptions | null) => void;
+}
+
+const InsightsContext = createContext<InsightsContextValue>({
   available: false,
   isExpanded: false,
   setIsExpanded: () => {},
+  setOverride: () => {},
 });
 
 /**
- * Hook to access the insights sidebar state.
- * Returns { available, isExpanded, setIsExpanded } to allow pages to adapt
- * their layout and control the sidebar. `available` is false when no
- * InsightsSidebar ancestor exists.
+ * Hook to access the insights sidebar state. `available` is false when no
+ * InsightsProvider ancestor exists.
  */
 export function useInsightsState() {
   return useContext(InsightsContext);
@@ -31,9 +58,9 @@ export function useInsightsState() {
 
 /**
  * Header-bar trigger for opening the AI Insights sidebar. Renders only
- * when inside an InsightsSidebar provider so it can be slotted globally
- * (e.g. into PageHeaderBreadcrumbs) without appearing on pages that don't
- * use insights.
+ * when inside an InsightsProvider so it can be slotted globally (e.g. into
+ * PageHeaderBreadcrumbs) without appearing on pages that opt out via
+ * hideTrigger.
  */
 export function InsightsTrigger({ className }: { className?: string }) {
   const { available, isExpanded, setIsExpanded } = useInsightsState();
@@ -56,49 +83,68 @@ export function InsightsTrigger({ className }: { className?: string }) {
   );
 }
 
-interface InsightsSidebarProps {
-  /** Base MCP config from useObservabilityMcpConfig */
+/**
+ * Page-level config override. Mount this anywhere inside an InsightsProvider
+ * to swap in a custom prompt/suggestions/MCP filter. Cleans up on unmount,
+ * restoring the provider's defaults.
+ */
+export function InsightsConfig(options: InsightsConfigOptions) {
+  const { setOverride } = useInsightsState();
+  // Stringify the options so the effect re-fires only when content changes,
+  // not on every parent render that creates a fresh object identity.
+  const key = JSON.stringify(options);
+  useEffect(() => {
+    setOverride(options);
+    return () => setOverride(null);
+  }, [key, setOverride, options]);
+  return null;
+}
+
+interface InsightsProviderProps {
+  /** Default MCP config used when no <InsightsConfig> override is mounted. */
   mcpConfig: Omit<ElementsConfig, "variant" | "welcome" | "theme">;
-  /** Title shown in the chat welcome screen */
+  /** Default welcome title. */
   title: string;
-  /** Subtitle shown in the chat welcome screen */
+  /** Default welcome subtitle. */
   subtitle: string;
-  /** Suggestion prompts for quick actions */
+  /** Default suggestion prompts. */
   suggestions?: Array<{
     title: string;
     label: string;
     prompt: string;
   }>;
-  /** Default expanded state */
+  /** Default expanded state. */
   defaultExpanded?: boolean;
-  /** Context information to pass to the chat (like current date range) */
-  contextInfo?: string;
-  /** Hide the trigger button (e.g., when logs are disabled) */
-  hideTrigger?: boolean;
-  /** Main content to render alongside the sidebar */
+  /** Children rendered alongside the sidebar (page content). */
   children: React.ReactNode;
 }
 
 const SIDEBAR_MAX_WIDTH = 670;
 const SIDEBAR_MAX_PERCENT = 40; // Never more than 40% of viewport
 
-export function InsightsSidebar({
-  mcpConfig,
-  title,
-  subtitle,
-  suggestions = [],
+export function InsightsProvider({
+  mcpConfig: defaultMcpConfig,
+  title: defaultTitle,
+  subtitle: defaultSubtitle,
+  suggestions: defaultSuggestions = [],
   defaultExpanded = false,
-  contextInfo,
-  hideTrigger = false,
   children,
-}: InsightsSidebarProps) {
+}: InsightsProviderProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [override, setOverride] = useState<InsightsConfigOptions | null>(null);
   const { theme } = useMoonshineConfig();
 
-  // Calculate responsive sidebar width (min of fixed width or 40% of viewport)
+  // Resolve effective values: per-page override wins, fall back to defaults.
+  const mcpConfig = override?.mcpConfig ?? defaultMcpConfig;
+  const title = override?.title ?? defaultTitle;
+  const subtitle = override?.subtitle ?? defaultSubtitle;
+  const suggestions = override?.suggestions ?? defaultSuggestions;
+  const contextInfo = override?.contextInfo;
+  const hideTrigger = override?.hideTrigger ?? false;
+
   const sidebarWidth = `min(${SIDEBAR_MAX_WIDTH}px, ${SIDEBAR_MAX_PERCENT}vw)`;
 
-  // Build system prompt with context info
+  // Build system prompt with optional context info.
   const baseInstructions = `You are a helpful assistant for analyzing logs in Gram, an AI observability platform. Focus exclusively on log search and analysis.
 
 The current date is ${new Date().toISOString().split("T")[0]}.
@@ -141,9 +187,19 @@ When the user asks about "current period", "selected period", "this timeframe", 
     [mcpConfig, title, subtitle, suggestions, theme, systemPrompt],
   );
 
-  const contextValue = useMemo(
-    () => ({ available: !hideTrigger, isExpanded, setIsExpanded }),
-    [hideTrigger, isExpanded],
+  const handleSetOverride = useCallback(
+    (next: InsightsConfigOptions | null) => setOverride(next),
+    [],
+  );
+
+  const contextValue = useMemo<InsightsContextValue>(
+    () => ({
+      available: !hideTrigger,
+      isExpanded,
+      setIsExpanded,
+      setOverride: handleSetOverride,
+    }),
+    [hideTrigger, isExpanded, handleSetOverride],
   );
 
   return (
@@ -169,8 +225,7 @@ When the user asks about "current period", "selected period", "this timeframe", 
         )}
 
         {/* Sidebar panel - fixed position that slides in.
-            Note: the trigger for opening this panel now lives in the top
-            breadcrumb bar via <InsightsTrigger />, rendered by PageHeader. */}
+            Trigger lives in the top breadcrumb bar via <InsightsTrigger />. */}
         <div
           className={cn(
             "bg-background border-border fixed top-0 right-0 bottom-0 z-30 flex flex-col border-l shadow-xl transition-transform duration-300 ease-in-out",
@@ -218,3 +273,10 @@ When the user asks about "current period", "selected period", "this timeframe", 
     </InsightsContext.Provider>
   );
 }
+
+/**
+ * @deprecated Use <InsightsProvider> at the app shell level + <InsightsConfig>
+ * on individual pages that need custom prompts. This alias is kept temporarily
+ * to avoid breaking out-of-tree consumers; remove after migration.
+ */
+export const InsightsSidebar = InsightsProvider;
