@@ -60,7 +60,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>settings</SidebarGroupLabel>
           <SidebarGroupContent>
             <NavMenu items={settingsItems}>
-              <RequireScope scope={["org:read", "org:admin"]} level="component">
+              <RequireScope scope={["org:read", "org:admin"]} level="section">
                 <SidebarMenuItem>
                   <NavButton
                     title="Organization settings"
