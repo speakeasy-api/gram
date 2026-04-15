@@ -238,11 +238,25 @@ func TestService_Info(t *testing.T) {
 
 // TestService_Info_AdminOrgRelationshipUpserted verifies that an admin user who has no
 // pre-existing record in organization_user_relationships gets one created when Info is
-// called for one of their own organizations.
+// called for their speakeasy-team org.
 func TestService_Info_AdminOrgRelationshipUpserted(t *testing.T) {
 	t.Parallel()
 
-	userInfo := adminMockUserInfo()
+	userInfo := &MockUserInfo{
+		UserID:          "admin-user-speakeasy",
+		Email:           "admin@speakeasyapi.dev",
+		Admin:           true,
+		UserWhitelisted: true,
+		Organizations: []MockOrganizationEntry{
+			{
+				ID:                 "speakeasy-team-org-id",
+				Name:               "Speakeasy Team",
+				Slug:               "speakeasy-team",
+				SsoConnectionID:    nil,
+				UserWorkspaceSlugs: []string{"speakeasy-workspace"},
+			},
+		},
+	}
 	ctx, instance := newTestAuthService(t, userInfo)
 
 	err := instance.createTestUser(ctx, userInfo)
