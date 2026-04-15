@@ -1926,7 +1926,7 @@ async function executePostgresSQL(label: string, sql: string): Promise<void> {
 
   try {
     await $`docker compose cp ${tmpFile} gram-db:/tmp/${label}.sql`.quiet();
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -f /tmp/${label}.sql`.quiet();
+    await $`docker compose exec gram-db psql -v ON_ERROR_STOP=1 -U ${dbUser} -d ${dbName} -f /tmp/${label}.sql`.quiet();
   } finally {
     await fs.unlink(tmpFile).catch(() => {});
   }
@@ -1948,6 +1948,18 @@ async function seedSkillsData(init: {
   const runtimeSkills: SeededSkillRuntime[] = [];
 
   statements.push("BEGIN;");
+  statements.push(`
+    DELETE FROM skill_versions
+    WHERE skill_id IN (
+      SELECT id
+      FROM skills
+      WHERE project_id = ${sqlString(projectId)}::uuid
+        AND (
+          slug IN (${skillSlugs})
+          OR skill_uuid IN (${skillUUIDs})
+        )
+    );
+  `);
   statements.push(`
     DELETE FROM skills
     WHERE project_id = ${sqlString(projectId)}::uuid
