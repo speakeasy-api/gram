@@ -77,6 +77,35 @@ func resolveAttributeColumn(path string) string {
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
+// applyHookFiltersToBuilder applies attribute filters and hook type conditions to sb.
+// It mirrors the filter logic used in ListHooksTraces.
+func applyHookFiltersToBuilder(sb squirrel.SelectBuilder, filters []AttributeFilter, typesToInclude []string) squirrel.SelectBuilder {
+	for _, filter := range filters {
+		col := resolveAttributeColumn(filter.Path)
+		pred := filter.Predicate(col)
+		if pred != nil {
+			sb = sb.Where(pred)
+		}
+	}
+	if len(typesToInclude) > 0 {
+		typeConditions := make([]string, 0, len(typesToInclude))
+		for _, hookType := range typesToInclude {
+			switch hookType {
+			case "skill":
+				typeConditions = append(typeConditions, "tool_name = 'Skill'")
+			case "mcp":
+				typeConditions = append(typeConditions, "(tool_source != '' AND tool_name != 'Skill')")
+			case "local":
+				typeConditions = append(typeConditions, "(tool_source = '' AND tool_name != 'Skill')")
+			}
+		}
+		if len(typeConditions) > 0 {
+			sb = sb.Where(fmt.Sprintf("(%s)", strings.Join(typeConditions, " OR ")))
+		}
+	}
+	return sb
+}
+
 // InsertTelemetryLogParams contains the parameters for inserting a telemetry log.
 type InsertTelemetryLogParams struct {
 	ID                   string
@@ -1290,11 +1319,13 @@ type HooksServerSummaryRow struct {
 	FailureRate  float64 `ch:"failure_rate"`
 }
 
-// GetHooksSummaryParams defines the parameters for getting hooks summary.
+// GetHooksSummaryParams defines the parameters for getting hooks server summary.
 type GetHooksSummaryParams struct {
-	GramProjectID string
-	TimeStart     int64
-	TimeEnd       int64
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	Filters        []AttributeFilter
+	TypesToInclude []string
 }
 
 // GetHooksSummary retrieves aggregated hooks metrics grouped by server.
@@ -1313,8 +1344,11 @@ func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("event_source = 'hook'").
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
-		Where("start_time_unix_nano <= ?", arg.TimeEnd).
-		GroupBy("server_name").
+		Where("start_time_unix_nano <= ?", arg.TimeEnd)
+
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+
+	sb = sb.GroupBy("server_name").
 		OrderBy("event_count DESC")
 
 	query, args, err := sb.ToSql()
@@ -1399,9 +1433,11 @@ type HooksUserSummaryRow struct {
 
 // GetHooksUserSummaryParams defines the parameters for getting hooks user summary.
 type GetHooksUserSummaryParams struct {
-	GramProjectID string
-	TimeStart     int64
-	TimeEnd       int64
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	Filters        []AttributeFilter
+	TypesToInclude []string
 }
 
 // GetHooksUserSummary retrieves aggregated hooks metrics grouped by user.
@@ -1420,8 +1456,11 @@ func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSumma
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("event_source = 'hook'").
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
-		Where("start_time_unix_nano <= ?", arg.TimeEnd).
-		GroupBy("user_email").
+		Where("start_time_unix_nano <= ?", arg.TimeEnd)
+
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+
+	sb = sb.GroupBy("user_email").
 		OrderBy("event_count DESC")
 
 	query, args, err := sb.ToSql()
@@ -1460,9 +1499,11 @@ type SkillSummaryRow struct {
 
 // GetSkillsSummaryParams defines the parameters for getting skills summary.
 type GetSkillsSummaryParams struct {
-	GramProjectID string
-	TimeStart     int64
-	TimeEnd       int64
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	Filters        []AttributeFilter
+	TypesToInclude []string
 }
 
 // GetSkillsSummary retrieves aggregated skills usage metrics.
@@ -1479,8 +1520,11 @@ func (q *Queries) GetSkillsSummary(ctx context.Context, arg GetSkillsSummaryPara
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
 		Where("start_time_unix_nano <= ?", arg.TimeEnd).
-		Where("skill_name != ''").
-		GroupBy("skill_name").
+		Where("skill_name != ''")
+
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+
+	sb = sb.GroupBy("skill_name").
 		OrderBy("use_count DESC")
 
 	query, args, err := sb.ToSql()
@@ -1508,6 +1552,143 @@ func (q *Queries) GetSkillsSummary(ctx context.Context, arg GetSkillsSummaryPara
 	}
 
 	return summaries, nil
+}
+
+// HooksBreakdownRow contains cross-dimensional aggregated counts for a unique (user, server, source, tool) combination.
+type HooksBreakdownRow struct {
+	UserEmail    string `ch:"user_email"`
+	ServerName   string `ch:"server_name"`
+	HookSource   string `ch:"hook_source"`
+	ToolName     string `ch:"tool_name"`
+	EventCount   uint64 `ch:"event_count"`
+	FailureCount uint64 `ch:"failure_count"`
+}
+
+// GetHooksBreakdownParams defines the parameters for the cross-dimensional hooks breakdown query.
+type GetHooksBreakdownParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	Filters        []AttributeFilter
+	TypesToInclude []string
+}
+
+// GetHooksBreakdown retrieves cross-dimensional hook event counts grouped by (user, server, hook_source, tool).
+// This powers bar charts in the analytics dashboard without being limited to paginated trace data.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetHooksBreakdown(ctx context.Context, arg GetHooksBreakdownParams) ([]HooksBreakdownRow, error) {
+	sb := sq.Select(
+		"if(user_email = '', 'Unknown', user_email) as user_email",
+		"if(tool_source = '', 'local', tool_source) as server_name",
+		"hook_source",
+		"tool_name",
+		"count(*) as event_count",
+		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
+	).
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("event_source = 'hook'").
+		Where("start_time_unix_nano >= ?", arg.TimeStart).
+		Where("start_time_unix_nano <= ?", arg.TimeEnd)
+
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+
+	sb = sb.GroupBy("user_email", "server_name", "hook_source", "tool_name").
+		OrderBy("event_count DESC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building hooks breakdown query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var breakdown []HooksBreakdownRow
+	for rows.Next() {
+		var row HooksBreakdownRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("error scanning hooks breakdown row: %w", err)
+		}
+		breakdown = append(breakdown, row)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return breakdown, nil
+}
+
+// HooksTimeSeriesPoint contains event counts for a single time bucket, server, and user combination.
+type HooksTimeSeriesPoint struct {
+	BucketStartNs int64  `ch:"bucket_start"`
+	ServerName    string `ch:"server_name"`
+	UserEmail     string `ch:"user_email"`
+	EventCount    uint64 `ch:"event_count"`
+}
+
+// GetHooksTimeSeriesParams defines the parameters for the hooks time series query.
+type GetHooksTimeSeriesParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	BucketSizeNs   int64 // Bucket size in nanoseconds (e.g. 5*60*1e9 for 5 minutes)
+	Filters        []AttributeFilter
+	TypesToInclude []string
+}
+
+// GetHooksTimeSeries retrieves time-bucketed hook event counts grouped by (bucket, server, user).
+// BucketSizeNs controls the bucket granularity (e.g. 5 minutes = 5*60*1e9).
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetHooksTimeSeries(ctx context.Context, arg GetHooksTimeSeriesParams) ([]HooksTimeSeriesPoint, error) {
+	sb := sq.Select(
+		fmt.Sprintf("intDiv(start_time_unix_nano, %d) * %d as bucket_start", arg.BucketSizeNs, arg.BucketSizeNs),
+		"if(tool_source = '', 'local', tool_source) as server_name",
+		"if(user_email = '', 'Unknown', user_email) as user_email",
+		"count(*) as event_count",
+	).
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("event_source = 'hook'").
+		Where("start_time_unix_nano >= ?", arg.TimeStart).
+		Where("start_time_unix_nano <= ?", arg.TimeEnd)
+
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+
+	sb = sb.GroupBy("bucket_start", "server_name", "user_email").
+		OrderBy("bucket_start ASC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building hooks time series query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var points []HooksTimeSeriesPoint
+	for rows.Next() {
+		var pt HooksTimeSeriesPoint
+		if err = rows.ScanStruct(&pt); err != nil {
+			return nil, fmt.Errorf("error scanning hooks time series point: %w", err)
+		}
+		points = append(points, pt)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return points, nil
 }
 
 // ListHooksTracesParams contains the parameters for listing hook traces.
