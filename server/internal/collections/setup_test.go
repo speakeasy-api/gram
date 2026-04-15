@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/collections"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
@@ -75,7 +76,7 @@ func newTestCollectionsService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{})
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
 
 	svc := collections.NewService(logger, tracerProvider, conn, sessionManager, accessManager, testenv.DefaultSiteURL(t))
 	toolsetsSvc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, accessManager)
