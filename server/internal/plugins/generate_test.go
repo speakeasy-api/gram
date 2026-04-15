@@ -40,6 +40,7 @@ func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 
 	expectedPaths := []string{
 		".claude-plugin/marketplace.json",
+		".cursor-plugin/marketplace.json",
 		"engineering-tools/.claude-plugin/plugin.json",
 		"engineering-tools/.mcp.json",
 		"engineering-tools-cursor/.cursor-plugin/plugin.json",
@@ -121,13 +122,22 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var manifest marketplaceManifest
-	err = json.Unmarshal(files[".claude-plugin/marketplace.json"], &manifest)
+	var claudeManifest marketplaceManifest
+	err = json.Unmarshal(files[".claude-plugin/marketplace.json"], &claudeManifest)
 	require.NoError(t, err)
 
-	require.Equal(t, "Acme-gram", manifest.Name)
-	require.Equal(t, "Acme", manifest.Owner.Name)
-	require.Len(t, manifest.Plugins, 2)
-	require.Equal(t, "./a", manifest.Plugins[0].Source)
-	require.Equal(t, "./b", manifest.Plugins[1].Source)
+	require.Equal(t, "Acme-gram", claudeManifest.Name)
+	require.Equal(t, "Acme", claudeManifest.Owner.Name)
+	require.Len(t, claudeManifest.Plugins, 2)
+	require.Equal(t, "./a", claudeManifest.Plugins[0].Source)
+	require.Equal(t, "./b", claudeManifest.Plugins[1].Source)
+
+	var cursorManifest marketplaceManifest
+	err = json.Unmarshal(files[".cursor-plugin/marketplace.json"], &cursorManifest)
+	require.NoError(t, err)
+
+	require.Equal(t, "Acme-gram", cursorManifest.Name)
+	require.Len(t, cursorManifest.Plugins, 2)
+	require.Equal(t, "./a-cursor", cursorManifest.Plugins[0].Source)
+	require.Equal(t, "./b-cursor", cursorManifest.Plugins[1].Source)
 }

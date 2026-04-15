@@ -35,7 +35,8 @@ type GenerateConfig struct {
 func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 
-	var marketplacePlugins []marketplaceEntry
+	var claudePlugins []marketplaceEntry
+	var cursorPlugins []marketplaceEntry
 	for _, p := range plugins {
 		if err := generateClaudePlugin(files, p, cfg); err != nil {
 			return nil, fmt.Errorf("generate claude plugin %s: %w", p.Slug, err)
@@ -43,22 +44,39 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		if err := generateCursorPlugin(files, p, cfg); err != nil {
 			return nil, fmt.Errorf("generate cursor plugin %s: %w", p.Slug, err)
 		}
-		marketplacePlugins = append(marketplacePlugins, marketplaceEntry{
+		claudePlugins = append(claudePlugins, marketplaceEntry{
 			Name:        p.Slug,
 			Source:      "./" + p.Slug,
 			Description: p.Description,
 		})
+		cursorPlugins = append(cursorPlugins, marketplaceEntry{
+			Name:        p.Slug + "-cursor",
+			Source:      "./" + p.Slug + "-cursor",
+			Description: p.Description,
+		})
 	}
 
-	manifest, err := marshalJSON(marketplaceManifest{
+	owner := marketplaceOwner{Name: cfg.OrgName, Email: cfg.OrgEmail}
+
+	claudeManifest, err := marshalJSON(marketplaceManifest{
 		Name:    cfg.OrgName + "-gram",
-		Owner:   marketplaceOwner{Name: cfg.OrgName, Email: cfg.OrgEmail},
-		Plugins: marketplacePlugins,
+		Owner:   owner,
+		Plugins: claudePlugins,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("marshal marketplace.json: %w", err)
+		return nil, fmt.Errorf("marshal claude marketplace.json: %w", err)
 	}
-	files[".claude-plugin/marketplace.json"] = manifest
+	files[".claude-plugin/marketplace.json"] = claudeManifest
+
+	cursorManifest, err := marshalJSON(marketplaceManifest{
+		Name:    cfg.OrgName + "-gram",
+		Owner:   owner,
+		Plugins: cursorPlugins,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal cursor marketplace.json: %w", err)
+	}
+	files[".cursor-plugin/marketplace.json"] = cursorManifest
 
 	return files, nil
 }
