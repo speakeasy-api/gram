@@ -94,7 +94,7 @@ WHERE id = @id
 -- name: AddPluginAssignment :one
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
 VALUES (@plugin_id, @organization_id, @principal_urn)
-ON CONFLICT (plugin_id, organization_id, principal_urn) DO UPDATE
+ON CONFLICT (plugin_id, principal_urn) DO UPDATE
   SET principal_urn = EXCLUDED.principal_urn
 RETURNING *;
 
