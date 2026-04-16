@@ -9842,6 +9842,974 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdatePackage
+    /rpc/plugins.addPluginServer:
+        post:
+            description: Add an MCP server to a plugin.
+            operationId: addPluginServer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AddPluginServerForm'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PluginServer'
+                    description: Created response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: addPluginServer plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: addPluginServer
+            x-speakeasy-react-hook:
+                name: AddPluginServer
+    /rpc/plugins.createPlugin:
+        post:
+            description: Create a new plugin.
+            operationId: createPlugin
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreatePluginForm'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Plugin'
+                    description: Created response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createPlugin plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: createPlugin
+            x-speakeasy-react-hook:
+                name: CreatePlugin
+    /rpc/plugins.deletePlugin:
+        delete:
+            description: Delete a plugin.
+            operationId: deletePlugin
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: deletePlugin plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: deletePlugin
+            x-speakeasy-react-hook:
+                name: DeletePlugin
+    /rpc/plugins.downloadPluginPackage:
+        get:
+            description: Download a ZIP of a single plugin package for direct installation.
+            operationId: downloadPluginPackage
+            parameters:
+                - allowEmptyValue: true
+                  description: The plugin to download.
+                  in: query
+                  name: plugin_id
+                  required: true
+                  schema:
+                    description: The plugin to download.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Target platform to download plugins for.
+                  in: query
+                  name: platform
+                  required: true
+                  schema:
+                    description: Target platform to download plugins for.
+                    enum:
+                        - claude
+                        - cursor
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                format: binary
+                                type: string
+                    description: OK response.
+                    headers:
+                        Content-Disposition:
+                            schema:
+                                type: string
+                        Content-Type:
+                            schema:
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: downloadPluginPackage plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: downloadPluginPackage
+    /rpc/plugins.getPlugin:
+        get:
+            description: Get a plugin with its servers and assignments.
+            operationId: getPlugin
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Plugin'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getPlugin plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: getPlugin
+            x-speakeasy-react-hook:
+                name: Plugin
+    /rpc/plugins.listPlugins:
+        get:
+            description: List all plugins for the current project.
+            operationId: listPlugins
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListPluginsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listPlugins plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: listPlugins
+            x-speakeasy-react-hook:
+                name: Plugins
+    /rpc/plugins.removePluginServer:
+        delete:
+            description: Remove a server from a plugin.
+            operationId: removePluginServer
+            parameters:
+                - allowEmptyValue: true
+                  description: The plugin server ID to remove.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The plugin server ID to remove.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: plugin_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: removePluginServer plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: removePluginServer
+            x-speakeasy-react-hook:
+                name: RemovePluginServer
+    /rpc/plugins.setPluginAssignments:
+        put:
+            description: Replace all assignments for a plugin with the given list of principal URNs.
+            operationId: setPluginAssignments
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetPluginAssignmentsForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SetPluginAssignmentsResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: setPluginAssignments plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: setPluginAssignments
+            x-speakeasy-react-hook:
+                name: SetPluginAssignments
+    /rpc/plugins.updatePlugin:
+        put:
+            description: Update plugin metadata.
+            operationId: updatePlugin
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdatePluginForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Plugin'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updatePlugin plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: updatePlugin
+            x-speakeasy-react-hook:
+                name: UpdatePlugin
+    /rpc/plugins.updatePluginServer:
+        put:
+            description: Update a server's configuration within a plugin.
+            operationId: updatePluginServer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdatePluginServerForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PluginServer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updatePluginServer plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: updatePluginServer
+            x-speakeasy-react-hook:
+                name: UpdatePluginServer
     /rpc/productFeatures.get:
         get:
             description: Get the current state of all product feature flags.
@@ -16535,6 +17503,33 @@ components:
                     description: The version of the package to add. If omitted, the latest version will be used.
             required:
                 - name
+        AddPluginServerForm:
+            type: object
+            properties:
+                display_name:
+                    type: string
+                    description: Display name for the server.
+                plugin_id:
+                    type: string
+                    format: uuid
+                policy:
+                    type: string
+                    default: required
+                    enum:
+                        - required
+                        - optional
+                sort_order:
+                    type: integer
+                    default: 0
+                    format: int32
+                toolset_id:
+                    type: string
+                    description: Gram toolset ID for the MCP server.
+                    format: uuid
+            required:
+                - plugin_id
+                - toolset_id
+                - display_name
         AllowedOrigin:
             type: object
             properties:
@@ -17423,6 +18418,20 @@ components:
                     $ref: '#/components/schemas/Package'
             required:
                 - package
+        CreatePluginForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Optional description.
+                name:
+                    type: string
+                    description: Display name for the plugin.
+                slug:
+                    type: string
+                    description: Optional URL-safe identifier. Auto-generated from name if omitted.
+            required:
+                - name
         CreateProjectForm:
             type: object
             properties:
@@ -20100,6 +21109,16 @@ components:
                     description: The list of packages
             required:
                 - packages
+        ListPluginsResult:
+            type: object
+            properties:
+                plugins:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Plugin'
+                    description: The plugins in the organization.
+            required:
+                - plugins
         ListProjectsPayload:
             type: object
             properties:
@@ -21311,6 +22330,103 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
+        Plugin:
+            type: object
+            properties:
+                assignment_count:
+                    type: integer
+                    description: Number of role/user assignments.
+                    format: int64
+                assignments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PluginAssignment'
+                    description: Role/user assignments.
+                created_at:
+                    type: string
+                    format: date-time
+                description:
+                    type: string
+                    description: Optional description.
+                id:
+                    type: string
+                    description: Unique plugin identifier.
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name.
+                server_count:
+                    type: integer
+                    description: Number of active servers in this plugin.
+                    format: int64
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PluginServer'
+                    description: Servers included in this plugin.
+                slug:
+                    type: string
+                    description: URL-safe identifier, unique per org.
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - name
+                - slug
+                - created_at
+                - updated_at
+        PluginAssignment:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                    description: Unique assignment identifier.
+                    format: uuid
+                principal_urn:
+                    type: string
+                    description: Principal URN (e.g. role:engineering, user:id, or *).
+            required:
+                - id
+                - principal_urn
+                - created_at
+        PluginServer:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                display_name:
+                    type: string
+                    description: Display name shown in generated plugin config.
+                id:
+                    type: string
+                    description: Unique plugin server identifier.
+                    format: uuid
+                policy:
+                    type: string
+                    description: Whether this server is required or optional.
+                    enum:
+                        - required
+                        - optional
+                sort_order:
+                    type: integer
+                    description: Ordering within the plugin.
+                    format: int32
+                toolset_id:
+                    type: string
+                    description: Gram toolset ID.
+                    format: uuid
+            required:
+                - id
+                - toolset_id
+                - display_name
+                - policy
+                - sort_order
+                - created_at
         Project:
             type: object
             properties:
@@ -22516,6 +23632,30 @@ components:
             required:
                 - organization_id
                 - whitelisted
+        SetPluginAssignmentsForm:
+            type: object
+            properties:
+                plugin_id:
+                    type: string
+                    format: uuid
+                principal_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: List of principal URNs to assign.
+            required:
+                - plugin_id
+                - principal_urns
+        SetPluginAssignmentsResponseBody:
+            type: object
+            properties:
+                assignments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PluginAssignment'
+                    description: The updated assignments.
+            required:
+                - assignments
         SetProductFeatureRequestBody:
             type: object
             properties:
@@ -23608,6 +24748,50 @@ components:
                     $ref: '#/components/schemas/Package'
             required:
                 - package
+        UpdatePluginForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Updated description.
+                id:
+                    type: string
+                    format: uuid
+                name:
+                    type: string
+                    description: Updated display name.
+                slug:
+                    type: string
+                    description: Updated slug.
+            required:
+                - id
+                - name
+                - slug
+        UpdatePluginServerForm:
+            type: object
+            properties:
+                display_name:
+                    type: string
+                id:
+                    type: string
+                    format: uuid
+                plugin_id:
+                    type: string
+                    format: uuid
+                policy:
+                    type: string
+                    default: required
+                    enum:
+                        - required
+                        - optional
+                sort_order:
+                    type: integer
+                    default: 0
+                    format: int32
+            required:
+                - id
+                - plugin_id
+                - display_name
         UpdatePromptTemplateForm:
             type: object
             properties:
@@ -24290,6 +25474,8 @@ tags:
       description: Organization membership, invitations, and directory.
     - name: packages
       description: Manages packages in Gram.
+    - name: plugins
+      description: Manage distributable plugin bundles of MCP servers and hooks.
     - name: features
       description: Manage product level feature controls.
     - name: projects

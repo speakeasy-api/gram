@@ -294,6 +294,19 @@ run();
 * [publish](docs/sdks/packages/README.md#publish) - publish packages
 * [update](docs/sdks/packages/README.md#update) - updatePackage packages
 
+### [Plugins](docs/sdks/plugins/README.md)
+
+* [addPluginServer](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
+* [createPlugin](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
+* [deletePlugin](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
+* [downloadPluginPackage](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
+* [getPlugin](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
+* [listPlugins](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
+* [removePluginServer](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
+* [setPluginAssignments](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
+* [updatePlugin](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
+* [updatePluginServer](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
+
 ### [Projects](docs/sdks/projects/README.md)
 
 * [create](docs/sdks/projects/README.md#create) - createProject projects
@@ -507,6 +520,16 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`packagesListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`packagesPublish`](docs/sdks/packages/README.md#publish) - publish packages
 - [`packagesUpdate`](docs/sdks/packages/README.md#update) - updatePackage packages
+- [`pluginsAddPluginServer`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
+- [`pluginsCreatePlugin`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
+- [`pluginsDeletePlugin`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
+- [`pluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
+- [`pluginsGetPlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
+- [`pluginsListPlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
+- [`pluginsRemovePluginServer`](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
+- [`pluginsSetPluginAssignments`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
+- [`pluginsUpdatePlugin`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
+- [`pluginsUpdatePluginServer`](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
 - [`projectsDeleteById`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
@@ -599,6 +622,7 @@ To learn about this feature and how to get started, check
 - [`useActiveDeployment`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`useAddOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
+- [`useAddPluginServerMutation`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
 - [`useChatDeleteMutation`](docs/sdks/chat/README.md#delete) - deleteChat chat
@@ -621,6 +645,7 @@ To learn about this feature and how to get started, check
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
+- [`useCreatePluginMutation`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
 - [`useCreateRoleMutation`](docs/sdks/access/README.md#createrole) - createRole access
 - [`useCreateSignedChatAttachmentURLMutation`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
@@ -631,6 +656,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
+- [`useDeletePluginMutation`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 - [`useDeleteProjectMutation`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`useDeleteRoleMutation`](docs/sdks/access/README.md#deleterole) - deleteRole access
 - [`useDeleteSlackAppMutation`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
@@ -705,6 +731,9 @@ To learn about this feature and how to get started, check
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
+- [`usePlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
+- [`usePlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
+- [`usePluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
@@ -714,6 +743,7 @@ To learn about this feature and how to get started, check
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
 - [`useRemoveOAuthServerMutation`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
 - [`useRemoveOrganizationUserMutation`](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
+- [`useRemovePluginServerMutation`](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useResumeTriggerMutation`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
@@ -732,6 +762,7 @@ To learn about this feature and how to get started, check
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
+- [`useSetPluginAssignmentsMutation`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
 - [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
@@ -747,6 +778,8 @@ To learn about this feature and how to get started, check
 - [`useUpdateMemberRoleMutation`](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
 - [`useUpdateOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
+- [`useUpdatePluginMutation`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
+- [`useUpdatePluginServerMutation`](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
 - [`useUpdateRoleMutation`](docs/sdks/access/README.md#updaterole) - updateRole access
 - [`useUpdateSlackAppMutation`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
