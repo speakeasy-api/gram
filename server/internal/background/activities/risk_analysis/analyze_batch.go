@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -48,7 +49,10 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
 
+	start := time.Now()
+
 	// Fetch message content for the batch.
+	fetchStart := time.Now()
 	messages, err := a.repo.GetMessageContentBatch(ctx, repo.GetMessageContentBatchParams{
 		Ids:       args.MessageIDs,
 		ProjectID: uuid.NullUUID{UUID: args.ProjectID, Valid: true},
@@ -56,10 +60,12 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 	if err != nil {
 		return nil, fmt.Errorf("get message content batch: %w", err)
 	}
+	fetchDuration := time.Since(fetchStart)
 
 	var rows []repo.InsertRiskResultsParams
 	findingsCount := 0
 
+	scanStart := time.Now()
 	for i, msg := range messages {
 		// Heartbeat every 50 messages so Temporal knows we're alive.
 		if i%50 == 0 {
@@ -116,8 +122,10 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 			rows = append(rows, emptyResultRow(args, msg.ID))
 		}
 	}
+	scanDuration := time.Since(scanStart)
 
 	// Atomically delete old results (any version) and insert new ones.
+	writeStart := time.Now()
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
@@ -142,6 +150,17 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit results: %w", err)
 	}
+	writeDuration := time.Since(writeStart)
+
+	a.logger.InfoContext(ctx, "analyzed message batch",
+		slog.Int("messages", len(messages)),
+		slog.Int("findings", findingsCount),
+		slog.Int("rows_written", len(rows)),
+		slog.Duration("fetch_content", fetchDuration),
+		slog.Duration("scan", scanDuration),
+		slog.Duration("db_write", writeDuration),
+		slog.Duration("total", time.Since(start)),
+	)
 
 	return &AnalyzeBatchResult{
 		Processed: len(messages),

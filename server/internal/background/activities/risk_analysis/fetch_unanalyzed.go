@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -38,6 +39,8 @@ type FetchUnanalyzedResult struct {
 }
 
 func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*FetchUnanalyzedResult, error) {
+	start := time.Now()
+
 	// Always read the current policy to get the latest version and sources.
 	policy, err := a.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
 		ID:        args.RiskPolicyID,
@@ -64,6 +67,7 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*Fe
 		}, nil
 	}
 
+	queryStart := time.Now()
 	ids, err := a.repo.FetchUnanalyzedMessageIDs(ctx, repo.FetchUnanalyzedMessageIDsParams{
 		ProjectID:     uuid.NullUUID{UUID: args.ProjectID, Valid: true},
 		RiskPolicyID:  args.RiskPolicyID,
@@ -73,6 +77,13 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*Fe
 	if err != nil {
 		return nil, fmt.Errorf("fetch unanalyzed message IDs: %w", err)
 	}
+
+	a.logger.InfoContext(ctx, "fetched unanalyzed message IDs",
+		slog.Int("count", len(ids)),
+		slog.Int64("policy_version", policy.Version),
+		slog.Duration("query_duration", time.Since(queryStart)),
+		slog.Duration("total_duration", time.Since(start)),
+	)
 
 	return &FetchUnanalyzedResult{
 		MessageIDs:    ids,
