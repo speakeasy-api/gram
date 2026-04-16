@@ -6,12 +6,26 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
+export type CreateRiskPolicySecurityOption1 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type CreateRiskPolicySecurityOption2 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
 export type CreateRiskPolicySecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: CreateRiskPolicySecurityOption1 | undefined;
+  option2?: CreateRiskPolicySecurityOption2 | undefined;
 };
 
 export type CreateRiskPolicyRequest = {
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -24,9 +38,75 @@ export type CreateRiskPolicyRequest = {
 };
 
 /** @internal */
+export type CreateRiskPolicySecurityOption1$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const CreateRiskPolicySecurityOption1$outboundSchema: z.ZodMiniType<
+  CreateRiskPolicySecurityOption1$Outbound,
+  CreateRiskPolicySecurityOption1
+> = z.pipe(
+  z.object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
+  }),
+);
+
+export function createRiskPolicySecurityOption1ToJSON(
+  createRiskPolicySecurityOption1: CreateRiskPolicySecurityOption1,
+): string {
+  return JSON.stringify(
+    CreateRiskPolicySecurityOption1$outboundSchema.parse(
+      createRiskPolicySecurityOption1,
+    ),
+  );
+}
+
+/** @internal */
+export type CreateRiskPolicySecurityOption2$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const CreateRiskPolicySecurityOption2$outboundSchema: z.ZodMiniType<
+  CreateRiskPolicySecurityOption2$Outbound,
+  CreateRiskPolicySecurityOption2
+> = z.pipe(
+  z.object({
+    projectSlugHeaderGramProject: z.string(),
+    sessionHeaderGramSession: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
+    });
+  }),
+);
+
+export function createRiskPolicySecurityOption2ToJSON(
+  createRiskPolicySecurityOption2: CreateRiskPolicySecurityOption2,
+): string {
+  return JSON.stringify(
+    CreateRiskPolicySecurityOption2$outboundSchema.parse(
+      createRiskPolicySecurityOption2,
+    ),
+  );
+}
+
+/** @internal */
 export type CreateRiskPolicySecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: CreateRiskPolicySecurityOption1$Outbound | undefined;
+  Option2?: CreateRiskPolicySecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -35,13 +115,17 @@ export const CreateRiskPolicySecurity$outboundSchema: z.ZodMiniType<
   CreateRiskPolicySecurity
 > = z.pipe(
   z.object({
-    projectSlugHeaderGramProject: z.optional(z.string()),
-    sessionHeaderGramSession: z.optional(z.string()),
+    option1: z.optional(
+      z.lazy(() => CreateRiskPolicySecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => CreateRiskPolicySecurityOption2$outboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-      sessionHeaderGramSession: "session_header_Gram-Session",
+      option1: "Option1",
+      option2: "Option2",
     });
   }),
 );
@@ -56,6 +140,7 @@ export function createRiskPolicySecurityToJSON(
 
 /** @internal */
 export type CreateRiskPolicyRequest$Outbound = {
+  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   CreateRiskPolicyRequestBody: components.CreateRiskPolicyRequestBody$Outbound;
@@ -67,6 +152,7 @@ export const CreateRiskPolicyRequest$outboundSchema: z.ZodMiniType<
   CreateRiskPolicyRequest
 > = z.pipe(
   z.object({
+    gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     createRiskPolicyRequestBody:
@@ -74,6 +160,7 @@ export const CreateRiskPolicyRequest$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
       createRiskPolicyRequestBody: "CreateRiskPolicyRequestBody",

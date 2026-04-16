@@ -11995,6 +11995,13 @@ paths:
       operationId: createRiskPolicy
       parameters:
         - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
@@ -12076,6 +12083,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
         - {}
@@ -12096,6 +12105,13 @@ paths:
           schema:
             description: The policy ID.
             format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -12169,6 +12185,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
         - {}
@@ -12189,6 +12207,13 @@ paths:
           schema:
             description: The policy ID.
             format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -12266,6 +12291,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
         - {}
@@ -12278,6 +12305,13 @@ paths:
       description: List all risk analysis policies for the current project.
       operationId: listRiskPolicies
       parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -12354,6 +12388,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
         - {}
@@ -12376,6 +12412,13 @@ paths:
           schema:
             description: The policy ID.
             format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -12453,6 +12496,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
         - {}
@@ -12465,6 +12510,13 @@ paths:
       description: Manually trigger risk analysis for a policy, starting or signaling the drain workflow.
       operationId: triggerRiskAnalysis
       parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -12543,6 +12595,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
         - {}
@@ -12555,6 +12609,13 @@ paths:
       description: Update a risk analysis policy.
       operationId: updateRiskPolicy
       parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -12637,6 +12698,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
         - {}
@@ -12666,6 +12729,13 @@ paths:
             description: Maximum number of results to return.
             format: int64
             type: integer
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -12742,6 +12812,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
         - {}

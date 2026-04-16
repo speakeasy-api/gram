@@ -45,6 +45,7 @@ export function buildRiskGetPolicyQuery(
   return {
     queryKey: queryKeyRiskGetPolicy({
       id: request.id,
+      gramKey: request.gramKey,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
     }),
@@ -75,6 +76,7 @@ export function buildRiskGetPolicyQuery(
 export function queryKeyRiskGetPolicy(
   parameters: {
     id: string;
+    gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

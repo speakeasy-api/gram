@@ -5,9 +5,19 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
+export type GetRiskPolicySecurityOption1 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
+export type GetRiskPolicySecurityOption2 = {
+  projectSlugHeaderGramProject: string;
+  sessionHeaderGramSession: string;
+};
+
 export type GetRiskPolicySecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
-  sessionHeaderGramSession?: string | undefined;
+  option1?: GetRiskPolicySecurityOption1 | undefined;
+  option2?: GetRiskPolicySecurityOption2 | undefined;
 };
 
 export type GetRiskPolicyRequest = {
@@ -15,6 +25,10 @@ export type GetRiskPolicyRequest = {
    * The policy ID.
    */
   id: string;
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -26,9 +40,75 @@ export type GetRiskPolicyRequest = {
 };
 
 /** @internal */
+export type GetRiskPolicySecurityOption1$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const GetRiskPolicySecurityOption1$outboundSchema: z.ZodMiniType<
+  GetRiskPolicySecurityOption1$Outbound,
+  GetRiskPolicySecurityOption1
+> = z.pipe(
+  z.object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
+  }),
+);
+
+export function getRiskPolicySecurityOption1ToJSON(
+  getRiskPolicySecurityOption1: GetRiskPolicySecurityOption1,
+): string {
+  return JSON.stringify(
+    GetRiskPolicySecurityOption1$outboundSchema.parse(
+      getRiskPolicySecurityOption1,
+    ),
+  );
+}
+
+/** @internal */
+export type GetRiskPolicySecurityOption2$Outbound = {
+  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
+};
+
+/** @internal */
+export const GetRiskPolicySecurityOption2$outboundSchema: z.ZodMiniType<
+  GetRiskPolicySecurityOption2$Outbound,
+  GetRiskPolicySecurityOption2
+> = z.pipe(
+  z.object({
+    projectSlugHeaderGramProject: z.string(),
+    sessionHeaderGramSession: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
+    });
+  }),
+);
+
+export function getRiskPolicySecurityOption2ToJSON(
+  getRiskPolicySecurityOption2: GetRiskPolicySecurityOption2,
+): string {
+  return JSON.stringify(
+    GetRiskPolicySecurityOption2$outboundSchema.parse(
+      getRiskPolicySecurityOption2,
+    ),
+  );
+}
+
+/** @internal */
 export type GetRiskPolicySecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
-  "session_header_Gram-Session"?: string | undefined;
+  Option1?: GetRiskPolicySecurityOption1$Outbound | undefined;
+  Option2?: GetRiskPolicySecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
@@ -37,13 +117,17 @@ export const GetRiskPolicySecurity$outboundSchema: z.ZodMiniType<
   GetRiskPolicySecurity
 > = z.pipe(
   z.object({
-    projectSlugHeaderGramProject: z.optional(z.string()),
-    sessionHeaderGramSession: z.optional(z.string()),
+    option1: z.optional(
+      z.lazy(() => GetRiskPolicySecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => GetRiskPolicySecurityOption2$outboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-      sessionHeaderGramSession: "session_header_Gram-Session",
+      option1: "Option1",
+      option2: "Option2",
     });
   }),
 );
@@ -59,6 +143,7 @@ export function getRiskPolicySecurityToJSON(
 /** @internal */
 export type GetRiskPolicyRequest$Outbound = {
   id: string;
+  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
@@ -70,11 +155,13 @@ export const GetRiskPolicyRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     id: z.string(),
+    gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
     });

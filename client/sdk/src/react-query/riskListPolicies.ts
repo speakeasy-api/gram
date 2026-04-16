@@ -111,6 +111,7 @@ export function setRiskListPoliciesData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -126,6 +127,7 @@ export function invalidateRiskListPolicies(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]

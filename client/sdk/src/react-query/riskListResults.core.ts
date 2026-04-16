@@ -46,6 +46,7 @@ export function buildRiskListResultsQuery(
     queryKey: queryKeyRiskListResults({
       policyId: request?.policyId,
       limit: request?.limit,
+      gramKey: request?.gramKey,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
     }),
@@ -77,6 +78,7 @@ export function queryKeyRiskListResults(
   parameters: {
     policyId?: string | undefined;
     limit?: number | undefined;
+    gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

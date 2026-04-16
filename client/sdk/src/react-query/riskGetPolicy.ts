@@ -106,6 +106,7 @@ export function setRiskGetPolicyData(
   queryKeyBase: [
     parameters: {
       id: string;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -122,6 +123,7 @@ export function invalidateRiskGetPolicy(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       id: string;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]

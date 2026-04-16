@@ -110,6 +110,7 @@ export function setRiskListResultsData(
     parameters: {
       policyId?: string | undefined;
       limit?: number | undefined;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -127,6 +128,7 @@ export function invalidateRiskListResults(
     [parameters: {
       policyId?: string | undefined;
       limit?: number | undefined;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]
