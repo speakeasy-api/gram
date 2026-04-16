@@ -461,7 +461,11 @@ function AttributesSection({
           }
 
           return (
-            <DropdownMenu key={entry.key}>
+            // `modal={false}` is required because this menu lives inside a
+            // Sheet (Radix Dialog). Modal-on-modal stacking swallows pointer
+            // events, so outside-click-to-close never fires and every row's
+            // menu stays open. Non-modal uses pointer-down-outside instead.
+            <DropdownMenu key={entry.key} modal={false}>
               <DropdownMenuTrigger asChild>
                 <button
                   className="hover:bg-muted/50 flex w-full cursor-pointer flex-col gap-1 px-4 py-2.5 text-left transition-colors"
