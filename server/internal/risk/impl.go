@@ -91,10 +91,8 @@ func (s *Service) OnMessagesStored(ctx context.Context, projectID uuid.UUID) {
 
 	for _, p := range policies {
 		if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-			ProjectID:     p.ProjectID,
-			RiskPolicyID:  p.ID,
-			PolicyVersion: p.Version,
-			Sources:       p.Sources,
+			ProjectID:    p.ProjectID,
+			RiskPolicyID: p.ID,
 		}); err != nil {
 			s.logger.ErrorContext(ctx, "signal risk drain workflow", attr.SlogError(err))
 		}
@@ -131,10 +129,8 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	// Trigger the drain workflow for the new policy.
 	if enabled {
 		_ = s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-			ProjectID:     row.ProjectID,
-			RiskPolicyID:  row.ID,
-			PolicyVersion: row.Version,
-			Sources:       row.Sources,
+			ProjectID:    row.ProjectID,
+			RiskPolicyID: row.ID,
 		})
 	}
 
@@ -221,10 +217,8 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	// Signal the drain workflow with the new version.
 	if enabled {
 		_ = s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-			ProjectID:     row.ProjectID,
-			RiskPolicyID:  row.ID,
-			PolicyVersion: row.Version,
-			Sources:       row.Sources,
+			ProjectID:    row.ProjectID,
+			RiskPolicyID: row.ID,
 		})
 	}
 
@@ -344,18 +338,16 @@ func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskP
 	}
 
 	analyzedMessages, err := s.repo.CountAnalyzedMessages(ctx, repo.CountAnalyzedMessagesParams{
-		ProjectID:     *authCtx.ProjectID,
-		RiskPolicyID:  id,
-		PolicyVersion: policy.Version,
+		ProjectID:    *authCtx.ProjectID,
+		RiskPolicyID: id,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count analyzed messages").Log(ctx, s.logger)
 	}
 
 	findingsCount, err := s.repo.CountFindingsByPolicy(ctx, repo.CountFindingsByPolicyParams{
-		ProjectID:     *authCtx.ProjectID,
-		RiskPolicyID:  id,
-		PolicyVersion: policy.Version,
+		ProjectID:    *authCtx.ProjectID,
+		RiskPolicyID: id,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count findings").Log(ctx, s.logger)
@@ -402,10 +394,8 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 	}
 
 	if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-		ProjectID:     policy.ProjectID,
-		RiskPolicyID:  policy.ID,
-		PolicyVersion: policy.Version,
-		Sources:       policy.Sources,
+		ProjectID:    policy.ProjectID,
+		RiskPolicyID: policy.ID,
 	}); err != nil {
 		return fmt.Errorf("signal risk analysis workflow: %w", err)
 	}
@@ -421,9 +411,8 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	}
 
 	pendingMessages, err := s.repo.CountUnanalyzedMessages(ctx, repo.CountUnanalyzedMessagesParams{
-		ProjectID:     uuid.NullUUID{UUID: row.ProjectID, Valid: true},
-		RiskPolicyID:  row.ID,
-		PolicyVersion: row.Version,
+		ProjectID:    uuid.NullUUID{UUID: row.ProjectID, Valid: true},
+		RiskPolicyID: row.ID,
 	})
 	if err != nil {
 		pendingMessages = 0

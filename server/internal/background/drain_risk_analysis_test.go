@@ -67,10 +67,8 @@ func TestDrainWorkflow_DrainsAndSleeps(t *testing.T) {
 	}, 0)
 
 	env.ExecuteWorkflow(DrainRiskAnalysisWorkflow, DrainRiskAnalysisParams{
-		ProjectID:     projectID,
-		RiskPolicyID:  policyID,
-		PolicyVersion: 1,
-		Sources:       []string{"gitleaks"},
+		ProjectID:    projectID,
+		RiskPolicyID: policyID,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -109,10 +107,8 @@ func TestDrainWorkflow_EmptyDrainWaitsForSignal(t *testing.T) {
 	}, 0)
 
 	env.ExecuteWorkflow(DrainRiskAnalysisWorkflow, DrainRiskAnalysisParams{
-		ProjectID:     uuid.New(),
-		RiskPolicyID:  uuid.New(),
-		PolicyVersion: 1,
-		Sources:       []string{"gitleaks"},
+		ProjectID:    uuid.New(),
+		RiskPolicyID: uuid.New(),
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -155,10 +151,8 @@ func TestDrainWorkflow_ActivityFailureContinues(t *testing.T) {
 	}, 0)
 
 	env.ExecuteWorkflow(DrainRiskAnalysisWorkflow, DrainRiskAnalysisParams{
-		ProjectID:     uuid.New(),
-		RiskPolicyID:  uuid.New(),
-		PolicyVersion: 1,
-		Sources:       []string{"gitleaks"},
+		ProjectID:    uuid.New(),
+		RiskPolicyID: uuid.New(),
 	})
 
 	require.True(t, env.IsWorkflowCompleted())

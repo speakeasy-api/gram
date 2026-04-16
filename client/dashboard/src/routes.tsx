@@ -340,7 +340,7 @@ const ROUTE_STRUCTURE = {
     component: ObservabilityOverview,
   },
   dlp: {
-    title: "Overview",
+    title: "Risk Overview",
     url: "dlp",
     icon: "shield",
     component: DlpOverview,

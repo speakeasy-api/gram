@@ -32,11 +32,11 @@ const (
 )
 
 // DrainRiskAnalysisParams identifies the policy this workflow drains.
+// Version and sources are read from the DB on each drain cycle so that
+// policy updates are picked up without restarting the workflow.
 type DrainRiskAnalysisParams struct {
-	ProjectID     uuid.UUID
-	RiskPolicyID  uuid.UUID
-	PolicyVersion int64
-	Sources       []string
+	ProjectID    uuid.UUID
+	RiskPolicyID uuid.UUID
 }
 
 // DrainRiskAnalysisWorkflow is a perpetual "one-man queue" for a single risk
@@ -62,12 +62,13 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 
 	// ── Drain loop ──────────────────────────────────────────────────────
 	for {
+		// Fetch reads the current policy version from the DB each time,
+		// so version bumps (policy updates) are picked up automatically.
 		var fetchResult risk_analysis.FetchUnanalyzedResult
 		err := workflow.ExecuteActivity(ctx, a.FetchUnanalyzedMessages, risk_analysis.FetchUnanalyzedArgs{
-			ProjectID:     params.ProjectID,
-			RiskPolicyID:  params.RiskPolicyID,
-			PolicyVersion: params.PolicyVersion,
-			BatchLimit:    drainFetchLimit,
+			ProjectID:    params.ProjectID,
+			RiskPolicyID: params.RiskPolicyID,
+			BatchLimit:   drainFetchLimit,
 		}).Get(ctx, &fetchResult)
 		if err != nil {
 			logger.Error("fetch unanalyzed message IDs", "error", err.Error())
@@ -90,12 +91,13 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 				pending = pending[1:]
 			}
 
+			// Use version and sources from the fetch result (read from DB).
 			f := workflow.ExecuteActivity(ctx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
 				ProjectID:     params.ProjectID,
 				RiskPolicyID:  params.RiskPolicyID,
-				PolicyVersion: params.PolicyVersion,
+				PolicyVersion: fetchResult.PolicyVersion,
 				MessageIDs:    batch,
-				Sources:       params.Sources,
+				Sources:       fetchResult.Sources,
 			})
 			pending = append(pending, f)
 		}

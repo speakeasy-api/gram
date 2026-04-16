@@ -12,7 +12,7 @@ import (
 )
 
 // FetchUnanalyzed retrieves a batch of chat message IDs that have not yet been
-// analyzed for a given risk policy at the specified version.
+// analyzed for a given risk policy at its current version.
 type FetchUnanalyzed struct {
 	logger *slog.Logger
 	repo   *repo.Queries
@@ -26,26 +26,48 @@ func NewFetchUnanalyzed(logger *slog.Logger, db *pgxpool.Pool) *FetchUnanalyzed 
 }
 
 type FetchUnanalyzedArgs struct {
-	ProjectID     uuid.UUID
-	RiskPolicyID  uuid.UUID
-	PolicyVersion int64
-	BatchLimit    int32
+	ProjectID    uuid.UUID
+	RiskPolicyID uuid.UUID
+	BatchLimit   int32
 }
 
 type FetchUnanalyzedResult struct {
-	MessageIDs []uuid.UUID
+	MessageIDs    []uuid.UUID
+	PolicyVersion int64
+	Sources       []string
 }
 
 func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*FetchUnanalyzedResult, error) {
+	// Always read the current policy to get the latest version and sources.
+	policy, err := a.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        args.RiskPolicyID,
+		ProjectID: args.ProjectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get risk policy: %w", err)
+	}
+
+	if !policy.Enabled {
+		return &FetchUnanalyzedResult{
+			MessageIDs:    nil,
+			PolicyVersion: policy.Version,
+			Sources:       policy.Sources,
+		}, nil
+	}
+
 	ids, err := a.repo.FetchUnanalyzedMessageIDs(ctx, repo.FetchUnanalyzedMessageIDsParams{
 		ProjectID:     uuid.NullUUID{UUID: args.ProjectID, Valid: true},
 		RiskPolicyID:  args.RiskPolicyID,
-		PolicyVersion: args.PolicyVersion,
+		PolicyVersion: policy.Version,
 		BatchLimit:    args.BatchLimit,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("fetch unanalyzed message IDs: %w", err)
 	}
 
-	return &FetchUnanalyzedResult{MessageIDs: ids}, nil
+	return &FetchUnanalyzedResult{
+		MessageIDs:    ids,
+		PolicyVersion: policy.Version,
+		Sources:       policy.Sources,
+	}, nil
 }
