@@ -252,6 +252,21 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 		return nil, oops.E(oops.CodeUnsupportedMedia, nil, "unsupported content type: %s", mediaType)
 	}
 
+	if len(payload.Name) > maxSkillNameLen {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skill name exceeds %d characters", maxSkillNameLen)
+	}
+
+	skillSlug := conv.ToSlug(payload.Name)
+	if skillSlug == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skill name must include at least one alphanumeric character")
+	}
+	if len(skillSlug) > maxSkillSlugLen {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skill slug exceeds %d characters", maxSkillSlugLen)
+	}
+	if payload.AssetFormat != skillAssetFormatZip {
+		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported asset format: %s", payload.AssetFormat)
+	}
+
 	file, err := os.CreateTemp("", "skill-capture-*")
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create temp file: %w", err), "error buffering skill artifact")
@@ -275,21 +290,6 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 		return nil, oops.E(oops.CodeBadRequest, nil, "content sha256 mismatch")
 	}
 
-	if len(payload.Name) > maxSkillNameLen {
-		return nil, oops.E(oops.CodeBadRequest, nil, "skill name exceeds %d characters", maxSkillNameLen)
-	}
-
-	skillSlug := conv.ToSlug(payload.Name)
-	if skillSlug == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "skill name must include at least one alphanumeric character")
-	}
-	if len(skillSlug) > maxSkillSlugLen {
-		return nil, oops.E(oops.CodeBadRequest, nil, "skill slug exceeds %d characters", maxSkillSlugLen)
-	}
-	if payload.AssetFormat != skillAssetFormatZip {
-		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported asset format: %s", payload.AssetFormat)
-	}
-
 	existing, err := s.findExistingAsset(ctx, *authCtx.ProjectID, contentSHA)
 	if err != nil {
 		return nil, err
@@ -304,7 +304,13 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error accessing skill assets").Log(ctx, s.logger)
 		}
-		defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+		txClosed := false
+	defer o11y.NoLogDefer(func() error {
+		if txClosed || dbtx == nil {
+			return nil
+		}
+		return dbtx.Rollback(ctx)
+	})
 
 		err = s.ensureSkillLineageForCapture(ctx, s.skillsRepo.WithTx(dbtx), authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, skillSlug, contentSHA, payload, existingAssetID)
 		if err != nil {
@@ -328,7 +334,13 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing skill assets").Log(ctx, s.logger)
 	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	txClosed := false
+	defer o11y.NoLogDefer(func() error {
+		if txClosed || dbtx == nil {
+			return nil
+		}
+		return dbtx.Rollback(ctx)
+	})
 
 	skillsTxRepo := s.skillsRepo.WithTx(dbtx)
 	asset, err := s.repo.WithTx(dbtx).CreateAsset(ctx, assetsrepo.CreateAssetParams{
