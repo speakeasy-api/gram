@@ -1026,6 +1026,73 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
     >
       <div class="modal-content">
         <h1>Instructions</h1>
+        {{- if .SecurityInputs }}
+        <ol>
+          <li class="instruction-item">
+            In Claude Desktop, navigate to
+            <strong
+              >Settings &gt; Developer &gt; Local MCP Servers &gt; Edit
+              config</strong
+            >. This opens your <code>claude_desktop_config.json</code> file in
+            your operating system's file browser.
+          </li>
+          <li class="instruction-item">
+            Open <code>claude_desktop_config.json</code> in your editor of
+            choice and merge in the following configuration. Replace each
+            <code>your-*-value</code> placeholder with your actual credential.
+            <div class="card code-container">
+              <button class="copy-button waiting">
+                <svg
+                  class="icon icon-copy"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
+                  <use href="#icon-copy"></use>
+                </svg>
+                <svg
+                  class="icon icon-copy-success"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
+                  <use href="#icon-copy-check"></use>
+                </svg>
+              </button>
+              <!-- prettier-ignore -->
+              <code class="code-snippet language-json">{
+  "mcpServers": {
+    "{{ .MCPSlug }}": {
+      "command": "npx",
+      "args": [
+        "mcp-remote@0.1.25",
+        "{{ .MCPURL }}"{{- range .SecurityInputs }},
+        "--header",
+        "{{ .SystemName | asHTTPHeader }}:${{ "{" }}{{ .DisplayName | asPosixName }}{{ "}" }}"{{- end }}
+      ],
+      "env": {
+        {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
+        "{{ $input.DisplayName | asPosixName }}": "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }}
+      }
+    }
+  }
+}</code>
+            </div>
+          </li>
+          <li class="instruction-item">
+            Save <code>claude_desktop_config.json</code> and restart Claude
+            Desktop to load the new configuration.
+          </li>
+        </ol>
+        <p>
+          These steps are longer than the
+          <strong>Add custom connector</strong> flow because Claude Desktop
+          does not yet support custom HTTP headers in remote MCP server
+          connectors. Configuring a local MCP server entry that proxies to the
+          remote server (via <code>mcp-remote</code>) is the current
+          workaround.
+        </p>
+        {{- else }}
         <ol>
           <li class="instruction-item">
             In Claude Desktop, navigate to
@@ -1077,6 +1144,7 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
           page. Once added, team members can connect from
           <strong>Settings &gt; Connectors</strong>.
         </p>
+        {{- end }}
       </div>
     </template>
     <template class="install-target-template" data-install-target="codex-cli">
