@@ -81,6 +81,9 @@ var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 // It mirrors the filter logic used in ListHooksTraces.
 func applyHookFiltersToBuilder(sb squirrel.SelectBuilder, filters []AttributeFilter, typesToInclude []string) squirrel.SelectBuilder {
 	for _, filter := range filters {
+		if !validJSONPath.MatchString(filter.Path) {
+			continue // skip invalid paths to prevent injection
+		}
 		col := resolveAttributeColumn(filter.Path)
 		pred := filter.Predicate(col)
 		if pred != nil {
@@ -1736,6 +1739,9 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 
 	// Apply arbitrary attribute filters
 	for _, filter := range arg.Filters {
+		if !validJSONPath.MatchString(filter.Path) {
+			continue // skip invalid paths to prevent injection
+		}
 		materializedCol, isMaterialized := materializedColumns[filter.Path]
 		var columnRef string
 		if isMaterialized {
