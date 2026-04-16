@@ -241,7 +241,7 @@ async function main(): Promise<void> {
       projectDir: process.cwd(),
       homeDir: os.homedir(),
       serverURL: process.env.GRAM_HOOKS_SERVER_URL,
-      gramKey: process.env.GRAM_API_KEY,
+      gramKey: process.env.GRAM_API_KEY ?? process.env.GRAM_KEY,
       gramProject: process.env.GRAM_PROJECT_SLUG,
     });
 

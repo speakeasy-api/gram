@@ -541,6 +541,42 @@ func TestService_Capture_RejectsNameWithoutAlphanumericSlug(t *testing.T) {
 	require.Contains(t, oopsErr.Error(), "skill name must include at least one alphanumeric character")
 }
 
+func TestService_Capture_RejectsTooLongName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestSkillsService(t)
+
+	content := []byte("PK\x03\x04skill-zip-content-name-too-long")
+	sha := sha256.Sum256(content)
+	expectedSHA := hex.EncodeToString(sha[:])
+	payload := newCapturePayload("application/zip", int64(len(content)), expectedSHA)
+	payload.Name = strings.Repeat("a", 101)
+
+	_, err := ti.service.Capture(ctx, payload, io.NopCloser(bytes.NewReader(content)))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "skill name exceeds 100 characters")
+}
+
+func TestService_Capture_RejectsUnsupportedAssetFormat(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestSkillsService(t)
+
+	content := []byte("PK\x03\x04skill-zip-content-asset-format")
+	sha := sha256.Sum256(content)
+	expectedSHA := hex.EncodeToString(sha[:])
+	payload := newCapturePayload("application/zip", int64(len(content)), expectedSHA)
+	payload.AssetFormat = "tar"
+
+	_, err := ti.service.Capture(ctx, payload, io.NopCloser(bytes.NewReader(content)))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "unsupported asset format: tar")
+}
+
 func TestService_Capture_BackfillsLineageForExistingAsset(t *testing.T) {
 	t.Parallel()
 

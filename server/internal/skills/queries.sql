@@ -188,6 +188,23 @@ WHERE skills.project_id = @project_id
   )
 RETURNING *;
 
+-- name: SetSkillActiveVersionIfNull :one
+UPDATE skills
+SET
+    active_version_id = @active_version_id
+  , updated_at = clock_timestamp()
+WHERE skills.project_id = @project_id
+  AND skills.id = @id
+  AND skills.deleted IS FALSE
+  AND skills.active_version_id IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM skill_versions sv
+    WHERE sv.id = @active_version_id
+      AND sv.skill_id = skills.id
+  )
+RETURNING *;
+
 -- name: UpsertOrganizationCapturePolicy :one
 INSERT INTO skills_capture_policies (
     organization_id
