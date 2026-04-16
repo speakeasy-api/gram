@@ -43,7 +43,7 @@ func NewClient(appID int64, privateKeyPEM []byte, httpClient *guardian.HTTPClien
 	if err != nil {
 		k, err2 := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if err2 != nil {
-			return nil, fmt.Errorf("parse private key: %w", err)
+			return nil, fmt.Errorf("parse private key (tried PKCS1 and PKCS8): %w", err2)
 		}
 		var ok bool
 		key, ok = k.(*rsa.PrivateKey)

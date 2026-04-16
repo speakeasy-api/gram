@@ -52,11 +52,20 @@ func (c *Client) CreateRepo(ctx context.Context, installationID int64, org, name
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusUnprocessableEntity {
+	switch resp.StatusCode {
+	case http.StatusCreated:
+		return nil
+	case http.StatusUnprocessableEntity:
+		// 422 is returned both for "already exists" and for validation errors
+		// (invalid name, permissions). Check the body for the "already exists" case.
+		body := truncatedBody(resp)
+		if strings.Contains(body, "name already exists") {
+			return nil
+		}
+		return fmt.Errorf("create repo: status %d: %s", resp.StatusCode, body)
+	default:
 		return fmt.Errorf("create repo: status %d: %s", resp.StatusCode, truncatedBody(resp))
 	}
-
-	return nil
 }
 
 // PushFiles atomically commits a set of files to the given repository branch
@@ -211,6 +220,8 @@ func (c *Client) createCommit(ctx context.Context, installationID int64, owner, 
 }
 
 func (c *Client) updateRef(ctx context.Context, installationID int64, owner, repo, branch, commitSHA string) error {
+	// force: true is safe because Gram creates and fully manages this repo.
+	// Concurrent publishes will race, with one commit silently winning.
 	payload := map[string]any{
 		"sha":   commitSHA,
 		"force": true,

@@ -670,7 +670,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	}
 
 	if len(pluginInfos) == 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "no plugins to publish")
+		return nil, oops.E(oops.CodeBadRequest, nil, "no plugins with servers to publish")
 	}
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
@@ -683,10 +683,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	repoName := ac.OrganizationSlug + "-plugins"
 
 	if err := s.github.Client.CreateRepo(ctx, s.github.InstallationID, s.github.Org, repoName, false); err != nil {
-		s.logger.WarnContext(ctx, "repo creation returned error (may already exist)",
-			attr.SlogOrganizationID(ac.ActiveOrganizationID),
-			attr.SlogError(err),
-		)
+		return nil, oops.E(oops.CodeGatewayError, err, "create github repo").Log(ctx, s.logger)
 	}
 
 	_, err = s.github.Client.PushFiles(
@@ -702,6 +699,9 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeGatewayError, err, "push plugin files to GitHub").Log(ctx, s.logger)
 	}
 
+	// Note: if this upsert fails after a successful push, the repo will be
+	// published but GetPublishStatus will report connected: false. A subsequent
+	// re-publish will converge since both CreateRepo and PushFiles are idempotent.
 	if _, err := s.repo.UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
 		ProjectID:      *ac.ProjectID,
 		InstallationID: s.github.InstallationID,
@@ -770,7 +770,14 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug string) Gen
 		OrgEmail:  "",
 		ServerURL: s.serverURL,
 	}
-	if orgName, err := s.repo.GetOrganizationName(ctx, orgID); err == nil {
+	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		s.logger.WarnContext(ctx, "failed to fetch organization name, falling back to slug",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+	if err == nil {
 		cfg.OrgName = orgName
 	}
 	return cfg
