@@ -75,8 +75,8 @@ const OAuthDetectedCallout = ({
 
   let description: ReactNode = (
     <Type muted small className="mt-1">
-      We discovered OAuth {version} metadata from this server. The
-      configuration will be pre-filled for either selection below.
+      We discovered OAuth {version} metadata from this server. The configuration
+      will be pre-filled for either selection below.
     </Type>
   );
   if (version == "2.0") {
