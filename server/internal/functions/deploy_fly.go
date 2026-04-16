@@ -642,7 +642,7 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 		Guest: &fly.MachineGuest{
 			CPUKind:       "shared",
 			CPUs:          2,
-			MemoryMB:      2048,
+			MemoryMB:      memoryMB,
 			GPUs:          0,
 			PersistRootfs: fly.MachinePersistRootfsNever,
 		},
