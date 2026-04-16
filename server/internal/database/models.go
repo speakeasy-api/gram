@@ -409,6 +409,21 @@ type FunctionsAccess struct {
 	Deleted       bool
 }
 
+type GlobalRole struct {
+	ID                uuid.UUID
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}
+
 type HooksServerNameOverride struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
@@ -634,6 +649,23 @@ type OrganizationMetadatum struct {
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
+}
+
+type OrganizationRole struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosDeleted     bool
+	WorkosLastEventID pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
 }
 
 type OrganizationUserRelationship struct {
@@ -1006,4 +1038,17 @@ type UserOauthToken struct {
 	UpdatedAt             pgtype.Timestamptz
 	DeletedAt             pgtype.Timestamptz
 	Deleted               bool
+}
+
+type WorkosOrganizationSync struct {
+	ID                   int64
+	WorkosOrganizationID string
+	LastEventID          string
+	CreatedAt            pgtype.Timestamptz
+}
+
+type WorkosUserSync struct {
+	ID          int64
+	LastEventID string
+	CreatedAt   pgtype.Timestamptz
 }

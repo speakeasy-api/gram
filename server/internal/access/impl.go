@@ -939,8 +939,8 @@ func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organ
 		IsSystem:    isSystemRole(role.Slug),
 		Grants:      roleGrantsFromListRoleGrants(grants),
 		MemberCount: memberCount,
-		CreatedAt:   conv.Default(role.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
-		UpdatedAt:   conv.Default(role.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+		CreatedAt:   role.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:   role.UpdatedAt.Format(time.RFC3339),
 	}, nil
 }
 

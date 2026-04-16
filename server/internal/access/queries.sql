@@ -53,3 +53,15 @@ WHERE organization_id = @organization_id
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND resource = @resource;
+
+-- name: UpsertRole :exec
+INSERT INTO organization_roles (organization_id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at)
+VALUES (@organization_id, @workos_slug, @workos_name, @workos_description, @workos_created_at, @workos_updated_at)
+ON CONFLICT (organization_id, workos_slug)
+DO UPDATE SET
+  workos_name = EXCLUDED.workos_name,
+  workos_description = EXCLUDED.workos_description,
+  workos_created_at = EXCLUDED.workos_created_at,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  updated_at = clock_timestamp()
+  WHERE organization_roles.workos_updated_at < EXCLUDED.workos_updated_at;
