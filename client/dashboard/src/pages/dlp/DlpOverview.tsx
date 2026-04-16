@@ -9,7 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useRoutes } from "@/routes";
-import { Shield } from "lucide-react";
+import { Shield, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router";
 import {
@@ -119,6 +119,7 @@ export default function DlpOverview() {
                   <TableHead>Rule</TableHead>
                   <TableHead>Match</TableHead>
                   <TableHead>Detected</TableHead>
+                  <TableHead className="w-[100px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -158,6 +159,29 @@ export default function DlpOverview() {
                       {result.createdAt
                         ? new Date(result.createdAt).toLocaleString()
                         : "-"}
+                    </TableCell>
+                    <TableCell>
+                      {result.chatId && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground hover:text-foreground gap-1 text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const params = new URLSearchParams({
+                              chatId: result.chatId!,
+                              search: result.chatId!,
+                              range: "90d",
+                            });
+                            navigate(
+                              `${routes.chatSessions.href()}?${params.toString()}`,
+                            );
+                          }}
+                        >
+                          View Chat
+                          <ExternalLink className="h-3 w-3" />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

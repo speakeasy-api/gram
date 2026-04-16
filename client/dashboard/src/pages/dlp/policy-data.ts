@@ -129,83 +129,1327 @@ export const CHECK_SCOPE_META: Record<
 export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
   secrets: [
     {
-      id: "private-key",
-      description: "Private Key (RSA/EC/DSA/OPENSSH)",
+      id: "1password-secret-key",
+      description:
+        "Uncovered a possible 1Password secret key, potentially compromising access to secrets in vaults.",
       source: "gitleaks",
     },
     {
-      id: "aws-access-token",
-      description: "AWS credentials",
+      id: "1password-service-account-token",
+      description:
+        "Uncovered a possible 1Password service account token, potentially compromising access to secrets in vaults.",
       source: "gitleaks",
     },
     {
-      id: "github-pat",
-      description: "GitHub Personal Access Token",
+      id: "adafruit-api-key",
+      description:
+        "Identified a potential Adafruit API Key, which could lead to unauthorized access to Adafruit services and sensitive data exposure.",
       source: "gitleaks",
     },
     {
-      id: "github-fine-grained-pat",
-      description: "GitHub Fine-Grained PAT",
+      id: "adobe-client-id",
+      description:
+        "Detected a pattern that resembles an Adobe OAuth Web Client ID, posing a risk of compromised Adobe integrations and data breaches.",
       source: "gitleaks",
     },
     {
-      id: "gitlab-pat",
-      description: "GitLab Personal Access Token",
+      id: "adobe-client-secret",
+      description:
+        "Discovered a potential Adobe Client Secret, which, if exposed, could allow unauthorized Adobe service access and data manipulation.",
+      source: "gitleaks",
+    },
+    {
+      id: "age-secret-key",
+      description:
+        "Discovered a potential Age encryption tool secret key, risking data decryption and unauthorized access to sensitive information.",
+      source: "gitleaks",
+    },
+    {
+      id: "airtable-api-key",
+      description:
+        "Uncovered a possible Airtable API Key, potentially compromising database access and leading to data leakage or alteration.",
+      source: "gitleaks",
+    },
+    {
+      id: "airtable-personnal-access-token",
+      description:
+        "Uncovered a possible Airtable Personal AccessToken, potentially compromising database access and leading to data leakage or alteration.",
+      source: "gitleaks",
+    },
+    {
+      id: "algolia-api-key",
+      description:
+        "Identified an Algolia API Key, which could result in unauthorized search operations and data exposure on Algolia-managed platforms.",
+      source: "gitleaks",
+    },
+    {
+      id: "alibaba-access-key-id",
+      description:
+        "Detected an Alibaba Cloud AccessKey ID, posing a risk of unauthorized cloud resource access and potential data compromise.",
+      source: "gitleaks",
+    },
+    {
+      id: "alibaba-secret-key",
+      description:
+        "Discovered a potential Alibaba Cloud Secret Key, potentially allowing unauthorized operations and data access within Alibaba Cloud.",
+      source: "gitleaks",
+    },
+    {
+      id: "anthropic-admin-api-key",
+      description:
+        "Detected an Anthropic Admin API Key, risking unauthorized access to administrative functions and sensitive AI model configurations.",
       source: "gitleaks",
     },
     {
       id: "anthropic-api-key",
-      description: "Anthropic API Key",
+      description:
+        "Identified an Anthropic API Key, which may compromise AI assistant integrations and expose sensitive data to unauthorized access.",
       source: "gitleaks",
     },
-    { id: "openai-api-key", description: "OpenAI API Key", source: "gitleaks" },
-    { id: "gcp-api-key", description: "GCP API key", source: "gitleaks" },
+    {
+      id: "artifactory-api-key",
+      description:
+        "Detected an Artifactory api key, posing a risk unauthorized access to the central repository.",
+      source: "gitleaks",
+    },
+    {
+      id: "artifactory-reference-token",
+      description:
+        "Detected an Artifactory reference token, posing a risk of impersonation and unauthorized access to the central repository.",
+      source: "gitleaks",
+    },
+    {
+      id: "asana-client-id",
+      description:
+        "Discovered a potential Asana Client ID, risking unauthorized access to Asana projects and sensitive task information.",
+      source: "gitleaks",
+    },
+    {
+      id: "asana-client-secret",
+      description:
+        "Identified an Asana Client Secret, which could lead to compromised project management integrity and unauthorized access.",
+      source: "gitleaks",
+    },
+    {
+      id: "atlassian-api-token",
+      description:
+        "Detected an Atlassian API token, posing a threat to project management and collaboration tool security and data confidentiality.",
+      source: "gitleaks",
+    },
+    {
+      id: "authress-service-client-access-key",
+      description:
+        "Uncovered a possible Authress Service Client Access Key, which may compromise access control services and sensitive data.",
+      source: "gitleaks",
+    },
+    {
+      id: "aws-access-token",
+      description:
+        "Identified a pattern that may indicate AWS credentials, risking unauthorized cloud resource access and data breaches on AWS platforms.",
+      source: "gitleaks",
+    },
+    {
+      id: "aws-amazon-bedrock-api-key-long-lived",
+      description:
+        "Identified a pattern that may indicate long-lived Amazon Bedrock API keys, risking unauthorized Amazon Bedrock usage",
+      source: "gitleaks",
+    },
+    {
+      id: "aws-amazon-bedrock-api-key-short-lived",
+      description:
+        "Identified a pattern that may indicate short-lived Amazon Bedrock API keys, risking unauthorized Amazon Bedrock usage",
+      source: "gitleaks",
+    },
     {
       id: "azure-ad-client-secret",
       description: "Azure AD Client Secret",
       source: "gitleaks",
     },
     {
-      id: "stripe-access-token",
-      description: "Stripe Access Token",
+      id: "beamer-api-token",
+      description:
+        "Detected a Beamer API token, potentially compromising content management and exposing sensitive notifications and updates.",
       source: "gitleaks",
     },
     {
-      id: "slack-bot-token",
-      description: "Slack Bot token",
+      id: "bitbucket-client-id",
+      description:
+        "Discovered a potential Bitbucket Client ID, risking unauthorized repository access and potential codebase exposure.",
       source: "gitleaks",
     },
     {
-      id: "slack-webhook-url",
-      description: "Slack Webhook",
+      id: "bitbucket-client-secret",
+      description:
+        "Discovered a potential Bitbucket Client Secret, posing a risk of compromised code repositories and unauthorized access.",
       source: "gitleaks",
     },
     {
-      id: "sendgrid-api-token",
-      description: "SendGrid API token",
+      id: "bittrex-access-key",
+      description:
+        "Identified a Bittrex Access Key, which could lead to unauthorized access to cryptocurrency trading accounts and financial loss.",
       source: "gitleaks",
     },
-    { id: "twilio-api-key", description: "Twilio API Key", source: "gitleaks" },
-    { id: "heroku-api-key", description: "Heroku API Key", source: "gitleaks" },
+    {
+      id: "bittrex-secret-key",
+      description:
+        "Detected a Bittrex Secret Key, potentially compromising cryptocurrency transactions and financial security.",
+      source: "gitleaks",
+    },
+    {
+      id: "cisco-meraki-api-key",
+      description:
+        "Cisco Meraki is a cloud-managed IT solution that provides networking, security, and device management through an easy-to-use interface.",
+      source: "gitleaks",
+    },
+    {
+      id: "clickhouse-cloud-api-secret-key",
+      description:
+        "Identified a pattern that may indicate clickhouse cloud API secret key, risking unauthorized clickhouse cloud api access and data breaches on ClickHouse Cloud platforms.",
+      source: "gitleaks",
+    },
+    {
+      id: "clojars-api-token",
+      description:
+        "Uncovered a possible Clojars API token, risking unauthorized access to Clojure libraries and potential code manipulation.",
+      source: "gitleaks",
+    },
+    {
+      id: "cloudflare-api-key",
+      description:
+        "Detected a Cloudflare API Key, potentially compromising cloud application deployments and operational security.",
+      source: "gitleaks",
+    },
+    {
+      id: "cloudflare-global-api-key",
+      description:
+        "Detected a Cloudflare Global API Key, potentially compromising cloud application deployments and operational security.",
+      source: "gitleaks",
+    },
+    {
+      id: "cloudflare-origin-ca-key",
+      description:
+        "Detected a Cloudflare Origin CA Key, potentially compromising cloud application deployments and operational security.",
+      source: "gitleaks",
+    },
+    {
+      id: "codecov-access-token",
+      description:
+        "Found a pattern resembling a Codecov Access Token, posing a risk of unauthorized access to code coverage reports and sensitive data.",
+      source: "gitleaks",
+    },
+    {
+      id: "cohere-api-token",
+      description:
+        "Identified a Cohere Token, posing a risk of unauthorized access to AI services and data manipulation.",
+      source: "gitleaks",
+    },
+    {
+      id: "coinbase-access-token",
+      description:
+        "Detected a Coinbase Access Token, posing a risk of unauthorized access to cryptocurrency accounts and financial transactions.",
+      source: "gitleaks",
+    },
+    {
+      id: "confluent-access-token",
+      description:
+        "Identified a Confluent Access Token, which could compromise access to streaming data platforms and sensitive data flow.",
+      source: "gitleaks",
+    },
+    {
+      id: "confluent-secret-key",
+      description:
+        "Found a Confluent Secret Key, potentially risking unauthorized operations and data access within Confluent services.",
+      source: "gitleaks",
+    },
+    {
+      id: "contentful-delivery-api-token",
+      description:
+        "Discovered a Contentful delivery API token, posing a risk to content management systems and data integrity.",
+      source: "gitleaks",
+    },
+    {
+      id: "curl-auth-header",
+      description:
+        "Discovered a potential authorization token provided in a curl command header, which could compromise the curl accessed resource.",
+      source: "gitleaks",
+    },
+    {
+      id: "curl-auth-user",
+      description:
+        "Discovered a potential basic authorization token provided in a curl command, which could compromise the curl accessed resource.",
+      source: "gitleaks",
+    },
     {
       id: "databricks-api-token",
-      description: "Databricks API token",
+      description:
+        "Uncovered a Databricks API token, which may compromise big data analytics platforms and sensitive data processing.",
       source: "gitleaks",
     },
     {
       id: "datadog-access-token",
-      description: "Datadog Access Token",
+      description:
+        "Detected a Datadog Access Token, potentially risking monitoring and analytics data exposure and manipulation.",
+      source: "gitleaks",
+    },
+    {
+      id: "defined-networking-api-token",
+      description:
+        "Identified a Defined Networking API token, which could lead to unauthorized network operations and data breaches.",
+      source: "gitleaks",
+    },
+    {
+      id: "digitalocean-access-token",
+      description:
+        "Found a DigitalOcean OAuth Access Token, risking unauthorized cloud resource access and data compromise.",
+      source: "gitleaks",
+    },
+    {
+      id: "digitalocean-pat",
+      description:
+        "Discovered a DigitalOcean Personal Access Token, posing a threat to cloud infrastructure security and data privacy.",
+      source: "gitleaks",
+    },
+    {
+      id: "digitalocean-refresh-token",
+      description:
+        "Uncovered a DigitalOcean OAuth Refresh Token, which could allow prolonged unauthorized access and resource manipulation.",
+      source: "gitleaks",
+    },
+    {
+      id: "discord-api-token",
+      description:
+        "Detected a Discord API key, potentially compromising communication channels and user data privacy on Discord.",
+      source: "gitleaks",
+    },
+    {
+      id: "discord-client-id",
+      description:
+        "Identified a Discord client ID, which may lead to unauthorized integrations and data exposure in Discord applications.",
+      source: "gitleaks",
+    },
+    {
+      id: "discord-client-secret",
+      description:
+        "Discovered a potential Discord client secret, risking compromised Discord bot integrations and data leaks.",
+      source: "gitleaks",
+    },
+    {
+      id: "doppler-api-token",
+      description:
+        "Discovered a Doppler API token, posing a risk to environment and secrets management security.",
+      source: "gitleaks",
+    },
+    {
+      id: "droneci-access-token",
+      description:
+        "Detected a Droneci Access Token, potentially compromising continuous integration and deployment workflows.",
+      source: "gitleaks",
+    },
+    {
+      id: "dropbox-api-token",
+      description:
+        "Identified a Dropbox API secret, which could lead to unauthorized file access and data breaches in Dropbox storage.",
+      source: "gitleaks",
+    },
+    {
+      id: "dropbox-long-lived-api-token",
+      description:
+        "Found a Dropbox long-lived API token, risking prolonged unauthorized access to cloud storage and sensitive data.",
+      source: "gitleaks",
+    },
+    {
+      id: "dropbox-short-lived-api-token",
+      description:
+        "Discovered a Dropbox short-lived API token, posing a risk of temporary but potentially harmful data access and manipulation.",
+      source: "gitleaks",
+    },
+    {
+      id: "duffel-api-token",
+      description:
+        "Uncovered a Duffel API token, which may compromise travel platform integrations and sensitive customer data.",
+      source: "gitleaks",
+    },
+    {
+      id: "dynatrace-api-token",
+      description:
+        "Detected a Dynatrace API token, potentially risking application performance monitoring and data exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "easypost-api-token",
+      description:
+        "Identified an EasyPost API token, which could lead to unauthorized postal and shipment service access and data exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "easypost-test-api-token",
+      description:
+        "Detected an EasyPost test API token, risking exposure of test environments and potentially sensitive shipment data.",
+      source: "gitleaks",
+    },
+    {
+      id: "etsy-access-token",
+      description:
+        "Found an Etsy Access Token, potentially compromising Etsy shop management and customer data.",
+      source: "gitleaks",
+    },
+    {
+      id: "facebook-access-token",
+      description:
+        "Discovered a Facebook Access Token, posing a risk of unauthorized access to Facebook accounts and personal data exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "facebook-page-access-token",
+      description:
+        "Discovered a Facebook Page Access Token, posing a risk of unauthorized access to Facebook accounts and personal data exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "facebook-secret",
+      description:
+        "Discovered a Facebook Application secret, posing a risk of unauthorized access to Facebook accounts and personal data exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "fastly-api-token",
+      description:
+        "Uncovered a Fastly API key, which may compromise CDN and edge cloud services, leading to content delivery and security issues.",
+      source: "gitleaks",
+    },
+    {
+      id: "finicity-api-token",
+      description:
+        "Detected a Finicity API token, potentially risking financial data access and unauthorized financial operations.",
+      source: "gitleaks",
+    },
+    {
+      id: "finicity-client-secret",
+      description:
+        "Identified a Finicity Client Secret, which could lead to compromised financial service integrations and data breaches.",
+      source: "gitleaks",
+    },
+    {
+      id: "finnhub-access-token",
+      description:
+        "Found a Finnhub Access Token, risking unauthorized access to financial market data and analytics.",
+      source: "gitleaks",
+    },
+    {
+      id: "flickr-access-token",
+      description:
+        "Discovered a Flickr Access Token, posing a risk of unauthorized photo management and potential data leakage.",
+      source: "gitleaks",
+    },
+    {
+      id: "flutterwave-encryption-key",
+      description:
+        "Uncovered a Flutterwave Encryption Key, which may compromise payment processing and sensitive financial information.",
+      source: "gitleaks",
+    },
+    {
+      id: "flutterwave-public-key",
+      description:
+        "Detected a Finicity Public Key, potentially exposing public cryptographic operations and integrations.",
+      source: "gitleaks",
+    },
+    {
+      id: "flutterwave-secret-key",
+      description:
+        "Identified a Flutterwave Secret Key, risking unauthorized financial transactions and data breaches.",
+      source: "gitleaks",
+    },
+    {
+      id: "flyio-access-token",
+      description: "Uncovered a Fly.io API key",
+      source: "gitleaks",
+    },
+    {
+      id: "frameio-api-token",
+      description:
+        "Found a Frame.io API token, potentially compromising video collaboration and project management.",
+      source: "gitleaks",
+    },
+    {
+      id: "freemius-secret-key",
+      description:
+        "Detected a Freemius secret key, potentially exposing sensitive information.",
+      source: "gitleaks",
+    },
+    {
+      id: "freshbooks-access-token",
+      description:
+        "Discovered a Freshbooks Access Token, posing a risk to accounting software access and sensitive financial data exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "gcp-api-key",
+      description:
+        "Uncovered a GCP API key, which could lead to unauthorized access to Google Cloud services and data breaches.",
       source: "gitleaks",
     },
     {
       id: "generic-api-key",
-      description: "Generic API Key",
+      description:
+        "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
       source: "gitleaks",
     },
-    { id: "jwt", description: "JSON Web Token", source: "gitleaks" },
+    {
+      id: "github-app-token",
+      description:
+        "Identified a GitHub App Token, which may compromise GitHub application integrations and source code security.",
+      source: "gitleaks",
+    },
+    {
+      id: "github-fine-grained-pat",
+      description:
+        "Found a GitHub Fine-Grained Personal Access Token, risking unauthorized repository access and code manipulation.",
+      source: "gitleaks",
+    },
+    {
+      id: "github-oauth",
+      description:
+        "Discovered a GitHub OAuth Access Token, posing a risk of compromised GitHub account integrations and data leaks.",
+      source: "gitleaks",
+    },
+    {
+      id: "github-pat",
+      description:
+        "Uncovered a GitHub Personal Access Token, potentially leading to unauthorized repository access and sensitive content exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "github-refresh-token",
+      description:
+        "Detected a GitHub Refresh Token, which could allow prolonged unauthorized access to GitHub services.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-cicd-job-token",
+      description:
+        "Identified a GitLab CI/CD Job Token, potential access to projects and some APIs on behalf of a user while the CI job is running.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-deploy-token",
+      description:
+        "Identified a GitLab Deploy Token, risking access to repositories, packages and containers with write access.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-feature-flag-client-token",
+      description:
+        "Identified a GitLab feature flag client token, risks exposing user lists and features flags used by an application.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-feed-token",
+      description:
+        "Identified a GitLab feed token, risking exposure of user data.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-incoming-mail-token",
+      description:
+        "Identified a GitLab incoming mail token, risking manipulation of data sent by mail.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-kubernetes-agent-token",
+      description:
+        "Identified a GitLab Kubernetes Agent token, risking access to repos and registry of projects connected via agent.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-oauth-app-secret",
+      description:
+        "Identified a GitLab OIDC Application Secret, risking access to apps using GitLab as authentication provider.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-pat",
+      description:
+        "Identified a GitLab Personal Access Token, risking unauthorized access to GitLab repositories and codebase exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-pat-routable",
+      description:
+        "Identified a GitLab Personal Access Token (routable), risking unauthorized access to GitLab repositories and codebase exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-ptt",
+      description:
+        "Found a GitLab Pipeline Trigger Token, potentially compromising continuous integration workflows and project security.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-rrt",
+      description:
+        "Discovered a GitLab Runner Registration Token, posing a risk to CI/CD pipeline integrity and unauthorized access.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-runner-authentication-token",
+      description:
+        "Discovered a GitLab Runner Authentication Token, posing a risk to CI/CD pipeline integrity and unauthorized access.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-runner-authentication-token-routable",
+      description:
+        "Discovered a GitLab Runner Authentication Token (Routable), posing a risk to CI/CD pipeline integrity and unauthorized access.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-scim-token",
+      description:
+        "Discovered a GitLab SCIM Token, posing a risk to unauthorized access for a organization or instance.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitlab-session-cookie",
+      description:
+        "Discovered a GitLab Session Cookie, posing a risk to unauthorized access to a user account.",
+      source: "gitleaks",
+    },
+    {
+      id: "gitter-access-token",
+      description:
+        "Uncovered a Gitter Access Token, which may lead to unauthorized access to chat and communication services.",
+      source: "gitleaks",
+    },
+    {
+      id: "gocardless-api-token",
+      description:
+        "Detected a GoCardless API token, potentially risking unauthorized direct debit payment operations and financial data exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "grafana-api-key",
+      description:
+        "Identified a Grafana API key, which could compromise monitoring dashboards and sensitive data analytics.",
+      source: "gitleaks",
+    },
+    {
+      id: "grafana-cloud-api-token",
+      description:
+        "Found a Grafana cloud API token, risking unauthorized access to cloud-based monitoring services and data exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "grafana-service-account-token",
+      description:
+        "Discovered a Grafana service account token, posing a risk of compromised monitoring services and data integrity.",
+      source: "gitleaks",
+    },
+    {
+      id: "harness-api-key",
+      description:
+        "Identified a Harness Access Token (PAT or SAT), risking unauthorized access to a Harness account.",
+      source: "gitleaks",
+    },
+    {
+      id: "hashicorp-tf-api-token",
+      description:
+        "Uncovered a HashiCorp Terraform user/org API token, which may lead to unauthorized infrastructure management and security breaches.",
+      source: "gitleaks",
+    },
+    {
+      id: "hashicorp-tf-password",
+      description:
+        "Identified a HashiCorp Terraform password field, risking unauthorized infrastructure configuration and security breaches.",
+      source: "gitleaks",
+    },
+    {
+      id: "heroku-api-key",
+      description:
+        "Detected a Heroku API Key, potentially compromising cloud application deployments and operational security.",
+      source: "gitleaks",
+    },
+    {
+      id: "heroku-api-key-v2",
+      description:
+        "Detected a Heroku API Key, potentially compromising cloud application deployments and operational security.",
+      source: "gitleaks",
+    },
+    {
+      id: "hubspot-api-key",
+      description:
+        "Found a HubSpot API Token, posing a risk to CRM data integrity and unauthorized marketing operations.",
+      source: "gitleaks",
+    },
+    {
+      id: "huggingface-access-token",
+      description:
+        "Discovered a Hugging Face Access token, which could lead to unauthorized access to AI models and sensitive data.",
+      source: "gitleaks",
+    },
+    {
+      id: "huggingface-organization-api-token",
+      description:
+        "Uncovered a Hugging Face Organization API token, potentially compromising AI organization accounts and associated data.",
+      source: "gitleaks",
+    },
+    {
+      id: "infracost-api-token",
+      description:
+        "Detected an Infracost API Token, risking unauthorized access to cloud cost estimation tools and financial data.",
+      source: "gitleaks",
+    },
+    {
+      id: "intercom-api-key",
+      description:
+        "Identified an Intercom API Token, which could compromise customer communication channels and data privacy.",
+      source: "gitleaks",
+    },
+    {
+      id: "intra42-client-secret",
+      description:
+        "Found a Intra42 client secret, which could lead to unauthorized access to the 42School API and sensitive data.",
+      source: "gitleaks",
+    },
+    {
+      id: "jfrog-api-key",
+      description:
+        "Found a JFrog API Key, posing a risk of unauthorized access to software artifact repositories and build pipelines.",
+      source: "gitleaks",
+    },
+    {
+      id: "jfrog-identity-token",
+      description:
+        "Discovered a JFrog Identity Token, potentially compromising access to JFrog services and sensitive software artifacts.",
+      source: "gitleaks",
+    },
+    {
+      id: "jwt",
+      description:
+        "Uncovered a JSON Web Token, which may lead to unauthorized access to web applications and sensitive user data.",
+      source: "gitleaks",
+    },
+    {
+      id: "jwt-base64",
+      description:
+        "Detected a Base64-encoded JSON Web Token, posing a risk of exposing encoded authentication and data exchange information.",
+      source: "gitleaks",
+    },
+    {
+      id: "kraken-access-token",
+      description:
+        "Identified a Kraken Access Token, potentially compromising cryptocurrency trading accounts and financial security.",
+      source: "gitleaks",
+    },
+    {
+      id: "kubernetes-secret-yaml",
+      description:
+        "Possible Kubernetes Secret detected, posing a risk of leaking credentials/tokens from your deployments",
+      source: "gitleaks",
+    },
+    {
+      id: "kucoin-access-token",
+      description:
+        "Found a Kucoin Access Token, risking unauthorized access to cryptocurrency exchange services and transactions.",
+      source: "gitleaks",
+    },
+    {
+      id: "kucoin-secret-key",
+      description:
+        "Discovered a Kucoin Secret Key, which could lead to compromised cryptocurrency operations and financial data breaches.",
+      source: "gitleaks",
+    },
+    {
+      id: "launchdarkly-access-token",
+      description:
+        "Uncovered a Launchdarkly Access Token, potentially compromising feature flag management and application functionality.",
+      source: "gitleaks",
+    },
+    {
+      id: "linear-api-key",
+      description:
+        "Detected a Linear API Token, posing a risk to project management tools and sensitive task data.",
+      source: "gitleaks",
+    },
+    {
+      id: "linear-client-secret",
+      description:
+        "Identified a Linear Client Secret, which may compromise secure integrations and sensitive project management data.",
+      source: "gitleaks",
+    },
+    {
+      id: "linkedin-client-id",
+      description:
+        "Found a LinkedIn Client ID, risking unauthorized access to LinkedIn integrations and professional data exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "linkedin-client-secret",
+      description:
+        "Discovered a LinkedIn Client secret, potentially compromising LinkedIn application integrations and user data.",
+      source: "gitleaks",
+    },
+    {
+      id: "lob-api-key",
+      description:
+        "Uncovered a Lob API Key, which could lead to unauthorized access to mailing and address verification services.",
+      source: "gitleaks",
+    },
+    {
+      id: "lob-pub-api-key",
+      description:
+        "Detected a Lob Publishable API Key, posing a risk of exposing mail and print service integrations.",
+      source: "gitleaks",
+    },
+    {
+      id: "looker-client-id",
+      description:
+        "Found a Looker Client ID, risking unauthorized access to a Looker account and exposing sensitive data.",
+      source: "gitleaks",
+    },
+    {
+      id: "looker-client-secret",
+      description:
+        "Found a Looker Client Secret, risking unauthorized access to a Looker account and exposing sensitive data.",
+      source: "gitleaks",
+    },
+    {
+      id: "mailchimp-api-key",
+      description:
+        "Identified a Mailchimp API key, potentially compromising email marketing campaigns and subscriber data.",
+      source: "gitleaks",
+    },
+    {
+      id: "mailgun-private-api-token",
+      description:
+        "Found a Mailgun private API token, risking unauthorized email service operations and data breaches.",
+      source: "gitleaks",
+    },
+    {
+      id: "mailgun-pub-key",
+      description:
+        "Discovered a Mailgun public validation key, which could expose email verification processes and associated data.",
+      source: "gitleaks",
+    },
+    {
+      id: "mailgun-signing-key",
+      description:
+        "Uncovered a Mailgun webhook signing key, potentially compromising email automation and data integrity.",
+      source: "gitleaks",
+    },
+    {
+      id: "mapbox-api-token",
+      description:
+        "Detected a MapBox API token, posing a risk to geospatial services and sensitive location data exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "mattermost-access-token",
+      description:
+        "Identified a Mattermost Access Token, which may compromise team communication channels and data privacy.",
+      source: "gitleaks",
+    },
+    {
+      id: "maxmind-license-key",
+      description: "Discovered a potential MaxMind license key.",
+      source: "gitleaks",
+    },
+    {
+      id: "messagebird-api-token",
+      description:
+        "Found a MessageBird API token, risking unauthorized access to communication platforms and message data.",
+      source: "gitleaks",
+    },
+    {
+      id: "messagebird-client-id",
+      description:
+        "Discovered a MessageBird client ID, potentially compromising API integrations and sensitive communication data.",
+      source: "gitleaks",
+    },
+    {
+      id: "microsoft-teams-webhook",
+      description:
+        "Uncovered a Microsoft Teams Webhook, which could lead to unauthorized access to team collaboration tools and data leaks.",
+      source: "gitleaks",
+    },
+    {
+      id: "netlify-access-token",
+      description:
+        "Detected a Netlify Access Token, potentially compromising web hosting services and site management.",
+      source: "gitleaks",
+    },
+    {
+      id: "new-relic-browser-api-token",
+      description:
+        "Identified a New Relic ingest browser API token, risking unauthorized access to application performance data and analytics.",
+      source: "gitleaks",
+    },
+    {
+      id: "new-relic-insert-key",
+      description:
+        "Discovered a New Relic insight insert key, compromising data injection into the platform.",
+      source: "gitleaks",
+    },
+    {
+      id: "new-relic-user-api-id",
+      description:
+        "Found a New Relic user API ID, posing a risk to application monitoring services and data integrity.",
+      source: "gitleaks",
+    },
+    {
+      id: "new-relic-user-api-key",
+      description:
+        "Discovered a New Relic user API Key, which could lead to compromised application insights and performance monitoring.",
+      source: "gitleaks",
+    },
+    {
+      id: "notion-api-token",
+      description: "Notion API token",
+      source: "gitleaks",
+    },
+    {
+      id: "npm-access-token",
+      description:
+        "Uncovered an npm access token, potentially compromising package management and code repository access.",
+      source: "gitleaks",
+    },
+    {
+      id: "nuget-config-password",
+      description:
+        "Identified a password within a Nuget config file, potentially compromising package management access.",
+      source: "gitleaks",
+    },
+    {
+      id: "nytimes-access-token",
+      description:
+        "Detected a Nytimes Access Token, risking unauthorized access to New York Times APIs and content services.",
+      source: "gitleaks",
+    },
+    {
+      id: "octopus-deploy-api-key",
+      description:
+        "Discovered a potential Octopus Deploy API key, risking application deployments and operational security.",
+      source: "gitleaks",
+    },
+    {
+      id: "okta-access-token",
+      description:
+        "Identified an Okta Access Token, which may compromise identity management services and user authentication data.",
+      source: "gitleaks",
+    },
+    {
+      id: "openai-api-key",
+      description:
+        "Found an OpenAI API Key, posing a risk of unauthorized access to AI services and data manipulation.",
+      source: "gitleaks",
+    },
+    {
+      id: "openshift-user-token",
+      description:
+        "Found an OpenShift user token, potentially compromising an OpenShift/Kubernetes cluster.",
+      source: "gitleaks",
+    },
+    {
+      id: "perplexity-api-key",
+      description:
+        "Detected a Perplexity API key, which could lead to unauthorized access to Perplexity AI services and data exposure.",
+      source: "gitleaks",
+    },
     {
       id: "pkcs12-file",
-      description: "PKCS #12 file (bundled private keys)",
+      description:
+        "Found a PKCS #12 file, which commonly contain bundled private keys.",
+      source: "gitleaks",
+    },
+    {
+      id: "plaid-api-token",
+      description:
+        "Discovered a Plaid API Token, potentially compromising financial data aggregation and banking services.",
+      source: "gitleaks",
+    },
+    {
+      id: "plaid-client-id",
+      description:
+        "Uncovered a Plaid Client ID, which could lead to unauthorized financial service integrations and data breaches.",
+      source: "gitleaks",
+    },
+    {
+      id: "plaid-secret-key",
+      description:
+        "Detected a Plaid Secret key, risking unauthorized access to financial accounts and sensitive transaction data.",
+      source: "gitleaks",
+    },
+    {
+      id: "planetscale-api-token",
+      description:
+        "Identified a PlanetScale API token, potentially compromising database management and operations.",
+      source: "gitleaks",
+    },
+    {
+      id: "planetscale-oauth-token",
+      description:
+        "Found a PlanetScale OAuth token, posing a risk to database access control and sensitive data integrity.",
+      source: "gitleaks",
+    },
+    {
+      id: "planetscale-password",
+      description:
+        "Discovered a PlanetScale password, which could lead to unauthorized database operations and data breaches.",
+      source: "gitleaks",
+    },
+    {
+      id: "postman-api-token",
+      description:
+        "Uncovered a Postman API token, potentially compromising API testing and development workflows.",
+      source: "gitleaks",
+    },
+    {
+      id: "prefect-api-token",
+      description:
+        "Detected a Prefect API token, risking unauthorized access to workflow management and automation services.",
+      source: "gitleaks",
+    },
+    {
+      id: "private-key",
+      description:
+        "Identified a Private Key, which may compromise cryptographic security and sensitive data encryption.",
+      source: "gitleaks",
+    },
+    {
+      id: "privateai-api-token",
+      description:
+        "Identified a PrivateAI Token, posing a risk of unauthorized access to AI services and data manipulation.",
+      source: "gitleaks",
+    },
+    {
+      id: "pulumi-api-token",
+      description:
+        "Found a Pulumi API token, posing a risk to infrastructure as code services and cloud resource management.",
+      source: "gitleaks",
+    },
+    {
+      id: "pypi-upload-token",
+      description:
+        "Discovered a PyPI upload token, potentially compromising Python package distribution and repository integrity.",
+      source: "gitleaks",
+    },
+    {
+      id: "rapidapi-access-token",
+      description:
+        "Uncovered a RapidAPI Access Token, which could lead to unauthorized access to various APIs and data services.",
+      source: "gitleaks",
+    },
+    {
+      id: "readme-api-token",
+      description:
+        "Detected a Readme API token, risking unauthorized documentation management and content exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "rubygems-api-token",
+      description:
+        "Identified a Rubygem API token, potentially compromising Ruby library distribution and package management.",
+      source: "gitleaks",
+    },
+    {
+      id: "scalingo-api-token",
+      description:
+        "Found a Scalingo API token, posing a risk to cloud platform services and application deployment security.",
+      source: "gitleaks",
+    },
+    {
+      id: "sendbird-access-id",
+      description:
+        "Discovered a Sendbird Access ID, which could compromise chat and messaging platform integrations.",
+      source: "gitleaks",
+    },
+    {
+      id: "sendbird-access-token",
+      description:
+        "Uncovered a Sendbird Access Token, potentially risking unauthorized access to communication services and user data.",
+      source: "gitleaks",
+    },
+    {
+      id: "sendgrid-api-token",
+      description:
+        "Detected a SendGrid API token, posing a risk of unauthorized email service operations and data exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "sendinblue-api-token",
+      description:
+        "Identified a Sendinblue API token, which may compromise email marketing services and subscriber data privacy.",
+      source: "gitleaks",
+    },
+    {
+      id: "sentry-access-token",
+      description:
+        "Found a Sentry.io Access Token (old format), risking unauthorized access to error tracking services and sensitive application data.",
+      source: "gitleaks",
+    },
+    {
+      id: "sentry-org-token",
+      description:
+        "Found a Sentry.io Organization Token, risking unauthorized access to error tracking services and sensitive application data.",
+      source: "gitleaks",
+    },
+    {
+      id: "sentry-user-token",
+      description:
+        "Found a Sentry.io User Token, risking unauthorized access to error tracking services and sensitive application data.",
+      source: "gitleaks",
+    },
+    {
+      id: "settlemint-application-access-token",
+      description: "Found a Settlemint Application Access Token.",
+      source: "gitleaks",
+    },
+    {
+      id: "settlemint-personal-access-token",
+      description: "Found a Settlemint Personal Access Token.",
+      source: "gitleaks",
+    },
+    {
+      id: "settlemint-service-access-token",
+      description: "Found a Settlemint Service Access Token.",
+      source: "gitleaks",
+    },
+    {
+      id: "shippo-api-token",
+      description:
+        "Discovered a Shippo API token, potentially compromising shipping services and customer order data.",
+      source: "gitleaks",
+    },
+    {
+      id: "shopify-access-token",
+      description:
+        "Uncovered a Shopify access token, which could lead to unauthorized e-commerce platform access and data breaches.",
+      source: "gitleaks",
+    },
+    {
+      id: "shopify-custom-access-token",
+      description:
+        "Detected a Shopify custom access token, potentially compromising custom app integrations and e-commerce data security.",
+      source: "gitleaks",
+    },
+    {
+      id: "shopify-private-app-access-token",
+      description:
+        "Identified a Shopify private app access token, risking unauthorized access to private app data and store operations.",
+      source: "gitleaks",
+    },
+    {
+      id: "shopify-shared-secret",
+      description:
+        "Found a Shopify shared secret, posing a risk to application authentication and e-commerce platform security.",
+      source: "gitleaks",
+    },
+    {
+      id: "sidekiq-secret",
+      description:
+        "Discovered a Sidekiq Secret, which could lead to compromised background job processing and application data breaches.",
+      source: "gitleaks",
+    },
+    {
+      id: "sidekiq-sensitive-url",
+      description:
+        "Uncovered a Sidekiq Sensitive URL, potentially exposing internal job queues and sensitive operation details.",
+      source: "gitleaks",
+    },
+    {
+      id: "slack-app-token",
+      description:
+        "Detected a Slack App-level token, risking unauthorized access to Slack applications and workspace data.",
+      source: "gitleaks",
+    },
+    {
+      id: "slack-bot-token",
+      description:
+        "Identified a Slack Bot token, which may compromise bot integrations and communication channel security.",
+      source: "gitleaks",
+    },
+    {
+      id: "slack-config-access-token",
+      description:
+        "Found a Slack Configuration access token, posing a risk to workspace configuration and sensitive data access.",
+      source: "gitleaks",
+    },
+    {
+      id: "slack-config-refresh-token",
+      description:
+        "Discovered a Slack Configuration refresh token, potentially allowing prolonged unauthorized access to configuration settings.",
+      source: "gitleaks",
+    },
+    {
+      id: "slack-legacy-bot-token",
+      description:
+        "Uncovered a Slack Legacy bot token, which could lead to compromised legacy bot operations and data exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "slack-legacy-token",
+      description:
+        "Detected a Slack Legacy token, risking unauthorized access to older Slack integrations and user data.",
+      source: "gitleaks",
+    },
+    {
+      id: "slack-legacy-workspace-token",
+      description:
+        "Identified a Slack Legacy Workspace token, potentially compromising access to workspace data and legacy features.",
+      source: "gitleaks",
+    },
+    {
+      id: "slack-user-token",
+      description:
+        "Found a Slack User token, posing a risk of unauthorized user impersonation and data access within Slack workspaces.",
+      source: "gitleaks",
+    },
+    {
+      id: "slack-webhook-url",
+      description:
+        "Discovered a Slack Webhook, which could lead to unauthorized message posting and data leakage in Slack channels.",
+      source: "gitleaks",
+    },
+    {
+      id: "snyk-api-token",
+      description:
+        "Uncovered a Snyk API token, potentially compromising software vulnerability scanning and code security.",
+      source: "gitleaks",
+    },
+    {
+      id: "sonar-api-token",
+      description:
+        "Uncovered a Sonar API token, potentially compromising software vulnerability scanning and code security.",
+      source: "gitleaks",
+    },
+    {
+      id: "sourcegraph-access-token",
+      description: "Sourcegraph is a code search and navigation engine.",
+      source: "gitleaks",
+    },
+    {
+      id: "square-access-token",
+      description:
+        "Detected a Square Access Token, risking unauthorized payment processing and financial transaction exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "squarespace-access-token",
+      description:
+        "Identified a Squarespace Access Token, which may compromise website management and content control on Squarespace.",
+      source: "gitleaks",
+    },
+    {
+      id: "stripe-access-token",
+      description:
+        "Found a Stripe Access Token, posing a risk to payment processing services and sensitive financial data.",
+      source: "gitleaks",
+    },
+    {
+      id: "sumologic-access-id",
+      description:
+        "Discovered a SumoLogic Access ID, potentially compromising log management services and data analytics integrity.",
+      source: "gitleaks",
+    },
+    {
+      id: "sumologic-access-token",
+      description:
+        "Uncovered a SumoLogic Access Token, which could lead to unauthorized access to log data and analytics insights.",
+      source: "gitleaks",
+    },
+    {
+      id: "telegram-bot-api-token",
+      description:
+        "Detected a Telegram Bot API Token, risking unauthorized bot operations and message interception on Telegram.",
+      source: "gitleaks",
+    },
+    {
+      id: "travisci-access-token",
+      description:
+        "Identified a Travis CI Access Token, potentially compromising continuous integration services and codebase security.",
+      source: "gitleaks",
+    },
+    {
+      id: "twilio-api-key",
+      description:
+        "Found a Twilio API Key, posing a risk to communication services and sensitive customer interaction data.",
+      source: "gitleaks",
+    },
+    {
+      id: "twitch-api-token",
+      description:
+        "Discovered a Twitch API token, which could compromise streaming services and account integrations.",
+      source: "gitleaks",
+    },
+    {
+      id: "twitter-access-secret",
+      description:
+        "Uncovered a Twitter Access Secret, potentially risking unauthorized Twitter integrations and data breaches.",
+      source: "gitleaks",
+    },
+    {
+      id: "twitter-access-token",
+      description:
+        "Detected a Twitter Access Token, posing a risk of unauthorized account operations and social media data exposure.",
+      source: "gitleaks",
+    },
+    {
+      id: "twitter-api-key",
+      description:
+        "Identified a Twitter API Key, which may compromise Twitter application integrations and user data security.",
+      source: "gitleaks",
+    },
+    {
+      id: "twitter-api-secret",
+      description:
+        "Found a Twitter API Secret, risking the security of Twitter app integrations and sensitive data access.",
+      source: "gitleaks",
+    },
+    {
+      id: "twitter-bearer-token",
+      description:
+        "Discovered a Twitter Bearer Token, potentially compromising API access and data retrieval from Twitter.",
+      source: "gitleaks",
+    },
+    {
+      id: "typeform-api-token",
+      description:
+        "Uncovered a Typeform API token, which could lead to unauthorized survey management and data collection.",
+      source: "gitleaks",
+    },
+    {
+      id: "vault-batch-token",
+      description:
+        "Detected a Vault Batch Token, risking unauthorized access to secret management services and sensitive data.",
+      source: "gitleaks",
+    },
+    {
+      id: "vault-service-token",
+      description:
+        "Identified a Vault Service Token, potentially compromising infrastructure security and access to sensitive credentials.",
+      source: "gitleaks",
+    },
+    {
+      id: "yandex-access-token",
+      description:
+        "Found a Yandex Access Token, posing a risk to Yandex service integrations and user data privacy.",
+      source: "gitleaks",
+    },
+    {
+      id: "yandex-api-key",
+      description:
+        "Discovered a Yandex API Key, which could lead to unauthorized access to Yandex services and data manipulation.",
+      source: "gitleaks",
+    },
+    {
+      id: "yandex-aws-access-token",
+      description:
+        "Uncovered a Yandex AWS Access Token, potentially compromising cloud resource access and data security on Yandex Cloud.",
+      source: "gitleaks",
+    },
+    {
+      id: "zendesk-secret-key",
+      description:
+        "Detected a Zendesk Secret Key, risking unauthorized access to customer support services and sensitive ticketing data.",
       source: "gitleaks",
     },
   ],
