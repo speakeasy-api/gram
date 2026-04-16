@@ -356,7 +356,7 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
             </Type>
             <div className="mt-2">
               <orgRoutes.access.roles.Link>
-                <Button variant="ghost" size="sm">
+                <Button variant="tertiary" size="sm">
                   <Button.Text>Configure Roles</Button.Text>
                 </Button>
               </orgRoutes.access.roles.Link>
