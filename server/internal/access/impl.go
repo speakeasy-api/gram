@@ -850,7 +850,7 @@ func (s *Service) localMemberCounts(ctx context.Context, members []workos.Member
 	}
 	localRows, err := usersrepo.New(s.db).GetUsersByWorkosIDs(ctx, workosIDs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get users by workos ids: %w", err)
 	}
 	localSet := make(map[string]struct{}, len(localRows))
 	for _, u := range localRows {
