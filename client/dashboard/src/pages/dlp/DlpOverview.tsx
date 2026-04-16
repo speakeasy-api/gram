@@ -122,7 +122,17 @@ export default function DlpOverview() {
               </TableHeader>
               <TableBody>
                 {results.map((result) => (
-                  <TableRow key={result.id}>
+                  <TableRow
+                    key={result.id}
+                    className="cursor-pointer"
+                    onClick={() => {
+                      if (result.chatId) {
+                        routes.chatSessions.goTo({
+                          queryParams: { search: result.chatId },
+                        });
+                      }
+                    }}
+                  >
                     <TableCell>
                       <Badge variant="outline">{result.source}</Badge>
                     </TableCell>

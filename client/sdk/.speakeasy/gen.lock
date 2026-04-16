@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: e59d5d2115cc14857e4910d7d778b517
+  docChecksum: 11eaaa5ace31ca4c24086a0ef76ee576
   docVersion: 0.0.1
   speakeasyVersion: 1.730.1
   generationVersion: 2.844.3
-  releaseVersion: 0.32.64
-  configChecksum: c32106dc61242e6890dd304d7633e58e
+  releaseVersion: 0.32.65
+  configChecksum: 69e2c38abedc7dd8cfb5d04157b9f5cd
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -548,7 +548,7 @@ trackedFiles:
   docs/models/components/riskpolicystatus.md:
     last_write_checksum: sha1:516633e7ddae4a15c8060c4cbcccbab4f9485352
   docs/models/components/riskresult.md:
-    last_write_checksum: sha1:bb36e2f26f3a46da9a2f86df7b74d1d2864f4730
+    last_write_checksum: sha1:20031c2b3d0551ab8c138089bc4990e55d0f7b46
   docs/models/components/role.md:
     last_write_checksum: sha1:809bed93dac0663775bca80b214937f21a60184a
   docs/models/components/rolegrant.md:
@@ -1985,11 +1985,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:70c65b2f982ef7b18abc969c5d6e8f48b9666917
+    last_write_checksum: sha1:82255456ff42c5b1d7b58e96f9742fdf6cac450b
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:e5ea05e9b9b0241e7f1c39fe65d6ea59a376380c
+    last_write_checksum: sha1:43e7ab51134741fa421e880f07fd92a3cbfc5d8e
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2577,7 +2577,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:719a0a8277653ff8612739a574b5ef5e5b8979c9
+    last_write_checksum: sha1:317d9c0b29bd1cee21b59213bc90d1bfaed208b6
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -3286,7 +3286,7 @@ trackedFiles:
   src/models/components/riskpolicystatus.ts:
     last_write_checksum: sha1:478a39101a4d8c9d51b31417839ef68b5b727e77
   src/models/components/riskresult.ts:
-    last_write_checksum: sha1:6fa108ed3f66292976c8f8d453aa69812561eaa9
+    last_write_checksum: sha1:b45685d0e03b9502a0565c8ad0db5c80641d16e1
   src/models/components/role.ts:
     last_write_checksum: sha1:0471a9177cc9f7a8494dfa8d834808500d1b05a7
   src/models/components/rolegrant.ts:

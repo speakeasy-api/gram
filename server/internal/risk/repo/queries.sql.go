@@ -499,12 +499,13 @@ func (q *Queries) ListRiskResultsByProject(ctx context.Context, arg ListRiskResu
 }
 
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
-SELECT id, project_id, risk_policy_id, policy_version, chat_message_id, source, found, rule_id, description, match, start_line, start_column, end_line, end_column, confidence, tags, created_at
-FROM risk_results
-WHERE project_id = $1
-  AND risk_policy_id = $2
-  AND found IS TRUE
-ORDER BY created_at DESC
+SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_line, rr.start_column, rr.end_line, rr.end_column, rr.confidence, rr.tags, rr.created_at, cm.chat_id
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.project_id = $1
+  AND rr.risk_policy_id = $2
+  AND rr.found IS TRUE
+ORDER BY rr.created_at DESC
 LIMIT $3
 `
 
@@ -514,15 +515,36 @@ type ListRiskResultsByProjectAndPolicyParams struct {
 	ResultLimit  int32
 }
 
-func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg ListRiskResultsByProjectAndPolicyParams) ([]RiskResult, error) {
+type ListRiskResultsByProjectAndPolicyRow struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	RiskPolicyID  uuid.UUID
+	PolicyVersion int64
+	ChatMessageID uuid.UUID
+	Source        string
+	Found         bool
+	RuleID        pgtype.Text
+	Description   pgtype.Text
+	Match         pgtype.Text
+	StartLine     pgtype.Int4
+	StartColumn   pgtype.Int4
+	EndLine       pgtype.Int4
+	EndColumn     pgtype.Int4
+	Confidence    pgtype.Float8
+	Tags          []string
+	CreatedAt     pgtype.Timestamptz
+	ChatID        uuid.UUID
+}
+
+func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg ListRiskResultsByProjectAndPolicyParams) ([]ListRiskResultsByProjectAndPolicyRow, error) {
 	rows, err := q.db.Query(ctx, listRiskResultsByProjectAndPolicy, arg.ProjectID, arg.RiskPolicyID, arg.ResultLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []RiskResult
+	var items []ListRiskResultsByProjectAndPolicyRow
 	for rows.Next() {
-		var i RiskResult
+		var i ListRiskResultsByProjectAndPolicyRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
@@ -541,6 +563,7 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 			&i.Confidence,
 			&i.Tags,
 			&i.CreatedAt,
+			&i.ChatID,
 		); err != nil {
 			return nil, err
 		}
@@ -553,11 +576,12 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 }
 
 const listRiskResultsByProjectFound = `-- name: ListRiskResultsByProjectFound :many
-SELECT id, project_id, risk_policy_id, policy_version, chat_message_id, source, found, rule_id, description, match, start_line, start_column, end_line, end_column, confidence, tags, created_at
-FROM risk_results
-WHERE project_id = $1
-  AND found IS TRUE
-ORDER BY created_at DESC
+SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_line, rr.start_column, rr.end_line, rr.end_column, rr.confidence, rr.tags, rr.created_at, cm.chat_id
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.project_id = $1
+  AND rr.found IS TRUE
+ORDER BY rr.created_at DESC
 LIMIT $2
 `
 
@@ -566,15 +590,36 @@ type ListRiskResultsByProjectFoundParams struct {
 	ResultLimit int32
 }
 
-func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRiskResultsByProjectFoundParams) ([]RiskResult, error) {
+type ListRiskResultsByProjectFoundRow struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	RiskPolicyID  uuid.UUID
+	PolicyVersion int64
+	ChatMessageID uuid.UUID
+	Source        string
+	Found         bool
+	RuleID        pgtype.Text
+	Description   pgtype.Text
+	Match         pgtype.Text
+	StartLine     pgtype.Int4
+	StartColumn   pgtype.Int4
+	EndLine       pgtype.Int4
+	EndColumn     pgtype.Int4
+	Confidence    pgtype.Float8
+	Tags          []string
+	CreatedAt     pgtype.Timestamptz
+	ChatID        uuid.UUID
+}
+
+func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRiskResultsByProjectFoundParams) ([]ListRiskResultsByProjectFoundRow, error) {
 	rows, err := q.db.Query(ctx, listRiskResultsByProjectFound, arg.ProjectID, arg.ResultLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []RiskResult
+	var items []ListRiskResultsByProjectFoundRow
 	for rows.Next() {
-		var i RiskResult
+		var i ListRiskResultsByProjectFoundRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
@@ -593,6 +638,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 			&i.Confidence,
 			&i.Tags,
 			&i.CreatedAt,
+			&i.ChatID,
 		); err != nil {
 			return nil, err
 		}

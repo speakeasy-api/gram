@@ -16,6 +16,8 @@ type RiskResult struct {
 	PolicyVersion int64
 	// The chat message that was scanned.
 	ChatMessageID string
+	// The chat session containing the message.
+	ChatID *string
 	// Detection source (e.g. gitleaks).
 	Source string
 	// The matched rule identifier.

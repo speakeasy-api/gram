@@ -10,6 +10,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type RiskResult = {
   /**
+   * The chat session containing the message.
+   */
+  chatId?: string | undefined;
+  /**
    * The chat message that was scanned.
    */
   chatMessageId: string;
@@ -75,6 +79,7 @@ export type RiskResult = {
 export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
   .pipe(
     z.object({
+      chat_id: z.optional(z.string()),
       chat_message_id: z.string(),
       confidence: z.optional(z.number()),
       created_at: z.pipe(
@@ -96,6 +101,7 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "chat_id": "chatId",
         "chat_message_id": "chatMessageId",
         "created_at": "createdAt",
         "end_column": "endColumn",

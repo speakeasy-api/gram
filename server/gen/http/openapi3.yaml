@@ -23895,6 +23895,10 @@ components:
         RiskResult:
             type: object
             properties:
+                chat_id:
+                    type: string
+                    description: The chat session containing the message.
+                    format: uuid
                 chat_message_id:
                     type: string
                     description: The chat message that was scanned.

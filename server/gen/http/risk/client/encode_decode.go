@@ -1955,6 +1955,7 @@ func unmarshalRiskResultResponseBodyToTypesRiskResult(v *RiskResultResponseBody)
 		PolicyID:      *v.PolicyID,
 		PolicyVersion: *v.PolicyVersion,
 		ChatMessageID: *v.ChatMessageID,
+		ChatID:        v.ChatID,
 		Source:        *v.Source,
 		RuleID:        v.RuleID,
 		Description:   v.Description,

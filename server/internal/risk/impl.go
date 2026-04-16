@@ -264,32 +264,39 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 	}
 	limit := int32(rawLimit)
 
-	var rows []repo.RiskResult
-	var err error
+	var results []*types.RiskResult
 
 	if payload.PolicyID != nil && *payload.PolicyID != "" {
 		policyID, parseErr := uuid.Parse(*payload.PolicyID)
 		if parseErr != nil {
 			return nil, oops.C(oops.CodeInvalid)
 		}
-		rows, err = s.repo.ListRiskResultsByProjectAndPolicy(ctx, repo.ListRiskResultsByProjectAndPolicyParams{
+		rows, err := s.repo.ListRiskResultsByProjectAndPolicy(ctx, repo.ListRiskResultsByProjectAndPolicyParams{
 			ProjectID:    *authCtx.ProjectID,
 			RiskPolicyID: policyID,
 			ResultLimit:  limit,
 		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list risk results").Log(ctx, s.logger)
+		}
+		results = make([]*types.RiskResult, 0, len(rows))
+		for _, row := range rows {
+			chatID := row.ChatID.String()
+			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.PolicyVersion, row.ChatMessageID, &chatID, row.Source, row.RuleID, row.Description, row.Match, row.StartLine, row.StartColumn, row.EndLine, row.EndColumn, row.Confidence, row.Tags, row.CreatedAt))
+		}
 	} else {
-		rows, err = s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
+		rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
 			ProjectID:   *authCtx.ProjectID,
 			ResultLimit: limit,
 		})
-	}
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk results").Log(ctx, s.logger)
-	}
-
-	results := make([]*types.RiskResult, 0, len(rows))
-	for _, row := range rows {
-		results = append(results, resultToType(row))
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list risk results").Log(ctx, s.logger)
+		}
+		results = make([]*types.RiskResult, 0, len(rows))
+		for _, row := range rows {
+			chatID := row.ChatID.String()
+			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.PolicyVersion, row.ChatMessageID, &chatID, row.Source, row.RuleID, row.Description, row.Match, row.StartLine, row.StartColumn, row.EndLine, row.EndColumn, row.Confidence, row.Tags, row.CreatedAt))
+		}
 	}
 
 	return &gen.ListRiskResultsResult{Results: results}, nil
@@ -419,26 +426,30 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	}, nil
 }
 
-func resultToType(row repo.RiskResult) *types.RiskResult {
-	r := &types.RiskResult{
-		ID:            row.ID.String(),
-		PolicyID:      row.RiskPolicyID.String(),
-		PolicyVersion: row.PolicyVersion,
-		ChatMessageID: row.ChatMessageID.String(),
-		Source:        row.Source,
-		RuleID:        ptrText(row.RuleID),
-		Description:   ptrText(row.Description),
-		Match:         ptrText(row.Match),
-		StartLine:     ptrInt4(row.StartLine),
-		StartColumn:   ptrInt4(row.StartColumn),
-		EndLine:       ptrInt4(row.EndLine),
-		EndColumn:     ptrInt4(row.EndColumn),
-		Confidence:    ptrFloat8(row.Confidence),
-		Tags:          row.Tags,
-		CreatedAt:     row.CreatedAt.Time.Format(time.RFC3339),
+func foundRowToResult(
+	id, policyID uuid.UUID, policyVersion int64, chatMessageID uuid.UUID, chatID *string,
+	source string, ruleID, description, match pgtype.Text,
+	startLine, startColumn, endLine, endColumn pgtype.Int4,
+	confidence pgtype.Float8, tags []string, createdAt pgtype.Timestamptz,
+) *types.RiskResult {
+	return &types.RiskResult{
+		ID:            id.String(),
+		PolicyID:      policyID.String(),
+		PolicyVersion: policyVersion,
+		ChatMessageID: chatMessageID.String(),
+		ChatID:        chatID,
+		Source:        source,
+		RuleID:        ptrText(ruleID),
+		Description:   ptrText(description),
+		Match:         ptrText(match),
+		StartLine:     ptrInt4(startLine),
+		StartColumn:   ptrInt4(startColumn),
+		EndLine:       ptrInt4(endLine),
+		EndColumn:     ptrInt4(endColumn),
+		Confidence:    ptrFloat8(confidence),
+		Tags:          tags,
+		CreatedAt:     createdAt.Time.Format(time.RFC3339),
 	}
-
-	return r
 }
 
 func ptrText(v pgtype.Text) *string {

@@ -1648,6 +1648,8 @@ type RiskResultResponseBody struct {
 	PolicyVersion int64 `form:"policy_version" json:"policy_version" xml:"policy_version"`
 	// The chat message that was scanned.
 	ChatMessageID string `form:"chat_message_id" json:"chat_message_id" xml:"chat_message_id"`
+	// The chat session containing the message.
+	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
 	// Detection source (e.g. gitleaks).
 	Source string `form:"source" json:"source" xml:"source"`
 	// The matched rule identifier.
