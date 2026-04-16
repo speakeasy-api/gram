@@ -407,19 +407,22 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 
 		//nolint:gosec // Values are bounded counts that won't overflow int64
 		users[i] = &telem_gen.UserSummary{
-			UserID:              item.UserID,
-			FirstSeenUnixNano:   strconv.FormatInt(item.FirstSeenUnixNano, 10),
-			LastSeenUnixNano:    strconv.FormatInt(item.LastSeenUnixNano, 10),
-			TotalChats:          int64(item.TotalChats),
-			TotalChatRequests:   int64(item.TotalChatRequests),
-			TotalInputTokens:    item.TotalInputTokens,
-			TotalOutputTokens:   item.TotalOutputTokens,
-			TotalTokens:         item.TotalTokens,
-			AvgTokensPerRequest: sanitizeFloat64(item.AvgTokensPerReq),
-			TotalToolCalls:      int64(item.TotalToolCalls),
-			ToolCallSuccess:     int64(item.ToolCallSuccess),
-			ToolCallFailure:     int64(item.ToolCallFailure),
-			Tools:               tools,
+			UserID:                   item.UserID,
+			FirstSeenUnixNano:        strconv.FormatInt(item.FirstSeenUnixNano, 10),
+			LastSeenUnixNano:         strconv.FormatInt(item.LastSeenUnixNano, 10),
+			TotalChats:               int64(item.TotalChats),
+			TotalChatRequests:        int64(item.TotalChatRequests),
+			TotalInputTokens:         item.TotalInputTokens,
+			TotalOutputTokens:        item.TotalOutputTokens,
+			TotalTokens:              item.TotalTokens,
+			CacheReadInputTokens:     item.CacheReadInputTokens,
+			CacheCreationInputTokens: item.CacheCreationInputTokens,
+			AvgTokensPerRequest:      sanitizeFloat64(item.AvgTokensPerReq),
+			TotalCost:                sanitizeFloat64(item.TotalCost),
+			TotalToolCalls:           int64(item.TotalToolCalls),
+			ToolCallSuccess:          int64(item.ToolCallSuccess),
+			ToolCallFailure:          int64(item.ToolCallFailure),
+			Tools:                    tools,
 		}
 	}
 

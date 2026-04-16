@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -48,17 +47,6 @@ type Service struct {
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
-	sessionTotals      map[string]*SessionTotals
-	sessionTotalsMu    sync.RWMutex
-}
-
-// SessionTotals tracks cumulative metrics for a session
-type SessionTotals struct {
-	TotalCost         float64
-	TotalInputTokens  float64
-	TotalOutputTokens float64
-	TotalCacheRead    float64
-	TotalCacheCreate  float64
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -116,7 +104,6 @@ func NewService(
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
-		sessionTotals:      make(map[string]*SessionTotals),
 	}
 }
 
@@ -231,9 +218,6 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
 
-	// Extract token usage metrics
-	tokenMetrics := extractTokenMetrics(payload)
-
 	s.logger.InfoContext(ctx, "Received Claude token metrics",
 		attr.SlogEvent("claude_metrics"),
 		attr.SlogValueAny(map[string]any{
@@ -242,47 +226,10 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 		}),
 	)
 
-	// Update running totals
-	s.updateSessionTotals(tokenMetrics)
-
 	// Write metrics to ClickHouse
 	s.writeMetricsToClickHouse(ctx, payload, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	return nil
-}
-
-// updateSessionTotals accumulates metrics for a session
-func (s *Service) updateSessionTotals(metrics TokenMetrics) {
-	if metrics.SessionID == "" {
-		return
-	}
-
-	s.sessionTotalsMu.Lock()
-	defer s.sessionTotalsMu.Unlock()
-
-	if s.sessionTotals[metrics.SessionID] == nil {
-		s.sessionTotals[metrics.SessionID] = &SessionTotals{}
-	}
-
-	totals := s.sessionTotals[metrics.SessionID]
-
-	for _, dp := range metrics.DataPoints {
-		switch dp.MetricName {
-		case "claude_code.cost.usage":
-			totals.TotalCost += dp.Value
-		case "claude_code.token.usage":
-			switch dp.Type {
-			case "input":
-				totals.TotalInputTokens += dp.Value
-			case "output":
-				totals.TotalOutputTokens += dp.Value
-			case "cacheRead":
-				totals.TotalCacheRead += dp.Value
-			case "cacheCreation":
-				totals.TotalCacheCreate += dp.Value
-			}
-		}
-	}
 }
 
 type claudeLogMetadata struct {
@@ -502,23 +449,6 @@ type OTELLogData struct {
 	ClaudeOrgID string
 }
 
-// TokenMetrics contains extracted token usage information
-type TokenMetrics struct {
-	SessionID   string
-	Model       string
-	UserEmail   string
-	ClaudeOrgID string
-	DataPoints  []TokenDataPoint
-}
-
-// TokenDataPoint represents a single metric data point
-type TokenDataPoint struct {
-	MetricName string
-	Type       string
-	Value      float64
-	Timestamp  string
-}
-
 // extractResourceAttribute extracts a specific attribute from OTEL resource
 func extractResourceAttribute(resource *gen.OTELResource, key string) string {
 	if resource == nil || resource.Attributes == nil {
@@ -567,103 +497,3 @@ func extractLogData(logRecord *gen.OTELLogRecord) OTELLogData {
 	return data
 }
 
-// extractTokenMetrics extracts token usage information from OTEL metrics payload
-func extractTokenMetrics(payload *gen.MetricsPayload) TokenMetrics {
-	metrics := TokenMetrics{
-		DataPoints: make([]TokenDataPoint, 0),
-	}
-
-	if payload.ResourceMetrics == nil {
-		return metrics
-	}
-
-	// Iterate through resource metrics
-	for _, resourceMetric := range payload.ResourceMetrics {
-		if resourceMetric == nil || resourceMetric.ScopeMetrics == nil {
-			continue
-		}
-
-		// Iterate through scope metrics
-		for _, scopeMetric := range resourceMetric.ScopeMetrics {
-			if scopeMetric == nil || scopeMetric.Metrics == nil {
-				continue
-			}
-
-			// Iterate through individual metrics
-			for _, metric := range scopeMetric.Metrics {
-				if metric == nil || metric.Name == nil || metric.Sum == nil {
-					continue
-				}
-
-				metricName := *metric.Name
-
-				// Process each data point
-				for _, dataPoint := range metric.Sum.DataPoints {
-					if dataPoint == nil {
-						continue
-					}
-
-					// Extract common attributes
-					sessionID := extractAttributeString(dataPoint.Attributes, "session.id")
-					model := extractAttributeString(dataPoint.Attributes, "model")
-					userEmail := extractAttributeString(dataPoint.Attributes, "user.email")
-					claudeOrgID := extractAttributeString(dataPoint.Attributes, "organization.id")
-					metricType := extractAttributeString(dataPoint.Attributes, "type")
-
-					// Store common metadata (from first data point)
-					if sessionID != "" && metrics.SessionID == "" {
-						metrics.SessionID = sessionID
-					}
-					if model != "" && metrics.Model == "" {
-						metrics.Model = model
-					}
-					if userEmail != "" && metrics.UserEmail == "" {
-						metrics.UserEmail = userEmail
-					}
-					if claudeOrgID != "" && metrics.ClaudeOrgID == "" {
-						metrics.ClaudeOrgID = claudeOrgID
-					}
-
-					// Get the value
-					value := float64(0)
-					if dataPoint.AsDouble != nil {
-						value = *dataPoint.AsDouble
-					} else if dataPoint.AsInt != nil {
-						value = float64(*dataPoint.AsInt)
-					}
-
-					// Get timestamp
-					timestamp := ""
-					if dataPoint.TimeUnixNano != nil {
-						timestamp = *dataPoint.TimeUnixNano
-					}
-
-					// Create data point entry
-					metrics.DataPoints = append(metrics.DataPoints, TokenDataPoint{
-						MetricName: metricName,
-						Type:       metricType,
-						Value:      value,
-						Timestamp:  timestamp,
-					})
-				}
-			}
-		}
-	}
-
-	return metrics
-}
-
-// extractAttributeString extracts a string attribute value by key
-func extractAttributeString(attributes []*gen.OTELAttribute, key string) string {
-	if attributes == nil {
-		return ""
-	}
-
-	for _, attr := range attributes {
-		if attr.Key == key && attr.Value != nil && attr.Value.StringValue != nil {
-			return *attr.Value.StringValue
-		}
-	}
-
-	return ""
-}
