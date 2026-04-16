@@ -48,6 +48,15 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*Fe
 	}
 
 	if !policy.Enabled {
+		// Policy is disabled — clear all existing results.
+		if err := a.repo.DeleteStaleRiskResults(ctx, repo.DeleteStaleRiskResultsParams{
+			RiskPolicyID:  args.RiskPolicyID,
+			ProjectID:     args.ProjectID,
+			PolicyVersion: policy.Version + 1, // version+1 deletes everything including current
+		}); err != nil {
+			return nil, fmt.Errorf("delete results for disabled policy: %w", err)
+		}
+
 		return &FetchUnanalyzedResult{
 			MessageIDs:    nil,
 			PolicyVersion: policy.Version,
