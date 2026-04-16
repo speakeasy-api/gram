@@ -218,13 +218,14 @@ function LogDetailContent({
             />
           )}
 
-          {/* Resource */}
+          {/* Resource — no onAddFilter: the backend's attribute filter
+              resolves paths against `attributes.*`, not `resource_attributes.*`,
+              so resource-derived filters would silently return no results. */}
           {log.resourceAttributes &&
             Object.keys(log.resourceAttributes as object).length > 0 && (
               <AttributesSection
                 title="Resource"
                 data={log.resourceAttributes as Record<string, unknown>}
-                onAddFilter={onAddFilter}
               />
             )}
         </TabsContent>
