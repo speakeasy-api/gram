@@ -1,6 +1,7 @@
 package organizations_test
 
 import (
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ func TestService_SendInvite(t *testing.T) {
 
 	ti.orgs.On("SendInvitation", mock.Anything, thirdpartyworkos.SendInvitationOpts{
 		Email:          "test@example.com",
-		OrganizationID: "org_workos_test",
+		OrganizationID: mockidp.MockOrgID,
 		InviterUserID:  testAuthUserWorkOSID,
 		ExpiresInDays:  7,
 	}).Return(&thirdpartyworkos.Invitation{
@@ -77,7 +78,7 @@ func TestService_SendInvite_WithRoleSlug(t *testing.T) {
 
 	ti.orgs.On("SendInvitation", mock.Anything, thirdpartyworkos.SendInvitationOpts{
 		Email:          "test@example.com",
-		OrganizationID: "org_workos_test",
+		OrganizationID: mockidp.MockOrgID,
 		InviterUserID:  testAuthUserWorkOSID,
 		RoleSlug:       roleSlug,
 		ExpiresInDays:  7,

@@ -70,7 +70,7 @@ type MockOrganizationEntry struct {
 	ID                 string   `json:"id"`
 	Name               string   `json:"name"`
 	Slug               string   `json:"slug"`
-	SsoConnectionID    *string  `json:"sso_connection_id"`
+	WorkosID           *string  `json:"workos_id"`
 	UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 }
 
@@ -96,7 +96,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 				Name               string   `json:"name"`
 				Slug               string   `json:"slug"`
 				AccountType        string   `json:"account_type"`
-				SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+				WorkOSID           *string  `json:"workos_id,omitempty"`
 				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 			} `json:"organizations"`
 		}{
@@ -118,7 +118,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 				Name               string   `json:"name"`
 				Slug               string   `json:"slug"`
 				AccountType        string   `json:"account_type"`
-				SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+				WorkOSID           *string  `json:"workos_id,omitempty"`
 				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 			}{},
 		}
@@ -134,7 +134,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 			Name               string   `json:"name"`
 			Slug               string   `json:"slug"`
 			AccountType        string   `json:"account_type"`
-			SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+			WorkOSID           *string  `json:"workos_id,omitempty"`
 			UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 		}, len(userInfo.Organizations))
 
@@ -143,7 +143,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 			validateResp.Organizations[i].Name = org.Name
 			validateResp.Organizations[i].Slug = org.Slug
 			validateResp.Organizations[i].AccountType = "scale-up"
-			validateResp.Organizations[i].SSOConnectionID = org.SsoConnectionID
+			validateResp.Organizations[i].WorkOSID = org.WorkosID
 			validateResp.Organizations[i].UserWorkspaceSlugs = org.UserWorkspaceSlugs
 		}
 
@@ -162,7 +162,6 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 			ID:                 "new-org-123",
 			Name:               "New Organization",
 			Slug:               "new-org",
-			SsoConnectionID:    nil,
 			UserWorkspaceSlugs: []string{"new-workspace"},
 		}
 
@@ -184,7 +183,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 				Name               string   `json:"name"`
 				Slug               string   `json:"slug"`
 				AccountType        string   `json:"account_type"`
-				SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+				WorkOSID           *string  `json:"workos_id,omitempty"`
 				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 			} `json:"organizations"`
 		}{
@@ -206,7 +205,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 				Name               string   `json:"name"`
 				Slug               string   `json:"slug"`
 				AccountType        string   `json:"account_type"`
-				SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+				WorkOSID           *string  `json:"workos_id,omitempty"`
 				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 			}{},
 		}
@@ -222,7 +221,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 			Name               string   `json:"name"`
 			Slug               string   `json:"slug"`
 			AccountType        string   `json:"account_type"`
-			SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+			WorkOSID           *string  `json:"workos_id,omitempty"`
 			UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 		}, len(updatedUserInfo.Organizations))
 
@@ -231,7 +230,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 			validateResp.Organizations[i].Name = org.Name
 			validateResp.Organizations[i].Slug = org.Slug
 			validateResp.Organizations[i].AccountType = "free"
-			validateResp.Organizations[i].SSOConnectionID = org.SsoConnectionID
+			validateResp.Organizations[i].WorkOSID = org.WorkosID
 			validateResp.Organizations[i].UserWorkspaceSlugs = org.UserWorkspaceSlugs
 		}
 
@@ -330,7 +329,6 @@ func defaultMockUserInfo() *MockUserInfo {
 				ID:                 "org-123",
 				Name:               "Test Organization",
 				Slug:               "test-org",
-				SsoConnectionID:    nil,
 				UserWorkspaceSlugs: []string{"workspace1", "workspace2"},
 			},
 		},
@@ -349,14 +347,12 @@ func speakeasyMockUserInfo() *MockUserInfo {
 				ID:                 "speakeasy-team-123",
 				Name:               "Speakeasy Team",
 				Slug:               "speakeasy-team",
-				SsoConnectionID:    nil,
 				UserWorkspaceSlugs: []string{"speakeasy-workspace"},
 			},
 			{
 				ID:                 "other-org-123",
 				Name:               "Other Organization",
 				Slug:               "other-org",
-				SsoConnectionID:    nil,
 				UserWorkspaceSlugs: []string{"other-workspace"},
 			},
 		},
@@ -375,7 +371,6 @@ func adminMockUserInfo() *MockUserInfo {
 				ID:                 "admin-org-123",
 				Name:               "Admin Organization",
 				Slug:               "admin-org",
-				SsoConnectionID:    nil,
 				UserWorkspaceSlugs: []string{"admin-workspace"},
 			},
 		},
@@ -402,10 +397,10 @@ func (ti *testInstance) createTestUser(ctx context.Context, userInfo *MockUserIn
 func (ti *testInstance) createTestOrganization(ctx context.Context, org MockOrganizationEntry) error {
 	orgQueries := orgRepo.New(ti.conn)
 	_, err := orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              org.ID,
-		Name:            org.Name,
-		Slug:            org.Slug,
-		SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
+		ID:       org.ID,
+		Name:     org.Name,
+		Slug:     org.Slug,
+		WorkosID: conv.PtrToPGText(org.WorkosID),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to upsert organization metadata: %w", err)
