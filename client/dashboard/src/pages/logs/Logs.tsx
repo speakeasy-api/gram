@@ -362,13 +362,6 @@ function LogsContent() {
     [setSearchParams],
   );
 
-  const handleAddFilterFromLog = useCallback(
-    (path: string, op: Operator, value: string) => {
-      handleLogFiltersChange(applyFilterAdd(logFilters, { path, op, value }));
-    },
-    [logFilters, handleLogFiltersChange],
-  );
-
   const effectiveGramUrn = searchQuery;
 
   // Fetch attribute keys for filter bar
@@ -685,6 +678,13 @@ function LogsInnerContent({
   hasActiveFilters: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
+
+  const handleAddFilterFromLog = useCallback(
+    (path: string, op: Operator, value: string) => {
+      onLogFiltersChange(applyFilterAdd(logFilters, { path, op, value }));
+    },
+    [logFilters, onLogFiltersChange],
+  );
 
   // Enforce a minimum visible duration for the refresh button's in-flight
   // state. Instant or cached refetches would otherwise flash the spinner for
