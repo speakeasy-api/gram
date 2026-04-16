@@ -420,6 +420,11 @@ function AttributesSection({
   onAddFilter?: (path: string, op: Operator, value: string) => void;
 }) {
   const flatEntries = flattenObject(data);
+  // Controlled state: track which single row's menu is open. Each row has its
+  // own DropdownMenu instance, so we need a coordinator to ensure only one is
+  // open at a time (Radix's default uncontrolled behavior opened each one
+  // independently inside the Sheet modal stack).
+  const [openMenuKey, setOpenMenuKey] = useState<string | null>(null);
 
   return (
     <div className="flex flex-col gap-2">
@@ -461,11 +466,11 @@ function AttributesSection({
           }
 
           return (
-            // `modal={false}` is required because this menu lives inside a
-            // Sheet (Radix Dialog). Modal-on-modal stacking swallows pointer
-            // events, so outside-click-to-close never fires and every row's
-            // menu stays open. Non-modal uses pointer-down-outside instead.
-            <DropdownMenu key={entry.key} modal={false}>
+            <DropdownMenu
+              key={entry.key}
+              open={openMenuKey === entry.key}
+              onOpenChange={(open) => setOpenMenuKey(open ? entry.key : null)}
+            >
               <DropdownMenuTrigger asChild>
                 <button
                   className="hover:bg-muted/50 flex w-full cursor-pointer flex-col gap-1 px-4 py-2.5 text-left transition-colors"
