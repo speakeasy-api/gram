@@ -391,12 +391,14 @@ const STATUS_OPTIONS: {
   label: string;
   description: string;
   dotClass: string;
+  hoverDotClass: string;
 }[] = [
   {
     value: "disabled",
     label: "Disabled",
     description: "The server is offline.",
     dotClass: "bg-amber-400",
+    hoverDotClass: "group-hover:bg-amber-400",
   },
   {
     value: "private",
@@ -404,6 +406,7 @@ const STATUS_OPTIONS: {
     description:
       "Only users with a Gram API Key from this project can read the tools hosted by this server.",
     dotClass: "bg-blue-400",
+    hoverDotClass: "group-hover:bg-blue-400",
   },
   {
     value: "public",
@@ -411,6 +414,7 @@ const STATUS_OPTIONS: {
     description:
       "Anyone with the URL can read the tools hosted by this server. Authentication is still required to use the tools.",
     dotClass: "bg-green-400",
+    hoverDotClass: "group-hover:bg-green-400",
   },
 ];
 
@@ -501,14 +505,14 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
               key={option.value}
               onSelect={() => handleSelect(option.value)}
               disabled={option.value === currentStatus}
-              className="flex cursor-pointer items-start gap-2.5 rounded-md p-2"
+              className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
             >
               <span
                 className={cn(
-                  "mt-1 h-2 w-2 shrink-0 rounded-full",
+                  "mt-1 h-2 w-2 shrink-0 rounded-full transition-colors",
                   option.value === currentStatus
                     ? option.dotClass
-                    : "bg-muted-foreground",
+                    : cn("bg-muted", option.hoverDotClass),
                 )}
               />
               <div className="flex-1">
