@@ -68,6 +68,8 @@ export interface RunUploadWorkerOptions extends ExecuteUploadOptions {
 export interface SpawnDetachedUploadOptions {
   nodeBin?: string;
   workerPath?: string;
+  gramKey?: string | null;
+  gramProject?: string | null;
 }
 
 type SerializableRequest = {
@@ -281,9 +283,21 @@ export async function spawnDetachedUploadWorker(
     options.workerPath ?? path.join(moduleDir, "producer-upload-worker.mts");
 
   try {
+    const workerEnv = {
+      ...process.env,
+      ...(typeof options.gramKey === "string" && options.gramKey.length > 0
+        ? { GRAM_API_KEY: options.gramKey }
+        : {}),
+      ...(typeof options.gramProject === "string" &&
+      options.gramProject.length > 0
+        ? { GRAM_PROJECT_SLUG: options.gramProject }
+        : {}),
+    };
+
     const child = spawn(nodeBin, [workerPath, "--request-file", requestFile], {
       detached: true,
       stdio: "ignore",
+      env: workerEnv,
     });
     child.unref();
     return { spawned: true };

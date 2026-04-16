@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -42,9 +43,10 @@ import (
 )
 
 const (
-	maxCaptureArtifactMiB   = 10
-	maxCaptureArtifactBytes = maxCaptureArtifactMiB * 1024 * 1024
-	skillAssetKind          = "skill"
+	maxCaptureArtifactMiB    = 10
+	maxCaptureArtifactBytes  = maxCaptureArtifactMiB * 1024 * 1024
+	skillAssetKind           = "skill"
+	skillVersionStatePending = "pending_review"
 )
 
 var allowedCaptureContentTypes = map[string]struct{}{
@@ -270,11 +272,36 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 		return nil, oops.E(oops.CodeBadRequest, nil, "content sha256 mismatch")
 	}
 
+	skillSlug := conv.ToSlug(payload.Name)
+	if skillSlug == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skill name must include at least one alphanumeric character")
+	}
+
 	existing, err := s.findExistingAsset(ctx, *authCtx.ProjectID, contentSHA)
 	if err != nil {
 		return nil, err
 	}
 	if existing != nil {
+		existingAssetID, err := uuid.Parse(existing.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse existing asset id: %w", err), "error loading skill artifact")
+		}
+
+		dbtx, err := s.db.Begin(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error accessing skill assets").Log(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+		err = s.ensureSkillLineageForCapture(ctx, s.skillsRepo.WithTx(dbtx), authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, skillSlug, contentSHA, payload, existingAssetID)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := dbtx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to save skill artifact").Log(ctx, s.logger)
+		}
+
 		return &gen.CaptureSkillResult{Asset: existing}, nil
 	}
 
@@ -290,6 +317,7 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	skillsTxRepo := s.skillsRepo.WithTx(dbtx)
 	asset, err := s.repo.WithTx(dbtx).CreateAsset(ctx, assetsrepo.CreateAssetParams{
 		Name:          filename,
 		Url:           uri.String(),
@@ -306,15 +334,45 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 			if findErr != nil {
 				return nil, findErr
 			}
-			if existing != nil {
-				return &gen.CaptureSkillResult{Asset: existing}, nil
+			if existing == nil {
+				return nil, oops.E(oops.CodeConflict, nil, "skill asset already exists with incompatible metadata")
 			}
-			return nil, oops.E(oops.CodeConflict, nil, "skill asset already exists with incompatible metadata")
+
+			existingAssetID, parseErr := uuid.Parse(existing.ID)
+			if parseErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse existing asset id: %w", parseErr), "error loading skill artifact")
+			}
+
+			if rollbackErr := dbtx.Rollback(ctx); rollbackErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("rollback failed asset transaction: %w", rollbackErr), "failed to save skill artifact").Log(ctx, s.logger)
+			}
+
+			dbtx, err = s.db.Begin(ctx)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "error accessing skill assets").Log(ctx, s.logger)
+			}
+			skillsTxRepo = s.skillsRepo.WithTx(dbtx)
+
+			err = s.ensureSkillLineageForCapture(ctx, skillsTxRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, skillSlug, contentSHA, payload, existingAssetID)
+			if err != nil {
+				return nil, err
+			}
+
+			if err := dbtx.Commit(ctx); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to save skill artifact").Log(ctx, s.logger)
+			}
+
+			return &gen.CaptureSkillResult{Asset: existing}, nil
 		}
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create skill asset: %w", err), "error saving skill artifact")
 	}
 	if asset.Kind != skillAssetKind {
 		return nil, oops.E(oops.CodeConflict, nil, "skill asset hash conflicts with existing non-skill asset")
+	}
+
+	err = s.ensureSkillLineageForCapture(ctx, skillsTxRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, skillSlug, contentSHA, payload, asset.ID)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -384,6 +442,133 @@ func (s *Service) getEffectiveCaptureMode(ctx context.Context, organizationID st
 	default:
 		return CaptureModeDisabled, oops.E(oops.CodeUnexpected, nil, "invalid capture policy mode")
 	}
+}
+
+func (s *Service) ensureSkillLineageForCapture(
+	ctx context.Context,
+	repo *skillsrepo.Queries,
+	organizationID string,
+	projectID uuid.UUID,
+	userID string,
+	skillSlug string,
+	contentSHA string,
+	payload *gen.CaptureSkillForm,
+	assetID uuid.UUID,
+) error {
+	skill, err := repo.GetSkillBySlug(ctx, skillsrepo.GetSkillBySlugParams{
+		ProjectID: projectID,
+		Slug:      skillSlug,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			skill, err = repo.CreateSkill(ctx, skillsrepo.CreateSkillParams{
+				OrganizationID: organizationID,
+				ProjectID:      projectID,
+				Name:           payload.Name,
+				Slug:           skillSlug,
+				Description: pgtype.Text{
+					String: "",
+					Valid:  false,
+				},
+				SkillUuid: pgtype.Text{
+					String: "",
+					Valid:  false,
+				},
+				ActiveVersionID: uuid.NullUUID{
+					UUID:  uuid.Nil,
+					Valid: false,
+				},
+				CreatedByUserID: userID,
+			})
+			if err != nil {
+				var pgErr *pgconn.PgError
+				if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+					skill, err = repo.GetSkillBySlug(ctx, skillsrepo.GetSkillBySlugParams{
+						ProjectID: projectID,
+						Slug:      skillSlug,
+					})
+					if err != nil {
+						return oops.E(oops.CodeUnexpected, fmt.Errorf("get skill by slug after create conflict: %w", err), "error loading skill")
+					}
+				} else {
+					return oops.E(oops.CodeUnexpected, fmt.Errorf("create skill: %w", err), "error saving skill artifact")
+				}
+			}
+		} else {
+			return oops.E(oops.CodeUnexpected, fmt.Errorf("get skill by slug: %w", err), "error loading skill")
+		}
+	}
+
+	version, err := repo.GetSkillVersionByHash(ctx, skillsrepo.GetSkillVersionByHashParams{
+		SkillID:       skill.ID,
+		ContentSha256: contentSHA,
+		ProjectID:     projectID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			version, err = repo.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+				AssetID:       assetID,
+				ContentSha256: contentSHA,
+				AssetFormat:   payload.AssetFormat,
+				SizeBytes:     payload.ContentLength,
+				SkillBytes: pgtype.Int8{
+					Int64: 0,
+					Valid: false,
+				},
+				State:            skillVersionStatePending,
+				CapturedByUserID: userID,
+				AuthorName: pgtype.Text{
+					String: "",
+					Valid:  false,
+				},
+				FirstSeenTraceID: pgtype.Text{
+					String: "",
+					Valid:  false,
+				},
+				FirstSeenSessionID: pgtype.Text{
+					String: "",
+					Valid:  false,
+				},
+				FirstSeenAt: pgtype.Timestamptz{
+					Time:             time.Time{},
+					InfinityModifier: 0,
+					Valid:            false,
+				},
+				SkillID:   skill.ID,
+				ProjectID: projectID,
+			})
+			if err != nil {
+				var pgErr *pgconn.PgError
+				if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+					version, err = repo.GetSkillVersionByHash(ctx, skillsrepo.GetSkillVersionByHashParams{
+						SkillID:       skill.ID,
+						ContentSha256: contentSHA,
+						ProjectID:     projectID,
+					})
+					if err != nil {
+						return oops.E(oops.CodeUnexpected, fmt.Errorf("get skill version by hash after create conflict: %w", err), "error loading skill")
+					}
+				} else {
+					return oops.E(oops.CodeUnexpected, fmt.Errorf("create skill version: %w", err), "error saving skill artifact")
+				}
+			}
+		} else {
+			return oops.E(oops.CodeUnexpected, fmt.Errorf("get skill version by hash: %w", err), "error loading skill")
+		}
+	}
+
+	if !skill.ActiveVersionID.Valid {
+		_, err = repo.SetSkillActiveVersion(ctx, skillsrepo.SetSkillActiveVersionParams{
+			ActiveVersionID: uuid.NullUUID{UUID: version.ID, Valid: true},
+			ProjectID:       projectID,
+			ID:              skill.ID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, fmt.Errorf("set skill active version: %w", err), "error saving skill artifact")
+		}
+	}
+
+	return nil
 }
 
 func captureModeAllowsScope(mode CaptureMode, scope string) bool {

@@ -22,6 +22,10 @@ func TestService_Capture_Success(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestSkillsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	require.NotNil(t, authCtx.ProjectID)
 
 	content := []byte("PK\x03\x04skill-zip-content")
 	sha := sha256.Sum256(content)
@@ -42,12 +46,41 @@ func TestService_Capture_Success(t *testing.T) {
 	require.Equal(t, int64(len(content)), result.Asset.ContentLength)
 	require.NotEmpty(t, result.Asset.CreatedAt)
 	require.NotEmpty(t, result.Asset.UpdatedAt)
+
+	skill, err := ti.skillsRepo.GetSkillBySlug(ctx, skillsrepo.GetSkillBySlugParams{
+		ProjectID: *authCtx.ProjectID,
+		Slug:      "golang",
+	})
+	require.NoError(t, err)
+	require.Equal(t, authCtx.ActiveOrganizationID, skill.OrganizationID)
+	require.Equal(t, *authCtx.ProjectID, skill.ProjectID)
+	require.Equal(t, "golang", skill.Name)
+	require.Equal(t, "golang", skill.Slug)
+	require.Equal(t, authCtx.UserID, skill.CreatedByUserID)
+	require.True(t, skill.ActiveVersionID.Valid)
+
+	version, err := ti.skillsRepo.GetSkillVersionByHash(ctx, skillsrepo.GetSkillVersionByHashParams{
+		SkillID:       skill.ID,
+		ContentSha256: expectedSHA,
+		ProjectID:     *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, skill.ID, version.SkillID)
+	require.Equal(t, "zip", version.AssetFormat)
+	require.Equal(t, int64(len(content)), version.SizeBytes)
+	require.Equal(t, "pending_review", version.State)
+	require.Equal(t, authCtx.UserID, version.CapturedByUserID)
+	require.Equal(t, version.ID, skill.ActiveVersionID.UUID)
 }
 
 func TestService_Capture_DedupesExistingAsset(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestSkillsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	require.NotNil(t, authCtx.ProjectID)
 
 	content := []byte("PK\x03\x04skill-zip-content-dedupe")
 	sha := sha256.Sum256(content)
@@ -65,6 +98,20 @@ func TestService_Capture_DedupesExistingAsset(t *testing.T) {
 	require.NotNil(t, second.Asset)
 	require.Equal(t, first.Asset.ID, second.Asset.ID)
 	require.Equal(t, first.Asset.Sha256, second.Asset.Sha256)
+
+	skill, err := ti.skillsRepo.GetSkillBySlug(ctx, skillsrepo.GetSkillBySlugParams{
+		ProjectID: *authCtx.ProjectID,
+		Slug:      "golang",
+	})
+	require.NoError(t, err)
+
+	versions, err := ti.skillsRepo.ListSkillVersions(ctx, skillsrepo.ListSkillVersionsParams{
+		ProjectID: *authCtx.ProjectID,
+		SkillID:   skill.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, versions, 1)
+	require.Equal(t, expectedSHA, versions[0].ContentSha256)
 }
 
 func TestService_Capture_Unauthorized(t *testing.T) {
@@ -408,4 +455,71 @@ func TestService_Capture_ProjectOverrideTakesPrecedence(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.Asset)
+}
+
+func TestService_Capture_RejectsNameWithoutAlphanumericSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestSkillsService(t)
+
+	content := []byte("PK\x03\x04skill-zip-content-invalid-slug")
+	sha := sha256.Sum256(content)
+	expectedSHA := hex.EncodeToString(sha[:])
+	payload := newCapturePayload("application/zip", int64(len(content)), expectedSHA)
+	payload.Name = "!!!"
+
+	_, err := ti.service.Capture(ctx, payload, io.NopCloser(bytes.NewReader(content)))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "skill name must include at least one alphanumeric character")
+}
+
+func TestService_Capture_BackfillsLineageForExistingAsset(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestSkillsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	require.NotNil(t, authCtx.ProjectID)
+
+	content := []byte("PK\x03\x04skill-zip-content-backfill")
+	sha := sha256.Sum256(content)
+	expectedSHA := hex.EncodeToString(sha[:])
+	payload := newCapturePayload("application/zip", int64(len(content)), expectedSHA)
+
+	existingAsset, err := ti.repo.CreateAsset(ctx, assetsrepo.CreateAssetParams{
+		Name:          fmt.Sprintf("skill-%s.zip", expectedSHA),
+		Url:           fmt.Sprintf("file://skills/%s.zip", expectedSHA),
+		ProjectID:     *authCtx.ProjectID,
+		Sha256:        expectedSHA,
+		Kind:          "skill",
+		ContentType:   "application/zip",
+		ContentLength: int64(len(content)),
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.Capture(ctx, payload, io.NopCloser(bytes.NewReader(content)))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Asset)
+	require.Equal(t, existingAsset.ID.String(), result.Asset.ID)
+
+	skill, err := ti.skillsRepo.GetSkillBySlug(ctx, skillsrepo.GetSkillBySlugParams{
+		ProjectID: *authCtx.ProjectID,
+		Slug:      "golang",
+	})
+	require.NoError(t, err)
+	require.True(t, skill.ActiveVersionID.Valid)
+
+	version, err := ti.skillsRepo.GetSkillVersionByHash(ctx, skillsrepo.GetSkillVersionByHashParams{
+		SkillID:       skill.ID,
+		ContentSha256: expectedSHA,
+		ProjectID:     *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, existingAsset.ID, version.AssetID)
+	require.Equal(t, "pending_review", version.State)
+	require.Equal(t, version.ID, skill.ActiveVersionID.UUID)
 }
