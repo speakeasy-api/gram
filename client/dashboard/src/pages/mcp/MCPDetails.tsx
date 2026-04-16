@@ -469,7 +469,7 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
         onError: (error) => {
           if (
             error instanceof Error &&
-            error.message.includes("maximum number")
+            error.message.includes("maximum number of public MCP servers")
           ) {
             setIsMaxServersModalOpen(true);
           } else {
