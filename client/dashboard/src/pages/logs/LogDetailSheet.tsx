@@ -316,6 +316,72 @@ function MetadataBadge({
   );
 }
 
+interface AttributeEntry {
+  key: string;
+  displayValue: string;
+  filterValue: string | null;
+}
+
+/**
+ * Flatten a nested object into dot-notation keys with filterability metadata.
+ * e.g. { http: { request: { method: "POST" } } } =>
+ *   [{ key: "http.request.method", displayValue: "POST", filterValue: "POST" }]
+ */
+function flattenObject(
+  obj: Record<string, unknown>,
+  prefix = "",
+): AttributeEntry[] {
+  const result: AttributeEntry[] = [];
+
+  for (const [key, value] of Object.entries(obj)) {
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+
+    if (value === null || value === undefined) {
+      result.push({ key: fullKey, displayValue: "\u2014", filterValue: null });
+      continue;
+    }
+
+    switch (typeof value) {
+      case "object":
+        if (Array.isArray(value)) {
+          result.push({
+            key: fullKey,
+            displayValue: JSON.stringify(value),
+            filterValue: null,
+          });
+        } else if (Object.keys(value).length > 0) {
+          result.push(
+            ...flattenObject(value as Record<string, unknown>, fullKey),
+          );
+        }
+        break;
+      case "string":
+        result.push({
+          key: fullKey,
+          displayValue: value || "\u2014",
+          filterValue: value || null,
+        });
+        break;
+      case "number":
+      case "boolean":
+        result.push({
+          key: fullKey,
+          displayValue: String(value),
+          filterValue: String(value),
+        });
+        break;
+      default:
+        result.push({
+          key: fullKey,
+          displayValue: JSON.stringify(value),
+          filterValue: JSON.stringify(value),
+        });
+    }
+  }
+
+  return result;
+}
+
 function AttributesSection({
   title,
   data,
@@ -341,59 +407,18 @@ function AttributesSection({
         </button>
       </div>
       <div className="bg-muted border-border divide-border divide-y rounded-lg border">
-        {flatEntries.map(([key, value]) => (
+        {flatEntries.map((entry) => (
           <div
-            key={key}
+            key={entry.key}
             className="hover:bg-muted/50 flex flex-col gap-1 px-4 py-2.5 transition-colors"
           >
-            <span className="text-muted-foreground text-xs">{key}</span>
-            <span className="font-mono text-sm break-all">{value}</span>
+            <span className="text-muted-foreground text-xs">{entry.key}</span>
+            <span className="font-mono text-sm break-all">
+              {entry.displayValue}
+            </span>
           </div>
         ))}
       </div>
     </div>
   );
-}
-
-/**
- * Flatten a nested object into dot-notation keys
- * e.g. { http: { request: { method: "POST" } } } => [["http.request.method", "POST"]]
- */
-function flattenObject(
-  obj: Record<string, unknown>,
-  prefix = "",
-): [string, string][] {
-  const result: [string, string][] = [];
-
-  for (const [key, value] of Object.entries(obj)) {
-    const fullKey = prefix ? `${prefix}.${key}` : key;
-
-    if (value === null || value === undefined) {
-      result.push([fullKey, "—"]);
-      continue;
-    }
-
-    switch (typeof value) {
-      case "object":
-        if (Array.isArray(value)) {
-          result.push([fullKey, JSON.stringify(value)]);
-        } else if (Object.keys(value).length > 0) {
-          result.push(
-            ...flattenObject(value as Record<string, unknown>, fullKey),
-          );
-        }
-        break;
-      case "string":
-        result.push([fullKey, value || "—"]);
-        break;
-      case "number":
-      case "boolean":
-        result.push([fullKey, String(value)]);
-        break;
-      default:
-        result.push([fullKey, JSON.stringify(value)]);
-    }
-  }
-
-  return result;
 }
