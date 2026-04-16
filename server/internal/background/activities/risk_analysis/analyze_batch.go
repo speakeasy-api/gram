@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.temporal.io/sdk/activity"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -62,64 +61,52 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 	}
 	fetchDuration := time.Since(fetchStart)
 
+	// Build content slice for parallel scanning.
+	contents := make([]string, len(messages))
+	for i, msg := range messages {
+		contents[i] = msg.Content
+	}
+
+	// Scan all messages in parallel using a goroutine worker pool.
+	scanStart := time.Now()
+	activity.RecordHeartbeat(ctx, 0)
+
+	batchFindings, err := ScanBatchParallel(contents)
+	if err != nil {
+		return nil, fmt.Errorf("parallel gitleaks scan: %w", err)
+	}
+
+	// Convert scan results to DB rows.
 	var rows []repo.InsertRiskResultsParams
 	findingsCount := 0
 
-	scanStart := time.Now()
 	for i, msg := range messages {
-		// Heartbeat every 50 messages so Temporal knows we're alive.
-		if i%50 == 0 {
-			activity.RecordHeartbeat(ctx, i)
-		}
+		findings := batchFindings[i]
 
-		contentStr := msg.Content
-		if contentStr == "" {
-			// Insert a "no finding" row so the message is marked as analyzed.
+		if len(findings) == 0 {
 			rows = append(rows, emptyResultRow(args, msg.ID))
 			continue
 		}
 
-		messageHasFindings := false
-
-		for _, source := range args.Sources {
-			switch source {
-			case "gitleaks":
-				findings, scanErr := ScanWithGitleaks(contentStr)
-				if scanErr != nil {
-					a.logger.ErrorContext(ctx, "gitleaks scan failed",
-						attr.SlogError(scanErr),
-					)
-					continue
-				}
-				for _, f := range findings {
-					messageHasFindings = true
-					findingsCount++
-					rows = append(rows, repo.InsertRiskResultsParams{
-						ProjectID:     args.ProjectID,
-						RiskPolicyID:  args.RiskPolicyID,
-						PolicyVersion: args.PolicyVersion,
-						ChatMessageID: msg.ID,
-						Source:        "gitleaks",
-						Found:         true,
-						RuleID:        pgtype.Text{String: f.RuleID, Valid: true},
-						Description:   pgtype.Text{String: f.Description, Valid: true},
-						Match:         pgtype.Text{String: f.Match, Valid: true},
-						StartLine:     pgtype.Int4{Int32: safeInt32(f.StartLine), Valid: true},
-						StartColumn:   pgtype.Int4{Int32: safeInt32(f.StartColumn), Valid: true},
-						EndLine:       pgtype.Int4{Int32: safeInt32(f.EndLine), Valid: true},
-						EndColumn:     pgtype.Int4{Int32: safeInt32(f.EndColumn), Valid: true},
-						Confidence:    pgtype.Float8{Float64: 1.0, Valid: true},
-						Tags:          f.Tags,
-					})
-				}
-			default:
-				a.logger.WarnContext(ctx, "unknown detection source: "+source)
-			}
-		}
-
-		// If no findings at all, insert a "clean" marker row.
-		if !messageHasFindings {
-			rows = append(rows, emptyResultRow(args, msg.ID))
+		for _, f := range findings {
+			findingsCount++
+			rows = append(rows, repo.InsertRiskResultsParams{
+				ProjectID:     args.ProjectID,
+				RiskPolicyID:  args.RiskPolicyID,
+				PolicyVersion: args.PolicyVersion,
+				ChatMessageID: msg.ID,
+				Source:        "gitleaks",
+				Found:         true,
+				RuleID:        pgtype.Text{String: f.RuleID, Valid: true},
+				Description:   pgtype.Text{String: f.Description, Valid: true},
+				Match:         pgtype.Text{String: f.Match, Valid: true},
+				StartLine:     pgtype.Int4{Int32: safeInt32(f.StartLine), Valid: true},
+				StartColumn:   pgtype.Int4{Int32: safeInt32(f.StartColumn), Valid: true},
+				EndLine:       pgtype.Int4{Int32: safeInt32(f.EndLine), Valid: true},
+				EndColumn:     pgtype.Int4{Int32: safeInt32(f.EndColumn), Valid: true},
+				Confidence:    pgtype.Float8{Float64: 1.0, Valid: true},
+				Tags:          f.Tags,
+			})
 		}
 	}
 	scanDuration := time.Since(scanStart)
