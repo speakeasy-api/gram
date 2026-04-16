@@ -473,87 +473,77 @@ func (s *Service) ensureDefaultRegistryCollection(ctx context.Context, organizat
 		defaultVisibility     = "private"
 	)
 
-	var existing *repo.GetOrganizationMcpCollectionBySlugAndOrgRow
-	existingRow, err := s.repo.GetOrganizationMcpCollectionBySlugAndOrg(ctx, repo.GetOrganizationMcpCollectionBySlugAndOrgParams{
+	collectionID, err := s.ensureDefaultCollectionRow(ctx, organizationID, defaultCollectionName, defaultVisibility)
+	if err != nil {
+		return err
+	}
+
+	return s.ensureDefaultCollectionRegistry(ctx, organizationID, collectionID, defaultRegistryNamespace(organizationSlug, organizationID))
+}
+
+func (s *Service) ensureDefaultCollectionRow(ctx context.Context, organizationID, name, visibility string) (uuid.UUID, error) {
+	getParams := repo.GetOrganizationMcpCollectionBySlugAndOrgParams{
 		Slug:           defaultCollectionSlug,
 		OrganizationID: organizationID,
+	}
+
+	row, err := s.repo.GetOrganizationMcpCollectionBySlugAndOrg(ctx, getParams)
+	switch {
+	case err == nil:
+		return row.ID, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error getting default registry collection").Log(ctx, s.logger)
+	}
+
+	created, createErr := s.repo.CreateOrganizationMcpCollection(ctx, repo.CreateOrganizationMcpCollectionParams{
+		OrganizationID: organizationID,
+		Name:           name,
+		Description:    pgtype.Text{String: "", Valid: false},
+		Slug:           defaultCollectionSlug,
+		Visibility:     visibility,
 	})
-	if err == nil {
-		existing = &existingRow
-		if _, regErr := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, repo.GetOrganizationMcpCollectionRegistryByIDParams{
-			CollectionID:   existing.ID,
-			OrganizationID: organizationID,
-		}); regErr == nil {
-			return nil
-		} else if !errors.Is(regErr, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnexpected, regErr, "error getting default registry namespace").Log(ctx, s.logger)
-		}
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return oops.E(oops.CodeConflict, err, "default registry collection already exists").Log(ctx, s.logger)
-		}
-		return oops.E(oops.CodeUnexpected, err, "error getting default registry collection").Log(ctx, s.logger)
+	if createErr == nil {
+		return created.ID, nil
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error starting transaction for default collection").Log(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	tx := s.repo.WithTx(dbtx)
-	namespace := defaultRegistryNamespace(organizationSlug, organizationID)
-	var collectionID uuid.UUID
-	if existing != nil {
-		collectionID = existing.ID
-	}
-	if existing == nil {
-		created, createErr := tx.CreateOrganizationMcpCollection(ctx, repo.CreateOrganizationMcpCollectionParams{
-			OrganizationID: organizationID,
-			Name:           defaultCollectionName,
-			Description:    pgtype.Text{String: "", Valid: false},
-			Slug:           defaultCollectionSlug,
-			Visibility:     defaultVisibility,
-		})
-		if createErr != nil {
-			var pgErr *pgconn.PgError
-			if errors.As(createErr, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-				return oops.E(oops.CodeConflict, createErr, "default registry collection already exists").Log(ctx, s.logger)
-			}
-			return oops.E(oops.CodeUnexpected, createErr, "error creating default registry collection").Log(ctx, s.logger)
-		}
-
-		collectionID = created.ID
+	var pgErr *pgconn.PgError
+	if !errors.As(createErr, &pgErr) || pgErr.Code != pgerrcode.UniqueViolation {
+		return uuid.Nil, oops.E(oops.CodeUnexpected, createErr, "error creating default registry collection").Log(ctx, s.logger)
 	}
 
-	if _, regErr := tx.GetOrganizationMcpCollectionRegistryByID(ctx, repo.GetOrganizationMcpCollectionRegistryByIDParams{
+	row, getErr := s.repo.GetOrganizationMcpCollectionBySlugAndOrg(ctx, getParams)
+	if getErr != nil {
+		return uuid.Nil, oops.E(oops.CodeUnexpected, getErr, "error fetching default registry collection after unique violation").Log(ctx, s.logger)
+	}
+	return row.ID, nil
+}
+
+func (s *Service) ensureDefaultCollectionRegistry(ctx context.Context, organizationID string, collectionID uuid.UUID, namespace string) error {
+	_, err := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, repo.GetOrganizationMcpCollectionRegistryByIDParams{
 		CollectionID:   collectionID,
 		OrganizationID: organizationID,
-	}); regErr == nil {
+	})
+	switch {
+	case err == nil:
 		return nil
-	} else if !errors.Is(regErr, pgx.ErrNoRows) {
-		return oops.E(oops.CodeUnexpected, regErr, "error getting default registry namespace").Log(ctx, s.logger)
+	case !errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeUnexpected, err, "error getting default registry namespace").Log(ctx, s.logger)
 	}
 
-	_, err = tx.CreateOrganizationMcpCollectionRegistry(ctx, repo.CreateOrganizationMcpCollectionRegistryParams{
+	_, createErr := s.repo.CreateOrganizationMcpCollectionRegistry(ctx, repo.CreateOrganizationMcpCollectionRegistryParams{
 		CollectionID:   collectionID,
 		OrganizationID: organizationID,
 		Namespace:      namespace,
 	})
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return oops.E(oops.CodeConflict, err, "default registry namespace already exists").Log(ctx, s.logger)
-		}
-		return oops.E(oops.CodeUnexpected, err, "error creating default registry namespace").Log(ctx, s.logger)
+	if createErr == nil {
+		return nil
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error committing default registry collection").Log(ctx, s.logger)
+	var pgErr *pgconn.PgError
+	if errors.As(createErr, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+		return nil
 	}
-
-	return nil
+	return oops.E(oops.CodeUnexpected, createErr, "error creating default registry namespace").Log(ctx, s.logger)
 }
 
 func defaultRegistryNamespace(organizationSlug, organizationID string) string {
