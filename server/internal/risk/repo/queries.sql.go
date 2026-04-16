@@ -167,18 +167,16 @@ func (q *Queries) DeleteRiskPolicy(ctx context.Context, arg DeleteRiskPolicyPara
 const deleteRiskResultsForMessages = `-- name: DeleteRiskResultsForMessages :exec
 DELETE FROM risk_results
 WHERE risk_policy_id = $1
-  AND policy_version = $2
-  AND chat_message_id = ANY($3::uuid[])
+  AND chat_message_id = ANY($2::uuid[])
 `
 
 type DeleteRiskResultsForMessagesParams struct {
-	RiskPolicyID  uuid.UUID
-	PolicyVersion int64
-	MessageIds    []uuid.UUID
+	RiskPolicyID uuid.UUID
+	MessageIds   []uuid.UUID
 }
 
 func (q *Queries) DeleteRiskResultsForMessages(ctx context.Context, arg DeleteRiskResultsForMessagesParams) error {
-	_, err := q.db.Exec(ctx, deleteRiskResultsForMessages, arg.RiskPolicyID, arg.PolicyVersion, arg.MessageIds)
+	_, err := q.db.Exec(ctx, deleteRiskResultsForMessages, arg.RiskPolicyID, arg.MessageIds)
 	return err
 }
 

@@ -55,15 +55,6 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*Fe
 		}, nil
 	}
 
-	// Clean up results from older policy versions.
-	if err := a.repo.DeleteStaleRiskResults(ctx, repo.DeleteStaleRiskResultsParams{
-		RiskPolicyID:  args.RiskPolicyID,
-		ProjectID:     args.ProjectID,
-		PolicyVersion: policy.Version,
-	}); err != nil {
-		return nil, fmt.Errorf("delete stale risk results: %w", err)
-	}
-
 	ids, err := a.repo.FetchUnanalyzedMessageIDs(ctx, repo.FetchUnanalyzedMessageIDsParams{
 		ProjectID:     uuid.NullUUID{UUID: args.ProjectID, Valid: true},
 		RiskPolicyID:  args.RiskPolicyID,
