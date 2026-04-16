@@ -45,8 +45,11 @@ import (
 const (
 	maxCaptureArtifactMiB    = 10
 	maxCaptureArtifactBytes  = maxCaptureArtifactMiB * 1024 * 1024
+	maxSkillNameLen          = 100
+	maxSkillSlugLen          = 100
 	skillAssetKind           = "skill"
 	skillVersionStatePending = "pending_review"
+	skillAssetFormatZip      = "zip"
 )
 
 var allowedCaptureContentTypes = map[string]struct{}{
@@ -272,9 +275,19 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 		return nil, oops.E(oops.CodeBadRequest, nil, "content sha256 mismatch")
 	}
 
+	if len(payload.Name) > maxSkillNameLen {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skill name exceeds %d characters", maxSkillNameLen)
+	}
+
 	skillSlug := conv.ToSlug(payload.Name)
 	if skillSlug == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "skill name must include at least one alphanumeric character")
+	}
+	if len(skillSlug) > maxSkillSlugLen {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skill slug exceeds %d characters", maxSkillSlugLen)
+	}
+	if payload.AssetFormat != skillAssetFormatZip {
+		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported asset format: %s", payload.AssetFormat)
 	}
 
 	existing, err := s.findExistingAsset(ctx, *authCtx.ProjectID, contentSHA)
@@ -558,13 +571,16 @@ func (s *Service) ensureSkillLineageForCapture(
 	}
 
 	if !skill.ActiveVersionID.Valid {
-		_, err = repo.SetSkillActiveVersion(ctx, skillsrepo.SetSkillActiveVersionParams{
+		_, err = repo.SetSkillActiveVersionIfNull(ctx, skillsrepo.SetSkillActiveVersionIfNullParams{
 			ActiveVersionID: uuid.NullUUID{UUID: version.ID, Valid: true},
 			ProjectID:       projectID,
 			ID:              skill.ID,
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, fmt.Errorf("set skill active version: %w", err), "error saving skill artifact")
+			if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			return oops.E(oops.CodeUnexpected, fmt.Errorf("set skill active version when empty: %w", err), "error saving skill artifact")
 		}
 	}
 

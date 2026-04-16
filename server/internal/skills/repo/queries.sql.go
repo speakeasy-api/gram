@@ -714,6 +714,51 @@ func (q *Queries) SetSkillActiveVersion(ctx context.Context, arg SetSkillActiveV
 	return i, err
 }
 
+const setSkillActiveVersionIfNull = `-- name: SetSkillActiveVersionIfNull :one
+UPDATE skills
+SET
+    active_version_id = $1
+  , updated_at = clock_timestamp()
+WHERE skills.project_id = $2
+  AND skills.id = $3
+  AND skills.deleted IS FALSE
+  AND skills.active_version_id IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM skill_versions sv
+    WHERE sv.id = $1
+      AND sv.skill_id = skills.id
+  )
+RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+`
+
+type SetSkillActiveVersionIfNullParams struct {
+	ActiveVersionID uuid.NullUUID
+	ProjectID       uuid.UUID
+	ID              uuid.UUID
+}
+
+func (q *Queries) SetSkillActiveVersionIfNull(ctx context.Context, arg SetSkillActiveVersionIfNullParams) (Skill, error) {
+	row := q.db.QueryRow(ctx, setSkillActiveVersionIfNull, arg.ActiveVersionID, arg.ProjectID, arg.ID)
+	var i Skill
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.SkillUuid,
+		&i.ActiveVersionID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const updateSkill = `-- name: UpdateSkill :one
 UPDATE skills
 SET
