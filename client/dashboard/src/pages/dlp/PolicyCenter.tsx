@@ -1,7 +1,9 @@
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   Sheet,
@@ -24,8 +26,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  Icon,
 } from "@speakeasy-api/moonshine";
-import { Plus, Shield, Ellipsis, Loader2 } from "lucide-react";
+import type { IconName } from "@speakeasy-api/moonshine";
+import { Plus, Shield, Ellipsis, Loader2, ChevronRight } from "lucide-react";
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -41,6 +45,38 @@ import {
   invalidateAllRiskGetPolicyStatus,
 } from "@gram/client/react-query/riskGetPolicyStatus.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import {
+  RULE_CATEGORY_META,
+  DETECTION_RULES,
+  type RuleCategory,
+} from "./policy-data";
+import { cn } from "@/lib/utils";
+
+/** Map API source names to rule categories */
+function sourcesToCategories(sources: string[]): RuleCategory[] {
+  const mapping: Record<string, RuleCategory> = {
+    gitleaks: "secrets",
+    presidio: "pii",
+  };
+  return sources
+    .map((s) => mapping[s] ?? ("secrets" as RuleCategory))
+    .filter((v, i, a) => a.indexOf(v) === i);
+}
+
+/** All rule categories in display order */
+const ALL_CATEGORIES: RuleCategory[] = [
+  "secrets",
+  "financial",
+  "pii",
+  "government_ids",
+  "healthcare",
+  "prompt_attacks",
+  "prompt_injection",
+  "off_policy",
+];
+
+/** Categories that are currently available (not "Coming Soon") */
+const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set(["secrets"]);
 
 export default function PolicyCenter() {
   const queryClient = useQueryClient();
@@ -148,7 +184,7 @@ export default function PolicyCenter() {
         </Page.Header>
         <Page.Body>
           <div className="flex items-center justify-center py-20">
-            <p className="text-muted-foreground text-sm">Loading policies...</p>
+            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
           </div>
         </Page.Body>
       </Page>
@@ -163,7 +199,9 @@ export default function PolicyCenter() {
         </Page.Header>
         <Page.Body>
           <div className="flex flex-col items-center justify-center gap-4 py-20">
-            <Shield className="text-muted-foreground h-12 w-12" />
+            <div className="bg-muted flex h-14 w-14 items-center justify-center rounded-full">
+              <Shield className="text-muted-foreground h-7 w-7" />
+            </div>
             <h2 className="text-lg font-semibold">No Risk Policies</h2>
             <p className="text-muted-foreground max-w-md text-center text-sm">
               Risk policies scan your chat messages for secrets and sensitive
@@ -182,7 +220,14 @@ export default function PolicyCenter() {
               }
               disabled={createMutation.isPending}
             >
-              {createMutation.isPending ? "Creating..." : "Get Started"}
+              {createMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Get Started"
+              )}
             </Button>
           </div>
         </Page.Body>
@@ -214,84 +259,87 @@ export default function PolicyCenter() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Sources</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Categories</TableHead>
               <TableHead>Progress</TableHead>
-              <TableHead>Version</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead className="w-[60px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {policies.map((policy) => (
-              <TableRow
-                key={policy.id}
-                className="cursor-pointer"
-                onClick={() => handleEdit(policy)}
-              >
-                <TableCell className="font-medium">{policy.name}</TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    {policy.sources.map((s) => (
-                      <Badge key={s} variant="outline">
-                        {s}
-                      </Badge>
-                    ))}
-                  </div>
-                </TableCell>
-                <TableCell onClick={(e) => e.stopPropagation()}>
-                  <Switch
-                    checked={policy.enabled}
-                    onCheckedChange={(checked) => handleToggle(policy, checked)}
-                  />
-                </TableCell>
-                <TableCell>
-                  {policy.pendingMessages > 0 ? (
-                    <span className="text-muted-foreground text-xs">
-                      {policy.totalMessages - policy.pendingMessages}/
-                      {policy.totalMessages} analyzed
-                    </span>
-                  ) : (
-                    <Badge variant="secondary">Complete</Badge>
-                  )}
-                </TableCell>
-                <TableCell>v{policy.version}</TableCell>
-                <TableCell onClick={(e) => e.stopPropagation()}>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Ellipsis className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        className="cursor-pointer"
-                        onSelect={() =>
-                          setTimeout(() => setRunPanelPolicy(policy), 0)
-                        }
-                      >
-                        View Progress
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive cursor-pointer"
-                        onSelect={() => handleDelete(policy.id)}
-                      >
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
+            {policies.map((policy) => {
+              const categories = sourcesToCategories(policy.sources);
+              return (
+                <TableRow
+                  key={policy.id}
+                  className="cursor-pointer"
+                  onClick={() => handleEdit(policy)}
+                >
+                  <TableCell className="font-medium">{policy.name}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {categories.map((cat) => (
+                        <Badge key={cat} variant="secondary">
+                          {RULE_CATEGORY_META[cat].label}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {policy.pendingMessages > 0 ? (
+                      <span className="text-muted-foreground text-xs">
+                        {policy.totalMessages - policy.pendingMessages}/
+                        {policy.totalMessages} analyzed
+                      </span>
+                    ) : (
+                      <Badge variant="secondary">Complete</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Switch
+                      checked={policy.enabled}
+                      onCheckedChange={(checked) =>
+                        handleToggle(policy, checked)
+                      }
+                    />
+                  </TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Ellipsis className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          className="cursor-pointer"
+                          onSelect={() =>
+                            setTimeout(() => setRunPanelPolicy(policy), 0)
+                          }
+                        >
+                          View Progress
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive cursor-pointer"
+                          onSelect={() => handleDelete(policy.id)}
+                        >
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
 
         {/* Edit/Create Sheet */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent>
+          <SheetContent className="overflow-y-auto">
             <SheetHeader>
               <SheetTitle>
                 {editingPolicy ? "Edit Policy" : "New Policy"}
@@ -302,23 +350,12 @@ export default function PolicyCenter() {
                   : "Create a new risk analysis policy to scan chat messages."}
               </SheetDescription>
             </SheetHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Policy Name</label>
-                <Input
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="e.g. Secret Detection"
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">Enabled</label>
-                <Switch
-                  checked={formEnabled}
-                  onCheckedChange={setFormEnabled}
-                />
-              </div>
-            </div>
+            <PolicySheetBody
+              formName={formName}
+              setFormName={setFormName}
+              formEnabled={formEnabled}
+              setFormEnabled={setFormEnabled}
+            />
             <SheetFooter>
               <Button
                 onClick={handleSave}
@@ -328,7 +365,16 @@ export default function PolicyCenter() {
                   updateMutation.isPending
                 }
               >
-                {editingPolicy ? "Update" : "Create"}
+                {createMutation.isPending || updateMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : editingPolicy ? (
+                  "Update"
+                ) : (
+                  "Create"
+                )}
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -356,6 +402,153 @@ export default function PolicyCenter() {
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/*  PolicySheetBody                                                           */
+/* -------------------------------------------------------------------------- */
+
+function PolicySheetBody({
+  formName,
+  setFormName,
+  formEnabled,
+  setFormEnabled,
+}: {
+  formName: string;
+  setFormName: (v: string) => void;
+  formEnabled: boolean;
+  setFormEnabled: (v: boolean) => void;
+}) {
+  const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
+    null,
+  );
+
+  return (
+    <div className="space-y-6 py-4">
+      {/* Policy Name */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Policy Name</Label>
+        <Input
+          value={formName}
+          onChange={(e) => setFormName(e.target.value)}
+          placeholder="e.g. Secret Detection"
+        />
+      </div>
+
+      {/* Detection Rules */}
+      <div className="space-y-3">
+        <Label className="text-sm font-medium">Detection Rules</Label>
+        <div className="border-border divide-border divide-y rounded-lg border">
+          {ALL_CATEGORIES.map((cat) => {
+            const meta = RULE_CATEGORY_META[cat];
+            const isAvailable = AVAILABLE_CATEGORIES.has(cat);
+            const isExpanded = expandedCategory === cat;
+            const rules = DETECTION_RULES[cat];
+
+            return (
+              <div key={cat}>
+                {/* Category header */}
+                <div
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3",
+                    isAvailable && "cursor-pointer",
+                  )}
+                  onClick={() => {
+                    if (isAvailable) {
+                      setExpandedCategory(isExpanded ? null : cat);
+                    }
+                  }}
+                >
+                  {/* Expand chevron (only for available categories) */}
+                  {isAvailable && (
+                    <ChevronRight
+                      className={cn(
+                        "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+                        isExpanded && "rotate-90",
+                      )}
+                    />
+                  )}
+                  {!isAvailable && <div className="w-4 shrink-0" />}
+
+                  {/* Category icon */}
+                  <Icon
+                    name={meta.icon as IconName}
+                    className="text-muted-foreground size-4 shrink-0"
+                  />
+
+                  {/* Label & description */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{meta.label}</span>
+                      {!isAvailable && (
+                        <Badge variant="outline" className="text-[10px]">
+                          Coming Soon
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-muted-foreground text-xs">
+                      {meta.description}
+                    </p>
+                  </div>
+
+                  {/* Toggle */}
+                  <Switch
+                    checked={isAvailable && cat === "secrets"}
+                    disabled={!isAvailable}
+                    onCheckedChange={() => {
+                      // Currently only secrets is togglable; future: per-category toggle
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+
+                {/* Expanded rules list */}
+                {isAvailable && isExpanded && rules.length > 0 && (
+                  <div className="bg-muted/30 border-border border-t px-4 py-2">
+                    <div className="space-y-2 py-1">
+                      {rules.map((rule) => (
+                        <div
+                          key={rule.id}
+                          className="flex items-center gap-3 py-1 pl-8"
+                        >
+                          <Checkbox
+                            id={rule.id}
+                            checked={true}
+                            disabled={true}
+                          />
+                          <label
+                            htmlFor={rule.id}
+                            className="text-muted-foreground text-xs"
+                          >
+                            {rule.description}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Enabled toggle */}
+      <div className="flex items-center justify-between">
+        <div>
+          <Label className="text-sm font-medium">Enabled</Label>
+          <p className="text-muted-foreground text-xs">
+            Enable this policy to begin scanning messages.
+          </p>
+        </div>
+        <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  RunPanel                                                                  */
+/* -------------------------------------------------------------------------- */
+
 function RunPanel({
   policy,
   onTrigger,
@@ -375,9 +568,7 @@ function RunPanel({
     <>
       <SheetHeader>
         <SheetTitle>{policy.name}</SheetTitle>
-        <SheetDescription>
-          Analysis run details for version {policy.version}
-        </SheetDescription>
+        <SheetDescription>Analysis progress and run details.</SheetDescription>
       </SheetHeader>
 
       <div className="space-y-6 py-6">
@@ -394,13 +585,14 @@ function RunPanel({
               </label>
               <div className="flex items-center gap-2">
                 <span
-                  className={`inline-block h-2 w-2 rounded-full ${
+                  className={cn(
+                    "inline-block h-2 w-2 rounded-full",
                     status.workflowStatus === "running"
                       ? "bg-green-500"
                       : status.workflowStatus === "sleeping"
                         ? "bg-yellow-500"
-                        : "bg-muted-foreground"
-                  }`}
+                        : "bg-muted-foreground",
+                  )}
                 />
                 <span className="text-sm capitalize">
                   {status.workflowStatus.replace("_", " ")}
