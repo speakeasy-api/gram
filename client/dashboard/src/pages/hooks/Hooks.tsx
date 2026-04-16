@@ -1434,7 +1434,7 @@ function StackedBarChart({
   );
 }
 
-function ServerActivityChart({
+function UsersPerServerChart({
   title,
   breakdown,
   serverNameMappings,
@@ -1446,9 +1446,8 @@ function ServerActivityChart({
   handleFilter?: (userEmail: string, serverName: string) => void;
 }) {
   const { labels, datasets } = useMemo(() => {
-    // Build userEmail → serverDisplayName → count
-    const userMap = new Map<string, Map<string, number>>();
-    const serverSet = new Set<string>();
+    const serverMap = new Map<string, Map<string, number>>();
+    const userSet = new Set<string>();
     for (const row of breakdown) {
       const user = row.userEmail || "unknown";
       const displayName =
@@ -1456,39 +1455,37 @@ function ServerActivityChart({
           ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
           : (serverNameMappings.rawToDisplay.get(row.serverName) ??
             row.serverName);
-      serverSet.add(displayName);
-      const inner = userMap.get(user) ?? new Map<string, number>();
-      inner.set(displayName, (inner.get(displayName) ?? 0) + row.eventCount);
-      userMap.set(user, inner);
+      userSet.add(user);
+      const inner = serverMap.get(displayName) ?? new Map<string, number>();
+      inner.set(user, (inner.get(user) ?? 0) + row.eventCount);
+      serverMap.set(displayName, inner);
     }
 
-    // Sort users by total count desc
-    const sortedUsers = Array.from(userMap.entries())
-      .map(([user, serverCounts]) => ({
-        user,
-        total: Array.from(serverCounts.values()).reduce((a, b) => a + b, 0),
-        serverCounts,
+    const sortedServers = Array.from(serverMap.entries())
+      .map(([server, userCounts]) => ({
+        server,
+        total: Array.from(userCounts.values()).reduce((a, b) => a + b, 0),
+        userCounts,
       }))
       .sort((a, b) => b.total - a.total);
 
-    // Sort servers by total usage desc for consistent legend ordering
-    const sortedServers = Array.from(serverSet).sort((a, b) => {
-      const aTotal = sortedUsers.reduce(
-        (s, u) => s + (u.serverCounts.get(a) ?? 0),
+    const sortedUsers = Array.from(userSet).sort((a, b) => {
+      const aTotal = sortedServers.reduce(
+        (s, srv) => s + (srv.userCounts.get(a) ?? 0),
         0,
       );
-      const bTotal = sortedUsers.reduce(
-        (s, u) => s + (u.serverCounts.get(b) ?? 0),
+      const bTotal = sortedServers.reduce(
+        (s, srv) => s + (srv.userCounts.get(b) ?? 0),
         0,
       );
       return bTotal - aTotal;
     });
 
-    const chartLabels = sortedUsers.map((u) => u.user);
-    const chartDatasets = sortedServers.map((server, i) => ({
-      label: server,
+    const chartLabels = sortedServers.map((s) => s.server);
+    const chartDatasets = sortedUsers.map((user, i) => ({
+      label: user,
       barThickness: 24,
-      data: sortedUsers.map((u) => u.serverCounts.get(server) ?? 0),
+      data: sortedServers.map((s) => s.userCounts.get(user) ?? 0),
       backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "44",
       borderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
       borderWidth: 1.5,
@@ -1957,11 +1954,11 @@ function HooksAnalytics({
             compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-3",
           )}
         >
-          <ServerActivityChart
-            title="Server Usage per User"
+          <UsersPerServerChart
+            title="Users per Server"
             breakdown={breakdown}
             serverNameMappings={serverNameMappings}
-            handleFilter={makeFilterHandler({ server: "dataset", user: "row" })}
+            handleFilter={makeFilterHandler({ server: "row", user: "dataset" })}
           />
         </div>
       )}
