@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -401,4 +402,216 @@ func TestSyncWorkOSIDs_OrgAlreadyLinked(t *testing.T) {
 	// Second login: workos_id already set; must not error.
 	_, err = ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
 	require.NoError(t, err)
+}
+
+// TestSyncWorkOSIDs_ClearsStaleMemberships verifies that when a user loses a
+// WorkOS membership, the workos_membership_id is cleared on the next sync.
+func TestSyncWorkOSIDs_ClearsStaleMemberships(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "wos_user_stale"
+
+	fake := newFakeWorkOSServer()
+	fake.users = []fakeWOSUser{{ID: workosUserID, Email: mockidp.MockUserEmail}}
+	fake.memberships = []fakeWOSMembership{
+		{ID: "mem_stale", UserID: workosUserID, OrganizationID: mockidp.MockOrgID, RoleSlug: "member"},
+	}
+
+	ts := newManagerWithFakeWorkOS(t, fake)
+	ctx := t.Context()
+	idToken := acquireIDToken(t, ctx, ts.mgr)
+
+	// First login: sets workos_membership_id and org workos_id.
+	_, err := ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	require.NoError(t, err)
+
+	rel, err := orgRepo.New(ts.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
+		OrganizationID: mockidp.MockOrgID,
+		UserID:         mockidp.MockUserID,
+	})
+	require.NoError(t, err)
+	require.True(t, rel.WorkosMembershipID.Valid, "workos_membership_id should be set after first login")
+
+	// Remove the membership from WorkOS (user left the org).
+	fake.mu.Lock()
+	fake.memberships = nil
+	fake.mu.Unlock()
+
+	// Second login: membership gone → relationship should be soft-deleted.
+	_, err = ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	require.NoError(t, err)
+
+	// GetOrganizationUserRelationship filters by deleted_at IS NULL, so a
+	// soft-deleted relationship returns ErrNoRows.
+	_, err = orgRepo.New(ts.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
+		OrganizationID: mockidp.MockOrgID,
+		UserID:         mockidp.MockUserID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "relationship should be soft-deleted after membership removed")
+}
+
+// TestSyncWorkOSIDs_SkipsNullWorkOSIDOrgs verifies that orgs without a
+// workos_id in organization_metadata are NOT affected by the declarative sync.
+func TestSyncWorkOSIDs_SkipsNullWorkOSIDOrgs(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "wos_user_skip"
+	const otherOrgID = "550e8400-e29b-41d4-a716-000000000099"
+
+	fake := newFakeWorkOSServer()
+	fake.users = []fakeWOSUser{{ID: workosUserID, Email: mockidp.MockUserEmail}}
+	// Only a membership for mockOrgID; NOT for otherOrgID.
+	fake.memberships = []fakeWOSMembership{
+		{ID: "mem_skip", UserID: workosUserID, OrganizationID: mockidp.MockOrgID, RoleSlug: "member"},
+	}
+
+	ts := newManagerWithFakeWorkOS(t, fake)
+	ctx := t.Context()
+	idToken := acquireIDToken(t, ctx, ts.mgr)
+
+	// First login creates the user and sets up the mockOrg membership.
+	_, err := ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	require.NoError(t, err)
+
+	// Create a second org WITHOUT a workos_id.
+	_, err = orgRepo.New(ts.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:              otherOrgID,
+		Name:            "No WorkOS Org",
+		Slug:            "no-workos-org",
+		SsoConnectionID: pgtype.Text{Valid: false},
+		Whitelisted:     pgtype.Bool{Valid: false},
+	})
+	require.NoError(t, err)
+
+	// Create a relationship between the user and the non-WorkOS org, with a
+	// workos_membership_id manually set (simulating prior state).
+	err = orgRepo.New(ts.conn).AttachWorkOSUserToOrg(ctx, orgRepo.AttachWorkOSUserToOrgParams{
+		OrganizationID:     otherOrgID,
+		UserID:             mockidp.MockUserID,
+		WorkosMembershipID: pgtype.Text{String: "mem_other", Valid: true},
+	})
+	require.NoError(t, err)
+
+	// Second login: triggers sync again; should NOT clear the non-WorkOS org's membership.
+	_, err = ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	require.NoError(t, err)
+
+	// The non-WorkOS org's membership must still have its workos_membership_id.
+	rel, err := orgRepo.New(ts.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
+		OrganizationID: otherOrgID,
+		UserID:         mockidp.MockUserID,
+	})
+	require.NoError(t, err)
+	require.True(t, rel.WorkosMembershipID.Valid, "workos_membership_id on org without workos_id must not be cleared")
+	require.Equal(t, "mem_other", rel.WorkosMembershipID.String)
+}
+
+// TestSyncWorkOSIDs_DoesNotAffectOtherUsers verifies that syncing user 1's
+// WorkOS memberships does not modify user 2's workos_membership_id.
+func TestSyncWorkOSIDs_DoesNotAffectOtherUsers(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "wos_user_isolation"
+	const otherUserID = "other-user-999"
+
+	fake := newFakeWorkOSServer()
+	fake.users = []fakeWOSUser{{ID: workosUserID, Email: mockidp.MockUserEmail}}
+	// User 1 has NO WorkOS memberships for this org.
+	fake.memberships = nil
+
+	ts := newManagerWithFakeWorkOS(t, fake)
+	ctx := t.Context()
+
+	// Seed user 2 in the users table.
+	_, err := userRepo.New(ts.conn).UpsertUser(ctx, userRepo.UpsertUserParams{
+		ID:          otherUserID,
+		Email:       "other@example.com",
+		DisplayName: "Other User",
+		Admin:       false,
+	})
+	require.NoError(t, err)
+
+	// Set the org's workos_id so it's considered a WorkOS-managed org.
+	_, err = orgRepo.New(ts.conn).SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
+		WorkosID:       pgtype.Text{String: mockidp.MockOrgID, Valid: true},
+		OrganizationID: mockidp.MockOrgID,
+	})
+	require.NoError(t, err)
+
+	// Give user 2 a workos_membership_id for this org.
+	err = orgRepo.New(ts.conn).AttachWorkOSUserToOrg(ctx, orgRepo.AttachWorkOSUserToOrgParams{
+		OrganizationID:     mockidp.MockOrgID,
+		UserID:             otherUserID,
+		WorkosMembershipID: pgtype.Text{String: "mem_user2", Valid: true},
+	})
+	require.NoError(t, err)
+
+	// Login as user 1 — no WorkOS memberships → user 1's membership cleared.
+	idToken := acquireIDToken(t, ctx, ts.mgr)
+	_, err = ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	require.NoError(t, err)
+
+	// User 2's membership must be untouched.
+	rel, err := orgRepo.New(ts.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
+		OrganizationID: mockidp.MockOrgID,
+		UserID:         otherUserID,
+	})
+	require.NoError(t, err)
+	require.True(t, rel.WorkosMembershipID.Valid, "other user's workos_membership_id must not be cleared")
+	require.Equal(t, "mem_user2", rel.WorkosMembershipID.String)
+}
+
+// TestSyncWorkOSIDs_UndeletesRelationship verifies that a previously
+// soft-deleted organization_user_relationship is restored when the user
+// regains a WorkOS membership for that org.
+func TestSyncWorkOSIDs_UndeletesRelationship(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "wos_user_undelete"
+
+	fake := newFakeWorkOSServer()
+	fake.users = []fakeWOSUser{{ID: workosUserID, Email: mockidp.MockUserEmail}}
+	fake.memberships = []fakeWOSMembership{
+		{ID: "mem_undel", UserID: workosUserID, OrganizationID: mockidp.MockOrgID, RoleSlug: "member"},
+	}
+
+	ts := newManagerWithFakeWorkOS(t, fake)
+	ctx := t.Context()
+	idToken := acquireIDToken(t, ctx, ts.mgr)
+
+	// First login: creates the relationship.
+	_, err := ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	require.NoError(t, err)
+
+	// Remove WorkOS membership → relationship gets soft-deleted.
+	fake.mu.Lock()
+	fake.memberships = nil
+	fake.mu.Unlock()
+
+	_, err = ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	require.NoError(t, err)
+
+	_, err = orgRepo.New(ts.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
+		OrganizationID: mockidp.MockOrgID,
+		UserID:         mockidp.MockUserID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "relationship should be soft-deleted")
+
+	// Restore the WorkOS membership → relationship should be un-deleted.
+	fake.mu.Lock()
+	fake.memberships = []fakeWOSMembership{
+		{ID: "mem_undel", UserID: workosUserID, OrganizationID: mockidp.MockOrgID, RoleSlug: "member"},
+	}
+	fake.mu.Unlock()
+
+	_, err = ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	require.NoError(t, err)
+
+	rel, err := orgRepo.New(ts.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
+		OrganizationID: mockidp.MockOrgID,
+		UserID:         mockidp.MockUserID,
+	})
+	require.NoError(t, err, "relationship should be restored after membership re-added")
+	require.True(t, rel.WorkosMembershipID.Valid)
+	require.Equal(t, "mem_undel", rel.WorkosMembershipID.String)
 }

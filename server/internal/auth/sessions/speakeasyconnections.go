@@ -443,6 +443,9 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 		membershipByOrgID[m.OrganizationID] = i
 	}
 
+	var orgIDs []string
+	var membershipIDs []string
+
 	for _, org := range validateResp.Organizations {
 		idx, ok := membershipByOrgID[org.ID]
 		if !ok {
@@ -462,16 +465,15 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 			}
 		}
 
-		if err := s.orgRepo.AttachWorkOSUserToOrg(
-			ctx,
-			orgRepo.AttachWorkOSUserToOrgParams{
-				OrganizationID:     org.ID,
-				UserID:             validateResp.User.ID,
-				WorkosMembershipID: conv.ToPGText(orgMembership.ID),
-			},
-		); err != nil {
-			s.logger.ErrorContext(ctx, "failed to attach workos user to org", attr.SlogError(err))
-			continue
-		}
+		orgIDs = append(orgIDs, org.ID)
+		membershipIDs = append(membershipIDs, orgMembership.ID)
+	}
+
+	if err := s.orgRepo.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
+		UserID:              validateResp.User.ID,
+		OrganizationIds:     orgIDs,
+		WorkosMembershipIds: membershipIDs,
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to set user workos memberships", attr.SlogError(err))
 	}
 }
