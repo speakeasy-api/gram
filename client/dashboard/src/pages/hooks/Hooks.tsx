@@ -1507,6 +1507,54 @@ function UsersPerServerChart({
   );
 }
 
+function UserEventCountsChart({
+  title,
+  breakdown,
+  handleFilter,
+}: {
+  title: string;
+  breakdown: HooksBreakdownRow[];
+  handleFilter?: (datasetLabel: string, userEmail: string) => void;
+}) {
+  const { labels, datasets } = useMemo(() => {
+    const userMap = new Map<string, number>();
+    for (const row of breakdown) {
+      const user = row.userEmail || "unknown";
+      userMap.set(user, (userMap.get(user) ?? 0) + row.eventCount);
+    }
+
+    const sortedUsers = Array.from(userMap.entries()).sort(
+      (a, b) => b[1] - a[1],
+    );
+
+    const chartLabels = sortedUsers.map(([user]) => user);
+    const color = USER_SOURCE_COLORS[0]!;
+    const chartDatasets = [
+      {
+        label: "Events",
+        barThickness: 24,
+        data: sortedUsers.map(([, count]) => count),
+        backgroundColor: color + "44",
+        borderColor: color,
+        borderWidth: 1.5,
+        hoverBackgroundColor: color + "99",
+        hoverBorderColor: color,
+      },
+    ];
+
+    return { labels: chartLabels, datasets: chartDatasets };
+  }, [breakdown]);
+
+  return (
+    <StackedBarChart
+      title={title}
+      labels={labels}
+      datasets={datasets}
+      handleFilter={handleFilter}
+    />
+  );
+}
+
 function ServerErrorRateChart({
   title,
   breakdown,
@@ -1946,60 +1994,61 @@ function HooksAnalytics({
         )}
       </div>
 
-      {/* Bar Charts */}
-      {hasServers && (
-        <div
-          className={cn(
-            "grid gap-4",
-            compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-3",
-          )}
-        >
-          <UsersPerServerChart
-            title="Users per Server"
-            breakdown={breakdown}
-            serverNameMappings={serverNameMappings}
-            handleFilter={makeFilterHandler({ server: "row", user: "dataset" })}
-          />
-        </div>
-      )}
-
-      {/* Usage Over Time */}
-      {timeSeries.length > 0 && (
+      {(timeSeries.length > 0 || hasServers) && (
         <div
           className={cn(
             "grid gap-4",
             compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
           )}
         >
-          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-            <h3 className="text font-semibold">Server Usage</h3>
-            <ServerUsageTimeSeries
-              timeSeries={timeSeries}
-              from={from}
-              to={to}
+          {timeSeries.length > 0 && (
+            <div className="border-border bg-card space-y-4 rounded-lg border p-4">
+              <h3 className="text font-semibold">Server Usage</h3>
+              <ServerUsageTimeSeries
+                timeSeries={timeSeries}
+                from={from}
+                to={to}
+                serverNameMappings={serverNameMappings}
+              />
+            </div>
+          )}
+          {hasServers && (
+            <UsersPerServerChart
+              title="Users per Server"
+              breakdown={breakdown}
+              serverNameMappings={serverNameMappings}
+              handleFilter={makeFilterHandler({
+                server: "row",
+                user: "dataset",
+              })}
+            />
+          )}
+
+          {timeSeries.length > 0 && (
+            <div className="border-border bg-card space-y-4 rounded-lg border p-4">
+              <h3 className="text font-semibold">User Usage</h3>
+              <UserUsageTimeSeries
+                timeSeries={timeSeries}
+                from={from}
+                to={to}
+              />
+            </div>
+          )}
+          {hasServers && (
+            <UserEventCountsChart
+              title="User Event Counts"
+              breakdown={breakdown}
+              handleFilter={makeFilterHandler({ user: "row" })}
+            />
+          )}
+
+          {hasServers && (
+            <ServerErrorRateChart
+              title="Errors per Server and Tool"
+              breakdown={breakdown}
               serverNameMappings={serverNameMappings}
             />
-          </div>
-          <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-            <h3 className="text font-semibold">User Usage</h3>
-            <UserUsageTimeSeries timeSeries={timeSeries} from={from} to={to} />
-          </div>
-        </div>
-      )}
-
-      {/* Error Analysis */}
-      {hasServers && (
-        <div
-          className={cn(
-            "grid gap-4",
-            compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
           )}
-        >
-          <ServerErrorRateChart
-            title="Errors per Server and Tool"
-            breakdown={breakdown}
-            serverNameMappings={serverNameMappings}
-          />
         </div>
       )}
     </div>
