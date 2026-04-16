@@ -1550,6 +1550,9 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 
 	// Apply arbitrary attribute filters
 	for _, filter := range arg.Filters {
+		if !validJSONPath.MatchString(filter.Path) {
+			continue // skip invalid paths to prevent SQL injection
+		}
 		materializedCol, isMaterialized := materializedColumns[filter.Path]
 		var columnRef string
 		if isMaterialized {
