@@ -134,7 +134,7 @@ export function ScopePickerPopover({
   // Org-scoped permissions have no resource picker — they're always org-wide
   if (resourceType === "org") {
     return (
-      <span className="inline-flex items-center rounded-md border border-input bg-transparent px-2 py-1 text-xs text-muted-foreground h-7">
+      <span className="border-input text-muted-foreground inline-flex h-7 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
         All
       </span>
     );
@@ -205,7 +205,7 @@ export function ScopePickerPopover({
       {/* Resource list when scoped to specific resources */}
       {!isUnrestricted && !customMode && (
         <>
-          <div className="my-1 h-px bg-border" />
+          <div className="bg-border my-1 h-px" />
           {resourceType === "project"
             ? projectList.map((resource) => (
                 <ResourceCheckbox
@@ -218,7 +218,7 @@ export function ScopePickerPopover({
               ))
             : mcpServers.map((group) => (
                 <div key={group.projectId}>
-                  <div className="px-3 py-1.5 text-xs text-muted-foreground font-medium">
+                  <div className="text-muted-foreground px-3 py-1.5 text-xs font-medium">
                     {group.projectName}
                   </div>
                   {group.servers.map((server) => (
@@ -240,47 +240,47 @@ export function ScopePickerPopover({
         <>
           <Tabs
             value={customTab ?? "select"}
-            className="gap-0 -mx-1.5 -mb-1.5 flex-1 flex flex-col min-h-0"
+            className="-mx-1.5 -mb-1.5 flex min-h-0 flex-1 flex-col gap-0"
             onValueChange={(value) => {
               onChangeResources([]);
               onChangeAnnotations?.([]);
               onCustomTabChange?.(value as CustomTab);
             }}
           >
-            <TabsList className="w-full h-auto rounded-none bg-transparent px-1.5 py-1.5 gap-2 border-y border-border">
+            <TabsList className="border-border h-auto w-full gap-2 rounded-none border-y bg-transparent px-1.5 py-1.5">
               <TabsTrigger
                 value="select"
-                className="h-auto rounded-sm border-none shadow-none px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
               >
                 <Wrench className="h-3.5 w-3.5" />
                 All tools
               </TabsTrigger>
-              <div className="w-px self-stretch my-1 bg-border/40" />
+              <div className="bg-border/40 my-1 w-px self-stretch" />
               <TabsTrigger
                 value="auto-groups"
-                className="h-auto rounded-sm border-none shadow-none px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
               >
                 <Tag className="h-3.5 w-3.5" />
                 By annotation
               </TabsTrigger>
-              <div className="w-px self-stretch my-1 bg-border/40" />
+              <div className="bg-border/40 my-1 w-px self-stretch" />
               <TabsTrigger
                 value="http-method"
-                className="h-auto rounded-sm border-none shadow-none px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
               >
                 <SquareAsterisk className="h-3.5 w-3.5" />
                 By HTTP method
               </TabsTrigger>
-              <div className="w-px self-stretch my-1 bg-border/40" />
+              <div className="bg-border/40 my-1 w-px self-stretch" />
               <TabsTrigger
                 value="collection"
-                className="h-auto rounded-sm border-none shadow-none px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
               >
                 <SquareLibrary className="h-3.5 w-3.5" />
                 By collection
               </TabsTrigger>
             </TabsList>
-            <TabsContent value="select" className="p-0 flex-1 min-h-0">
+            <TabsContent value="select" className="min-h-0 flex-1 p-0">
               <ToolSelectionPanel
                 mcpServers={mcpServers}
                 resources={resources ?? []}
@@ -289,7 +289,7 @@ export function ScopePickerPopover({
             </TabsContent>
             <TabsContent
               value="auto-groups"
-              className="px-2 py-1 flex-1 min-h-0 overflow-y-auto"
+              className="min-h-0 flex-1 overflow-y-auto px-2 py-1"
             >
               <AnnotationGroupPanel
                 annotations={annotations ?? []}
@@ -318,7 +318,7 @@ export function ScopePickerPopover({
             </TabsContent>
             <TabsContent
               value="http-method"
-              className="px-2 py-1 flex-1 min-h-0 overflow-y-auto"
+              className="min-h-0 flex-1 overflow-y-auto px-2 py-1"
             >
               <HttpMethodGroupPanel
                 mcpServers={mcpServers}
@@ -329,7 +329,7 @@ export function ScopePickerPopover({
             </TabsContent>
             <TabsContent
               value="collection"
-              className="px-2 py-1 flex-1 min-h-0 overflow-y-auto"
+              className="min-h-0 flex-1 overflow-y-auto px-2 py-1"
             >
               <CollectionGroupPanel
                 mcpServers={mcpServers}
@@ -350,18 +350,18 @@ export function ScopePickerPopover({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs hover:bg-background transition-colors shrink-0 h-7"
+            className="border-input bg-background hover:bg-background inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs shadow-xs transition-colors"
           >
-            <span className="truncate max-w-[120px]">{label}</span>
-            <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
+            <span className="max-w-[120px] truncate">{label}</span>
+            <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
           </button>
         </PopoverTrigger>
         <PopoverContent
           align="end"
           sideOffset={8}
           className={cn(
-            "p-1.5 overflow-hidden transition-[width] duration-500",
-            customMode ? "w-[620px]" : "w-56 max-h-[300px] overflow-y-auto",
+            "overflow-hidden p-1.5 transition-[width] duration-500",
+            customMode ? "w-[620px]" : "max-h-[300px] w-56 overflow-y-auto",
           )}
           style={{
             transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
@@ -369,14 +369,14 @@ export function ScopePickerPopover({
         >
           {pickerContent}
           {isMcp && (
-            <div className="-mx-1.5 -mb-1.5 mt-1 border-t border-border rounded-b-lg">
+            <div className="border-border -mx-1.5 mt-1 -mb-1.5 rounded-b-lg border-t">
               <button
                 type="button"
                 onClick={() => {
                   setPopoverOpen(false);
                   setExpanded(true);
                 }}
-                className="flex w-full items-center justify-center gap-1.5 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer rounded-b-lg"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-b-lg px-3 py-2.5 text-xs transition-colors"
               >
                 <Maximize2 className="h-3 w-3" />
                 Open in full screen
@@ -392,9 +392,9 @@ export function ScopePickerPopover({
           if (!open) setExpanded(false);
         }}
       >
-        <Dialog.Content className="sm:max-w-5xl w-[90vw] h-[85vh] p-0 flex flex-col overflow-hidden gap-0 [&>.absolute]:hidden">
-          <div className="flex items-center justify-between px-4 py-4 bg-muted/50 border-b border-border">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        <Dialog.Content className="flex h-[85vh] w-[90vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl [&>.absolute]:hidden">
+          <div className="bg-muted/50 border-border flex items-center justify-between border-b px-4 py-4">
+            <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
               Configure Access
             </span>
             <button
@@ -403,12 +403,12 @@ export function ScopePickerPopover({
                 setExpanded(false);
                 setPopoverOpen(true);
               }}
-              className="h-6 w-6 inline-flex items-center justify-center rounded-sm opacity-70 hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity cursor-pointer"
+              className="text-muted-foreground hover:text-foreground inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm opacity-70 transition-opacity hover:opacity-100"
             >
               <Minimize2 className="h-4 w-4" />
             </button>
           </div>
-          <div className="p-1.5 flex-1 overflow-hidden flex flex-col min-h-0 [&_.tool-scroll]:min-h-0 [&_.tool-scroll]:max-h-none [&_.tool-scroll]:flex-1">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-1.5 [&_.tool-scroll]:max-h-none [&_.tool-scroll]:min-h-0 [&_.tool-scroll]:flex-1">
             {pickerContent}
           </div>
         </Dialog.Content>
@@ -457,8 +457,8 @@ function ToolSelectionPanel({
   return (
     <div className="flex h-full">
       {/* Left column — server list */}
-      <div className="w-[160px] shrink-0 border-r border-border overflow-y-auto">
-        <div className="flex items-center gap-1.5 px-3 h-10 bg-muted/50 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
+      <div className="border-border w-[160px] shrink-0 overflow-y-auto border-r">
+        <div className="bg-muted/50 text-muted-foreground border-border flex h-10 items-center gap-1.5 border-b px-3 text-[10px] font-medium tracking-wider uppercase">
           <Globe className="h-3 w-3" />
           Server List
         </div>
@@ -473,13 +473,13 @@ function ToolSelectionPanel({
                 setSearch("");
               }}
               className={cn(
-                "flex w-full items-center justify-between px-3 h-10 text-sm cursor-pointer hover:bg-muted/50 truncate",
+                "hover:bg-muted/50 flex h-10 w-full cursor-pointer items-center justify-between truncate px-3 text-sm",
                 isActive && "bg-muted font-medium",
               )}
             >
               <span className="truncate">{server.name}</span>
               {isActive && (
-                <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
               )}
             </button>
           );
@@ -487,20 +487,20 @@ function ToolSelectionPanel({
       </div>
 
       {/* Right column — tools for selected server */}
-      <div className="flex-1 min-w-0 flex flex-col min-h-0">
-        <div className="flex items-center gap-1 px-3 h-10 border-b border-border">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="border-border flex h-10 items-center gap-1 border-b px-3">
           <input
             type="text"
             placeholder="Search tools…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 bg-transparent text-sm placeholder:text-muted-foreground outline-none"
+            className="placeholder:text-muted-foreground flex-1 bg-transparent text-sm outline-none"
           />
           {search && (
             <button
               type="button"
               onClick={() => setSearch("")}
-              className="shrink-0 text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground shrink-0"
             >
               <X className="h-3 w-3" />
             </button>
@@ -509,10 +509,10 @@ function ToolSelectionPanel({
         <div
           ref={scrollRef}
           onWheel={handleWheel}
-          className="tool-scroll min-h-[300px] max-h-[300px] overflow-y-auto pb-2"
+          className="tool-scroll max-h-[300px] min-h-[300px] overflow-y-auto pb-2"
         >
           {filteredTools.length === 0 ? (
-            <div className="px-3 py-3 text-sm text-muted-foreground">
+            <div className="text-muted-foreground px-3 py-3 text-sm">
               {tools.length === 0 ? "No tools found" : "No matching tools"}
             </div>
           ) : (
@@ -631,7 +631,7 @@ function AnnotationGroupPanel({
 
   return (
     <div className="py-1">
-      <div className="px-2 py-2 text-sm text-muted-foreground">
+      <div className="text-muted-foreground px-2 py-2 text-sm">
         Grant access to all tools matching selected annotations:
       </div>
       {ANNOTATION_OPTIONS.map((opt) => {
@@ -640,40 +640,40 @@ function AnnotationGroupPanel({
         const matchedTools = toolsByAnnotation.get(opt.key) ?? [];
         const Icon = opt.icon;
         return (
-          <div key={opt.key} className="rounded-sm hover:bg-accent">
+          <div key={opt.key} className="hover:bg-accent rounded-sm">
             <button
               type="button"
               onClick={() => toggle(opt.key)}
               className={cn(
-                "flex w-full items-center gap-3 px-3 py-2.5 text-sm cursor-pointer outline-none",
+                "flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-sm outline-none",
                 isSelected && "font-medium",
               )}
             >
               <Checkbox
                 checked={isSelected}
-                className="pointer-events-none focus-visible:ring-0 focus-visible:border-input"
+                className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
                 tabIndex={-1}
               />
-              <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <div className="flex-1 min-w-0 text-left">
+              <Icon className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+              <div className="min-w-0 flex-1 text-left">
                 <div>{opt.label}</div>
-                <div className="text-[11px] text-muted-foreground font-normal">
+                <div className="text-muted-foreground text-[11px] font-normal">
                   {opt.description}
                 </div>
               </div>
             </button>
             {isSelected && (
-              <div className="pl-[66px] pr-3 pb-3">
+              <div className="pr-3 pb-3 pl-[66px]">
                 {matchedTools.length === 0 ? (
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-muted-foreground text-[11px]">
                     No tools matched
                   </span>
                 ) : (
-                  <div className="rounded-md border border-border bg-background overflow-hidden">
+                  <div className="border-border bg-background overflow-hidden rounded-md border">
                     <button
                       type="button"
                       onClick={() => toggleExpanded(opt.key)}
-                      className="flex w-full items-center gap-1 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                      className="text-muted-foreground hover:text-foreground flex w-full cursor-pointer items-center gap-1 px-2.5 py-1.5 text-xs"
                     >
                       <ChevronRight
                         className={cn(
@@ -688,15 +688,15 @@ function AnnotationGroupPanel({
                       <div
                         ref={scrollRef}
                         onWheel={handleWheel}
-                        className="max-h-[120px] overflow-y-auto border-t border-border bg-popover"
+                        className="border-border bg-popover max-h-[120px] overflow-y-auto border-t"
                       >
                         {matchedTools.map((tool) => (
                           <div
                             key={`${tool.serverName}:${tool.id}`}
-                            className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs text-muted-foreground border-b border-border last:border-b-0"
+                            className="text-muted-foreground border-border flex items-center justify-between gap-2 border-b px-2.5 py-1.5 text-xs last:border-b-0"
                           >
                             <span className="truncate">{tool.name}</span>
-                            <span className="text-[10px] opacity-50 shrink-0">
+                            <span className="shrink-0 text-[10px] opacity-50">
                               {tool.serverName}
                             </span>
                           </div>
@@ -795,7 +795,7 @@ function HttpMethodGroupPanel({
 
   if (httpTools.length === 0) {
     return (
-      <div className="py-6 text-center text-sm text-muted-foreground">
+      <div className="text-muted-foreground py-6 text-center text-sm">
         No HTTP tools found
       </div>
     );
@@ -803,7 +803,7 @@ function HttpMethodGroupPanel({
 
   return (
     <div className="py-1">
-      <div className="px-2 py-2 text-sm text-muted-foreground">
+      <div className="text-muted-foreground px-2 py-2 text-sm">
         Select tools by HTTP method:
       </div>
       {[...toolsByMethod.entries()].map(([method, tools]) => {
@@ -830,7 +830,7 @@ function HttpMethodGroupPanel({
         };
 
         return (
-          <div key={method} className="rounded-sm hover:bg-accent">
+          <div key={method} className="hover:bg-accent rounded-sm">
             <div className="flex w-full items-center gap-3 px-3 py-2.5 text-sm">
               <Checkbox
                 checked={
@@ -848,7 +848,7 @@ function HttpMethodGroupPanel({
               />
               <span
                 className={cn(
-                  "inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide min-w-[52px]",
+                  "inline-flex min-w-[52px] items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide",
                   colors,
                 )}
               >
@@ -857,14 +857,14 @@ function HttpMethodGroupPanel({
               <button
                 type="button"
                 onClick={() => toggleExpanded(method)}
-                className="flex flex-1 items-center gap-2 cursor-pointer"
+                className="flex flex-1 cursor-pointer items-center gap-2"
               >
-                <span className="flex-1 text-left text-muted-foreground font-normal">
+                <span className="text-muted-foreground flex-1 text-left font-normal">
                   {selectedCount} of {tools.length} selected
                 </span>
                 <ChevronRight
                   className={cn(
-                    "h-3.5 w-3.5 text-muted-foreground transition-transform",
+                    "text-muted-foreground h-3.5 w-3.5 transition-transform",
                     isExpanded && "rotate-90",
                   )}
                 />
@@ -874,7 +874,7 @@ function HttpMethodGroupPanel({
               <div
                 ref={scrollRef}
                 onWheel={handleWheel}
-                className="max-h-[180px] overflow-y-auto border-t border-border bg-background"
+                className="border-border bg-background max-h-[180px] overflow-y-auto border-t"
               >
                 {tools.map((tool) => {
                   const compoundId = `${tool.serverSlug}:${tool.id}`;
@@ -885,19 +885,19 @@ function HttpMethodGroupPanel({
                       type="button"
                       onClick={() => onToggle(compoundId)}
                       className={cn(
-                        "flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent cursor-pointer",
+                        "hover:bg-accent flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm",
                         isChecked && "font-medium",
                       )}
                     >
                       <Checkbox
                         checked={isChecked}
-                        className="pointer-events-none focus-visible:ring-0 focus-visible:border-input"
+                        className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
                         tabIndex={-1}
                       />
-                      <span className="truncate flex-1 text-left">
+                      <span className="flex-1 truncate text-left">
                         {tool.name}
                       </span>
-                      <span className="text-[10px] text-muted-foreground opacity-50 shrink-0">
+                      <span className="text-muted-foreground shrink-0 text-[10px] opacity-50">
                         {tool.serverName}
                       </span>
                     </button>
@@ -942,7 +942,7 @@ function CollectionGroupPanel({
 
   if (mcpServers.length === 0) {
     return (
-      <div className="py-6 text-center text-sm text-muted-foreground">
+      <div className="text-muted-foreground py-6 text-center text-sm">
         No collections found
       </div>
     );
@@ -950,7 +950,7 @@ function CollectionGroupPanel({
 
   return (
     <div className="py-1">
-      <div className="px-2 py-2 text-sm text-muted-foreground">
+      <div className="text-muted-foreground px-2 py-2 text-sm">
         Select tools by collection:
       </div>
       {mcpServers.map((group) => {
@@ -976,7 +976,7 @@ function CollectionGroupPanel({
         };
 
         return (
-          <div key={group.projectId} className="rounded-sm hover:bg-accent">
+          <div key={group.projectId} className="hover:bg-accent rounded-sm">
             <div className="flex w-full items-center gap-3 px-3 py-2.5 text-sm">
               <Checkbox
                 checked={
@@ -995,9 +995,9 @@ function CollectionGroupPanel({
               <button
                 type="button"
                 onClick={() => toggleExpanded(group.projectId)}
-                className="flex flex-1 items-center gap-2 cursor-pointer min-w-0"
+                className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
               >
-                <span className="font-medium truncate">
+                <span className="truncate font-medium">
                   {group.projectName}
                 </span>
                 <span className="text-muted-foreground font-normal">
@@ -1005,7 +1005,7 @@ function CollectionGroupPanel({
                 </span>
                 <ChevronRight
                   className={cn(
-                    "h-3.5 w-3.5 text-muted-foreground transition-transform ml-auto shrink-0",
+                    "text-muted-foreground ml-auto h-3.5 w-3.5 shrink-0 transition-transform",
                     isExpanded && "rotate-90",
                   )}
                 />
@@ -1015,11 +1015,11 @@ function CollectionGroupPanel({
               <div
                 ref={scrollRef}
                 onWheel={handleWheel}
-                className="max-h-[180px] overflow-y-auto border-t border-border bg-background"
+                className="border-border bg-background max-h-[180px] overflow-y-auto border-t"
               >
                 {group.servers.map((server) => (
                   <div key={server.id}>
-                    <div className="px-3 py-1.5 text-[10px] text-muted-foreground font-medium uppercase tracking-wider bg-muted/30">
+                    <div className="text-muted-foreground bg-muted/30 px-3 py-1.5 text-[10px] font-medium tracking-wider uppercase">
                       {server.name}
                     </div>
                     {server.tools.map((tool) => {
@@ -1031,16 +1031,16 @@ function CollectionGroupPanel({
                           type="button"
                           onClick={() => onToggle(compoundId)}
                           className={cn(
-                            "flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent cursor-pointer",
+                            "hover:bg-accent flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm",
                             isChecked && "font-medium",
                           )}
                         >
                           <Checkbox
                             checked={isChecked}
-                            className="pointer-events-none focus-visible:ring-0 focus-visible:border-input"
+                            className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
                             tabIndex={-1}
                           />
-                          <span className="truncate flex-1 text-left">
+                          <span className="flex-1 truncate text-left">
                             {tool.name}
                           </span>
                         </button>
@@ -1075,14 +1075,14 @@ function ResourceCheckbox({
       type="button"
       onClick={() => onToggle(id)}
       className={cn(
-        "flex w-full items-center gap-2 px-3 hover:bg-accent cursor-pointer",
-        compact ? "text-sm rounded-none h-10" : "text-sm rounded-sm py-2",
+        "hover:bg-accent flex w-full cursor-pointer items-center gap-2 px-3",
+        compact ? "h-10 rounded-none text-sm" : "rounded-sm py-2 text-sm",
         checked && "font-medium",
       )}
     >
       <Checkbox
         checked={checked}
-        className="pointer-events-none focus-visible:ring-0 focus-visible:border-input"
+        className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
         tabIndex={-1}
       />
       <span className="truncate">{name}</span>
@@ -1104,11 +1104,11 @@ function ScopeOption({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 rounded-sm px-3 py-2 text-sm hover:bg-accent cursor-pointer",
+        "hover:bg-accent flex w-full cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm",
         selected && "font-medium",
       )}
     >
-      <span className="w-4 flex items-center justify-center shrink-0">
+      <span className="flex w-4 shrink-0 items-center justify-center">
         {selected && <Check className="h-3.5 w-3.5" />}
       </span>
       <span>{label}</span>

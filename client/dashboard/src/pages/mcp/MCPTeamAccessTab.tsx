@@ -105,23 +105,23 @@ function ToolRow({ tool }: { tool: Tool }) {
   if (annotations?.openWorldHint) annotationTags.push("Open-world");
 
   return (
-    <div className="rounded-lg border border-border p-3">
+    <div className="border-border rounded-lg border p-3">
       <div className="flex items-start gap-2">
         {method && methodColors && (
           <span
-            className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold font-mono shrink-0 mt-0.5 ${methodColors}`}
+            className={`mt-0.5 inline-flex shrink-0 items-center rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${methodColors}`}
           >
             {method}
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <Type variant="body" className="text-sm font-medium font-mono">
+          <Type variant="body" className="font-mono text-sm font-medium">
             {"name" in tool ? tool.name : "Unknown tool"}
           </Type>
           {httpTool?.path && (
             <Type
               variant="body"
-              className="text-xs text-muted-foreground font-mono mt-0.5"
+              className="text-muted-foreground mt-0.5 font-mono text-xs"
             >
               {httpTool.path}
             </Type>
@@ -131,17 +131,17 @@ function ToolRow({ tool }: { tool: Tool }) {
       {"description" in tool && tool.description && (
         <Type
           variant="body"
-          className="text-xs text-muted-foreground mt-1.5 line-clamp-2"
+          className="text-muted-foreground mt-1.5 line-clamp-2 text-xs"
         >
           {tool.description}
         </Type>
       )}
       {annotationTags.length > 0 && (
-        <div className="flex gap-1 mt-2">
+        <div className="mt-2 flex gap-1">
           {annotationTags.map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
+              className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px]"
             >
               {tag}
             </span>
@@ -177,7 +177,7 @@ function AccessBadge({
       );
     case "none":
       return (
-        <span className="text-sm text-muted-foreground/50">No access</span>
+        <span className="text-muted-foreground/50 text-sm">No access</span>
       );
   }
 }
@@ -258,12 +258,12 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <Type variant="body" className="font-medium truncate">
+            <Type variant="body" className="truncate font-medium">
               {row.member.name}
             </Type>
             <Type
               variant="body"
-              className="text-muted-foreground text-xs truncate"
+              className="text-muted-foreground truncate text-xs"
             >
               {row.member.email}
             </Type>
@@ -350,7 +350,7 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
           />
         )}
         <Table.Row>
-          <div className="col-span-full border-t border-border bg-muted/20 py-5 text-center">
+          <div className="border-border bg-muted/20 col-span-full border-t py-5 text-center">
             <Type variant="body" className="text-muted-foreground text-sm">
               Want to grant new members access?
             </Type>
@@ -372,14 +372,14 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
               <SheetHeader>
                 <SheetTitle>{sheetData.scopeLabel} access</SheetTitle>
                 <SheetDescription>
-                  <span className="font-medium text-foreground">
+                  <span className="text-foreground font-medium">
                     {sheetData.member.name}
                   </span>{" "}
                   can {sheetData.scopeLabel.toLowerCase()}{" "}
                   {sheetData.tools.length} tool
                   {sheetData.tools.length !== 1 ? "s" : ""} on this server via
                   the{" "}
-                  <span className="font-medium text-foreground">
+                  <span className="text-foreground font-medium">
                     {sheetData.role.name}
                   </span>{" "}
                   role.
@@ -391,7 +391,7 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
                     <ToolRow key={i} tool={tool} />
                   ))}
                   {sheetData.tools.length === 0 && (
-                    <div className="py-8 text-center text-sm text-muted-foreground">
+                    <div className="text-muted-foreground py-8 text-center text-sm">
                       Could not resolve tool names from grants.
                     </div>
                   )}

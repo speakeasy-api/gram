@@ -176,6 +176,7 @@ func DescribeToolsetEntry(
 				Name:        tool.Name,
 				ToolUrn:     tool.ToolUrn.String(),
 				Annotations: conv.AnnotationsFromColumns(tool.ReadOnlyHint, tool.DestructiveHint, tool.IdempotentHint, tool.OpenWorldHint),
+				HTTPMethod:  nil,
 			})
 
 			envVars, err := extractFunctionEnvVars(ctx, logger, tool.Variables, tool.AuthInput)
@@ -195,10 +196,12 @@ func DescribeToolsetEntry(
 
 		for _, pt := range promptTools {
 			tools = append(tools, &types.ToolEntry{
-				Type:    string(urn.ToolKindPrompt),
-				ID:      pt.ID.String(),
-				Name:    pt.Name,
-				ToolUrn: pt.ToolUrn.String(),
+				Type:        string(urn.ToolKindPrompt),
+				ID:          pt.ID.String(),
+				Name:        pt.Name,
+				ToolUrn:     pt.ToolUrn.String(),
+				Annotations: nil,
+				HTTPMethod:  nil,
 			})
 		}
 
@@ -230,6 +233,7 @@ func DescribeToolsetEntry(
 				Name:        externalMCPTool.Slug + ":proxy",
 				ToolUrn:     externalMCPTool.ToolUrn,
 				Annotations: conv.AnnotationsFromColumns(externalMCPTool.ReadOnlyHint, externalMCPTool.DestructiveHint, externalMCPTool.IdempotentHint, externalMCPTool.OpenWorldHint),
+				HTTPMethod:  nil,
 			})
 
 			headerDefs, err := extractExternalMCPHeaderDefinitions(ctx, logger, externalMCPTool.HeaderDefinitions, externalMCPTool.Slug)
