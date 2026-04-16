@@ -351,7 +351,7 @@ export function MCPDetailPage() {
           {/* Tab Content */}
           <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
             <TabsContent value="overview" className="mt-0 w-full">
-              <MCPOverviewTab toolset={toolset} onTabChange={handleTabChange} />
+              <MCPOverviewTab toolset={toolset} />
             </TabsContent>
 
             <TabsContent value="tools" className="mt-0 w-full">
@@ -569,13 +569,7 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
 /**
  * Overview Tab - Hosted URL and Installation instructions
  */
-function MCPOverviewTab({
-  toolset,
-  onTabChange,
-}: {
-  toolset: Toolset;
-  onTabChange: (tab: string) => void;
-}) {
+function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
   const { url: mcpUrl } = useMcpUrl(toolset);
 
   const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
@@ -606,15 +600,8 @@ function MCPOverviewTab({
       >
         {!toolset.mcpIsPublic && (
           <Type small italic destructive>
-            Your server is private. To share with external users, you must make
-            it public in the{" "}
-            <button
-              className="appearance-none underline"
-              onClick={() => onTabChange("settings")}
-            >
-              server settings
-            </button>
-            .
+            Your server is private. To share with external users, use the status
+            dropdown in the header to set it to Public.
           </Type>
         )}
         <Stack className="mt-2" gap={1}>
