@@ -12,7 +12,6 @@ import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import type { Server } from "./hooks";
-import { parseServerMetadata } from "./hooks/serverMetadata";
 
 interface ServerCardProps {
   server: Server;
@@ -38,7 +37,6 @@ export function ServerCard({
   isSelected,
   onToggleSelect,
 }: ServerCardProps) {
-  const metadata = useMemo(() => parseServerMetadata(server), [server]);
   const displayName = server.title ?? server.registrySpecifier;
 
   const isSpeakeasyServer = server.registrySpecifier.startsWith(
