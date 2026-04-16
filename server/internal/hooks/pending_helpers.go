@@ -181,7 +181,11 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 	}
 
 	// Extract metrics from payload
-	metrics := extractMetricsForClickHouse(payload)
+	metrics, err := extractMetricsForClickHouse(payload)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "Failed to extract metrics", attr.SlogError(err))
+		return
+	}
 
 	// Write each metric data point as a separate log entry
 	for _, m := range metrics {
@@ -245,12 +249,12 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 
 // extractMetricsForClickHouse converts OTEL metrics payload into aggregated metric data points
 // Groups by session ID and model, aggregating all token/cost values
-func extractMetricsForClickHouse(payload *gen.MetricsPayload) []MetricDataPoint {
+func extractMetricsForClickHouse(payload *gen.MetricsPayload) ([]MetricDataPoint, error) {
 	// Map key: sessionID + model
 	aggregated := make(map[string]*MetricDataPoint)
 
 	if payload.ResourceMetrics == nil {
-		return nil
+		return nil, nil
 	}
 
 	for _, resourceMetric := range payload.ResourceMetrics {
@@ -266,6 +270,17 @@ func extractMetricsForClickHouse(payload *gen.MetricsPayload) []MetricDataPoint 
 			for _, metric := range scopeMetric.Metrics {
 				if metric == nil || metric.Name == nil || metric.Sum == nil {
 					continue
+				}
+
+				// Validate aggregation temporality is DELTA (1)
+				// DELTA = 1 means each data point represents change since last export
+				// CUMULATIVE = 2 would require different handling to avoid double-counting
+				if metric.Sum.AggregationTemporality == nil || *metric.Sum.AggregationTemporality != 1 {
+					temporality := "nil"
+					if metric.Sum.AggregationTemporality != nil {
+						temporality = fmt.Sprintf("%d", *metric.Sum.AggregationTemporality)
+					}
+					return nil, fmt.Errorf("unsupported aggregation temporality %s for metric %s (expected 1 for DELTA)", temporality, *metric.Name)
 				}
 
 				metricName := *metric.Name
@@ -341,7 +356,7 @@ func extractMetricsForClickHouse(payload *gen.MetricsPayload) []MetricDataPoint 
 		result = append(result, *dp)
 	}
 
-	return result
+	return result, nil
 }
 
 // flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse.
