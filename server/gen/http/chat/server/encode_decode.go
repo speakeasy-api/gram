@@ -1440,14 +1440,18 @@ func EncodeSubmitFeedbackError(encoder func(context.Context, http.ResponseWriter
 // *ChatOverviewResponseBody from a value of type *chat.ChatOverview.
 func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *ChatOverviewResponseBody {
 	res := &ChatOverviewResponseBody{
-		ID:             v.ID,
-		Title:          v.Title,
-		UserID:         v.UserID,
-		ExternalUserID: v.ExternalUserID,
-		NumMessages:    v.NumMessages,
-		Source:         v.Source,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
+		ID:                v.ID,
+		Title:             v.Title,
+		UserID:            v.UserID,
+		ExternalUserID:    v.ExternalUserID,
+		NumMessages:       v.NumMessages,
+		Source:            v.Source,
+		CreatedAt:         v.CreatedAt,
+		UpdatedAt:         v.UpdatedAt,
+		TotalInputTokens:  v.TotalInputTokens,
+		TotalOutputTokens: v.TotalOutputTokens,
+		TotalTokens:       v.TotalTokens,
+		TotalCost:         v.TotalCost,
 	}
 
 	return res
@@ -1477,14 +1481,18 @@ func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatM
 // of type *chat.ChatOverviewWithResolutions.
 func marshalChatChatOverviewWithResolutionsToChatOverviewWithResolutionsResponseBody(v *chat.ChatOverviewWithResolutions) *ChatOverviewWithResolutionsResponseBody {
 	res := &ChatOverviewWithResolutionsResponseBody{
-		ID:             v.ID,
-		Title:          v.Title,
-		UserID:         v.UserID,
-		ExternalUserID: v.ExternalUserID,
-		NumMessages:    v.NumMessages,
-		Source:         v.Source,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
+		ID:                v.ID,
+		Title:             v.Title,
+		UserID:            v.UserID,
+		ExternalUserID:    v.ExternalUserID,
+		NumMessages:       v.NumMessages,
+		Source:            v.Source,
+		CreatedAt:         v.CreatedAt,
+		UpdatedAt:         v.UpdatedAt,
+		TotalInputTokens:  v.TotalInputTokens,
+		TotalOutputTokens: v.TotalOutputTokens,
+		TotalTokens:       v.TotalTokens,
+		TotalCost:         v.TotalCost,
 	}
 	if v.Resolutions != nil {
 		res.Resolutions = make([]*ChatResolutionResponseBody, len(v.Resolutions))

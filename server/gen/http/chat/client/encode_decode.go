@@ -1476,14 +1476,18 @@ func DecodeSubmitFeedbackResponse(decoder func(*http.Response) goahttp.Decoder, 
 // *chat.ChatOverview from a value of type *ChatOverviewResponseBody.
 func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponseBody) *chat.ChatOverview {
 	res := &chat.ChatOverview{
-		ID:             *v.ID,
-		Title:          *v.Title,
-		UserID:         v.UserID,
-		ExternalUserID: v.ExternalUserID,
-		NumMessages:    *v.NumMessages,
-		Source:         v.Source,
-		CreatedAt:      *v.CreatedAt,
-		UpdatedAt:      *v.UpdatedAt,
+		ID:                *v.ID,
+		Title:             *v.Title,
+		UserID:            v.UserID,
+		ExternalUserID:    v.ExternalUserID,
+		NumMessages:       *v.NumMessages,
+		Source:            v.Source,
+		CreatedAt:         *v.CreatedAt,
+		UpdatedAt:         *v.UpdatedAt,
+		TotalInputTokens:  v.TotalInputTokens,
+		TotalOutputTokens: v.TotalOutputTokens,
+		TotalTokens:       v.TotalTokens,
+		TotalCost:         v.TotalCost,
 	}
 
 	return res
@@ -1513,14 +1517,18 @@ func unmarshalChatMessageResponseBodyToChatChatMessage(v *ChatMessageResponseBod
 // type *ChatOverviewWithResolutionsResponseBody.
 func unmarshalChatOverviewWithResolutionsResponseBodyToChatChatOverviewWithResolutions(v *ChatOverviewWithResolutionsResponseBody) *chat.ChatOverviewWithResolutions {
 	res := &chat.ChatOverviewWithResolutions{
-		ID:             *v.ID,
-		Title:          *v.Title,
-		UserID:         v.UserID,
-		ExternalUserID: v.ExternalUserID,
-		NumMessages:    *v.NumMessages,
-		Source:         v.Source,
-		CreatedAt:      *v.CreatedAt,
-		UpdatedAt:      *v.UpdatedAt,
+		ID:                *v.ID,
+		Title:             *v.Title,
+		UserID:            v.UserID,
+		ExternalUserID:    v.ExternalUserID,
+		NumMessages:       *v.NumMessages,
+		Source:            v.Source,
+		CreatedAt:         *v.CreatedAt,
+		UpdatedAt:         *v.UpdatedAt,
+		TotalInputTokens:  v.TotalInputTokens,
+		TotalOutputTokens: v.TotalOutputTokens,
+		TotalTokens:       v.TotalTokens,
+		TotalCost:         v.TotalCost,
 	}
 	res.Resolutions = make([]*chat.ChatResolution, len(v.Resolutions))
 	for i, val := range v.Resolutions {

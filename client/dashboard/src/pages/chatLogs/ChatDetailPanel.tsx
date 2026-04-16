@@ -469,6 +469,52 @@ export function ChatDetailPanel({
                 </div>
                 <div className="text-sm font-medium">{toolLogs.length}</div>
               </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">
+                  Total Cost:
+                </div>
+                <div className="text-sm font-medium">
+                  {chat.totalCost !== undefined && chat.totalCost > 0
+                    ? `$${chat.totalCost.toFixed(4)}`
+                    : "unknown"}
+                </div>
+              </div>
+              {chat.totalInputTokens !== undefined && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">
+                    Input Tokens:
+                  </div>
+                  <div className="text-sm font-medium">
+                    {chat.totalInputTokens.toLocaleString()}
+                  </div>
+                </div>
+              )}
+              {chat.totalOutputTokens !== undefined && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">
+                    Output Tokens:
+                  </div>
+                  <div className="text-sm font-medium">
+                    {chat.totalOutputTokens.toLocaleString()}
+                  </div>
+                </div>
+              )}
+              {(chat.totalTokens !== undefined ||
+                (chat.totalInputTokens !== undefined &&
+                  chat.totalOutputTokens !== undefined)) && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">
+                    Total Tokens:
+                  </div>
+                  <div className="text-sm font-medium">
+                    {(chat.totalTokens && chat.totalTokens > 0
+                      ? chat.totalTokens
+                      : (chat.totalInputTokens || 0) +
+                        (chat.totalOutputTokens || 0)
+                    ).toLocaleString()}
+                  </div>
+                </div>
+              )}
               {resolutions.length > 0 && (
                 <>
                   <div>

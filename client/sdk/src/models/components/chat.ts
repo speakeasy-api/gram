@@ -39,6 +39,22 @@ export type Chat = {
    */
   title: string;
   /**
+   * Total cost in USD for this chat
+   */
+  totalCost?: number | undefined;
+  /**
+   * Total input tokens used in this chat
+   */
+  totalInputTokens?: number | undefined;
+  /**
+   * Total output tokens used in this chat
+   */
+  totalOutputTokens?: number | undefined;
+  /**
+   * Total tokens (input + output) used in this chat
+   */
+  totalTokens?: number | undefined;
+  /**
    * When the chat was last updated.
    */
   updatedAt: Date;
@@ -61,6 +77,10 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     num_messages: z.int(),
     source: z.optional(z.string()),
     title: z.string(),
+    total_cost: z.optional(z.number()),
+    total_input_tokens: z.optional(z.int()),
+    total_output_tokens: z.optional(z.int()),
+    total_tokens: z.optional(z.int()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -72,6 +92,10 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "created_at": "createdAt",
       "external_user_id": "externalUserId",
       "num_messages": "numMessages",
+      "total_cost": "totalCost",
+      "total_input_tokens": "totalInputTokens",
+      "total_output_tokens": "totalOutputTokens",
+      "total_tokens": "totalTokens",
       "updated_at": "updatedAt",
       "user_id": "userId",
     });

@@ -15215,6 +15215,22 @@ components:
                 title:
                     type: string
                     description: The title of the chat
+                total_cost:
+                    type: number
+                    description: Total cost in USD for this chat
+                    format: double
+                total_input_tokens:
+                    type: integer
+                    description: Total input tokens used in this chat
+                    format: int64
+                total_output_tokens:
+                    type: integer
+                    description: Total output tokens used in this chat
+                    format: int64
+                total_tokens:
+                    type: integer
+                    description: Total tokens (input + output) used in this chat
+                    format: int64
                 updated_at:
                     type: string
                     description: When the chat was last updated.
@@ -15291,6 +15307,22 @@ components:
                 title:
                     type: string
                     description: The title of the chat
+                total_cost:
+                    type: number
+                    description: Total cost in USD for this chat
+                    format: double
+                total_input_tokens:
+                    type: integer
+                    description: Total input tokens used in this chat
+                    format: int64
+                total_output_tokens:
+                    type: integer
+                    description: Total output tokens used in this chat
+                    format: int64
+                total_tokens:
+                    type: integer
+                    description: Total tokens (input + output) used in this chat
+                    format: int64
                 updated_at:
                     type: string
                     description: When the chat was last updated.
@@ -15332,6 +15364,22 @@ components:
                 title:
                     type: string
                     description: The title of the chat
+                total_cost:
+                    type: number
+                    description: Total cost in USD for this chat
+                    format: double
+                total_input_tokens:
+                    type: integer
+                    description: Total input tokens used in this chat
+                    format: int64
+                total_output_tokens:
+                    type: integer
+                    description: Total output tokens used in this chat
+                    format: int64
+                total_tokens:
+                    type: integer
+                    description: Total tokens (input + output) used in this chat
+                    format: int64
                 updated_at:
                     type: string
                     description: When the chat was last updated.

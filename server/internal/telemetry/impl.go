@@ -1255,3 +1255,16 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 		NextCursor: nextCursor,
 	}, nil
 }
+
+// GetChatMetricsByIDs retrieves token and cost metrics for specific chat IDs.
+// This is used by the chat service to enrich chat overview data with metrics from ClickHouse.
+func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, chatIDs []string) (map[string]repo.ChatMetricsRow, error) {
+	if s.chRepo == nil {
+		return make(map[string]repo.ChatMetricsRow), nil
+	}
+
+	return s.chRepo.GetChatMetricsByIDs(ctx, repo.GetChatMetricsByIDsParams{
+		GramProjectID: projectID,
+		ChatIDs:       chatIDs,
+	})
+}

@@ -327,6 +327,12 @@ export function ChatLogsTable({
                     <Icon name="message-square" className="size-4 opacity-60" />
                     {chat.numMessages} messages
                   </span>
+                  {chat.totalCost !== undefined && chat.totalCost > 0 && (
+                    <span className="flex items-center gap-0">
+                      <Icon name="dollar-sign" className="size-4 opacity-60" />
+                      {chat.totalCost.toFixed(4)}
+                    </span>
+                  )}
                 </div>
               </div>
 
