@@ -2,8 +2,10 @@ package collections_test
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
@@ -128,4 +130,86 @@ func TestCollectionsService_List_DefaultRegistryNotDuplicatedWhenAlreadyExists(t
 		}
 	}
 	require.Equal(t, 1, registryCount, "should not duplicate the registry collection")
+}
+
+func TestCollectionsService_List_DefaultRegistryConcurrent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCollectionsService(t)
+
+	const workers = 16
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	start := make(chan struct{})
+	wg.Add(workers)
+	for range workers {
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := ti.service.List(ctx, &gen.ListPayload{
+				SessionToken:     nil,
+				ApikeyToken:      nil,
+				ProjectSlugInput: nil,
+			})
+			errs <- err
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err, "concurrent ensure of default registry collection must not fail")
+	}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	cRepo := collectionsRepo.New(ti.conn)
+	rows, err := cRepo.ListOrganizationMcpCollections(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+
+	var registryCount int
+	for _, r := range rows {
+		if r.Slug == "registry" {
+			registryCount++
+		}
+	}
+	require.Equal(t, 1, registryCount, "exactly one default registry collection should exist after concurrent calls")
+}
+
+func TestCollectionsService_List_DefaultRegistryBackfillsMissingNamespace(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCollectionsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	cRepo := collectionsRepo.New(ti.conn)
+	_, err := cRepo.CreateOrganizationMcpCollection(ctx, collectionsRepo.CreateOrganizationMcpCollectionParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Name:           "Registry",
+		Description:    pgtype.Text{String: "", Valid: false},
+		Slug:           "registry",
+		Visibility:     "private",
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	var found bool
+	for _, c := range result.Collections {
+		if c.Slug == "registry" {
+			found = true
+			require.NotNil(t, c.McpRegistryNamespace)
+			require.Equal(t, fmt.Sprintf("com.speakeasy.%s.registry", mockidp.MockOrgSlug), *c.McpRegistryNamespace)
+		}
+	}
+	require.True(t, found, "default registry collection should be present with a backfilled namespace")
 }
