@@ -635,9 +635,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	// Extract JSON schema from response_format if present
 	// This enables structured output mode (e.g., for generateObject in AI SDK)
-	var jsonSchema *or.JSONSchemaConfig
-	if chatRequest.ResponseFormat != nil && chatRequest.ResponseFormat.ResponseFormatJSONSchema != nil {
-		schema := chatRequest.ResponseFormat.ResponseFormatJSONSchema.GetJSONSchema()
+	var jsonSchema *or.ChatJSONSchemaConfig
+	if chatRequest.ResponseFormat != nil && chatRequest.ResponseFormat.ChatFormatJSONSchemaConfig != nil {
+		schema := chatRequest.ResponseFormat.ChatFormatJSONSchemaConfig.GetJSONSchema()
 		jsonSchema = &schema
 	}
 
@@ -719,8 +719,8 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		Created: time.Now().Unix(),
 		Model:   response.Model,
 		Choices: []struct {
-			Message      or.Message `json:"message"`
-			FinishReason string     `json:"finish_reason"`
+			Message      or.ChatMessages `json:"message"`
+			FinishReason string          `json:"finish_reason"`
 		}{
 			{
 				Message:      *response.Message,
@@ -940,7 +940,7 @@ type chatMessageRow struct {
 
 	role             string
 	model            string
-	content          or.Message
+	content          or.ChatMessages
 	finishReason     *string
 	toolCalls        []string
 	promptTokens     int64

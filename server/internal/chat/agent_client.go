@@ -143,19 +143,21 @@ func (c *Client) AgentChat(
 		defer cancel()
 	}
 
-	var messages []or.Message
+	var messages []or.ChatMessages
 
 	// Optional system prompt
 	if opts.SystemPrompt != nil {
-		messages = append(messages, or.CreateMessageSystem(or.SystemMessage{
-			Content: or.CreateSystemMessageContentStr(*opts.SystemPrompt),
+		messages = append(messages, or.CreateChatMessagesSystem(or.ChatSystemMessage{
+			Role:    or.ChatSystemMessageRoleSystem,
+			Content: or.CreateChatSystemMessageContentStr(*opts.SystemPrompt),
 			Name:    nil,
 		}))
 	}
 
 	// User message
-	messages = append(messages, or.CreateMessageUser(or.UserMessage{
-		Content: or.CreateUserMessageContentStr(prompt),
+	messages = append(messages, or.CreateChatMessagesUser(or.ChatUserMessage{
+		Role:    or.ChatUserMessageRoleUser,
+		Content: or.CreateChatUserMessageContentStr(prompt),
 		Name:    nil,
 	}))
 
@@ -239,8 +241,9 @@ func (c *Client) AgentChat(
 				}
 			}
 
-			messages = append(messages, or.CreateMessageTool(or.ToolResponseMessage{
-				Content:    or.CreateToolResponseMessageContentStr(output),
+			messages = append(messages, or.CreateChatMessagesTool(or.ChatToolMessage{
+				Role:       or.ChatToolMessageRoleTool,
+				Content:    or.CreateChatToolMessageContentStr(output),
 				ToolCallID: tc.ID,
 			}))
 		}

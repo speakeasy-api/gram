@@ -124,7 +124,8 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 
 	// Add JSON schema if provided
 	if req.JSONSchema != nil {
-		jsonSchemaConfig := or.ResponseFormatJSONSchema{
+		jsonSchemaConfig := or.ChatFormatJSONSchemaConfig{
+			Type:       or.ChatFormatJSONSchemaConfigTypeJSONSchema,
 			JSONSchema: *req.JSONSchema,
 		}
 		responseFormat := or.CreateResponseFormatJSONSchema(jsonSchemaConfig)
@@ -300,13 +301,13 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 
 	// Extract tool calls
 	var toolCalls []ToolCall
-	if message.Type == or.MessageTypeAssistant {
-		if assistantMsg := message.AssistantMessage; assistantMsg != nil {
+	if message.Type == or.ChatMessagesTypeAssistant {
+		if assistantMsg := message.ChatAssistantMessage; assistantMsg != nil {
 			for idx, tc := range assistantMsg.ToolCalls {
 				toolCalls = append(toolCalls, ToolCall{
 					Index: idx,
 					ID:    tc.ID,
-					Type:  tc.GetType(),
+					Type:  string(tc.GetType()),
 					Function: ToolCallFunction{
 						Name:      tc.Function.Name,
 						Arguments: tc.Function.Arguments,
@@ -387,19 +388,21 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 }
 
 func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompletionRequest) (*CompletionResponse, error) {
-	var messages []or.Message
+	var messages []or.ChatMessages
 
 	// Optional system prompt
 	if req.SystemPrompt != "" {
-		messages = append(messages, or.CreateMessageSystem(or.SystemMessage{
-			Content: or.CreateSystemMessageContentStr(req.SystemPrompt),
+		messages = append(messages, or.CreateChatMessagesSystem(or.ChatSystemMessage{
+			Role:    or.ChatSystemMessageRoleSystem,
+			Content: or.CreateChatSystemMessageContentStr(req.SystemPrompt),
 			Name:    nil,
 		}))
 	}
 
 	// User message
-	messages = append(messages, or.CreateMessageUser(or.UserMessage{
-		Content: or.CreateUserMessageContentStr(req.Prompt),
+	messages = append(messages, or.CreateChatMessagesUser(or.ChatUserMessage{
+		Role:    or.ChatUserMessageRoleUser,
+		Content: or.CreateChatUserMessageContentStr(req.Prompt),
 		Name:    nil,
 	}))
 

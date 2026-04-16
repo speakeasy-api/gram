@@ -35,7 +35,7 @@ type HTTPMetadata struct {
 type CompletionRequest struct {
 	// Required fields
 	OrgID    string
-	Messages []or.Message
+	Messages []or.ChatMessages
 
 	// Optional fields with defaults
 	ProjectID   string
@@ -53,7 +53,7 @@ type CompletionRequest struct {
 	HTTPMetadata   *HTTPMetadata
 	APIKeyID       string
 
-	JSONSchema *or.JSONSchemaConfig // For structured output mode
+	JSONSchema *or.ChatJSONSchemaConfig // For structured output mode
 }
 
 type ObjectCompletionRequest struct {
@@ -66,13 +66,13 @@ type ObjectCompletionRequest struct {
 	UserID         string
 	ExternalUserID string
 	HTTPMetadata   *HTTPMetadata
-	JSONSchema     *or.JSONSchemaConfig // For structured output mode
+	JSONSchema     *or.ChatJSONSchemaConfig // For structured output mode
 }
 
 // CompletionResponse encapsulates the result of a completion call.
 type CompletionResponse struct {
 	StartTime    time.Time
-	Message      *or.Message
+	Message      *or.ChatMessages
 	MessageID    string
 	Model        string
 	Usage        Usage
