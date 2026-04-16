@@ -41,9 +41,12 @@ export function useRBAC() {
 
   // Fetch grants from the server. When dev override is active the SDK fetcher
   // attaches X-Gram-Scope-Override so the server returns the filtered grant set.
-  const { data, isLoading } = useGrants(undefined, undefined, {
+  // throwOnError is disabled so a missing org membership doesn't crash the app —
+  // the error state is surfaced via the returned `error` field instead.
+  const { data, isLoading, error } = useGrants(undefined, undefined, {
     enabled: isRbacEnabled,
     staleTime: 30_000,
+    throwOnError: false,
   });
 
   // overrideVersion triggers a re-render (and therefore a re-read of devOverrideActive)
@@ -109,7 +112,17 @@ export function useRBAC() {
       isRbacEnabled,
       isLoading: isRbacEnabled && isLoading,
       grants: grants ?? [],
+      /** Non-null when the grants query failed (e.g. missing org membership). */
+      error: isRbacEnabled ? error : null,
     }),
-    [hasScope, hasAllScopes, hasAnyScope, isRbacEnabled, isLoading, grants],
+    [
+      hasScope,
+      hasAllScopes,
+      hasAnyScope,
+      isRbacEnabled,
+      isLoading,
+      grants,
+      error,
+    ],
   );
 }
