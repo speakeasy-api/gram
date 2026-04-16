@@ -3,10 +3,15 @@ package risk_analysis
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/zricethezav/gitleaks/v8/detect"
 	"github.com/zricethezav/gitleaks/v8/report"
 )
+
+// gitleaksMu serializes calls to gitleaks which has internal mutable state
+// that is not safe for concurrent use.
+var gitleaksMu sync.Mutex
 
 // Finding represents a single secret or sensitive data match found in a message.
 type Finding struct {
@@ -23,6 +28,9 @@ type Finding struct {
 // ScanWithGitleaks scans the given content string using gitleaks default rules
 // and returns any findings.
 func ScanWithGitleaks(content string) ([]Finding, error) {
+	gitleaksMu.Lock()
+	defer gitleaksMu.Unlock()
+
 	d, err := detect.NewDetectorDefaultConfig()
 	if err != nil {
 		return nil, fmt.Errorf("create gitleaks detector: %w", err)
