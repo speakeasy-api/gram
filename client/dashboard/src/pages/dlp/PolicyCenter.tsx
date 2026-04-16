@@ -158,9 +158,20 @@ export default function PolicyCenter() {
               Risk policies scan your chat messages for secrets and sensitive
               data. Create your first policy to get started.
             </p>
-            <Button onClick={handleCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Get Started
+            <Button
+              onClick={() =>
+                createMutation.mutate({
+                  request: {
+                    createRiskPolicyRequestBody: {
+                      name: "Secret Scanner",
+                      enabled: true,
+                    },
+                  },
+                })
+              }
+              disabled={createMutation.isPending}
+            >
+              {createMutation.isPending ? "Creating..." : "Get Started"}
             </Button>
           </div>
         </Page.Body>
