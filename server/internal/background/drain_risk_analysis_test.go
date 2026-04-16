@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 )
@@ -62,7 +63,7 @@ func TestDrainWorkflow_DrainsAndSleeps(t *testing.T) {
 	// After draining, the workflow sleeps. Send a signal after a delay so it
 	// doesn't block forever — the idle timeout will complete it.
 	env.RegisterDelayedCallback(func() {
-		env.SignalWorkflow(SignalNewMessages, nil)
+		env.SignalWorkflow(SignalRiskAnalysisRequested, nil)
 	}, 0)
 
 	env.ExecuteWorkflow(DrainRiskAnalysisWorkflow, DrainRiskAnalysisParams{
@@ -101,7 +102,12 @@ func TestDrainWorkflow_EmptyDrainWaitsForSignal(t *testing.T) {
 		activity.RegisterOptions{Name: "AnalyzeBatch"},
 	)
 
-	// Don't send a signal — let the idle timeout fire.
+	// Workflow drains (nothing to do), then blocks on signalCh.Receive().
+	// Send a signal so it ContinueAsNew.
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(SignalRiskAnalysisRequested, nil)
+	}, 0)
+
 	env.ExecuteWorkflow(DrainRiskAnalysisWorkflow, DrainRiskAnalysisParams{
 		ProjectID:     uuid.New(),
 		RiskPolicyID:  uuid.New(),
@@ -110,7 +116,11 @@ func TestDrainWorkflow_EmptyDrainWaitsForSignal(t *testing.T) {
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
-	require.NoError(t, env.GetWorkflowError())
+	// Workflow ContinueAsNew after receiving the signal.
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	var continueAsNewErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, err, &continueAsNewErr)
 }
 
 func TestDrainWorkflow_ActivityFailureContinues(t *testing.T) {
@@ -139,6 +149,11 @@ func TestDrainWorkflow_ActivityFailureContinues(t *testing.T) {
 		activity.RegisterOptions{Name: "AnalyzeBatch"},
 	)
 
+	// After drain (with failure), workflow blocks on signal. Send one.
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(SignalRiskAnalysisRequested, nil)
+	}, 0)
+
 	env.ExecuteWorkflow(DrainRiskAnalysisWorkflow, DrainRiskAnalysisParams{
 		ProjectID:     uuid.New(),
 		RiskPolicyID:  uuid.New(),
@@ -147,9 +162,11 @@ func TestDrainWorkflow_ActivityFailureContinues(t *testing.T) {
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
-	// The workflow completes normally — failed batches are logged but don't
-	// stop the drain. It idles out after the timeout.
-	require.NoError(t, env.GetWorkflowError())
+	// Workflow ContinueAsNew despite the failed batch.
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	var continueAsNewErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, err, &continueAsNewErr)
 }
 
 func TestChunkUUIDs(t *testing.T) {

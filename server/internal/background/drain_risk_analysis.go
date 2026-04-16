@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	// SignalNewMessages is sent to wake the drain workflow when new chat messages
-	// arrive for a project that has enabled risk policies.
-	SignalNewMessages = "new-messages"
+	// SignalRiskAnalysisRequested wakes the drain workflow on new messages or
+	// policy updates.
+	SignalRiskAnalysisRequested = "risk-analysis-requested"
 
 	// drainFetchLimit is how many unanalyzed message IDs to fetch per round.
 	drainFetchLimit int32 = 20_000
@@ -29,13 +29,9 @@ const (
 	// drainMaxConcurrency is the maximum number of AnalyzeBatch activities
 	// running in parallel.
 	drainMaxConcurrency = 20
-
-	// drainIdleTimeout is how long the workflow waits for new signals before
-	// completing (to be restarted on the next signal).
-	drainIdleTimeout = 10 * time.Minute
 )
 
-// DrainRiskAnalysisParams are the inputs to the drain workflow.
+// DrainRiskAnalysisParams identifies the policy this workflow drains.
 type DrainRiskAnalysisParams struct {
 	ProjectID     uuid.UUID
 	RiskPolicyID  uuid.UUID
@@ -43,150 +39,61 @@ type DrainRiskAnalysisParams struct {
 	Sources       []string
 }
 
-// TemporalRiskAnalysisSignaler signals or starts the drain workflow for a
-// project's risk policies. It is called from the chat service when new messages
-// are stored.
-type TemporalRiskAnalysisSignaler struct {
-	TemporalEnv *tenv.Environment
-}
-
-// SignalNewMessages signals the drain workflow for the given policy. If the
-// workflow does not exist yet, it starts a new one.
-func (s *TemporalRiskAnalysisSignaler) SignalNewMessages(ctx context.Context, params DrainRiskAnalysisParams) error {
-	if s.TemporalEnv == nil {
-		return nil
-	}
-
-	wfID := drainWorkflowID(params.RiskPolicyID)
-
-	// Try to signal an already-running workflow.
-	err := s.TemporalEnv.Client().SignalWorkflow(ctx, wfID, "", SignalNewMessages, nil)
-	if err == nil {
-		return nil
-	}
-
-	// Workflow not running - start it with signal-with-start.
-	_, err = s.TemporalEnv.Client().SignalWithStartWorkflow(
-		ctx,
-		wfID,
-		SignalNewMessages,
-		nil, // signal arg
-		client.StartWorkflowOptions{
-			ID:                    wfID,
-			TaskQueue:             string(s.TemporalEnv.Queue()),
-			WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-			WorkflowRunTimeout:    1 * time.Hour,
-		},
-		DrainRiskAnalysisWorkflow,
-		params,
-	)
-	if err != nil {
-		return fmt.Errorf("signal-with-start drain risk analysis workflow: %w", err)
-	}
-	return nil
-}
-
-func ExecuteDrainRiskAnalysisWorkflow(ctx context.Context, env *tenv.Environment, params DrainRiskAnalysisParams) (client.WorkflowRun, error) {
-	id := drainWorkflowID(params.RiskPolicyID)
-	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                    id,
-		TaskQueue:             string(env.Queue()),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowRunTimeout:    1 * time.Hour,
-	}, DrainRiskAnalysisWorkflow, params)
-}
-
-// DrainRiskAnalysisWorkflow is a Temporal workflow that continuously fetches
-// unanalyzed messages for a risk policy and scans them in batches.
-//
-// The workflow sleeps until signalled (via SignalNewMessages) or until the idle
-// timeout elapses, at which point it completes. A new signal-with-start call
-// will restart it when needed.
+// DrainRiskAnalysisWorkflow is a perpetual "one-man queue" for a single risk
+// policy. It drains all unanalyzed messages, then sleeps until signaled.
+// ContinueAsNew keeps history bounded.
 func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisParams) error {
+	logger := workflow.GetLogger(ctx)
+	signalCh := workflow.GetSignalChannel(ctx, SignalRiskAnalysisRequested)
+
 	activityOpts := workflow.ActivityOptions{
-		StartToCloseTimeout: 90 * time.Second,
+		StartToCloseTimeout: 5 * time.Minute,
+		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    5,
-			InitialInterval:    2 * time.Second,
+			MaximumAttempts:    3,
+			InitialInterval:    5 * time.Second,
 			BackoffCoefficient: 2.0,
 			MaximumInterval:    60 * time.Second,
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOpts)
 
+	// Local activity options for the lightweight fetch query.
+	localCtx := workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts:    3,
+			InitialInterval:    2 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    15 * time.Second,
+		},
+	})
+
 	var a *Activities
-	signalCh := workflow.GetSignalChannel(ctx, SignalNewMessages)
 
-	for {
-		// Drain all currently unanalyzed messages.
-		drained, err := drainAllBatches(ctx, a, params)
-		if err != nil {
-			return fmt.Errorf("drain batches: %w", err)
-		}
-
-		if drained == 0 {
-			// Nothing to do - wait for a signal or timeout.
-			timerCtx, cancelTimer := workflow.WithCancel(ctx)
-			timer := workflow.NewTimer(timerCtx, drainIdleTimeout)
-
-			selector := workflow.NewSelector(ctx)
-			gotSignal := false
-
-			selector.AddReceive(signalCh, func(c workflow.ReceiveChannel, _ bool) {
-				var v any
-				c.Receive(ctx, &v)
-				gotSignal = true
-				cancelTimer()
-			})
-			selector.AddFuture(timer, func(f workflow.Future) {
-				// Timer expired.
-			})
-
-			selector.Select(ctx)
-
-			if !gotSignal {
-				// Idle timeout - workflow completes.
-				return nil
-			}
-			// Got a signal - loop back to drain.
-			continue
-		}
-
-		// Drain any pending signals so we don't immediately re-enter.
-		for signalCh.ReceiveAsync(nil) {
-		}
-	}
-}
-
-// drainAllBatches fetches up to 20,000 unanalyzed message IDs, chunks them
-// into batches of 1,000, and fans out up to 20 concurrent AnalyzeBatch
-// activities. Repeats until no unanalyzed messages remain.
-func drainAllBatches(ctx workflow.Context, a *Activities, params DrainRiskAnalysisParams) (int, error) {
-	logger := workflow.GetLogger(ctx)
-	total := 0
-
+	// ── Drain loop ──────────────────────────────────────────────────────
 	for {
 		var fetchResult risk_analysis.FetchUnanalyzedResult
-		err := workflow.ExecuteActivity(ctx, a.FetchUnanalyzedMessages, risk_analysis.FetchUnanalyzedArgs{
+		err := workflow.ExecuteLocalActivity(localCtx, a.FetchUnanalyzedMessages, risk_analysis.FetchUnanalyzedArgs{
 			ProjectID:     params.ProjectID,
 			RiskPolicyID:  params.RiskPolicyID,
 			PolicyVersion: params.PolicyVersion,
 			BatchLimit:    drainFetchLimit,
 		}).Get(ctx, &fetchResult)
 		if err != nil {
-			return total, fmt.Errorf("fetch unanalyzed: %w", err)
+			logger.Error("fetch unanalyzed message IDs", "error", err.Error())
+			break
 		}
 
 		if len(fetchResult.MessageIDs) == 0 {
 			break
 		}
 
-		// Chunk into batches and fan out with bounded concurrency.
+		// Fan out batches with bounded concurrency.
 		batches := chunkUUIDs(fetchResult.MessageIDs, drainBatchSize)
-		pending := make([]workflow.Future, 0, len(batches))
+		pending := make([]workflow.Future, 0, min(len(batches), drainMaxConcurrency))
 
 		for _, batch := range batches {
-			// If at concurrency limit, wait for one to complete before launching another.
 			if len(pending) >= drainMaxConcurrency {
 				if err := pending[0].Get(ctx, nil); err != nil {
 					logger.Error("analyze batch failed", "error", err.Error())
@@ -204,25 +111,38 @@ func drainAllBatches(ctx workflow.Context, a *Activities, params DrainRiskAnalys
 			pending = append(pending, f)
 		}
 
-		// Wait for all remaining futures.
 		for _, f := range pending {
 			if err := f.Get(ctx, nil); err != nil {
 				logger.Error("analyze batch failed", "error", err.Error())
 			}
 		}
 
-		total += len(fetchResult.MessageIDs)
-
-		// If we got fewer than the fetch limit, all messages are now analyzed.
-		if len(fetchResult.MessageIDs) < int(drainFetchLimit) {
-			break
+		// ContinueAsNew if history is getting large.
+		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
+			drainSignals(signalCh)
+			return workflow.NewContinueAsNewError(ctx, DrainRiskAnalysisWorkflow, params)
 		}
 	}
-	return total, nil
+
+	// ── Sleep until signaled ────────────────────────────────────────────
+	// Check for queued signals before blocking.
+	if drainSignals(signalCh) {
+		return workflow.NewContinueAsNewError(ctx, DrainRiskAnalysisWorkflow, params)
+	}
+
+	// Block until a signal arrives, then ContinueAsNew.
+	signalCh.Receive(ctx, nil)
+	drainSignals(signalCh)
+	return workflow.NewContinueAsNewError(ctx, DrainRiskAnalysisWorkflow, params)
 }
 
-func drainWorkflowID(policyID uuid.UUID) string {
-	return fmt.Sprintf("v1:drain-risk-analysis:%s", policyID.String())
+// drainSignals consumes all queued signals. Returns true if at least one was consumed.
+func drainSignals(ch workflow.ReceiveChannel) bool {
+	gotAny := false
+	for ch.ReceiveAsync(nil) {
+		gotAny = true
+	}
+	return gotAny
 }
 
 func chunkUUIDs(ids []uuid.UUID, size int) [][]uuid.UUID {
@@ -232,4 +152,63 @@ func chunkUUIDs(ids []uuid.UUID, size int) [][]uuid.UUID {
 		chunks = append(chunks, ids[i:end])
 	}
 	return chunks
+}
+
+// ── Signaler ────────────────────────────────────────────────────────────
+
+// RiskAnalysisSignaler sends signals to drain workflows.
+type RiskAnalysisSignaler interface {
+	SignalNewMessages(ctx context.Context, params DrainRiskAnalysisParams) error
+	GetWorkflowStatus(ctx context.Context, policyID uuid.UUID) (string, error)
+}
+
+// TemporalRiskAnalysisSignaler implements RiskAnalysisSignaler using Temporal.
+type TemporalRiskAnalysisSignaler struct {
+	TemporalEnv *tenv.Environment
+}
+
+func (s *TemporalRiskAnalysisSignaler) SignalNewMessages(ctx context.Context, params DrainRiskAnalysisParams) error {
+	if s.TemporalEnv == nil {
+		return nil
+	}
+
+	wfID := drainWorkflowID(params.RiskPolicyID)
+	_, err := s.TemporalEnv.Client().SignalWithStartWorkflow(
+		ctx,
+		wfID,
+		SignalRiskAnalysisRequested,
+		nil,
+		client.StartWorkflowOptions{
+			ID:                    wfID,
+			TaskQueue:             string(s.TemporalEnv.Queue()),
+			WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		},
+		DrainRiskAnalysisWorkflow,
+		params,
+	)
+	if err != nil {
+		return fmt.Errorf("signal-with-start drain risk analysis: %w", err)
+	}
+	return nil
+}
+
+func (s *TemporalRiskAnalysisSignaler) GetWorkflowStatus(ctx context.Context, policyID uuid.UUID) (string, error) {
+	if s.TemporalEnv == nil {
+		return "not_started", nil
+	}
+
+	wfID := drainWorkflowID(policyID)
+	desc, err := s.TemporalEnv.Client().DescribeWorkflowExecution(ctx, wfID, "")
+	if err != nil {
+		return "not_started", nil //nolint:nilerr // workflow may not exist
+	}
+
+	if desc.WorkflowExecutionInfo.GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return "running", nil
+	}
+	return "not_started", nil
+}
+
+func drainWorkflowID(policyID uuid.UUID) string {
+	return fmt.Sprintf("v1:drain-risk-analysis:%s", policyID.String())
 }

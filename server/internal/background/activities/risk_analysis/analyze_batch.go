@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.temporal.io/sdk/activity"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -59,7 +60,12 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 	var rows []repo.InsertRiskResultsParams
 	findingsCount := 0
 
-	for _, msg := range messages {
+	for i, msg := range messages {
+		// Heartbeat every 50 messages so Temporal knows we're alive.
+		if i%50 == 0 {
+			activity.RecordHeartbeat(ctx, i)
+		}
+
 		contentStr := msg.Content
 		if contentStr == "" {
 			// Insert a "no finding" row so the message is marked as analyzed.
