@@ -45,10 +45,6 @@ const TOOL_IO_ATTR_KEYS = {
   output: "gen_ai.tool.call.result",
 } as const;
 
-function truncateValue(value: string, maxLen = 24): string {
-  return value.length > maxLen ? `${value.slice(0, maxLen)}\u2026` : value;
-}
-
 /**
  * Extract a deeply nested value from an object using a dot-separated path.
  * e.g. getNestedValue(obj, "gram.tool_call.input.content")
@@ -491,10 +487,10 @@ function AttributesSection({
                     }
                   }}
                 >
-                  <span>
-                    Filter by{" "}
-                    <span className="font-mono text-xs">
-                      {entry.key} = {truncateValue(entry.filterValue ?? "")}
+                  <span className="flex items-center gap-1">
+                    Filter by
+                    <span className="max-w-[200px] truncate font-mono text-xs">
+                      {entry.key} = {entry.filterValue ?? ""}
                     </span>
                   </span>
                 </DropdownMenuItem>
@@ -506,10 +502,10 @@ function AttributesSection({
                     }
                   }}
                 >
-                  <span>
-                    Exclude{" "}
-                    <span className="font-mono text-xs">
-                      {entry.key} != {truncateValue(entry.filterValue ?? "")}
+                  <span className="flex items-center gap-1">
+                    Exclude
+                    <span className="max-w-[200px] truncate font-mono text-xs">
+                      {entry.key} != {entry.filterValue ?? ""}
                     </span>
                   </span>
                 </DropdownMenuItem>
@@ -525,10 +521,10 @@ function AttributesSection({
                     }
                   }}
                 >
-                  <span>
-                    Contains{" "}
-                    <span className="font-mono text-xs">
-                      {truncateValue(entry.filterValue ?? "")}
+                  <span className="flex items-center gap-1">
+                    Contains
+                    <span className="max-w-[200px] truncate font-mono text-xs">
+                      {entry.filterValue ?? ""}
                     </span>
                   </span>
                 </DropdownMenuItem>
