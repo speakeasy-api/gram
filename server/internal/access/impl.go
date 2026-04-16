@@ -612,6 +612,14 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return &gen.ListUserGrantsResult{Grants: grantsFromRows(grantsFromOverrides(overrides).rows)}, nil
 	}
 
+	enforce, err := s.access.shouldEnforce(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !enforce {
+		return &gen.ListUserGrantsResult{Grants: fullAccessGrantPayloads()}, nil
+	}
+
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
@@ -951,6 +959,18 @@ func roleGrantsFromListRoleGrants(grants []*gen.ListRoleGrant) []*gen.RoleGrant 
 		out = append(out, &gen.RoleGrant{Scope: grant.Scope, Resources: grant.Resources})
 	}
 	return out
+}
+
+func fullAccessGrantPayloads() []*gen.ListRoleGrant {
+	return []*gen.ListRoleGrant{
+		{Scope: string(ScopeOrgRead), Resources: nil},
+		{Scope: string(ScopeOrgAdmin), Resources: nil},
+		{Scope: string(ScopeBuildRead), Resources: nil},
+		{Scope: string(ScopeBuildWrite), Resources: nil},
+		{Scope: string(ScopeMCPRead), Resources: nil},
+		{Scope: string(ScopeMCPWrite), Resources: nil},
+		{Scope: string(ScopeMCPConnect), Resources: nil},
+	}
 }
 
 func connectedUser(ctx context.Context, db *pgxpool.Pool, organizationID string, userID string) (usersrepo.User, error) {
