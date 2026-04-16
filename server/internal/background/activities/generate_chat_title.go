@@ -136,7 +136,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		OrgID:     orgID,
 		ProjectID: projectID,
 		ChatID:    uuid.Nil,
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			openrouter.CreateMessageSystem(systemPrompt),
 			openrouter.CreateMessageUser(conversationContext),
 		},

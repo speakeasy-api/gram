@@ -229,7 +229,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	req := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			CreateMessageUser("Hello"),
 		},
 		ChatID:      chatID,
@@ -353,7 +353,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	req := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			CreateMessageUser("Hello"),
 		},
 		Stream:      true,
@@ -469,7 +469,7 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 	req := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			CreateMessageUser("What's the weather in NYC?"),
 		},
 		Tools: []Tool{
@@ -566,7 +566,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 			req := CompletionRequest{
 				OrgID:     "test-org",
 				ProjectID: projectID.String(),
-				Messages: []or.Message{
+				Messages: []or.ChatMessages{
 					CreateMessageUser("Hello"),
 				},
 				ChatID:      uuid.New(),
@@ -644,7 +644,7 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 	req := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			CreateMessageUser("Hello"),
 		},
 		ChatID:      chatID,
@@ -806,7 +806,7 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 	req := CompletionRequest{
 		OrgID:       "test-org",
 		ProjectID:   projectID.String(),
-		Messages:    []or.Message{CreateMessageUser("Hello")},
+		Messages:    []or.ChatMessages{CreateMessageUser("Hello")},
 		ChatID:      uuid.Nil, // No chat — like title generation activity's internal call
 		UsageSource: billing.ModelUsageSourceGram,
 		APIKeyID:    "",
@@ -857,7 +857,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 		_, err := client.GetCompletion(context.Background(), CompletionRequest{
 			OrgID:       "test-org",
 			ProjectID:   projectID.String(),
-			Messages:    []or.Message{CreateMessageUser("Hello")},
+			Messages:    []or.ChatMessages{CreateMessageUser("Hello")},
 			ChatID:      chatID,
 			UsageSource: billing.ModelUsageSourcePlayground,
 			APIKeyID:    "key-1",
@@ -869,7 +869,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 	_, err = client.GetCompletion(context.Background(), CompletionRequest{
 		OrgID:       "test-org",
 		ProjectID:   projectID.String(),
-		Messages:    []or.Message{CreateMessageUser("Generate title")},
+		Messages:    []or.ChatMessages{CreateMessageUser("Generate title")},
 		ChatID:      uuid.Nil,
 		UsageSource: billing.ModelUsageSourceGram,
 		APIKeyID:    "",
@@ -922,7 +922,7 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 	req1 := CompletionRequest{
 		OrgID:       "test-org",
 		ProjectID:   projectID.String(),
-		Messages:    []or.Message{CreateMessageUser("Hello")},
+		Messages:    []or.ChatMessages{CreateMessageUser("Hello")},
 		ChatID:      chatID,
 		UsageSource: billing.ModelUsageSourcePlayground,
 		APIKeyID:    "key-1",
@@ -944,7 +944,7 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 	req2 := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			CreateMessageUser("Hello"),           // from history
 			CreateMessageAssistant("Response 1"), // from history
 			CreateMessageUser("How are you?"),    // new user message
@@ -1055,13 +1055,13 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 	req := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			CreateMessageUser("Is this a question?"),
 		},
 		ChatID:      chatID,
 		UsageSource: billing.ModelUsageSourcePlayground,
 		APIKeyID:    "test-api-key-id",
-		JSONSchema: &or.JSONSchemaConfig{
+		JSONSchema: &or.ChatJSONSchemaConfig{
 			Name: "question_check",
 			Schema: map[string]any{
 				"type": "object",
@@ -1073,6 +1073,8 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 				},
 				"required": []string{"isQuestion"},
 			},
+			Description: nil,
+			Strict:      nil,
 		},
 	}
 
@@ -1091,9 +1093,9 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 	// Verify the response_format contains the JSON schema
 	assert.Equal(t, "json_schema", string(receivedRequestBody.ResponseFormat.Type),
 		"response_format type should be json_schema")
-	assert.NotNil(t, receivedRequestBody.ResponseFormat.ResponseFormatJSONSchema,
-		"ResponseFormatJSONSchema should be set")
-	assert.Equal(t, "question_check", receivedRequestBody.ResponseFormat.ResponseFormatJSONSchema.JSONSchema.Name,
+	assert.NotNil(t, receivedRequestBody.ResponseFormat.ChatFormatJSONSchemaConfig,
+		"ChatFormatJSONSchemaConfig should be set")
+	assert.Equal(t, "question_check", receivedRequestBody.ResponseFormat.ChatFormatJSONSchemaConfig.JSONSchema.Name,
 		"schema name should match")
 }
 
@@ -1170,7 +1172,7 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 	req := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			CreateMessageUser("Hello"),
 		},
 		ChatID:      chatID,

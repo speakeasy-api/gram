@@ -55,8 +55,8 @@ github.com/Masterminds/squirrel v1.5.4 h1:uUcX/aBc8O7Fg9kaISIUsHXdKuqehiXAMQTYX8
 github.com/Masterminds/squirrel v1.5.4/go.mod h1:NNaOrjSoIDfDA40n7sr2tPNZRfjzjA400rg+riTZj10=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
-github.com/OpenRouterTeam/go-sdk v0.0.0-20260126192013-c2c3c701312e h1:rpbrijPUgjS7N8l8aEWqVsFNK7wnT4gVQZV77CzCIpA=
-github.com/OpenRouterTeam/go-sdk v0.0.0-20260126192013-c2c3c701312e/go.mod h1:NLgNF1fx3z3Ybyw3zjrUgJU+3dP5IxYJdfBiconkUSo=
+github.com/OpenRouterTeam/go-sdk v0.3.0 h1:JU8IGZiBGZlDfQ4Wp00/UXPgHB3ZQp2l7uvKEEHvcuE=
+github.com/OpenRouterTeam/go-sdk v0.3.0/go.mod h1:GRqEs3Twjnq1GekyuZCxHi55X8rBiHYK860wc3IvyUE=
 github.com/PuerkitoBio/rehttp v1.4.0 h1:rIN7A2s+O9fmHUM1vUcInvlHj9Ysql4hE+Y0wcl/xk8=
 github.com/PuerkitoBio/rehttp v1.4.0/go.mod h1:LUwKPoDbDIA2RL5wYZCNsQ90cx4OJ4AWBmq6KzWZL1s=
 github.com/agnivade/levenshtein v1.1.1 h1:QY8M92nrzkmr798gCo3kmMyqXFzdQVpxLlGPRBij0P8=
