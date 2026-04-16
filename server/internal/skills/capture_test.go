@@ -114,6 +114,72 @@ func TestService_Capture_DedupesExistingAsset(t *testing.T) {
 	require.Equal(t, expectedSHA, versions[0].ContentSha256)
 }
 
+func TestService_Capture_DoesNotPromoteSubsequentVersionsWithoutReview(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestSkillsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	require.NotNil(t, authCtx.ProjectID)
+
+	firstContent := []byte("PK\x03\x04skill-zip-content-first-version")
+	firstSHA := sha256.Sum256(firstContent)
+	firstExpectedSHA := hex.EncodeToString(firstSHA[:])
+
+	_, err := ti.service.Capture(
+		ctx,
+		newCapturePayload("application/zip", int64(len(firstContent)), firstExpectedSHA),
+		io.NopCloser(bytes.NewReader(firstContent)),
+	)
+	require.NoError(t, err)
+
+	skillAfterFirst, err := ti.skillsRepo.GetSkillBySlug(ctx, skillsrepo.GetSkillBySlugParams{
+		ProjectID: *authCtx.ProjectID,
+		Slug:      "golang",
+	})
+	require.NoError(t, err)
+	require.True(t, skillAfterFirst.ActiveVersionID.Valid)
+	firstActiveVersionID := skillAfterFirst.ActiveVersionID.UUID
+
+	secondContent := []byte("PK\x03\x04skill-zip-content-second-version")
+	secondSHA := sha256.Sum256(secondContent)
+	secondExpectedSHA := hex.EncodeToString(secondSHA[:])
+
+	_, err = ti.service.Capture(
+		ctx,
+		newCapturePayload("application/zip", int64(len(secondContent)), secondExpectedSHA),
+		io.NopCloser(bytes.NewReader(secondContent)),
+	)
+	require.NoError(t, err)
+
+	skillAfterSecond, err := ti.skillsRepo.GetSkillBySlug(ctx, skillsrepo.GetSkillBySlugParams{
+		ProjectID: *authCtx.ProjectID,
+		Slug:      "golang",
+	})
+	require.NoError(t, err)
+	require.True(t, skillAfterSecond.ActiveVersionID.Valid)
+	require.Equal(t, firstActiveVersionID, skillAfterSecond.ActiveVersionID.UUID)
+
+	firstVersion, err := ti.skillsRepo.GetSkillVersionByHash(ctx, skillsrepo.GetSkillVersionByHashParams{
+		SkillID:       skillAfterSecond.ID,
+		ContentSha256: firstExpectedSHA,
+		ProjectID:     *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "pending_review", firstVersion.State)
+
+	secondVersion, err := ti.skillsRepo.GetSkillVersionByHash(ctx, skillsrepo.GetSkillVersionByHashParams{
+		SkillID:       skillAfterSecond.ID,
+		ContentSha256: secondExpectedSHA,
+		ProjectID:     *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "pending_review", secondVersion.State)
+	require.NotEqual(t, firstVersion.ID, secondVersion.ID)
+	require.NotEqual(t, secondVersion.ID, skillAfterSecond.ActiveVersionID.UUID)
+}
+
 func TestService_Capture_Unauthorized(t *testing.T) {
 	t.Parallel()
 
