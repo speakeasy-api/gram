@@ -62,6 +62,8 @@ func TestService_UpdateRole(t *testing.T) {
 		mockMember("org_workos_test", "membership_1", "user_1", "custom-builder"),
 		mockMember("org_workos_test", "membership_2", "user_2", "custom-builder"),
 		mockMember("org_workos_test", "membership_3", "user_3", "custom-builder"),
+		// user_workos_only has never logged into Gram — should not be counted
+		mockMember("org_workos_test", "membership_workos_only", "user_workos_only", "custom-builder"),
 	}, nil).Once()
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
@@ -152,6 +154,8 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 		mockMember("org_workos_test", "membership_2", "user_2", "custom-builder"),
 	}, nil).Once()
 
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeBuildRead, "project-old")
 
 	updated, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
@@ -165,6 +169,7 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, updated)
+	require.Equal(t, 2, updated.MemberCount)
 
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAccessRoleUpdate)
 	require.NoError(t, err)
