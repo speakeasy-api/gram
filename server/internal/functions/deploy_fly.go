@@ -613,9 +613,23 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 	return nil
 }
 
+// concurrencyLimits derives Fly proxy concurrency soft and hard limits from the
+// machine's memory allocation. The hard limit caps the maximum concurrent
+// connections the Fly proxy will route to a single machine; the soft limit
+// triggers traffic deprioritization so the proxy can spread load before hitting
+// the hard cap.
+func concurrencyLimits(memoryMB int) (softLimit, hardLimit int) {
+	hardLimit = max(memoryMB/64, 4)
+	softLimit = max(hardLimit*3/4, 2)
+	return softLimit, hardLimit
+}
+
 func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, files []*fly.File, baseMetadata map[string]string) *fly.MachineConfig {
 	machineMeta := maps.Clone(baseMetadata)
 	machineMeta[fly.MachineConfigMetadataKeyFlyProcessGroup] = "gram_functions_runner"
+
+	memoryMB := 2048
+	softLimit, hardLimit := concurrencyLimits(memoryMB)
 
 	return &fly.MachineConfig{
 		Image: image,
@@ -659,8 +673,9 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 					},
 				},
 				Concurrency: &fly.MachineServiceConcurrency{
-					Type:      "connections",
-					SoftLimit: 20,
+					Type:      "requests",
+					SoftLimit: softLimit,
+					HardLimit: hardLimit,
 				},
 			},
 		},
