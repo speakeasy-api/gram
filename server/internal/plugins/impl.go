@@ -635,6 +635,9 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 
 	if s.github != nil {
 		conn, err := s.repo.GetGitHubConnection(ctx, *ac.ProjectID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "get github connection").Log(ctx, s.logger)
+		}
 		if err == nil {
 			result.Connected = true
 			result.RepoOwner = &conn.RepoOwner
@@ -664,6 +667,10 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	pluginInfos, err := s.resolvePluginInfos(ctx, *ac.ProjectID)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(pluginInfos) == 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "no plugins to publish")
 	}
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)

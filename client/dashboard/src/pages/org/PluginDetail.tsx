@@ -18,6 +18,7 @@ import { useState } from "react";
 import { useParams } from "react-router";
 import type { PluginServer } from "@gram/client/models/components";
 import { useFetcher } from "@/contexts/Fetcher";
+import { toast } from "sonner";
 import {
   invalidateAllPublishStatus,
   usePublishStatusSuspense,
@@ -61,7 +62,13 @@ export default function PluginDetail() {
   });
 
   const publishMutation = usePublishPluginsMutation({
-    onSuccess: () => invalidateAllPublishStatus(queryClient),
+    onSuccess: () => {
+      invalidateAllPublishStatus(queryClient);
+      toast.success("Plugins published to GitHub");
+    },
+    onError: () => {
+      toast.error("Failed to publish plugins to GitHub");
+    },
   });
 
   const handleUpdate: React.FormEventHandler<HTMLFormElement> = (e) => {

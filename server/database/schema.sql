@@ -1770,8 +1770,8 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   installation_id BIGINT NOT NULL,
-  repo_owner TEXT NOT NULL,
-  repo_name TEXT NOT NULL,
+  repo_owner TEXT NOT NULL CHECK (repo_owner <> ''),
+  repo_name TEXT NOT NULL CHECK (repo_name <> ''),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
