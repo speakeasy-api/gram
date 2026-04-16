@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -438,40 +436,18 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 		return
 	}
 
-	membershipByOrgID := make(map[string]int, len(memberships))
+	// Pass WorkOS org IDs directly — the query resolves them to Speakeasy org
+	// IDs via organization_metadata.workos_id.
+	workosOrgIDs := make([]string, len(memberships))
+	membershipIDs := make([]string, len(memberships))
 	for i, m := range memberships {
-		membershipByOrgID[m.OrganizationID] = i
-	}
-
-	var orgIDs []string
-	var membershipIDs []string
-
-	for _, org := range validateResp.Organizations {
-		idx, ok := membershipByOrgID[org.ID]
-		if !ok {
-			continue
-		}
-		orgMembership := memberships[idx]
-
-		// Link the organization to its WorkOS org ID if not already linked.
-		if _, err := s.orgRepo.SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
-			WorkosID:       conv.ToPGText(orgMembership.OrganizationID),
-			OrganizationID: org.ID,
-		}); err != nil {
-			// SetOrgWorkosID only updates when workos_id IS NULL, so
-			// pgx.ErrNoRows means it was already linked — not an error.
-			if !errors.Is(err, pgx.ErrNoRows) {
-				s.logger.ErrorContext(ctx, "failed to set org workos ID", attr.SlogError(err))
-			}
-		}
-
-		orgIDs = append(orgIDs, org.ID)
-		membershipIDs = append(membershipIDs, orgMembership.ID)
+		workosOrgIDs[i] = m.OrganizationID
+		membershipIDs[i] = m.ID
 	}
 
 	if err := s.orgRepo.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
 		UserID:              validateResp.User.ID,
-		OrganizationIds:     orgIDs,
+		WorkosOrgIds:        workosOrgIDs,
 		WorkosMembershipIds: membershipIDs,
 	}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to set user workos memberships", attr.SlogError(err))
