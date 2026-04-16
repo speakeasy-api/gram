@@ -18,12 +18,14 @@ interface LogDetailSheetProps {
   log: TelemetryLogRecord | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onAddFilter?: (path: string, op: Operator, value: string) => void;
 }
 
 export function LogDetailSheet({
   log,
   open,
   onOpenChange,
+  onAddFilter,
 }: LogDetailSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -31,7 +33,7 @@ export function LogDetailSheet({
         className="h-full max-h-screen overflow-y-auto"
         style={{ width: "33vw", minWidth: 500, maxWidth: "none" }}
       >
-        {log && <LogDetailContent log={log} />}
+        {log && <LogDetailContent log={log} onAddFilter={onAddFilter} />}
       </SheetContent>
     </Sheet>
   );
@@ -90,7 +92,13 @@ function removeNestedKey(
   return clone;
 }
 
-function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
+function LogDetailContent({
+  log,
+  onAddFilter,
+}: {
+  log: TelemetryLogRecord;
+  onAddFilter?: (path: string, op: Operator, value: string) => void;
+}) {
   const severityClass = getSeverityColorClass(log.severityText);
   const resourceAttrs = log.resourceAttributes as
     | { gram?: { tool?: { urn?: string } } }
@@ -203,7 +211,11 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
 
           {/* Attributes (with tool I/O keys removed) */}
           {filteredAttrs && Object.keys(filteredAttrs).length > 0 && (
-            <AttributesSection title="Attributes" data={filteredAttrs} />
+            <AttributesSection
+              title="Attributes"
+              data={filteredAttrs}
+              onAddFilter={onAddFilter}
+            />
           )}
 
           {/* Resource */}
@@ -212,6 +224,7 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
               <AttributesSection
                 title="Resource"
                 data={log.resourceAttributes as Record<string, unknown>}
+                onAddFilter={onAddFilter}
               />
             )}
         </TabsContent>

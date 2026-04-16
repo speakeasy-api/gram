@@ -51,7 +51,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOrgRoutes } from "@/routes";
 import { Link, useSearchParams } from "react-router";
-import type { ActiveLogFilter } from "./log-filter-types";
+import { type ActiveLogFilter, applyFilterAdd } from "./log-filter-types";
 import { parseFilters, serializeFilters } from "./log-filter-url";
 import { LogDetailSheet } from "./LogDetailSheet";
 import { LogFilterBar } from "./LogFilterBar";
@@ -360,6 +360,13 @@ function LogsContent() {
       );
     },
     [setSearchParams],
+  );
+
+  const handleAddFilterFromLog = useCallback(
+    (path: string, op: Operator, value: string) => {
+      handleLogFiltersChange(applyFilterAdd(logFilters, { path, op, value }));
+    },
+    [logFilters, handleLogFiltersChange],
   );
 
   const effectiveGramUrn = searchQuery;
@@ -858,6 +865,7 @@ function LogsInnerContent({
         log={selectedLog}
         open={!!selectedLog}
         onOpenChange={(open) => !open && setSelectedLog(null)}
+        onAddFilter={handleAddFilterFromLog}
       />
     </>
   );
