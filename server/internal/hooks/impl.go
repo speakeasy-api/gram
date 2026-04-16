@@ -231,9 +231,8 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
 
-	// Extract and print token usage metrics
+	// Extract token usage metrics
 	tokenMetrics := extractTokenMetrics(payload)
-	j, _ := json.MarshalIndent(tokenMetrics, "", "  ")
 
 	s.logger.InfoContext(ctx, "Received Claude token metrics",
 		attr.SlogEvent("claude_metrics"),
@@ -248,29 +247,6 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 
 	// Write metrics to ClickHouse
 	s.writeMetricsToClickHouse(ctx, payload, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
-
-	// Get the current totals for this session
-	s.sessionTotalsMu.RLock()
-	totals := s.sessionTotals[tokenMetrics.SessionID]
-	s.sessionTotalsMu.RUnlock()
-
-	println("--------------------------------")
-	println("EXTRACTED METRICS:")
-	println(string(j))
-	println("")
-	println("SESSION TOTALS:")
-	if totals != nil {
-		totalsJSON, _ := json.MarshalIndent(map[string]any{
-			"session_id":          tokenMetrics.SessionID,
-			"total_cost_usd":      totals.TotalCost,
-			"total_input_tokens":  totals.TotalInputTokens,
-			"total_output_tokens": totals.TotalOutputTokens,
-			"total_cache_read":    totals.TotalCacheRead,
-			"total_cache_create":  totals.TotalCacheCreate,
-		}, "", "  ")
-		println(string(totalsJSON))
-	}
-	println("--------------------------------")
 
 	return nil
 }
