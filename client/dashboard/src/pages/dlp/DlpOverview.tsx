@@ -117,7 +117,6 @@ export default function DlpOverview() {
                 <TableRow>
                   <TableHead>Category</TableHead>
                   <TableHead>Rule</TableHead>
-                  <TableHead>Description</TableHead>
                   <TableHead>Match</TableHead>
                   <TableHead>Detected</TableHead>
                 </TableRow>
@@ -147,9 +146,6 @@ export default function DlpOverview() {
                     </TableCell>
                     <TableCell className="font-mono text-xs">
                       {result.ruleId ?? "-"}
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate text-sm">
-                      {result.description ?? "-"}
                     </TableCell>
                     <TableCell className="max-w-xs truncate font-mono text-xs">
                       {result.match
