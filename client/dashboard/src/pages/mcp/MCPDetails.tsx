@@ -390,23 +390,27 @@ const STATUS_OPTIONS: {
   value: ServerStatus;
   label: string;
   description: string;
+  dotClass: string;
 }[] = [
   {
     value: "disabled",
     label: "Disabled",
     description: "The server is offline.",
+    dotClass: "bg-amber-400",
   },
   {
     value: "private",
     label: "Private",
     description:
       "Only users with a Gram API Key from this project can read the tools hosted by this server.",
+    dotClass: "bg-blue-400",
   },
   {
     value: "public",
     label: "Public",
     description:
       "Anyone with the URL can read the tools hosted by this server. Authentication is still required to use the tools.",
+    dotClass: "bg-green-400",
   },
 ];
 
@@ -496,12 +500,24 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
             <DropdownMenuItem
               key={option.value}
               onSelect={() => handleSelect(option.value)}
-              className="flex cursor-pointer flex-col items-start gap-0.5 rounded-md p-2"
+              className="flex cursor-pointer items-start gap-2.5 rounded-md p-2"
             >
-              <span className="font-medium">{option.label}</span>
-              <span className="text-muted-foreground text-xs">
-                {option.description}
-              </span>
+              <span
+                className={cn(
+                  "mt-1 h-2 w-2 shrink-0 rounded-full",
+                  option.value === currentStatus
+                    ? option.dotClass
+                    : "bg-muted-foreground",
+                )}
+              />
+              <div className="flex-1">
+                <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
+                  {option.label}
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  {option.description}
+                </span>
+              </div>
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
