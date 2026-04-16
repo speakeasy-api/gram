@@ -236,11 +236,10 @@ export default function PolicyCenter() {
                     ))}
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   <Switch
                     checked={policy.enabled}
                     onCheckedChange={(checked) => handleToggle(policy, checked)}
-                    onClick={(e) => e.stopPropagation()}
                   />
                 </TableCell>
                 <TableCell>
@@ -254,7 +253,7 @@ export default function PolicyCenter() {
                   )}
                 </TableCell>
                 <TableCell>v{policy.version}</TableCell>
-                <TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button

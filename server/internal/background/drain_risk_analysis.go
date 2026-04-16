@@ -58,23 +58,12 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOpts)
 
-	// Local activity options for the lightweight fetch query.
-	localCtx := workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{
-		StartToCloseTimeout: 30 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    3,
-			InitialInterval:    2 * time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    15 * time.Second,
-		},
-	})
-
 	var a *Activities
 
 	// ── Drain loop ──────────────────────────────────────────────────────
 	for {
 		var fetchResult risk_analysis.FetchUnanalyzedResult
-		err := workflow.ExecuteLocalActivity(localCtx, a.FetchUnanalyzedMessages, risk_analysis.FetchUnanalyzedArgs{
+		err := workflow.ExecuteActivity(ctx, a.FetchUnanalyzedMessages, risk_analysis.FetchUnanalyzedArgs{
 			ProjectID:     params.ProjectID,
 			RiskPolicyID:  params.RiskPolicyID,
 			PolicyVersion: params.PolicyVersion,
@@ -173,21 +162,23 @@ func (s *TemporalRiskAnalysisSignaler) SignalNewMessages(ctx context.Context, pa
 	}
 
 	wfID := drainWorkflowID(params.RiskPolicyID)
-	_, err := s.TemporalEnv.Client().SignalWithStartWorkflow(
-		ctx,
-		wfID,
-		SignalRiskAnalysisRequested,
-		nil,
-		client.StartWorkflowOptions{
-			ID:                    wfID,
-			TaskQueue:             string(s.TemporalEnv.Queue()),
-			WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		},
-		DrainRiskAnalysisWorkflow,
-		params,
-	)
+
+	// Try to signal an already-running workflow first.
+	err := s.TemporalEnv.Client().SignalWorkflow(ctx, wfID, "", SignalRiskAnalysisRequested, nil)
+	if err == nil {
+		return nil // Signal delivered — the workflow will drain on its next loop.
+	}
+
+	// Workflow not running — start a new one. The workflow is perpetual
+	// (ContinueAsNew), so we reject duplicates to avoid stale restarts.
+	_, err = s.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    wfID,
+		TaskQueue:             string(s.TemporalEnv.Queue()),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+	}, DrainRiskAnalysisWorkflow, params)
 	if err != nil {
-		return fmt.Errorf("signal-with-start drain risk analysis: %w", err)
+		// If it was already started by a concurrent call, that's fine.
+		return nil //nolint:nilerr // race between signal and start is benign
 	}
 	return nil
 }

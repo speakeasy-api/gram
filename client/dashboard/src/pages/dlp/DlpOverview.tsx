@@ -118,6 +118,7 @@ export default function DlpOverview() {
                   <TableHead>Rule</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Match</TableHead>
+                  <TableHead>Version</TableHead>
                   <TableHead>Detected</TableHead>
                 </TableRow>
               </TableHeader>
@@ -154,6 +155,9 @@ export default function DlpOverview() {
                           ? `${result.match.slice(0, 20)}...${result.match.slice(-10)}`
                           : result.match
                         : "-"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      v{result.policyVersion}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">
                       {result.createdAt
