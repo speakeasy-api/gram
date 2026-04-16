@@ -123,7 +123,9 @@ export default function PolicyCenter() {
   };
 
   const handleTrigger = (id: string) => {
-    triggerMutation.mutate({ request: { id } });
+    triggerMutation.mutate({
+      request: { triggerRiskAnalysisRequestBody: { id } },
+    });
   };
 
   const handleToggle = (policy: RiskPolicy, enabled: boolean) => {
