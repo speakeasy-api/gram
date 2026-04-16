@@ -60,7 +60,8 @@ func TestGetHooksSummary_AggregatesServersUsersAndBreakdown(t *testing.T) {
 	deploymentID := uuid.New().String()
 	now := time.Now().UTC()
 
-	// Two events from user1 on server-a (one success, one failure)
+	// Two events from user1 on server-a (one success, one failure) — each in its own trace
+	// so trace_summaries produces 2 rows for server-a (count(*) is trace-level, not log-level).
 	traceID1 := uuid.New().String()
 	insertHookEvent(t, ctx, hookEventParams{
 		projectID:      projectID,
@@ -74,11 +75,12 @@ func TestGetHooksSummary_AggregatesServersUsersAndBreakdown(t *testing.T) {
 		hookEvent:      "PostToolUse",
 		conversationID: "conv-1",
 	})
+	traceID1b := uuid.New().String()
 	insertHookEvent(t, ctx, hookEventParams{
 		projectID:      projectID,
 		deploymentID:   deploymentID,
 		timestamp:      now.Add(-9 * time.Minute),
-		traceID:        traceID1,
+		traceID:        traceID1b,
 		userEmail:      "user1@example.com",
 		hookSource:     "mcp",
 		toolSource:     "server-a",
@@ -112,7 +114,7 @@ func TestGetHooksSummary_AggregatesServersUsersAndBreakdown(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// Total events = 3 (individual log entries), sessions = 2 unique conversation IDs
+	// Total events = 3 traces (trace_summaries counts at trace level, not log level), sessions = 2 unique conversation IDs
 	require.Equal(t, int64(3), result.TotalEvents)
 	require.Equal(t, int64(2), result.TotalSessions)
 
