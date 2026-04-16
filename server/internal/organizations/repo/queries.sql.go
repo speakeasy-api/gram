@@ -261,43 +261,49 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 
 const setUserWorkOSMemberships = `-- name: SetUserWorkOSMemberships :exec
 WITH input_memberships AS (
-    SELECT unnest($2::text[]) AS organization_id,
+    SELECT unnest($2::text[]) AS workos_org_id,
            unnest($3::text[]) AS workos_membership_id
+),
+resolved AS (
+    SELECT organization_metadata.id AS organization_id,
+           input_memberships.workos_membership_id
+    FROM input_memberships
+    JOIN organization_metadata ON organization_metadata.workos_id = input_memberships.workos_org_id
 ),
 upserted AS (
     INSERT INTO organization_user_relationships (organization_id, user_id, workos_membership_id)
-    SELECT im.organization_id, $1, im.workos_membership_id
-    FROM input_memberships im
+    SELECT resolved.organization_id, $1, resolved.workos_membership_id
+    FROM resolved
     ON CONFLICT (organization_id, user_id) DO UPDATE SET
         workos_membership_id = EXCLUDED.workos_membership_id,
         deleted_at = NULL,
         updated_at = clock_timestamp()
     RETURNING organization_id
 )
-UPDATE organization_user_relationships AS our
+UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
-WHERE our.user_id = $1
-  AND our.deleted_at IS NULL
-  AND our.organization_id NOT IN (SELECT organization_id FROM input_memberships)
-  AND our.organization_id IN (
+WHERE organization_user_relationships.user_id = $1
+  AND organization_user_relationships.deleted_at IS NULL
+  AND organization_user_relationships.organization_id NOT IN (SELECT organization_id FROM resolved)
+  AND organization_user_relationships.organization_id IN (
       SELECT id FROM organization_metadata WHERE workos_id IS NOT NULL
   )
 `
 
 type SetUserWorkOSMembershipsParams struct {
 	UserID              string
-	OrganizationIds     []string
+	WorkosOrgIds        []string
 	WorkosMembershipIds []string
 }
 
-// Declaratively set all WorkOS memberships for a user. Upserts the provided
-// (org_id, workos_membership_id) pairs and soft-deletes any other org
-// relationships where the org has a non-NULL workos_id in organization_metadata.
-// Orgs without a workos_id are unaffected. Other users' memberships are never
-// modified.
+// Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs
+// (not Speakeasy org IDs) and resolves them via organization_metadata. Upserts
+// the provided (workos_org_id, workos_membership_id) pairs and soft-deletes any
+// other relationships where the org has a non-NULL workos_id. Orgs without a
+// workos_id are unaffected. Other users' memberships are never modified.
 func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkOSMembershipsParams) error {
-	_, err := q.db.Exec(ctx, setUserWorkOSMemberships, arg.UserID, arg.OrganizationIds, arg.WorkosMembershipIds)
+	_, err := q.db.Exec(ctx, setUserWorkOSMemberships, arg.UserID, arg.WorkosOrgIds, arg.WorkosMembershipIds)
 	return err
 }
 

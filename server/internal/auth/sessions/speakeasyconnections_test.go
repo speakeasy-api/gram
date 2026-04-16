@@ -184,13 +184,20 @@ func newManagerWithFakeWorkOS(t *testing.T, fake *fakeWorkOSServer) *testSetup {
 		workosClient,
 	)
 
-	// Seed org metadata so SetOrgWorkosID has a row to update.
-	_, err = orgRepo.New(conn).UpsertOrganizationMetadata(context.Background(), orgRepo.UpsertOrganizationMetadataParams{
+	// Seed org metadata with workos_id set so the CTE can resolve WorkOS org
+	// IDs back to Speakeasy org IDs. In the mock IDP the same ID is used for both.
+	oq := orgRepo.New(conn)
+	_, err = oq.UpsertOrganizationMetadata(context.Background(), orgRepo.UpsertOrganizationMetadataParams{
 		ID:              mockidp.MockOrgID,
 		Name:            mockidp.MockOrgName,
 		Slug:            mockidp.MockOrgSlug,
 		SsoConnectionID: pgtype.Text{Valid: false},
 		Whitelisted:     pgtype.Bool{Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = oq.SetOrgWorkosID(context.Background(), orgRepo.SetOrgWorkosIDParams{
+		WorkosID:       pgtype.Text{String: mockidp.MockOrgID, Valid: true},
+		OrganizationID: mockidp.MockOrgID,
 	})
 	require.NoError(t, err)
 
@@ -293,7 +300,7 @@ func TestSyncWorkOSIDs_CachesUserWorkosID(t *testing.T) {
 }
 
 // TestSyncWorkOSIDs_NoMembershipForOrg verifies that when the user has no WorkOS
-// membership for the org the workos_id stays NULL and no error propagates.
+// membership for the org, no workos_membership_id is set and no error propagates.
 func TestSyncWorkOSIDs_NoMembershipForOrg(t *testing.T) {
 	t.Parallel()
 
@@ -308,9 +315,13 @@ func TestSyncWorkOSIDs_NoMembershipForOrg(t *testing.T) {
 	_, err := ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
 	require.NoError(t, err)
 
-	org, err := orgRepo.New(ts.conn).GetOrganizationMetadata(ctx, mockidp.MockOrgID)
-	require.NoError(t, err)
-	require.False(t, org.WorkosID.Valid, "workos_id should remain NULL when no membership exists")
+	// The org-user relationship should be soft-deleted since user has no WorkOS
+	// membership and the org has a workos_id set.
+	_, err = orgRepo.New(ts.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
+		OrganizationID: mockidp.MockOrgID,
+		UserID:         mockidp.MockUserID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "relationship should be soft-deleted when no membership exists")
 }
 
 // TestSyncWorkOSIDs_UserNotInWorkOS verifies that when the user's email is
@@ -531,14 +542,7 @@ func TestSyncWorkOSIDs_DoesNotAffectOtherUsers(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Set the org's workos_id so it's considered a WorkOS-managed org.
-	_, err = orgRepo.New(ts.conn).SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
-		WorkosID:       pgtype.Text{String: mockidp.MockOrgID, Valid: true},
-		OrganizationID: mockidp.MockOrgID,
-	})
-	require.NoError(t, err)
-
-	// Give user 2 a workos_membership_id for this org.
+	// workos_id is already set by the test setup; give user 2 a workos_membership_id.
 	err = orgRepo.New(ts.conn).AttachWorkOSUserToOrg(ctx, orgRepo.AttachWorkOSUserToOrgParams{
 		OrganizationID:     mockidp.MockOrgID,
 		UserID:             otherUserID,

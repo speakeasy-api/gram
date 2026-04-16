@@ -431,47 +431,38 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 		}
 	}
 
-	// Fetch all org memberships for this user in one API call instead of one per org.
+	// Ensure that all orgs in the response with WorkOS syncing have been
+	// upserted into the database.
+	for _, org := range validateResp.Organizations {
+		if org.SSOConnectionID == nil {
+			continue
+		}
+		if _, err := s.orgRepo.SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
+			WorkosID:       conv.ToPGText(*org.SSOConnectionID),
+			OrganizationID: org.ID,
+		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			s.logger.ErrorContext(ctx, "failed to set org workos ID", attr.SlogError(err))
+		}
+	}
+
+	// Load current org membership state directly from WorkOS so we can populate
+	// the workos membership ID in the org membership records
 	memberships, err := s.workos.ListUserMemberships(ctx, workosUserID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to list workos user memberships", attr.SlogError(err))
 		return
 	}
 
-	membershipByOrgID := make(map[string]int, len(memberships))
+	workosOrgIDs := make([]string, len(memberships))
+	membershipIDs := make([]string, len(memberships))
 	for i, m := range memberships {
-		membershipByOrgID[m.OrganizationID] = i
-	}
-
-	var orgIDs []string
-	var membershipIDs []string
-
-	for _, org := range validateResp.Organizations {
-		idx, ok := membershipByOrgID[org.ID]
-		if !ok {
-			continue
-		}
-		orgMembership := memberships[idx]
-
-		// Link the organization to its WorkOS org ID if not already linked.
-		if _, err := s.orgRepo.SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
-			WorkosID:       conv.ToPGText(orgMembership.OrganizationID),
-			OrganizationID: org.ID,
-		}); err != nil {
-			// SetOrgWorkosID only updates when workos_id IS NULL, so
-			// pgx.ErrNoRows means it was already linked — not an error.
-			if !errors.Is(err, pgx.ErrNoRows) {
-				s.logger.ErrorContext(ctx, "failed to set org workos ID", attr.SlogError(err))
-			}
-		}
-
-		orgIDs = append(orgIDs, org.ID)
-		membershipIDs = append(membershipIDs, orgMembership.ID)
+		workosOrgIDs[i] = m.OrganizationID
+		membershipIDs[i] = m.ID
 	}
 
 	if err := s.orgRepo.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
 		UserID:              validateResp.User.ID,
-		OrganizationIds:     orgIDs,
+		WorkosOrgIds:        workosOrgIDs,
 		WorkosMembershipIds: membershipIDs,
 	}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to set user workos memberships", attr.SlogError(err))

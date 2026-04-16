@@ -1,7 +1,8 @@
 import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import { Modal, ModalProvider } from "@speakeasy-api/moonshine";
+import { Icon, Modal, ModalProvider } from "@speakeasy-api/moonshine";
 import { ShieldAlert } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
@@ -97,7 +98,9 @@ const AppLayoutContent = ({
         <AppSidebar variant="inset" />
         <SidebarInset>
           <GlobalInsightsWrapper>
-            <Outlet />
+            <MembershipSyncGuard>
+              <Outlet />
+            </MembershipSyncGuard>
             <Modal
               closable
               className="h-full max-h-[450px] min-h-auto w-9/12 max-w-[1100px] min-w-auto rounded-sm p-0 2xl:w-2/3 2xl:max-w-[1000px]"
@@ -152,6 +155,42 @@ const GlobalInsightsWrapper = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+/**
+ * Guards against a failed grants query (e.g. the user's org membership hasn't
+ * synced yet). Shows a recovery prompt instead of crashing the app.
+ */
+const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
+  const { error } = useRBAC();
+  const client = useSdkClient();
+
+  if (!error) return <>{children}</>;
+
+  return (
+    <div className="flex h-full min-h-[400px] w-full items-center justify-center">
+      <div className="flex max-w-md flex-col items-center gap-4 text-center">
+        <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
+          <Icon name="refresh-cw" className="text-muted-foreground h-5 w-5" />
+        </div>
+        <h2 className="text-lg font-medium">Organization sync required</h2>
+        <p className="text-muted-foreground text-sm">
+          Your organization membership needs to be re-synchronized. Please log
+          out and log back in to refresh your session.
+        </p>
+        <button
+          type="button"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2 rounded-md px-4 py-2 text-sm font-medium"
+          onClick={async () => {
+            await client.auth.logout();
+            window.location.href = "/login";
+          }}
+        >
+          Log out
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export const OrgLayout = () => {
   const isAdmin = useIsAdmin();
   const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
@@ -173,7 +212,9 @@ export const OrgLayout = () => {
           <div className="flex w-full flex-1 overflow-hidden pt-2">
             <OrgSidebar variant="inset" />
             <SidebarInset>
-              <Outlet />
+              <MembershipSyncGuard>
+                <Outlet />
+              </MembershipSyncGuard>
             </SidebarInset>
           </div>
         </div>
