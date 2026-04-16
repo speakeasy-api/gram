@@ -249,7 +249,15 @@ export default function PolicyCenter() {
               information in chat messages.
             </p>
           </div>
-          <Button onClick={handleCreate}>
+          <Button
+            onClick={handleCreate}
+            disabled={policies.length > 0}
+            tooltip={
+              policies.length > 0
+                ? "Only one policy per project is supported"
+                : undefined
+            }
+          >
             <Plus className="mr-2 h-4 w-4" />
             New Policy
           </Button>
@@ -339,8 +347,8 @@ export default function PolicyCenter() {
 
         {/* Edit/Create Sheet */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent className="overflow-y-auto">
-            <SheetHeader>
+          <SheetContent className="flex flex-col overflow-y-auto">
+            <SheetHeader className="px-6 pt-6">
               <SheetTitle>
                 {editingPolicy ? "Edit Policy" : "New Policy"}
               </SheetTitle>
@@ -350,13 +358,15 @@ export default function PolicyCenter() {
                   : "Create a new risk analysis policy to scan chat messages."}
               </SheetDescription>
             </SheetHeader>
-            <PolicySheetBody
-              formName={formName}
-              setFormName={setFormName}
-              formEnabled={formEnabled}
-              setFormEnabled={setFormEnabled}
-            />
-            <SheetFooter>
+            <div className="flex-1 overflow-y-auto px-6">
+              <PolicySheetBody
+                formName={formName}
+                setFormName={setFormName}
+                formEnabled={formEnabled}
+                setFormEnabled={setFormEnabled}
+              />
+            </div>
+            <SheetFooter className="px-6 pb-6">
               <Button
                 onClick={handleSave}
                 disabled={
