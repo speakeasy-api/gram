@@ -140,6 +140,13 @@ type testSetup struct {
 // and a fake WorkOS server. The mock IDP org is seeded into organization_metadata.
 func newManagerWithFakeWorkOS(t *testing.T, fake *fakeWorkOSServer) *testSetup {
 	t.Helper()
+	return newManagerWithFakeWorkOSConfig(t, fake, mockidp.NewConfig())
+}
+
+// newManagerWithFakeWorkOSConfig is like newManagerWithFakeWorkOS but uses the
+// given mock IDP config (e.g. to omit workos_id from /validate).
+func newManagerWithFakeWorkOSConfig(t *testing.T, fake *fakeWorkOSServer, idpCfg mockidp.Config) *testSetup {
+	t.Helper()
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -147,7 +154,6 @@ func newManagerWithFakeWorkOS(t *testing.T, fake *fakeWorkOSServer) *testSetup {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	idpCfg := mockidp.NewConfig()
 	idpSrv := httptest.NewServer(mockidp.Handler(idpCfg))
 	t.Cleanup(idpSrv.Close)
 
@@ -213,7 +219,7 @@ func acquireIDToken(t *testing.T, ctx context.Context, mgr *sessions.Manager) st
 }
 
 // TestSyncWorkOSIDs_PopulatesNonSSOOrg is the core regression test for the bug:
-// workos_id must be backfilled for orgs without an SSO connection.
+// workos_id must be backfilled from validate (workos_id) for orgs that sync with WorkOS.
 func TestSyncWorkOSIDs_PopulatesNonSSOOrg(t *testing.T) {
 	t.Parallel()
 
@@ -229,16 +235,52 @@ func TestSyncWorkOSIDs_PopulatesNonSSOOrg(t *testing.T) {
 
 	ts := newManagerWithFakeWorkOS(t, fake)
 	ctx := t.Context()
+
+	// Simulate an org row that has not yet been linked to WorkOS in Gram.
+	_, err := ts.conn.Exec(ctx, `UPDATE organization_metadata SET workos_id = NULL WHERE id = $1`, workosOrgID)
+	require.NoError(t, err)
+
 	idToken := acquireIDToken(t, ctx, ts.mgr)
 
 	// syncWorkOSIDs is called synchronously inside GetUserInfoFromSpeakeasy.
-	_, err := ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	_, err = ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
 	require.NoError(t, err)
 
 	org, err := orgRepo.New(ts.conn).GetOrganizationMetadata(ctx, workosOrgID)
 	require.NoError(t, err)
-	require.True(t, org.WorkosID.Valid, "workos_id should be populated for non-SSO org")
+	require.True(t, org.WorkosID.Valid, "workos_id should be populated from validate workos_id")
 	require.Equal(t, workosOrgID, org.WorkosID.String)
+}
+
+// TestSyncWorkOSIDs_SkipsSetOrgWorkosIDWhenValidateOmitsWorkOSID verifies that when
+// the Speakeasy validate response omits workos_id, Gram does not set organization_metadata.workos_id.
+func TestSyncWorkOSIDs_SkipsSetOrgWorkosIDWhenValidateOmitsWorkOSID(t *testing.T) {
+	t.Parallel()
+
+	cfg := mockidp.NewConfig()
+	cfg.Organization.WorkOSID = nil
+
+	const workosUserID = "wos_user_skip_validate_wos"
+
+	fake := newFakeWorkOSServer()
+	fake.users = []fakeWOSUser{{ID: workosUserID, Email: mockidp.MockUserEmail}}
+	fake.memberships = []fakeWOSMembership{
+		{ID: "mem_skip_v", UserID: workosUserID, OrganizationID: mockidp.MockOrgID, RoleSlug: "member"},
+	}
+
+	ts := newManagerWithFakeWorkOSConfig(t, fake, cfg)
+	ctx := t.Context()
+
+	_, err := ts.conn.Exec(ctx, `UPDATE organization_metadata SET workos_id = NULL WHERE id = $1`, mockidp.MockOrgID)
+	require.NoError(t, err)
+
+	idToken := acquireIDToken(t, ctx, ts.mgr)
+	_, err = ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	require.NoError(t, err)
+
+	org, err := orgRepo.New(ts.conn).GetOrganizationMetadata(ctx, mockidp.MockOrgID)
+	require.NoError(t, err)
+	require.False(t, org.WorkosID.Valid, "workos_id must remain unset when validate omits workos_id")
 }
 
 // TestSyncWorkOSIDs_UserWorkosIDSet verifies the user's workos_id is recorded
