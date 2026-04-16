@@ -370,6 +370,9 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	if toolset.ProjectID != *ac.ProjectID {
 		return nil, oops.E(oops.CodeBadRequest, nil, "toolset belongs to a different project")
 	}
+	if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "toolset does not have MCP enabled")
+	}
 
 	row, err := s.repo.AddPluginServer(ctx, repo.AddPluginServerParams{
 		PluginID:    pluginID,
