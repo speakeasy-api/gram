@@ -690,8 +690,8 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 	}
 
 	// Truncate inputs that exceed token limits
-	// Embedding models have 8192 token limit, using ~4 chars/token as conservative estimate
-	const maxChars = 30_000
+	// Embedding models have 8192 token limit, using ~3 chars/token as conservative estimate
+	const maxChars = 24_000
 	truncatedInputs := make([]string, len(inputs))
 	for i, input := range inputs {
 		if len(input) > maxChars {
