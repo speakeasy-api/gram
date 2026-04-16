@@ -1689,3 +1689,78 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_name_key
 ON remote_mcp_server_headers (remote_mcp_server_id, name)
 WHERE deleted IS FALSE;
+-- Plugin definitions: project-scoped distributable bundles of MCP servers.
+-- Admins create plugins, assign them to roles, and publish them to platform
+-- marketplaces (Claude Code, Cursor) via a connected GitHub repository.
+CREATE TABLE IF NOT EXISTS plugins (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  name TEXT NOT NULL CHECK (name <> ''),
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
+  description TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT plugins_pkey PRIMARY KEY (id),
+  CONSTRAINT plugins_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT plugins_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_project_id_slug_key
+  ON plugins (organization_id, project_id, slug)
+  WHERE deleted IS FALSE;
+
+-- Links a plugin to a toolset-backed MCP server.
+CREATE TABLE IF NOT EXISTS plugin_servers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  plugin_id uuid NOT NULL,
+  toolset_id uuid NOT NULL,
+  display_name TEXT NOT NULL CHECK (display_name <> ''),
+  policy TEXT NOT NULL DEFAULT 'required',
+  sort_order INT NOT NULL DEFAULT 0,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT plugin_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT plugin_servers_plugin_id_fkey FOREIGN KEY (plugin_id) REFERENCES plugins (id) ON DELETE CASCADE,
+  -- RESTRICT is intentional: CASCADE would silently destroy rows.
+  -- Toolsets use soft deletes so RESTRICT only blocks manual hard deletes.
+  -- If a hard-delete path is added later, it must purge soft-deleted
+  -- plugin_servers referencing the target first.
+  CONSTRAINT plugin_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
+  CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_display_name_key
+  ON plugin_servers (plugin_id, display_name)
+  WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_toolset_id_key
+  ON plugin_servers (plugin_id, toolset_id)
+  WHERE deleted IS FALSE;
+
+-- Controls who receives a plugin. Reuses the RBAC principal URN pattern
+-- (role:slug, user:id, or * for all org members).
+CREATE TABLE IF NOT EXISTS plugin_assignments (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  plugin_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  principal_urn TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT plugin_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT plugin_assignments_plugin_id_fkey FOREIGN KEY (plugin_id) REFERENCES plugins (id) ON DELETE CASCADE,
+  CONSTRAINT plugin_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_assignments_plugin_id_principal_urn_key
+  ON plugin_assignments (plugin_id, principal_urn);
