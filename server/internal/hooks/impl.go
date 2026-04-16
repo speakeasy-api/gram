@@ -497,3 +497,17 @@ func extractLogData(logRecord *gen.OTELLogRecord) OTELLogData {
 	return data
 }
 
+// extractAttributeString extracts a string attribute value by key
+func extractAttributeString(attributes []*gen.OTELAttribute, key string) string {
+	if attributes == nil {
+		return ""
+	}
+
+	for _, attr := range attributes {
+		if attr.Key == key && attr.Value != nil && attr.Value.StringValue != nil {
+			return *attr.Value.StringValue
+		}
+	}
+
+	return ""
+}
