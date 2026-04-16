@@ -218,6 +218,7 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 			Name: org.Name,
 			Slug: org.Slug,
 			// will be removed
+			SsoConnectionID:    nil,
 			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
 			Projects:           []*auth.ProjectEntry{}, // filled in from gram server
 		}
