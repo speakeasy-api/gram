@@ -257,7 +257,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 		return nil, oops.E(oops.CodeUnexpected, err, "sync grants for created role").Log(ctx, logger)
 	}
 
-	assignedCount := 0
+	assignedWorkosIDs := make([]string, 0, len(payload.MemberIds))
 	if len(payload.MemberIds) > 0 {
 		members, err := s.roles.ListMembers(ctx, workosOrgID)
 		if err != nil {
@@ -276,9 +276,20 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 				return nil, oops.E(oops.CodeUnexpected, err, "assign members to created role").Log(ctx, logger)
 			}
 
-			assignedCount++
+			assignedWorkosIDs = append(assignedWorkosIDs, userID)
 		}
 		s.access.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
+	}
+
+	// Only count assigned members who have local Gram accounts, consistent with
+	// how ListRoles/GetRole/UpdateRole count members via localMemberCounts.
+	assignedCount := 0
+	if len(assignedWorkosIDs) > 0 {
+		localRows, err := usersrepo.New(s.db).GetUsersByWorkosIDs(ctx, assignedWorkosIDs)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get users by workos ids: %w", err), "resolve local assigned members").Log(ctx, logger)
+		}
+		assignedCount = len(localRows)
 	}
 
 	createdRole, err := buildRole(ctx, logger, s.db, ac.ActiveOrganizationID, *wr, assignedCount)
