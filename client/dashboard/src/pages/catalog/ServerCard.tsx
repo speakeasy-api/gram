@@ -1,4 +1,7 @@
-import { ToolCollectionBadge } from "@/components/tool-collection-badge";
+import {
+  PoweredBySpeakeasyBadge,
+  ToolCollectionBadge,
+} from "@/components/tool-collection-badge";
 import { Badge } from "@/components/ui/badge";
 import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
@@ -9,7 +12,6 @@ import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import type { Server } from "./hooks";
-import { parseServerMetadata } from "./hooks/serverMetadata";
 
 interface ServerCardProps {
   server: Server;
@@ -35,8 +37,11 @@ export function ServerCard({
   isSelected,
   onToggleSelect,
 }: ServerCardProps) {
-  const metadata = useMemo(() => parseServerMetadata(server), [server]);
   const displayName = server.title ?? server.registrySpecifier;
+
+  const isSpeakeasyServer = server.registrySpecifier.startsWith(
+    "com.pulsemcp.mirror/gram",
+  );
 
   const existingMcp = externalMcps.find(
     (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
@@ -107,17 +112,15 @@ export function ServerCard({
               >
                 {displayName}
               </Type>
-              {metadata.visitorsMonth === 0 && (
-                <Badge variant="outline" className="shrink-0">
-                  New
-                </Badge>
-              )}
             </div>
             <Type small muted className="truncate">
               v{server.version}
             </Type>
           </div>
-          <ToolCollectionBadge toolNames={toolNames} />
+          <div className="flex items-baseline gap-1">
+            {isSpeakeasyServer && <PoweredBySpeakeasyBadge />}
+            <ToolCollectionBadge toolNames={toolNames} />
+          </div>
         </div>
 
         {/* Description */}

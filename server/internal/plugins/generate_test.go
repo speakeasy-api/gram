@@ -1,0 +1,143 @@
+package plugins
+
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name:        "Engineering Tools",
+			Slug:        "engineering-tools",
+			Description: "MCP servers for the engineering team",
+			Servers: []PluginServerInfo{
+				{
+					DisplayName: "crm-tools",
+					Policy:      "required",
+					MCPURL:      "https://app.getgram.ai/mcp/acme-abc12",
+				},
+				{
+					DisplayName: "analytics",
+					Policy:      "optional",
+					MCPURL:      "https://app.getgram.ai/mcp/analytics-xyz",
+				},
+			},
+		},
+	}
+
+	cfg := GenerateConfig{
+		OrgName:   "Acme Corp",
+		OrgEmail:  "",
+		ServerURL: "https://app.getgram.ai",
+	}
+
+	files, err := GeneratePluginPackages(plugins, cfg)
+	require.NoError(t, err)
+
+	expectedPaths := []string{
+		".claude-plugin/marketplace.json",
+		".cursor-plugin/marketplace.json",
+		"engineering-tools/.claude-plugin/plugin.json",
+		"engineering-tools/.mcp.json",
+		"engineering-tools-cursor/.cursor-plugin/plugin.json",
+		"engineering-tools-cursor/mcp.json",
+	}
+	for _, p := range expectedPaths {
+		_, ok := files[p]
+		require.True(t, ok, "missing file: %s", p)
+	}
+}
+
+func TestGenerateClaudeMCPConfigAlwaysHasAuthHeaders(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "gram-server", MCPURL: "https://app.getgram.ai/mcp/test"},
+				{DisplayName: "another", MCPURL: "https://app.getgram.ai/mcp/another"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		OrgEmail:  "",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig claudeMCPConfig
+	err = json.Unmarshal(files["test/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	for name, server := range mcpConfig.MCPServers {
+		require.Equal(t, "Bearer ${user_config.GRAM_API_KEY}", server.Headers["Authorization"], "server %s missing auth header", name)
+	}
+}
+
+func TestGenerateCursorMCPConfigUsesEnvSyntax(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "gram-server", MCPURL: "https://app.getgram.ai/mcp/test"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		OrgEmail:  "",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig cursorMCPConfig
+	err = json.Unmarshal(files["test-cursor/mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	gramServer := mcpConfig.MCPServers["gram-server"]
+	require.Equal(t, "Bearer ${env:GRAM_API_KEY}", gramServer.Headers["Authorization"])
+}
+
+func TestGenerateMarketplaceManifest(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{Name: "A", Slug: "a", Description: "First plugin"},
+		{Name: "B", Slug: "b", Description: "Second plugin"},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Acme",
+		OrgEmail:  "",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var claudeManifest marketplaceManifest
+	err = json.Unmarshal(files[".claude-plugin/marketplace.json"], &claudeManifest)
+	require.NoError(t, err)
+
+	require.Equal(t, "Acme-gram", claudeManifest.Name)
+	require.Equal(t, "Acme", claudeManifest.Owner.Name)
+	require.Len(t, claudeManifest.Plugins, 2)
+	require.Equal(t, "./a", claudeManifest.Plugins[0].Source)
+	require.Equal(t, "./b", claudeManifest.Plugins[1].Source)
+
+	var cursorManifest marketplaceManifest
+	err = json.Unmarshal(files[".cursor-plugin/marketplace.json"], &cursorManifest)
+	require.NoError(t, err)
+
+	require.Equal(t, "Acme-gram", cursorManifest.Name)
+	require.Len(t, cursorManifest.Plugins, 2)
+	require.Equal(t, "./a-cursor", cursorManifest.Plugins[0].Source)
+	require.Equal(t, "./b-cursor", cursorManifest.Plugins[1].Source)
+}

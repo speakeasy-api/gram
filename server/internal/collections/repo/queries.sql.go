@@ -213,6 +213,90 @@ func (q *Queries) DetachServerFromOrganizationMcpCollection(ctx context.Context,
 	return err
 }
 
+const ensureOrganizationMcpCollection = `-- name: EnsureOrganizationMcpCollection :one
+INSERT INTO organization_mcp_collections (organization_id, name, description, slug, visibility)
+VALUES
+  ($1, $2, $3, $4, $5)
+ON CONFLICT (slug, organization_id) WHERE deleted IS FALSE
+DO UPDATE SET updated_at = organization_mcp_collections.updated_at
+RETURNING id, organization_id, name, description, slug, visibility, created_at, updated_at
+`
+
+type EnsureOrganizationMcpCollectionParams struct {
+	OrganizationID string
+	Name           string
+	Description    pgtype.Text
+	Slug           string
+	Visibility     string
+}
+
+type EnsureOrganizationMcpCollectionRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Name           string
+	Description    pgtype.Text
+	Slug           string
+	Visibility     string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) EnsureOrganizationMcpCollection(ctx context.Context, arg EnsureOrganizationMcpCollectionParams) (EnsureOrganizationMcpCollectionRow, error) {
+	row := q.db.QueryRow(ctx, ensureOrganizationMcpCollection,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Description,
+		arg.Slug,
+		arg.Visibility,
+	)
+	var i EnsureOrganizationMcpCollectionRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Description,
+		&i.Slug,
+		&i.Visibility,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const ensureOrganizationMcpCollectionRegistry = `-- name: EnsureOrganizationMcpCollectionRegistry :one
+WITH org_collection AS (
+  SELECT omc.id FROM organization_mcp_collections omc
+  WHERE omc.id = $2 AND omc.organization_id = $3 AND omc.deleted IS FALSE
+)
+INSERT INTO organization_mcp_collection_registries (collection_id, namespace)
+SELECT id, $1
+FROM org_collection
+ON CONFLICT (collection_id) WHERE deleted IS FALSE
+DO UPDATE SET updated_at = organization_mcp_collection_registries.updated_at
+RETURNING id, collection_id, namespace, created_at, updated_at, deleted_at, deleted
+`
+
+type EnsureOrganizationMcpCollectionRegistryParams struct {
+	Namespace      string
+	CollectionID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) EnsureOrganizationMcpCollectionRegistry(ctx context.Context, arg EnsureOrganizationMcpCollectionRegistryParams) (OrganizationMcpCollectionRegistry, error) {
+	row := q.db.QueryRow(ctx, ensureOrganizationMcpCollectionRegistry, arg.Namespace, arg.CollectionID, arg.OrganizationID)
+	var i OrganizationMcpCollectionRegistry
+	err := row.Scan(
+		&i.ID,
+		&i.CollectionID,
+		&i.Namespace,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getOrganizationMcpCollectionByID = `-- name: GetOrganizationMcpCollectionByID :one
 SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections

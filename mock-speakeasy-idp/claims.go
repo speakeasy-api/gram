@@ -25,20 +25,20 @@ func deterministicUUID(input string) string {
 func deriveOrgs(claims *OidcClaims) []organization {
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	// WorkOS org claims — use the real WorkOS org ID directly (matching
-	// production where Gram org ID == WorkOS org ID) so that syncWorkOSIDs
-	// can look up memberships and link the org without special-casing.
+	// WorkOS org claims — derive a UUID for the Speakeasy org ID (mirroring
+	// production where Speakeasy org IDs are UUIDs, not WorkOS org_... IDs).
+	// The WorkOS org ID is preserved as SSOConnectionID.
 	if claims.OrgID != "" && claims.OrgName != "" {
-		orgID := claims.OrgID
+		workosOrgID := claims.OrgID
 		return []organization{
 			{
-				ID:                 orgID,
+				ID:                 deterministicUUID("org:" + workosOrgID),
 				Name:               claims.OrgName,
 				Slug:               slugify(claims.OrgName),
 				CreatedAt:          now,
 				UpdatedAt:          now,
 				AccountType:        "free",
-				SSOConnectionID:    &orgID,
+				SSOConnectionID:    &workosOrgID,
 				UserWorkspaceSlugs: []string{},
 			},
 		}

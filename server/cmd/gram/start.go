@@ -64,6 +64,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -726,6 +727,8 @@ func newStartCommand() *cli.Command {
 			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, accessManager))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, accessManager))
+
+			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, accessManager, c.String("server-url")))
 			// access depends on productfeatures for the RBAC feature gate, so inject
 			// the concrete checks here instead of importing access in that package.
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, accessManager, func(ctx context.Context, organizationID string) error {

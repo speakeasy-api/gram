@@ -36,6 +36,8 @@ import CollectionDetail from "./pages/collections/CollectionDetail";
 import CreateCollection from "./pages/collections/CreateCollection";
 import OrgAdminSettings from "./pages/org/OrgAdminSettings";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
+import Plugins, { PluginsRoot } from "./pages/org/Plugins";
+import PluginDetail from "./pages/org/PluginDetail";
 import OrgAuditLogs from "./pages/org/OrgAuditLogs";
 import OrgDomains from "./pages/org/OrgDomains";
 import OrgHome from "./pages/org/OrgHome";
@@ -352,6 +354,20 @@ const ROUTE_STRUCTURE = {
         title: "Overview",
         url: ":deploymentId",
         component: Deployment,
+      },
+    },
+  },
+  plugins: {
+    title: "Plugins",
+    url: "plugins",
+    icon: "puzzle",
+    component: PluginsRoot,
+    indexComponent: Plugins,
+    subPages: {
+      detail: {
+        title: "Plugin",
+        url: ":pluginId",
+        component: PluginDetail,
       },
     },
   },

@@ -23,6 +23,7 @@ import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { Organizations } from "./organizations.js";
 import { Packages } from "./packages.js";
+import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
 import { Resources } from "./resources.js";
 import { Slack } from "./slack.js";
@@ -128,6 +129,11 @@ export class Gram extends ClientSDK {
   private _packages?: Packages;
   get packages(): Packages {
     return (this._packages ??= new Packages(this._options));
+  }
+
+  private _plugins?: Plugins;
+  get plugins(): Plugins {
+    return (this._plugins ??= new Plugins(this._options));
   }
 
   private _features?: Features;
