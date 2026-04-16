@@ -273,13 +273,7 @@ export default function PolicyCenter() {
                           setTimeout(() => setRunPanelPolicy(policy), 0)
                         }
                       >
-                        View Run
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="cursor-pointer"
-                        onSelect={() => handleTrigger(policy.id)}
-                      >
-                        Trigger Analysis
+                        View Progress
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive cursor-pointer"

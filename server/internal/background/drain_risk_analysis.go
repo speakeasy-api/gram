@@ -165,22 +165,24 @@ func (s *TemporalRiskAnalysisSignaler) SignalNewMessages(ctx context.Context, pa
 
 	wfID := drainWorkflowID(params.RiskPolicyID)
 
-	// Try to signal an already-running workflow first.
-	err := s.TemporalEnv.Client().SignalWorkflow(ctx, wfID, "", SignalRiskAnalysisRequested, nil)
-	if err == nil {
-		return nil // Signal delivered — the workflow will drain on its next loop.
-	}
-
-	// Workflow not running — start a new one. The workflow is perpetual
-	// (ContinueAsNew), so we reject duplicates to avoid stale restarts.
-	_, err = s.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                    wfID,
-		TaskQueue:             string(s.TemporalEnv.Queue()),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-	}, DrainRiskAnalysisWorkflow, params)
+	// SignalWithStartWorkflow atomically signals an existing workflow or
+	// starts a new one if none is running. ALLOW_DUPLICATE lets a new run
+	// start even after a previous one was terminated or completed.
+	_, err := s.TemporalEnv.Client().SignalWithStartWorkflow(
+		ctx,
+		wfID,
+		SignalRiskAnalysisRequested,
+		nil,
+		client.StartWorkflowOptions{
+			ID:                    wfID,
+			TaskQueue:             string(s.TemporalEnv.Queue()),
+			WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		},
+		DrainRiskAnalysisWorkflow,
+		params,
+	)
 	if err != nil {
-		// If it was already started by a concurrent call, that's fine.
-		return nil //nolint:nilerr // race between signal and start is benign
+		return fmt.Errorf("signal-with-start drain workflow: %w", err)
 	}
 	return nil
 }

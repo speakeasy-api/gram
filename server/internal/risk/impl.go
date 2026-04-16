@@ -338,16 +338,18 @@ func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskP
 	}
 
 	analyzedMessages, err := s.repo.CountAnalyzedMessages(ctx, repo.CountAnalyzedMessagesParams{
-		ProjectID:    *authCtx.ProjectID,
-		RiskPolicyID: id,
+		ProjectID:     *authCtx.ProjectID,
+		RiskPolicyID:  id,
+		PolicyVersion: policy.Version,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count analyzed messages").Log(ctx, s.logger)
 	}
 
 	findingsCount, err := s.repo.CountFindingsByPolicy(ctx, repo.CountFindingsByPolicyParams{
-		ProjectID:    *authCtx.ProjectID,
-		RiskPolicyID: id,
+		ProjectID:     *authCtx.ProjectID,
+		RiskPolicyID:  id,
+		PolicyVersion: policy.Version,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count findings").Log(ctx, s.logger)
@@ -411,8 +413,9 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	}
 
 	pendingMessages, err := s.repo.CountUnanalyzedMessages(ctx, repo.CountUnanalyzedMessagesParams{
-		ProjectID:    uuid.NullUUID{UUID: row.ProjectID, Valid: true},
-		RiskPolicyID: row.ID,
+		ProjectID:     uuid.NullUUID{UUID: row.ProjectID, Valid: true},
+		RiskPolicyID:  row.ID,
+		PolicyVersion: row.Version,
 	})
 	if err != nil {
 		pendingMessages = 0
