@@ -10,7 +10,6 @@ import { Textarea } from "@/components/moon/textarea";
 import { Page } from "@/components/page-layout";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
 import { ToolList } from "@/components/tool-list";
-import { BigToggle } from "@/components/ui/big-toggle";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -63,11 +62,22 @@ import {
   useRemoveOAuthServerMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
-import { Badge, Button, Grid, Icon, Stack } from "@speakeasy-api/moonshine";
+import {
+  Badge,
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Grid,
+  Icon,
+  Stack,
+} from "@speakeasy-api/moonshine";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircleIcon,
+  ChevronDown,
   Download,
   Globe,
   LockIcon,
@@ -201,27 +211,27 @@ export function MCPDetailPage() {
   let statusBadge = null;
   if (!toolset.mcpEnabled) {
     statusBadge = (
-      <Badge variant="neutral">
+      <Badge variant="warning">
         <Badge.LeftIcon>
-          <XCircleIcon className="h-3 w-3" />
+          <XCircleIcon />
         </Badge.LeftIcon>
         <Badge.Text>Disabled</Badge.Text>
       </Badge>
     );
   } else if (toolset.mcpIsPublic) {
     statusBadge = (
-      <Badge variant="neutral">
+      <Badge variant="success">
         <Badge.LeftIcon>
-          <CheckCircleIcon className="h-3 w-3 text-green-600" />
+          <CheckCircleIcon />
         </Badge.LeftIcon>
         <Badge.Text>Public</Badge.Text>
       </Badge>
     );
   } else {
     statusBadge = (
-      <Badge variant="neutral">
+      <Badge variant="information">
         <Badge.LeftIcon>
-          <LockIcon className="h-3 w-3" />
+          <LockIcon />
         </Badge.LeftIcon>
         <Badge.Text>Private</Badge.Text>
       </Badge>
@@ -249,15 +259,15 @@ export function MCPDetailPage() {
                   <Button.Text>Playground</Button.Text>
                 </Button>
               </routes.playground.Link>
-              <MCPEnableButton toolset={toolset} />
+              <MCPStatusDropdown toolset={toolset} />
             </>
           }
         >
           <div className="flex items-end justify-between">
             <Stack gap={2}>
-              <div className="ml-1 flex items-center gap-3">
+              <div className="ml-1 flex gap-3">
                 <Heading variant="h1">{toolset.name}</Heading>
-                {statusBadge}
+                <div className="mt-auto mb-1">{statusBadge}</div>
               </div>
               <div className="ml-1 flex items-center gap-2">
                 <Type className="text-muted-foreground max-w-2xl truncate">
@@ -329,7 +339,7 @@ export function MCPDetailPage() {
           {/* Tab Content */}
           <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
             <TabsContent value="overview" className="mt-0 w-full">
-              <MCPOverviewTab toolset={toolset} onTabChange={handleTabChange} />
+              <MCPOverviewTab toolset={toolset} />
             </TabsContent>
 
             <TabsContent value="tools" className="mt-0 w-full">
@@ -362,51 +372,183 @@ export function MCPDetailPage() {
   );
 }
 
-export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
+type ServerStatus = "disabled" | "private" | "public";
+
+const STATUS_OPTIONS: {
+  value: ServerStatus;
+  label: string;
+  description: string;
+  dotClass: string;
+  hoverDotClass: string;
+}[] = [
+  {
+    value: "disabled",
+    label: "Disabled",
+    description: "The server is offline.",
+    dotClass: "bg-amber-400",
+    hoverDotClass: "group-hover:bg-amber-400",
+  },
+  {
+    value: "private",
+    label: "Private",
+    description:
+      "Only users with a Gram API Key from this project can read the tools hosted by this server.",
+    dotClass: "bg-blue-400",
+    hoverDotClass: "group-hover:bg-blue-400",
+  },
+  {
+    value: "public",
+    label: "Public",
+    description:
+      "Anyone with the URL can read the tools hosted by this server. Authentication is still required to use the tools.",
+    dotClass: "bg-green-400",
+    hoverDotClass: "group-hover:bg-green-400",
+  },
+];
+
+export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   const queryClient = useQueryClient();
-  const [isServerEnableDialogOpen, setIsServerEnableDialogOpen] =
-    useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<ServerStatus | null>(null);
+  const [isMaxServersModalOpen, setIsMaxServersModalOpen] = useState(false);
   const updateToolsetMutation = useUpdateToolsetMutation();
   const telemetry = useTelemetry();
-  const handleServerEnabledToggle = () => {
+
+  const currentStatus: ServerStatus = !toolset.mcpEnabled
+    ? "disabled"
+    : toolset.mcpIsPublic
+      ? "public"
+      : "private";
+
+  const applyStatus = (status: ServerStatus) => {
+    const updates =
+      status === "disabled"
+        ? { mcpEnabled: false }
+        : { mcpEnabled: true, mcpIsPublic: status === "public" };
+
     updateToolsetMutation.mutate(
       {
         request: {
           slug: toolset.slug,
-          updateToolsetRequestBody: { mcpEnabled: !toolset.mcpEnabled },
+          updateToolsetRequestBody: updates,
         },
       },
       {
         onSuccess: () => {
           invalidateAllToolset(queryClient);
           invalidateAllGetPeriodUsage(queryClient);
-
           telemetry.capture("mcp_event", {
-            action: toolset.mcpEnabled ? "mcp_disabled" : "mcp_enabled",
+            action:
+              status === "disabled"
+                ? "mcp_disabled"
+                : status === "public"
+                  ? "mcp_made_public"
+                  : "mcp_made_private",
             slug: toolset.slug,
           });
-          toast.success(
-            toolset.mcpEnabled ? "MCP server disabled" : "MCP server enabled",
-          );
+          const label =
+            status === "disabled"
+              ? "MCP server disabled"
+              : status === "public"
+                ? "MCP server set to public"
+                : "MCP server set to private";
+          toast.success(label);
+        },
+        onError: (error) => {
+          if (
+            error instanceof Error &&
+            error.message.includes("maximum number of public MCP servers")
+          ) {
+            setIsMaxServersModalOpen(true);
+          } else {
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : "Failed to update server status",
+            );
+          }
         },
       },
     );
   };
 
+  const handleSelect = (status: ServerStatus) => {
+    if (status === currentStatus) return;
+    const needsConfirm = status === "disabled" || currentStatus === "disabled";
+    setDropdownOpen(false);
+    if (needsConfirm) {
+      // Defer until after the dropdown has fully closed to avoid Radix focus-trap conflicts
+      setTimeout(() => setPendingStatus(status), 0);
+    } else {
+      applyStatus(status);
+    }
+  };
+
+  const currentLabel =
+    currentStatus === "disabled"
+      ? "Disabled"
+      : currentStatus === "public"
+        ? "Public"
+        : "Private";
+
   return (
     <>
-      <Button
-        variant="primary"
-        onClick={() => setIsServerEnableDialogOpen(true)}
-      >
-        {toolset.mcpEnabled ? "DISABLE" : "ENABLE"}
-      </Button>
+      <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="primary">
+            <Button.Text>{currentLabel}</Button.Text>
+            <Button.RightIcon>
+              <ChevronDown className="h-4 w-4" />
+            </Button.RightIcon>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[320px] p-1">
+          {STATUS_OPTIONS.map((option) => (
+            <DropdownMenuItem
+              key={option.value}
+              onSelect={() => handleSelect(option.value)}
+              disabled={option.value === currentStatus}
+              className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
+            >
+              <span
+                className={cn(
+                  "mt-1 h-2 w-2 shrink-0 rounded-full transition-colors",
+                  option.value === currentStatus
+                    ? option.dotClass
+                    : cn("bg-muted", option.hoverDotClass),
+                )}
+              />
+              <div className="flex-1">
+                <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
+                  {option.label}
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  {option.description}
+                </span>
+              </div>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
       <ServerEnableDialog
-        isOpen={isServerEnableDialogOpen}
-        onClose={() => setIsServerEnableDialogOpen(false)}
-        onConfirm={handleServerEnabledToggle}
+        isOpen={pendingStatus !== null}
+        onClose={() => setPendingStatus(null)}
+        onConfirm={() => {
+          if (pendingStatus) applyStatus(pendingStatus);
+        }}
         isLoading={updateToolsetMutation.isPending}
-        currentlyEnabled={toolset.mcpEnabled ?? false}
+        currentlyEnabled={currentStatus !== "disabled"}
+        targetIsPublic={pendingStatus === "public"}
+      />
+      <FeatureRequestModal
+        isOpen={isMaxServersModalOpen}
+        onClose={() => setIsMaxServersModalOpen(false)}
+        title="MCP Server Limit Reached"
+        description="You have reached the maximum number of MCP servers for the Base plan. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade."
+        actionType="max_public_mcp_servers"
+        icon={Globe}
+        telemetryData={{ slug: toolset.slug }}
+        accountUpgrade
       />
     </>
   );
@@ -415,13 +557,7 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
 /**
  * Overview Tab - Hosted URL and Installation instructions
  */
-function MCPOverviewTab({
-  toolset,
-  onTabChange,
-}: {
-  toolset: Toolset;
-  onTabChange: (tab: string) => void;
-}) {
+function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
   const { url: mcpUrl } = useMcpUrl(toolset);
 
   const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
@@ -452,15 +588,8 @@ function MCPOverviewTab({
       >
         {!toolset.mcpIsPublic && (
           <Type small italic destructive>
-            Your server is private. To share with external users, you must make
-            it public in the{" "}
-            <button
-              className="appearance-none underline"
-              onClick={() => onTabChange("settings")}
-            >
-              server settings
-            </button>
-            .
+            Your server is private. To share with external users, use the status
+            dropdown in the header to set it to Public.
           </Type>
         )}
         <Stack className="mt-2" gap={1}>
@@ -1028,29 +1157,16 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       telemetry.capture("mcp_event", {
         action: "mcp_settings_saved",
         slug: toolset.slug,
-        isPublic: mcpIsPublic,
       });
     },
-    onError: (error) => {
-      if (
-        error.message &&
-        error.message.includes(
-          "maximum number of public MCP servers for your account type",
-        )
-      ) {
-        setIsMaxServersModalOpen(true);
-      }
-
+    onError: () => {
       // Discard staged changes
       setMcpSlug(toolset.mcpSlug || "");
-      setMcpIsPublic(toolset.mcpIsPublic);
     },
   });
 
   const [mcpSlug, setMcpSlug] = useState(toolset.mcpSlug || "");
-  const [mcpIsPublic, setMcpIsPublic] = useState(toolset.mcpIsPublic);
   const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
-  const [isMaxServersModalOpen, setIsMaxServersModalOpen] = useState(false);
 
   const mcpSlugError = useMcpSlugValidation(mcpSlug, toolset.mcpSlug);
 
@@ -1120,7 +1236,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
             slug: toolset.slug,
             updateToolsetRequestBody: {
               mcpSlug: mcpSlug,
-              mcpIsPublic,
             },
           },
         });
@@ -1138,58 +1253,14 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       size="sm"
       onClick={() => {
         setMcpSlug(toolset.mcpSlug || "");
-        setMcpIsPublic(toolset.mcpIsPublic);
       }}
     >
       Discard
     </Button>
   );
 
-  const PublicToggle = ({ isPublic }: { isPublic: boolean }) => {
-    const onToggle = (value: string) => {
-      const newIsPublic = value === "public";
-      setMcpIsPublic(newIsPublic);
-      updateToolsetMutation.mutate({
-        request: {
-          slug: toolset.slug,
-          updateToolsetRequestBody: { mcpIsPublic: newIsPublic },
-        },
-      });
-    };
-
-    return (
-      <BigToggle
-        options={[
-          {
-            value: "public",
-            icon: "globe",
-            label: "Public",
-            description:
-              "Anyone with the URL can read the tools hosted by this server. Authentication is still required to use the tools.",
-          },
-          {
-            value: "private",
-            icon: "lock",
-            label: "Private",
-            description:
-              "Only users with a Gram API Key from this project can read the tools hosted by this server.",
-          },
-        ]}
-        selectedValue={isPublic ? "public" : "private"}
-        onSelect={onToggle}
-      />
-    );
-  };
-
   return (
     <Stack className="mb-4">
-      <PageSection
-        heading="Visibility"
-        description="Make your MCP server visible to the world, or protected behind a Gram key."
-      >
-        <PublicToggle isPublic={mcpIsPublic ?? false} />
-      </PageSection>
-
       <PageSection
         heading="Custom Slug"
         description="Customize the URL path for your MCP server."
@@ -1361,16 +1432,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         title="Host your MCP at a custom domain"
         description="Custom domains require upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
         actionType="mcp_custom_domain"
-        icon={Globe}
-        telemetryData={{ slug: toolset.slug }}
-        accountUpgrade
-      />
-      <FeatureRequestModal
-        isOpen={isMaxServersModalOpen}
-        onClose={() => setIsMaxServersModalOpen(false)}
-        title="MCP Server Limit Reached"
-        description={`You have reached the maximum number of MCP servers for the Base plan. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
-        actionType="max_public_mcp_servers"
         icon={Globe}
         telemetryData={{ slug: toolset.slug }}
         accountUpgrade
