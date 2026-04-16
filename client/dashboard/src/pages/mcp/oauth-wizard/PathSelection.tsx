@@ -2,8 +2,9 @@ import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { Globe, LockIcon } from "lucide-react";
 
-import type { DiscoveredOAuth, WizardDispatch } from "./types";
 import { Badge } from "@speakeasy-api/moonshine";
+import { ReactNode } from "react";
+import type { DiscoveredOAuth, WizardDispatch } from "./types";
 
 export function PathSelection({
   discoveredOAuth,
@@ -15,18 +16,7 @@ export function PathSelection({
   return (
     <div className="space-y-4">
       {discoveredOAuth && (
-        <div className="border-border bg-muted/50 flex items-start justify-between gap-4 rounded-md border p-4">
-          <div>
-            <Type small className="font-medium">
-              OAuth detected from {discoveredOAuth.name}
-            </Type>
-            <Type muted small className="mt-1">
-              We discovered OAuth {discoveredOAuth.version} metadata from this
-              server. The configuration will be pre-filled for either
-              configuration below.
-            </Type>
-          </div>
-        </div>
+        <OAuthDetectedCallout discoveredOAuth={discoveredOAuth} />
       )}
 
       <Type muted small>
@@ -56,7 +46,13 @@ export function PathSelection({
             "border-border flex flex-col items-start gap-2 rounded-lg border p-6 text-left transition-colors",
             "hover:border-primary hover:bg-muted/50",
           )}
-          onClick={() => dispatch({ type: "SELECT_EXTERNAL", discoveredOAuth })}
+          onClick={() =>
+            dispatch({
+              type: "SELECT_EXTERNAL",
+              discoveredOAuth:
+                discoveredOAuth?.version === "2.1" ? discoveredOAuth : null,
+            })
+          }
         >
           <Globe className="text-muted-foreground h-6 w-6" />
           <Type className="font-medium">External OAuth</Type>
@@ -69,3 +65,39 @@ export function PathSelection({
     </div>
   );
 }
+
+const OAuthDetectedCallout = ({
+  discoveredOAuth,
+}: {
+  discoveredOAuth: DiscoveredOAuth;
+}) => {
+  const { name, version } = discoveredOAuth;
+
+  let description: ReactNode = (
+    <Type muted small className="mt-1">
+      We discovered OAuth ${version} metadata from this server. The
+      configuration will be pre-filled for either selection below.
+    </Type>
+  );
+  if (version == "2.0") {
+    description = (
+      <Type muted small className="mt-1">
+        We discovered OAuth 2.0 metadata from this server. These details will be
+        pre-filled for the OAuth Proxy configuration below.
+      </Type>
+    );
+  }
+
+  return (
+    <div className="border-border bg-muted/50 flex items-start justify-between gap-4 rounded-md border p-4">
+      <div>
+        <Type small className="font-medium">
+          OAuth detected from {name}
+        </Type>
+        <Type muted small className="mt-1">
+          {description}
+        </Type>
+      </div>
+    </div>
+  );
+};

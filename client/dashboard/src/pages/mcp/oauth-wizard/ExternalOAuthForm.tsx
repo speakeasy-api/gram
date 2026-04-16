@@ -41,6 +41,7 @@ export function ExternalOAuthForm({
               <Type small className="font-medium">
                 OAuth detected from {discoveredOAuth.name}
               </Type>
+
               <Type muted small className="mt-1">
                 We discovered OAuth {discoveredOAuth.version} metadata from this
                 server. You can use it to pre-fill the form below.
@@ -95,7 +96,11 @@ export function ExternalOAuthForm({
                 placeholder="my-oauth-server"
                 value={state.slug}
                 onChange={(v: string) =>
-                  dispatch({ type: "UPDATE_FIELD", field: "slug", value: v })
+                  dispatch({
+                    type: "UPDATE_FIELD",
+                    field: "slug",
+                    value: v,
+                  })
                 }
                 maxLength={40}
               />

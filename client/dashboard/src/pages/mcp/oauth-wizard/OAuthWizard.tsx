@@ -246,7 +246,9 @@ function OAuthWizard({
           <ExternalOAuthForm
             state={state}
             dispatch={dispatch}
-            discoveredOAuth={discoveredOAuth}
+            discoveredOAuth={
+              discoveredOAuth?.version === "2.1" ? discoveredOAuth : null
+            }
             hasMultipleOAuth2AuthCode={hasMultipleOAuth2AuthCode}
             oauth2SecurityCount={
               toolset.oauthEnablementMetadata?.oauth2SecurityCount
