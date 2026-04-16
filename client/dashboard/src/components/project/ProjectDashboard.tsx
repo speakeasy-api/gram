@@ -14,6 +14,7 @@ import { subDays } from "date-fns";
 import { useMemo } from "react";
 import { Badge } from "@speakeasy-api/moonshine";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
+import { ProjectOnboardingBanner } from "./ProjectOnboarding";
 
 export function ProjectDashboard() {
   const { projectSlug } = useSlugs();
@@ -38,6 +39,13 @@ export function ProjectDashboard() {
     [auditLogsData],
   );
 
+  const isProjectEmpty =
+    !isOverviewPending &&
+    !isAuditLogsPending &&
+    overview &&
+    overview?.summary?.activeServersCount === 0 &&
+    overview?.summary?.totalToolCalls === 0;
+
   return (
     <Page.Section>
       <Page.Section.Title>Project Overview</Page.Section.Title>
@@ -52,6 +60,8 @@ export function ProjectDashboard() {
 
       <Page.Section.Body>
         <div className="space-y-8">
+          {isProjectEmpty && <ProjectOnboardingBanner />}
+
           {/* Row 0: KPI Cards */}
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {isOverviewPending ? (

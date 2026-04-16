@@ -1,0 +1,31 @@
+import { Card, Button, Icon } from "@speakeasy-api/moonshine";
+
+export function ProjectOnboardingBanner() {
+  return (
+    <Card className="bg-linear-to-tr from-white via-white to-blue-200 p-8">
+      <Card.Header>
+        <h2 className="text-3xl font-light">Welcome</h2>
+      </Card.Header>
+      <Card.Content className="flex max-w-lg flex-col gap-8">
+        <p className="text-muted-foreground text-base">
+          Build and deploy MCP servers in minutes. Connect your APIs, browse
+          popular integrations, or deploy a chat interface — all from one place.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <Button variant="primary">
+            <Button.Text>Connect an API</Button.Text>
+            <Button.RightIcon>
+              <Icon name="arrow-right" className="h-4 w-4" />
+            </Button.RightIcon>
+          </Button>
+          <Button variant="secondary">
+            <Button.Text>Browse catalog</Button.Text>
+            <Button.RightIcon>
+              <Icon name="arrow-right" className="h-4 w-4" />
+            </Button.RightIcon>
+          </Button>
+        </div>
+      </Card.Content>
+    </Card>
+  );
+}
