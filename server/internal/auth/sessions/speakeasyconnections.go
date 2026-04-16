@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -429,15 +431,28 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 		}
 	}
 
-	// Fetch all org memberships for this user in one API call instead of one per org.
+	// Ensure that all orgs in the response with WorkOS syncing have been
+	// upserted into the database.
+	for _, org := range validateResp.Organizations {
+		if org.SSOConnectionID == nil {
+			continue
+		}
+		if _, err := s.orgRepo.SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
+			WorkosID:       conv.ToPGText(*org.SSOConnectionID),
+			OrganizationID: org.ID,
+		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			s.logger.ErrorContext(ctx, "failed to set org workos ID", attr.SlogError(err))
+		}
+	}
+
+	// Load current org membership state directly from WorkOS so we can populate
+	// the workos membership ID in the org membership records
 	memberships, err := s.workos.ListUserMemberships(ctx, workosUserID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to list workos user memberships", attr.SlogError(err))
 		return
 	}
 
-	// Pass WorkOS org IDs directly — the query resolves them to Speakeasy org
-	// IDs via organization_metadata.workos_id.
 	workosOrgIDs := make([]string, len(memberships))
 	membershipIDs := make([]string, len(memberships))
 	for i, m := range memberships {
