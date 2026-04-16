@@ -94,9 +94,7 @@ const OAuthDetectedCallout = ({
         <Type small className="font-medium">
           OAuth detected from {name}
         </Type>
-        <Type muted small className="mt-1">
-          {description}
-        </Type>
+        {description}
       </div>
     </div>
   );
