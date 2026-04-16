@@ -12,13 +12,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hashicorp/go-cleanhttp"
 	"go.opentelemetry.io/otel/trace"
 
 	or_base "github.com/OpenRouterTeam/go-sdk"
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	or_operations "github.com/OpenRouterTeam/go-sdk/models/operations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -33,9 +33,9 @@ type ChatResolutionAnalyzer interface {
 	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
 }
 
-// TelemetryService emits telemetry events for observability.
-type TelemetryService interface {
-	CreateLog(params telemetry.LogParams)
+// TelemetryLogger emits telemetry events for observability.
+type TelemetryLogger interface {
+	Log(ctx context.Context, params telemetry.LogParams)
 }
 
 const (
@@ -46,34 +46,35 @@ const (
 // It applies pluggable strategies for message capture and usage tracking.
 type ChatClient struct {
 	logger                 *slog.Logger
-	httpClient             *http.Client
+	httpClient             *guardian.HTTPClient
 	provisioner            Provisioner
 	messageCaptureStrategy MessageCaptureStrategy
 	usageTrackingStrategy  UsageTrackingStrategy
 	chatTitleGenerator     ChatTitleGenerator
 	chatResolutionAnalyzer ChatResolutionAnalyzer
-	telemetryService       TelemetryService
+	telemetryLogger        TelemetryLogger
 }
 
 // NewUnifiedClient creates a new UnifiedClient with the given strategies.
 func NewUnifiedClient(
 	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
 	provisioner Provisioner,
 	captureStrategy MessageCaptureStrategy,
 	trackingStrategy UsageTrackingStrategy,
 	chatTitleGenerator ChatTitleGenerator,
 	chatResolutionAnalyzer ChatResolutionAnalyzer,
-	telemetryService TelemetryService,
+	telemetryLogger TelemetryLogger,
 ) *ChatClient {
 	return &ChatClient{
 		logger:                 logger.With(attr.SlogComponent("openrouter_completions")),
-		httpClient:             cleanhttp.DefaultPooledClient(),
+		httpClient:             guardianPolicy.PooledClient(),
 		provisioner:            provisioner,
 		messageCaptureStrategy: captureStrategy,
 		usageTrackingStrategy:  trackingStrategy,
 		chatTitleGenerator:     chatTitleGenerator,
 		chatResolutionAnalyzer: chatResolutionAnalyzer,
-		telemetryService:       telemetryService,
+		telemetryLogger:        telemetryLogger,
 	}
 }
 
@@ -123,7 +124,8 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 
 	// Add JSON schema if provided
 	if req.JSONSchema != nil {
-		jsonSchemaConfig := or.ResponseFormatJSONSchema{
+		jsonSchemaConfig := or.ChatFormatJSONSchemaConfig{
+			Type:       or.ChatFormatJSONSchemaConfigTypeJSONSchema,
 			JSONSchema: *req.JSONSchema,
 		}
 		responseFormat := or.CreateResponseFormatJSONSchema(jsonSchemaConfig)
@@ -299,13 +301,13 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 
 	// Extract tool calls
 	var toolCalls []ToolCall
-	if message.Type == or.MessageTypeAssistant {
-		if assistantMsg := message.AssistantMessage; assistantMsg != nil {
+	if message.Type == or.ChatMessagesTypeAssistant {
+		if assistantMsg := message.ChatAssistantMessage; assistantMsg != nil {
 			for idx, tc := range assistantMsg.ToolCalls {
 				toolCalls = append(toolCalls, ToolCall{
 					Index: idx,
 					ID:    tc.ID,
-					Type:  tc.GetType(),
+					Type:  string(tc.GetType()),
 					Function: ToolCallFunction{
 						Name:      tc.Function.Name,
 						Arguments: tc.Function.Arguments,
@@ -369,7 +371,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		request:              req,
 		logger:               c.logger,
 		client:               c,
-		telemetryService:     c.telemetryService,
+		telemetryService:     c.telemetryLogger,
 		lineBuf:              &strings.Builder{},
 		messageContent:       &strings.Builder{},
 		accumulatedToolCalls: make(map[int]ToolCall),
@@ -386,19 +388,21 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 }
 
 func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompletionRequest) (*CompletionResponse, error) {
-	var messages []or.Message
+	var messages []or.ChatMessages
 
 	// Optional system prompt
 	if req.SystemPrompt != "" {
-		messages = append(messages, or.CreateMessageSystem(or.SystemMessage{
-			Content: or.CreateSystemMessageContentStr(req.SystemPrompt),
+		messages = append(messages, or.CreateChatMessagesSystem(or.ChatSystemMessage{
+			Role:    or.ChatSystemMessageRoleSystem,
+			Content: or.CreateChatSystemMessageContentStr(req.SystemPrompt),
 			Name:    nil,
 		}))
 	}
 
 	// User message
-	messages = append(messages, or.CreateMessageUser(or.UserMessage{
-		Content: or.CreateUserMessageContentStr(req.Prompt),
+	messages = append(messages, or.CreateChatMessagesUser(or.ChatUserMessage{
+		Role:    or.ChatUserMessageRoleUser,
+		Content: or.CreateChatUserMessageContentStr(req.Prompt),
 		Name:    nil,
 	}))
 
@@ -431,7 +435,7 @@ type streamingResponseReader struct {
 	request          CompletionRequest
 	logger           *slog.Logger
 	client           *ChatClient
-	telemetryService TelemetryService
+	telemetryService TelemetryLogger
 
 	// SSE parsing state
 	lineBuf              *strings.Builder
@@ -598,7 +602,7 @@ func (c *ChatClient) emitGenAITelemetry(
 	result CompletionResponse,
 ) {
 	// Skip telemetry if no telemetry service configured
-	if c.telemetryService == nil {
+	if c.telemetryLogger == nil {
 		return
 	}
 
@@ -664,7 +668,7 @@ func (c *ChatClient) emitGenAITelemetry(
 		OrganizationID: orgID,
 	}
 
-	c.telemetryService.CreateLog(telemetry.LogParams{
+	c.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  time.Now(),
 		ToolInfo:   toolInfo,
 		Attributes: attrs,
@@ -686,8 +690,8 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 	}
 
 	// Truncate inputs that exceed token limits
-	// Embedding models have 8192 token limit, using ~4 chars/token as conservative estimate
-	const maxChars = 30_000
+	// Embedding models have 8192 token limit, using ~3 chars/token as conservative estimate
+	const maxChars = 24_000
 	truncatedInputs := make([]string, len(inputs))
 	for i, input := range inputs {
 		if len(input) > maxChars {

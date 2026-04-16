@@ -34,9 +34,9 @@ function MCPServerCard({
       type="button"
       onClick={() => onImport(server)}
       disabled={isImporting}
-      className="flex items-start gap-3 rounded-lg border border-border bg-card p-4 hover:border-border-hover transition-colors cursor-pointer text-left w-full disabled:opacity-50 disabled:cursor-not-allowed"
+      className="border-border bg-card hover:border-border-hover flex w-full cursor-pointer items-start gap-3 rounded-lg border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50"
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
+      <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-md">
         {server.iconUrl ? (
           <img
             src={server.iconUrl}
@@ -44,22 +44,22 @@ function MCPServerCard({
             className="h-6 w-6 rounded"
           />
         ) : (
-          <ServerIcon className="h-5 w-5 text-muted-foreground" />
+          <ServerIcon className="text-muted-foreground h-5 w-5" />
         )}
       </div>
-      <div className="flex-1 min-w-0">
-        <h3 className="font-medium text-foreground truncate">
+      <div className="min-w-0 flex-1">
+        <h3 className="text-foreground truncate font-medium">
           {server.title ?? server.registrySpecifier}
         </h3>
-        <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
+        <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
           {server.description}
         </p>
-        <p className="text-xs text-muted-foreground/70 mt-2">
+        <p className="text-muted-foreground/70 mt-2 text-xs">
           {server.registrySpecifier} v{server.version}
         </p>
       </div>
       {isImporting && (
-        <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
+        <Loader2Icon className="text-muted-foreground h-4 w-4 animate-spin" />
       )}
     </button>
   );
@@ -67,9 +67,9 @@ function MCPServerCard({
 
 function MCPServerCardSkeleton() {
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
+    <div className="border-border bg-card flex items-start gap-3 rounded-lg border p-4">
       <Skeleton className="h-10 w-10 shrink-0 rounded-md" />
-      <div className="flex-1 min-w-0 space-y-2">
+      <div className="min-w-0 flex-1 space-y-2">
         <Skeleton className="h-4 w-[150px]" />
         <Skeleton className="h-4 w-full" />
         <Skeleton className="h-3 w-[100px]" />
@@ -146,7 +146,7 @@ export default function ImportMCPTabContent({
   return (
     <div className="flex flex-col gap-4 p-4">
       <div className="relative">
-        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-500" />
+        <SearchIcon className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-500" />
         <Input
           type="text"
           placeholder="Search MCP servers..."
@@ -165,23 +165,23 @@ export default function ImportMCPTabContent({
       )}
 
       {error && (
-        <div className="rounded-lg border border-destructive bg-destructive/10 p-4 text-destructive">
+        <div className="border-destructive bg-destructive/10 text-destructive rounded-lg border p-4">
           Failed to load MCP catalog: {error.message}
         </div>
       )}
 
       {data && data.servers.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-          <ServerIcon className="h-12 w-12 mb-4" />
+        <div className="text-muted-foreground flex flex-col items-center justify-center py-12">
+          <ServerIcon className="mb-4 h-12 w-12" />
           <p>No MCP servers found</p>
           {debouncedSearch && (
-            <p className="text-sm mt-1">Try a different search term</p>
+            <p className="mt-1 text-sm">Try a different search term</p>
           )}
         </div>
       )}
 
       {data && data.servers.length > 0 && (
-        <div className="grid gap-3 max-h-[400px] overflow-y-auto">
+        <div className="grid max-h-[400px] gap-3 overflow-y-auto">
           {data.servers.map((server) => {
             const serverKey = `${server.registryId}-${server.registrySpecifier}`;
             return (

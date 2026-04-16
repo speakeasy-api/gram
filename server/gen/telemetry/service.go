@@ -33,6 +33,9 @@ type Service interface {
 	// Get observability overview metrics including time series, tool breakdowns,
 	// and summary stats
 	GetObservabilityOverview(context.Context, *GetObservabilityOverviewPayload) (res *GetObservabilityOverviewResult, err error)
+	// Get project-level overview including total chats, tool calls, active
+	// servers/users, and top lists
+	GetProjectOverview(context.Context, *GetProjectOverviewPayload) (res *GetProjectOverviewResult, err error)
 	// List available filter options (API keys or users) for the observability
 	// overview
 	ListFilterOptions(context.Context, *ListFilterOptionsPayload) (res *ListFilterOptionsResult, err error)
@@ -66,7 +69,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "listHooksTraces"}
+var MethodNames = [13]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "getProjectOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -214,6 +217,29 @@ type GetProjectMetricsSummaryPayload struct {
 	To string
 }
 
+// GetProjectOverviewPayload is the payload type of the telemetry service
+// getProjectOverview method.
+type GetProjectOverviewPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+}
+
+// GetProjectOverviewResult is the result type of the telemetry service
+// getProjectOverview method.
+type GetProjectOverviewResult struct {
+	// Current period summary metrics
+	Summary *ProjectOverviewSummary
+	// Previous period summary metrics for trend calculation
+	Comparison *ProjectOverviewSummary
+	// Indicates whether metrics are session-based or tool-call-based
+	MetricsMode string
+}
+
 // GetUserMetricsSummaryPayload is the payload type of the telemetry service
 // getUserMetricsSummary method.
 type GetUserMetricsSummaryPayload struct {
@@ -293,6 +319,14 @@ type HooksUserSummary struct {
 	FailureCount int64
 	// Failure rate as a decimal (0.0 to 1.0)
 	FailureRate float64
+}
+
+// Usage breakdown by LLM client/agent
+type LLMClientUsage struct {
+	// Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
+	ClientName string
+	// Number of messages (session mode) or tool calls (tool_call mode)
+	ActivityCount int64
 }
 
 // ListAttributeKeysPayload is the payload type of the telemetry service
@@ -418,6 +452,31 @@ type ObservabilitySummary struct {
 	FailedToolCalls int64
 	// Average tool latency in milliseconds
 	AvgLatencyMs float64
+}
+
+// Aggregated project-level summary metrics for a time period
+type ProjectOverviewSummary struct {
+	// Total number of chat sessions
+	TotalChats int64
+	// Number of resolved chat sessions
+	ResolvedChats int64
+	// Number of failed chat sessions
+	FailedChats int64
+	// Total number of tool calls
+	TotalToolCalls int64
+	// Number of failed tool calls
+	FailedToolCalls int64
+	// Number of MCP servers with at least one tool call in the time period
+	ActiveServersCount int64
+	// Number of unique users with activity in the time period
+	ActiveUsersCount int64
+	// Top 10 users by activity (# of messages or tool calls depending on
+	// metrics_mode)
+	TopUsers []*TopUser
+	// Top 10 MCP servers by tool call count
+	TopServers []*TopServer
+	// Breakdown of messages/activity by LLM client/agent
+	LlmClientBreakdown []*LLMClientUsage
 }
 
 // Aggregated metrics
@@ -789,6 +848,24 @@ type ToolUsage struct {
 	SuccessCount int64
 	// Failed calls (4xx/5xx status)
 	FailureCount int64
+}
+
+// Top MCP server by tool call count
+type TopServer struct {
+	// MCP server name
+	ServerName string
+	// Total number of tool calls
+	ToolCallCount int64
+}
+
+// Top user by activity
+type TopUser struct {
+	// User ID (internal or external depending on availability)
+	UserID string
+	// Type of user ID
+	UserType string
+	// Number of messages (session mode) or tool calls (tool_call mode)
+	ActivityCount int64
 }
 
 // Aggregated usage summary for a single user

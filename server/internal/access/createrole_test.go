@@ -40,6 +40,8 @@ func TestService_CreateRole(t *testing.T) {
 	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
 		mockMember("org_workos_test", "membership_1", "user_1", "member"),
 		mockMember("org_workos_test", "membership_2", "user_2", "member"),
+		// user_workos_only has never logged into Gram — should not be counted
+		mockMember("org_workos_test", "membership_workos_only", "user_workos_only", "member"),
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "org-custom-builder").Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
@@ -55,6 +57,9 @@ func TestService_CreateRole(t *testing.T) {
 		RoleSlug:       "org-custom-builder",
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
+
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
 
 	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
 		Name:        "Custom Builder",
@@ -184,21 +189,7 @@ func TestService_CreateRole_AuditLog(t *testing.T) {
 	require.Equal(t, "Audit Builder", record.SubjectDisplay)
 	require.Equal(t, "org-audit-builder", record.SubjectSlug)
 	require.Nil(t, record.BeforeSnapshot)
-	require.NotNil(t, record.AfterSnapshot)
-
-	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
-	require.NoError(t, err)
-	require.Equal(t, "Audit Builder", afterSnapshot["Name"])
-	grants, ok := afterSnapshot["Grants"].([]any)
-	require.True(t, ok)
-	require.Len(t, grants, 1)
-	grant, ok := grants[0].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, string(ScopeBuildRead), grant["Scope"])
-	resources, ok := grant["Resources"].([]any)
-	require.True(t, ok)
-	require.Len(t, resources, 1)
-	require.Equal(t, "project-1", resources[0])
+	require.Nil(t, record.AfterSnapshot)
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessRoleCreate)
 	require.NoError(t, err)

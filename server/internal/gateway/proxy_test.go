@@ -25,6 +25,33 @@ import (
 
 var funcs functions.ToolCaller
 
+type mockPlatformExecutor struct {
+	requestBody []byte
+	result      *PlatformResult
+	err         error
+}
+
+func (m *mockPlatformExecutor) ExecuteTool(_ context.Context, _ *ToolCallPlan, requestBody io.Reader) (*PlatformResult, error) {
+	if requestBody != nil {
+		body, err := io.ReadAll(requestBody)
+		if err != nil {
+			return nil, fmt.Errorf("read request body: %w", err)
+		}
+		m.requestBody = body
+	}
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.result != nil {
+		return m.result, nil
+	}
+	return &PlatformResult{
+		StatusCode:  http.StatusOK,
+		ContentType: "application/json",
+		Body:        []byte(`{"ok":true}`),
+	}, nil
+}
+
 func newTestToolDescriptor() *ToolDescriptor {
 	return &ToolDescriptor{
 		ID:               uuid.New().String(),
@@ -189,7 +216,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
 			enc := testenv.NewEncryptionClient(t)
-			policy, err := guardian.NewUnsafePolicy([]string{})
+			policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 			require.NoError(t, err)
 
 			tool := newTestToolDescriptor()
@@ -243,6 +270,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				funcs,
+				nil,
 			)
 
 			// Create response recorder
@@ -318,7 +346,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
 			enc := testenv.NewEncryptionClient(t)
-			policy, err := guardian.NewUnsafePolicy([]string{})
+			policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 			require.NoError(t, err)
 
 			tool := newTestToolDescriptor()
@@ -372,6 +400,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				funcs,
+				nil,
 			)
 
 			// Create response recorder
@@ -678,7 +707,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
 			enc := testenv.NewEncryptionClient(t)
-			policy, err := guardian.NewUnsafePolicy([]string{})
+			policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 			require.NoError(t, err)
 
 			tool := newTestToolDescriptor()
@@ -722,6 +751,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				funcs,
+				nil,
 			)
 
 			// Create response recorder
@@ -887,7 +917,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
 			enc := testenv.NewEncryptionClient(t)
-			policy, err := guardian.NewUnsafePolicy([]string{})
+			policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 			require.NoError(t, err)
 
 			// Create tool configuration
@@ -942,6 +972,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				funcs,
+				nil,
 			)
 
 			// Create response recorder
@@ -1253,7 +1284,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
 			enc := testenv.NewEncryptionClient(t)
-			policy, err := guardian.NewUnsafePolicy([]string{})
+			policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 			require.NoError(t, err)
 
 			tool := newTestToolDescriptor()
@@ -1282,6 +1313,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 				nil,
 				policy,
 				funcs,
+				nil,
 			)
 
 			// Create response recorder
@@ -1336,7 +1368,7 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	// Create resource descriptor
@@ -1383,6 +1415,7 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 	)
 
 	// Create response recorder
@@ -1476,7 +1509,7 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -1511,6 +1544,7 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 	)
 
 	// Create request body
@@ -1551,6 +1585,137 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	require.Equal(t, "5678900", memValue, "Memory trailer should be proxied through")
 }
 
+func TestToolProxy_Do_PlatformTool_UsesWrappedBodyPayload(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	enc := testenv.NewEncryptionClient(t)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	descriptor := newTestToolDescriptor()
+	descriptor.URN = urn.NewTool(urn.ToolKindPlatform, "logs", "search_logs")
+
+	toolCallPlan := NewPlatformToolCallPlan(descriptor, &PlatformToolCallPlan{
+		SourceSlug: "logs",
+		InputSchema: []byte(`{
+			"type":"object",
+			"properties":{"from":{"type":"string"},"limit":{"type":"integer"}},
+			"additionalProperties":false
+		}`),
+	})
+
+	requestBody := ToolCallBody{
+		Body: json.RawMessage(`{
+			"from":"2026-04-08T09:00:00Z",
+			"limit":25
+		}`),
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	platformExecutor := &mockPlatformExecutor{
+		result: &PlatformResult{
+			StatusCode:  http.StatusOK,
+			ContentType: "application/json",
+			Body:        []byte(`{"result":"ok"}`),
+		},
+	}
+
+	proxy := NewToolProxy(
+		logger,
+		tracerProvider,
+		meterProvider,
+		ToolCallSourceDirect,
+		enc,
+		nil,
+		policy,
+		funcs,
+		platformExecutor,
+	)
+
+	recorder := httptest.NewRecorder()
+	logAttrs := tm.HTTPLogAttributes{}
+
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+	}, toolCallPlan, logAttrs)
+	require.NoError(t, err)
+
+	require.JSONEq(t, `{
+		"from":"2026-04-08T09:00:00Z",
+		"limit":25
+	}`, string(platformExecutor.requestBody))
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.JSONEq(t, `{"result":"ok"}`, recorder.Body.String())
+	require.EqualValues(t, http.MethodPost, logAttrs["http.request.method"])
+	require.EqualValues(t, descriptor.URN.String(), logAttrs["http.route"])
+	require.EqualValues(t, int64(http.StatusOK), logAttrs["http.response.status_code"])
+}
+
+func TestToolProxy_Do_PlatformTool_PreservesRawBodyFieldPayload(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	enc := testenv.NewEncryptionClient(t)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	descriptor := newTestToolDescriptor()
+	descriptor.URN = urn.NewTool(urn.ToolKindPlatform, "logs", "search_logs")
+
+	toolCallPlan := NewPlatformToolCallPlan(descriptor, &PlatformToolCallPlan{
+		SourceSlug: "logs",
+		InputSchema: []byte(`{
+			"type":"object",
+			"properties":{
+				"body":{
+					"type":"object",
+					"properties":{"message":{"type":"string"}},
+					"required":["message"],
+					"additionalProperties":false
+				}
+			},
+			"required":["body"],
+			"additionalProperties":false
+		}`),
+	})
+
+	bodyBytes := []byte(`{"body":{"message":"hello"}}`)
+
+	platformExecutor := &mockPlatformExecutor{}
+
+	proxy := NewToolProxy(
+		logger,
+		tracerProvider,
+		meterProvider,
+		ToolCallSourceDirect,
+		enc,
+		nil,
+		policy,
+		funcs,
+		platformExecutor,
+	)
+
+	recorder := httptest.NewRecorder()
+
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+	}, toolCallPlan, tm.HTTPLogAttributes{})
+	require.NoError(t, err)
+
+	require.JSONEq(t, string(bodyBytes), string(platformExecutor.requestBody))
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
 func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
 	t.Parallel()
 
@@ -1570,7 +1735,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -1622,6 +1787,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
 		nil,
 		policy,
 		funcs,
+		nil,
 	)
 
 	// Create response recorder
@@ -1663,7 +1829,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -1707,6 +1873,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigNotInPlanNotSent(t *testing.T) {
 		nil,
 		policy,
 		funcs,
+		nil,
 	)
 
 	// Create response recorder
@@ -1767,7 +1934,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -1803,6 +1970,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 	)
 
 	// Create request body
@@ -1862,7 +2030,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -1914,6 +2082,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		nil,
 		policy,
 		funcs,
+		nil,
 	)
 
 	// Create response recorder
@@ -1956,7 +2125,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -1997,6 +2166,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T)
 		nil,
 		policy,
 		funcs,
+		nil,
 	)
 
 	recorder := httptest.NewRecorder()
@@ -2056,7 +2226,7 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2092,6 +2262,7 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 	)
 
 	// Create request body
@@ -2153,7 +2324,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigPrefersOverSystemEnv(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2205,6 +2376,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigPrefersOverSystemEnv(t *testing.T) {
 		nil,
 		policy,
 		funcs,
+		nil,
 	)
 
 	// Create response recorder
@@ -2266,7 +2438,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2302,6 +2474,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 	)
 
 	// Create request body
@@ -2380,7 +2553,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWhenInUserConfig(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2419,6 +2592,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWhenInUserConfig(t *testing.T) {
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 	)
 
 	// Create request body
@@ -2491,7 +2665,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNotSentWhenNotInUserConfig(t *testin
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2530,6 +2704,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNotSentWhenNotInUserConfig(t *testin
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 	)
 
 	// Create request body
@@ -2602,7 +2777,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputPrefersUserConfigOverSystemEnv(t *te
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2641,6 +2816,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputPrefersUserConfigOverSystemEnv(t *te
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 	)
 
 	// Create request body
@@ -2716,7 +2892,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWithRegularVariables(t *testing.
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2758,6 +2934,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWithRegularVariables(t *testing.
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 	)
 
 	// Create request body
@@ -2834,7 +3011,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
@@ -2870,6 +3047,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 	)
 
 	// Create request body

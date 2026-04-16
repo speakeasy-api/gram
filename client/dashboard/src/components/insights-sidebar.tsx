@@ -2,71 +2,149 @@ import type { ElementsConfig } from "@gram-ai/elements";
 import { Chat, GramElementsProvider } from "@gram-ai/elements";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Wand2, ChevronRight, Sparkles, Terminal } from "lucide-react";
-import { useState, useMemo, createContext, useContext } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { cn } from "@/lib/utils";
 import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
 
-// Context for sidebar state
-const InsightsContext = createContext<{
-  isExpanded: boolean;
-  setIsExpanded: (expanded: boolean) => void;
-}>({
-  isExpanded: false,
-  setIsExpanded: () => {},
-});
-
 /**
- * Hook to access the insights sidebar state.
- * Returns { isExpanded, setIsExpanded } to allow pages to adapt their layout
- * and control the sidebar.
+ * Per-page overrides for the global AI Insights panel. Pages mount
+ * <InsightsConfig {...} /> to register custom title/subtitle/suggestions
+ * /context/mcpConfig; on unmount, the global defaults take over again.
  */
-export function useInsightsState() {
-  return useContext(InsightsContext);
-}
-
-interface InsightsSidebarProps {
-  /** Base MCP config from useObservabilityMcpConfig */
-  mcpConfig: Omit<ElementsConfig, "variant" | "welcome" | "theme">;
-  /** Title shown in the chat welcome screen */
-  title: string;
-  /** Subtitle shown in the chat welcome screen */
-  subtitle: string;
-  /** Suggestion prompts for quick actions */
+export interface InsightsConfigOptions {
+  mcpConfig?: Omit<ElementsConfig, "variant" | "welcome" | "theme">;
+  title?: string;
+  subtitle?: string;
   suggestions?: Array<{
     title: string;
     label: string;
     prompt: string;
   }>;
-  /** Default expanded state */
-  defaultExpanded?: boolean;
-  /** Context information to pass to the chat (like current date range) */
   contextInfo?: string;
-  /** Hide the trigger button (e.g., when logs are disabled) */
+  /** Hide the trigger button (e.g., when logs are disabled on this page). */
   hideTrigger?: boolean;
-  /** Main content to render alongside the sidebar */
+}
+
+interface InsightsContextValue {
+  available: boolean;
+  isExpanded: boolean;
+  setIsExpanded: (expanded: boolean) => void;
+  /** Pages call this to register a per-page config override. Pass null to
+   *  clear (typically on unmount of <InsightsConfig />). */
+  setOverride: (override: InsightsConfigOptions | null) => void;
+}
+
+const InsightsContext = createContext<InsightsContextValue>({
+  available: false,
+  isExpanded: false,
+  setIsExpanded: () => {},
+  setOverride: () => {},
+});
+
+/**
+ * Hook to access the insights sidebar state. `available` is false when no
+ * InsightsProvider ancestor exists.
+ */
+export function useInsightsState() {
+  return useContext(InsightsContext);
+}
+
+/**
+ * Header-bar trigger for opening the AI Insights sidebar. Renders only
+ * when inside an InsightsProvider so it can be slotted globally (e.g. into
+ * PageHeaderBreadcrumbs) without appearing on pages that opt out via
+ * hideTrigger.
+ */
+export function InsightsTrigger({ className }: { className?: string }) {
+  const { available, isExpanded, setIsExpanded } = useInsightsState();
+  if (!available) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => setIsExpanded(!isExpanded)}
+      aria-label={isExpanded ? "Close AI Insights" : "Open AI Insights"}
+      aria-pressed={isExpanded}
+      className={cn(
+        "border-border hover:bg-accent hover:text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
+        isExpanded && "bg-accent text-accent-foreground",
+        className,
+      )}
+    >
+      <Wand2 className="size-3.5" />
+      <span className="font-medium">AI Insights</span>
+    </button>
+  );
+}
+
+/**
+ * Page-level config override. Mount this anywhere inside an InsightsProvider
+ * to swap in a custom prompt/suggestions/MCP filter. Cleans up on unmount,
+ * restoring the provider's defaults.
+ */
+export function InsightsConfig(options: InsightsConfigOptions) {
+  const { setOverride } = useInsightsState();
+  // Stringify the options so the effect re-fires only when content changes,
+  // not on every parent render that creates a fresh object identity.
+  const key = JSON.stringify(options);
+  useEffect(() => {
+    setOverride(options);
+    return () => setOverride(null);
+  }, [key, setOverride, options]);
+  return null;
+}
+
+interface InsightsProviderProps {
+  /** Default MCP config used when no <InsightsConfig> override is mounted. */
+  mcpConfig: Omit<ElementsConfig, "variant" | "welcome" | "theme">;
+  /** Default welcome title. */
+  title: string;
+  /** Default welcome subtitle. */
+  subtitle: string;
+  /** Default suggestion prompts. */
+  suggestions?: Array<{
+    title: string;
+    label: string;
+    prompt: string;
+  }>;
+  /** Default expanded state. */
+  defaultExpanded?: boolean;
+  /** Children rendered alongside the sidebar (page content). */
   children: React.ReactNode;
 }
 
 const SIDEBAR_MAX_WIDTH = 670;
 const SIDEBAR_MAX_PERCENT = 40; // Never more than 40% of viewport
 
-export function InsightsSidebar({
-  mcpConfig,
-  title,
-  subtitle,
-  suggestions = [],
+export function InsightsProvider({
+  mcpConfig: defaultMcpConfig,
+  title: defaultTitle,
+  subtitle: defaultSubtitle,
+  suggestions: defaultSuggestions = [],
   defaultExpanded = false,
-  contextInfo,
-  hideTrigger = false,
   children,
-}: InsightsSidebarProps) {
+}: InsightsProviderProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [override, setOverride] = useState<InsightsConfigOptions | null>(null);
   const { theme } = useMoonshineConfig();
 
-  // Calculate responsive sidebar width (min of fixed width or 40% of viewport)
+  // Resolve effective values: per-page override wins, fall back to defaults.
+  const mcpConfig = override?.mcpConfig ?? defaultMcpConfig;
+  const title = override?.title ?? defaultTitle;
+  const subtitle = override?.subtitle ?? defaultSubtitle;
+  const suggestions = override?.suggestions ?? defaultSuggestions;
+  const contextInfo = override?.contextInfo;
+  const hideTrigger = override?.hideTrigger ?? false;
+
   const sidebarWidth = `min(${SIDEBAR_MAX_WIDTH}px, ${SIDEBAR_MAX_PERCENT}vw)`;
 
-  // Build system prompt with context info
+  // Build system prompt with optional context info.
   const baseInstructions = `You are a helpful assistant for analyzing logs in Gram, an AI observability platform. Focus exclusively on log search and analysis.
 
 The current date is ${new Date().toISOString().split("T")[0]}.
@@ -109,9 +187,19 @@ When the user asks about "current period", "selected period", "this timeframe", 
     [mcpConfig, title, subtitle, suggestions, theme, systemPrompt],
   );
 
-  const contextValue = useMemo(
-    () => ({ isExpanded, setIsExpanded }),
-    [isExpanded],
+  const handleSetOverride = useCallback(
+    (next: InsightsConfigOptions | null) => setOverride(next),
+    [],
+  );
+
+  const contextValue = useMemo<InsightsContextValue>(
+    () => ({
+      available: !hideTrigger,
+      isExpanded,
+      setIsExpanded,
+      setOverride: handleSetOverride,
+    }),
+    [hideTrigger, isExpanded, handleSetOverride],
   );
 
   return (
@@ -119,7 +207,7 @@ When the user asks about "current period", "selected period", "this timeframe", 
       <div className="flex h-full w-full">
         {/* Main content area - shrinks when sidebar opens */}
         <div
-          className="flex-1 min-w-0 transition-all duration-300 ease-in-out overflow-hidden"
+          className="min-w-0 flex-1 overflow-hidden transition-all duration-300 ease-in-out"
           style={{
             marginRight: isExpanded ? sidebarWidth : 0,
           }}
@@ -136,38 +224,24 @@ When the user asks about "current period", "selected period", "this timeframe", 
           />
         )}
 
-        {/* Toggle button - shows when collapsed and not hidden */}
-        {!hideTrigger && (
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className={cn(
-              "fixed right-0 top-1/2 -translate-y-1/2 z-40 flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-2.5 rounded-l-lg shadow-lg hover:bg-primary/90 transition-all duration-300 group",
-              isExpanded && "opacity-0 pointer-events-none",
-            )}
-            aria-label="Open AI Insights"
-          >
-            <Wand2 className="size-4" />
-            <span className="text-sm font-medium">Ask AI</span>
-          </button>
-        )}
-
-        {/* Sidebar panel - fixed position that slides in */}
+        {/* Sidebar panel - fixed position that slides in.
+            Trigger lives in the top breadcrumb bar via <InsightsTrigger />. */}
         <div
           className={cn(
-            "fixed right-0 top-0 bottom-0 z-30 flex flex-col bg-background border-l border-border shadow-xl transition-transform duration-300 ease-in-out",
+            "bg-background border-border fixed top-0 right-0 bottom-0 z-30 flex flex-col border-l shadow-xl transition-transform duration-300 ease-in-out",
             isExpanded ? "translate-x-0" : "translate-x-full",
           )}
           style={{ width: sidebarWidth }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+          <div className="border-border bg-muted/30 flex items-center justify-between border-b px-4 py-3">
             <div className="flex items-center gap-2">
-              <Sparkles className="size-5 text-primary" />
+              <Sparkles className="text-primary size-5" />
               <span className="font-semibold">AI Insights</span>
             </div>
             <button
               onClick={() => setIsExpanded(false)}
-              className="p-1.5 rounded hover:bg-muted transition-colors"
+              className="hover:bg-muted rounded p-1.5 transition-colors"
               aria-label="Close AI Insights"
             >
               <ChevronRight className="size-5" />
@@ -176,11 +250,11 @@ When the user asks about "current period", "selected period", "this timeframe", 
 
           {/* Dev notice when MCP is not configured */}
           {devObservabilityMcpMissing && !("mcp" in mcpConfig) && (
-            <div className="mx-4 mt-3 flex items-start gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+            <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
               <Terminal className="mt-0.5 size-3.5 shrink-0" />
               <span>
                 AI tools are unavailable. Run{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">
+                <code className="bg-muted text-foreground rounded px-1 py-0.5 font-mono">
                   mise seed
                 </code>{" "}
                 to enable the observability MCP server.
@@ -199,3 +273,10 @@ When the user asks about "current period", "selected period", "this timeframe", 
     </InsightsContext.Provider>
   );
 }
+
+/**
+ * @deprecated Use <InsightsProvider> at the app shell level + <InsightsConfig>
+ * on individual pages that need custom prompts. This alias is kept temporarily
+ * to avoid breaking out-of-tree consumers; remove after migration.
+ */
+export const InsightsSidebar = InsightsProvider;

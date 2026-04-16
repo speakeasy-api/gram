@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -41,10 +43,11 @@ type GenerateChatTitleArgs struct {
 const (
 	defaultChatTitle       = "New Chat"
 	DefaultClaudeChatTitle = "Claude Code Session"
+	DefaultCursorChatTitle = "Cursor Session"
 )
 
 func isDefaultChatTitle(title string) bool {
-	return title == defaultChatTitle || title == DefaultClaudeChatTitle
+	return title == defaultChatTitle || title == DefaultClaudeChatTitle || title == DefaultCursorChatTitle
 }
 
 func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) error {
@@ -54,6 +57,9 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 	}
 
 	chat, err := g.repo.GetChat(ctx, chatID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil // chat was deleted, nothing to do
+	}
 	if err != nil {
 		return fmt.Errorf("get chat: %w", err)
 	}
@@ -130,7 +136,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		OrgID:     orgID,
 		ProjectID: projectID,
 		ChatID:    uuid.Nil,
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			openrouter.CreateMessageSystem(systemPrompt),
 			openrouter.CreateMessageUser(conversationContext),
 		},

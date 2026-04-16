@@ -137,6 +137,7 @@ var _ = Service("mcpRegistries", func() {
 		Meta("openapi:operationId", "getMCPServerDetails")
 		Meta("openapi:extension:x-speakeasy-name-override", "getServerDetails")
 	})
+
 })
 
 var ExternalMCPServer = Type("ExternalMCPServer", func() {
@@ -151,7 +152,10 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 		Example("1.0.0")
 	})
 	Attribute("description", String, "Description of what the server does")
-	Attribute("registry_id", String, "ID of the registry this server came from", func() {
+	Attribute("registry_id", String, "ID of the external MCP registry this server came from", func() {
+		Format(FormatUUID)
+	})
+	Attribute("organization_mcp_collection_registry_id", String, "ID of the internal collection registry this server came from", func() {
 		Format(FormatUUID)
 	})
 	Attribute("title", String, "Display name for the server")
@@ -162,7 +166,7 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 	Attribute("tools", ArrayOf(ExternalMCPTool), "Tools available on the server")
 	Attribute("remotes", ArrayOf(ExternalMCPRemote), "Available remote endpoints for the server")
 
-	Required("registry_specifier", "version", "description", "registry_id")
+	Required("registry_specifier", "version", "description")
 })
 
 var MCPRegistry = Type("MCPRegistry", func() {

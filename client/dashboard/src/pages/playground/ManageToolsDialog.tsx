@@ -9,32 +9,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
-import { Tool, Toolset } from "@/lib/toolTypes";
+import { Tool, Toolset, getToolSourceLabel } from "@/lib/toolTypes";
 import { Button } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EditToolDialog } from "./EditToolDialog";
-
-function getToolSource(
-  tool: Tool,
-  documentIdToName?: Record<string, string>,
-  functionIdToName?: Record<string, string>,
-): string {
-  if (tool.type === "http") {
-    if (tool.packageName) return tool.packageName;
-    if (tool.openapiv3DocumentId && documentIdToName) {
-      return documentIdToName[tool.openapiv3DocumentId];
-    }
-    if (tool.deploymentId) return tool.deploymentId;
-    return "custom";
-  } else if (tool.type === "function") {
-    if (tool.functionId && functionIdToName) {
-      return functionIdToName[tool.functionId];
-    }
-    return "Functions";
-  }
-  return "unknown";
-}
 
 interface ManageToolsDialogProps {
   open: boolean;
@@ -100,7 +79,10 @@ export function ManageToolsDialog({
 
     const sourceSet = new Set<string>();
     allTools.tools.forEach((tool) => {
-      const source = getToolSource(tool, documentIdToName, functionIdToName);
+      const source = getToolSourceLabel(tool, {
+        documentIdToName,
+        functionIdToName,
+      });
       sourceSet.add(source);
     });
 
@@ -123,7 +105,10 @@ export function ManageToolsDialog({
 
     return displayTools.filter((tool) => {
       if (sourceFilter !== "all") {
-        const source = getToolSource(tool, documentIdToName, functionIdToName);
+        const source = getToolSourceLabel(tool, {
+          documentIdToName,
+          functionIdToName,
+        });
         if (source !== sourceFilter) return false;
       }
 
@@ -166,7 +151,7 @@ export function ManageToolsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="min-w-3xl max-h-[80vh] flex flex-col">
+      <Dialog.Content className="flex max-h-[80vh] min-w-3xl flex-col">
         <Dialog.Header>
           <Dialog.Title>
             {mode === "add" ? "Add tools" : "Manage tools"}
@@ -179,7 +164,7 @@ export function ManageToolsDialog({
           </Dialog.Description>
         </Dialog.Header>
 
-        <div className="flex flex-col gap-4 flex-1 min-h-0">
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
           {/* Mode toggle + Filters */}
           <div className="flex gap-2">
             <Select
@@ -220,11 +205,11 @@ export function ManageToolsDialog({
           {/* Tool list with selection mode */}
           <div className="flex-1 overflow-auto">
             {isLoading ? (
-              <div className="text-center py-8 text-neutral-500">
+              <div className="py-8 text-center text-neutral-500">
                 Loading tools...
               </div>
             ) : filteredTools.length === 0 ? (
-              <div className="text-center py-8 text-neutral-500">
+              <div className="py-8 text-center text-neutral-500">
                 {noResultsMessage}
               </div>
             ) : (

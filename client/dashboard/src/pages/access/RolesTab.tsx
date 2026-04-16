@@ -24,6 +24,7 @@ import { useState } from "react";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { Ellipsis } from "lucide-react";
+import { RequireScope } from "@/components/require-scope";
 
 export function RolesTab() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -101,19 +102,23 @@ export function RolesTab() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onSelect={() => setTimeout(() => setEditingRole(role), 0)}
-            >
-              Edit
-            </DropdownMenuItem>
-            {!role.isSystem && (
+            <RequireScope scope="org:admin" level="component">
               <DropdownMenuItem
-                className="text-destructive focus:text-destructive cursor-pointer"
-                onSelect={() => setTimeout(() => setDeletingRole(role), 0)}
+                className="cursor-pointer"
+                onSelect={() => setTimeout(() => setEditingRole(role), 0)}
               >
-                Delete
+                Edit
               </DropdownMenuItem>
+            </RequireScope>
+            {!role.isSystem && (
+              <RequireScope scope="org:admin" level="component">
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive cursor-pointer"
+                  onSelect={() => setTimeout(() => setDeletingRole(role), 0)}
+                >
+                  Delete
+                </DropdownMenuItem>
+              </RequireScope>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -123,19 +128,21 @@ export function RolesTab() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
+      <div className="mb-1 flex items-center justify-between">
         <div>
           <Heading variant="h4">Roles</Heading>
           <Type muted small className="mt-1">
             Define roles and their associated permissions.
           </Type>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Button.LeftIcon>
-            <Icon name="plus" className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Add Role</Button.Text>
-        </Button>
+        <RequireScope scope="org:admin" level="component">
+          <Button onClick={() => setIsCreateOpen(true)}>
+            <Button.LeftIcon>
+              <Icon name="plus" className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Add Role</Button.Text>
+          </Button>
+        </RequireScope>
       </div>
 
       {isLoading ? (
@@ -151,7 +158,7 @@ export function RolesTab() {
         />
       )}
 
-      <div className="mt-12 rounded-md border border-border/50 bg-muted/30 px-4 py-3">
+      <div className="border-border/50 bg-muted/30 mt-12 rounded-md border px-4 py-3">
         <Type variant="subheading" className="mb-4">
           About System roles
         </Type>
@@ -159,7 +166,7 @@ export function RolesTab() {
           <Badge
             variant="outline"
             size="sm"
-            className="shrink-0 mt-0.5 bg-white dark:bg-zinc-900 w-16 justify-center"
+            className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
           >
             Member
           </Badge>
@@ -168,11 +175,11 @@ export function RolesTab() {
             organization and the ability to connect to MCP servers.
           </Type>
         </div>
-        <div className="flex items-start gap-3 text-sm mt-2">
+        <div className="mt-2 flex items-start gap-3 text-sm">
           <Badge
             variant="outline"
             size="sm"
-            className="shrink-0 mt-0.5 bg-white dark:bg-zinc-900 w-16 justify-center"
+            className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
           >
             Admin
           </Badge>

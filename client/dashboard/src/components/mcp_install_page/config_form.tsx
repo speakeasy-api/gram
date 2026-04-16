@@ -273,7 +273,7 @@ export function useMcpMetadataMetadataForm(
         metadataParams.logoAssetId ? (
           <AssetImage
             assetId={metadataParams.logoAssetId}
-            className="w-16 h-16"
+            className="h-16 w-16"
           />
         ) : undefined,
     },
@@ -338,7 +338,7 @@ export function InstallPageConfigForm({
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border bg-muted/20 p-2">
+    <div className="bg-muted/20 flex items-center gap-2 rounded-lg border p-2">
       <CodeBlock
         className="flex-grow overflow-hidden"
         innerClassName="!p-2 !pr-10 !bg-white dark:!bg-zinc-950"
@@ -380,7 +380,7 @@ export function InstallPageConfigForm({
                 allowedExtensions={["png", "jpg", "jpeg"]}
                 onUpload={form.logoUploadHandlers.onUpload}
                 renderFilePreview={form.logoUploadHandlers.renderFilePreview}
-                className="w-full max-h-[200px]"
+                className="max-h-[200px] w-full"
               />
             </div>
             <div>
@@ -398,7 +398,7 @@ export function InstallPageConfigForm({
                 {...form.urlInputHandlers}
               />
               {form.valid.message && (
-                <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                <span className="text-destructive absolute -bottom-4 left-0 text-xs">
                   {form.valid.message}
                 </span>
               )}
@@ -417,7 +417,7 @@ export function InstallPageConfigForm({
                 {...form.docsTextInputHandlers}
               />
               {form.valid.message && (
-                <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                <span className="text-destructive absolute -bottom-4 left-0 text-xs">
                   {form.valid.message}
                 </span>
               )}
@@ -437,7 +437,7 @@ export function InstallPageConfigForm({
                 {...form.installationOverrideUrlInputHandlers}
               />
               {form.valid.message && (
-                <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                <span className="text-destructive absolute -bottom-4 left-0 text-xs">
                   {form.valid.message}
                 </span>
               )}
@@ -466,7 +466,7 @@ export function InstallPageConfigForm({
       <Link external to={installPageUrl} noIcon>
         <Button variant="primary" className="px-4">
           <Button.LeftIcon>
-            <Icon name="external-link" className="w-4 h-4" />
+            <Icon name="external-link" className="h-4 w-4" />
           </Button.LeftIcon>
           <Button.Text>View</Button.Text>
         </Button>

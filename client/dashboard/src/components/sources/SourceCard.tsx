@@ -27,7 +27,7 @@ export type NamedAsset =
       name: string;
       slug: string;
       type: "externalmcp";
-      registryId: string;
+      registryId?: string;
       iconUrl?: string;
     };
 
@@ -103,14 +103,14 @@ export function SourceCard({
         <img
           src={asset.iconUrl}
           alt={asset.name}
-          className="w-12 h-12 object-contain"
+          className="h-12 w-12 object-contain"
         />
       );
     }
     if (asset.type === "externalmcp") {
-      return <Network className="w-8 h-8 text-muted-foreground" />;
+      return <Network className="text-muted-foreground h-8 w-8" />;
     }
-    return <FileCode className="w-8 h-8 text-muted-foreground" />;
+    return <FileCode className="text-muted-foreground h-8 w-8" />;
   })();
 
   return (
@@ -121,16 +121,16 @@ export function SourceCard({
     >
       <DotCard icon={iconContent}>
         {/* Header row with name and actions */}
-        <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="mb-2 flex items-start justify-between gap-2">
           <Type
             variant="subheading"
             as="div"
-            className="truncate flex-1 text-md group-hover:text-primary transition-colors"
+            className="text-md group-hover:text-primary flex-1 truncate transition-colors"
             title={displayName}
           >
             {displayName}
           </Type>
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex shrink-0 items-center gap-1">
             {causingFailure && <AssetIsCausingFailureNotice />}
             <div onClick={(e) => e.stopPropagation()}>
               <MoreActions actions={actions} />
@@ -139,11 +139,11 @@ export function SourceCard({
         </div>
 
         {/* Footer row with type badge and open link */}
-        <div className="flex items-center justify-between gap-2 mt-auto pt-2">
+        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           <Badge variant="neutral">{config.label}</Badge>
-          <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors text-sm">
+          <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
             <span>Open</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <ArrowRight className="h-3.5 w-3.5" />
           </div>
         </div>
       </DotCard>
@@ -153,19 +153,19 @@ export function SourceCard({
 
 export function SourceCardSkeleton() {
   return (
-    <div className="bg-card text-card-foreground flex flex-row rounded-xl border overflow-hidden">
+    <div className="bg-card text-card-foreground flex flex-row overflow-hidden rounded-xl border">
       {/* Dot pattern sidebar placeholder */}
-      <div className="w-40 shrink-0 bg-muted/50 animate-pulse border-r" />
+      <div className="bg-muted/50 w-40 shrink-0 animate-pulse border-r" />
 
       {/* Content area */}
-      <div className="p-4 flex flex-col flex-1">
+      <div className="flex flex-1 flex-col p-4">
         {/* Name placeholder */}
-        <div className="h-5 w-2/3 bg-muted rounded animate-pulse mb-2" />
+        <div className="bg-muted mb-2 h-5 w-2/3 animate-pulse rounded" />
 
         {/* Footer row */}
-        <div className="flex items-center justify-between gap-2 mt-auto pt-2">
-          <div className="h-5 w-16 bg-muted rounded-full animate-pulse" />
-          <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+          <div className="bg-muted h-5 w-16 animate-pulse rounded-full" />
+          <div className="bg-muted h-4 w-24 animate-pulse rounded" />
         </div>
       </div>
     </div>
@@ -182,7 +182,7 @@ const AssetIsCausingFailureNotice = () => {
         className="cursor-pointer"
         aria-label="View deployment failure details"
       >
-        <CircleAlertIcon className="size-3 text-destructive" />
+        <CircleAlertIcon className="text-destructive size-3" />
       </HoverCardTrigger>
       <HoverCardPortal>
         <HoverCardContent side="bottom" className="text-sm" asChild>
@@ -191,7 +191,7 @@ const AssetIsCausingFailureNotice = () => {
               This API source caused the latest deployment to fail. Remove or
               update it to prevent future failures.
             </div>
-            <div className="flex justify-end mt-3">
+            <div className="mt-3 flex justify-end">
               <routes.deployments.deployment.Link
                 className="text-link"
                 params={[latestDeployment.data?.deployment?.id ?? ""]}

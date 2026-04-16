@@ -30,11 +30,13 @@ import (
 	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -58,6 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -67,6 +70,7 @@ type Service struct {
 	logger              *slog.Logger
 	tracer              trace.Tracer
 	metrics             *metrics
+	guardianPolicy      *guardian.Policy
 	db                  *pgxpool.Pool
 	authRepo            *auth_repo.Queries
 	toolsetsRepo        *toolsets_repo.Queries
@@ -83,7 +87,7 @@ type Service struct {
 	billingRepository   billing.Repository
 	toolsetCache        cache.TypedCacheObject[mv.ToolsetBaseContents]
 	features            *productfeatures.Client
-	telemetryService    *tm.Service
+	telemLogger         *tm.Logger
 	vectorToolStore     *rag.ToolsetVectorStore
 	temporal            *temporal.Environment
 	sessions            *sessions.Manager
@@ -91,6 +95,7 @@ type Service struct {
 	externalmcpRepo     *externalmcp_repo.Queries
 	deploymentsRepo     *deployments_repo.Queries
 	enc                 *encryption.Client
+	access              *access.Manager
 }
 
 type oauthTokenInputs struct {
@@ -130,20 +135,30 @@ func NewService(
 	oauthService OAuthService,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
+	telemLogger *tm.Logger,
 	telemSvc *tm.Service,
 	features *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
+	triggerApp *bgtriggers.App,
 	temporal *temporal.Environment,
-	accessLoader auth.AccessLoader,
+	accessManager *access.Manager,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 	logger = logger.With(attr.SlogComponent("mcp"))
 
+	platformSvc := platformtoolsruntime.NewService(
+		logger,
+		db,
+		telemSvc,
+		platformtoolsruntime.WithTriggerTools(triggerApp),
+	)
+
 	return &Service{
 		logger:          logger,
 		tracer:          tracer,
 		metrics:         newMetrics(meter, logger),
+		guardianPolicy:  guardianPolicy,
 		db:              db,
 		authRepo:        auth_repo.New(db),
 		toolsetsRepo:    toolsets_repo.New(db),
@@ -151,7 +166,7 @@ func NewService(
 		orgsRepo:        organizations_repo.New(db),
 		deploymentsRepo: deployments_repo.New(db),
 		externalmcpRepo: externalmcp_repo.New(db),
-		auth:            auth.New(logger, db, sessions, accessLoader),
+		auth:            auth.New(logger, db, sessions, accessManager),
 		env:             env,
 		serverURL:       serverURL,
 		posthog:         posthog,
@@ -164,19 +179,21 @@ func NewService(
 			cacheImpl,
 			guardianPolicy,
 			funcCaller,
+			platformSvc,
 		),
 		oauthService:        oauthService,
 		oauthRepo:           oauth_repo.New(db),
 		billingTracker:      billingTracker,
 		billingRepository:   billingRepository,
 		toolsetCache:        cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
-		telemetryService:    telemSvc,
+		telemLogger:         telemLogger,
 		features:            features,
 		vectorToolStore:     vectorToolStore,
 		temporal:            temporal,
 		sessions:            sessions,
 		chatSessionsManager: chatSessionsManager,
 		enc:                 enc,
+		access:              accessManager,
 	}
 }
 
@@ -547,8 +564,23 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.C(oops.CodeNotFound)
 	}
 
-	// IMPORTANT: We should not use gram environments if we are not in an authenticated context
 	if authenticated {
+		// Private MCPs require mcp:connect on the specific toolset.
+		// Public MCPs are open to everyone — no RBAC enforcement.
+		if !toolset.McpIsPublic {
+			// Ensure grants are loaded — not all auth strategies in authenticateToken
+			// go through auth.Authorize (which calls PrepareContext). This is a no-op
+			// if grants are already in context.
+			ctx, err = s.access.PrepareContext(ctx)
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").Log(ctx, s.logger)
+			}
+			if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPConnect, ResourceID: toolset.ID.String()}); err != nil {
+				return err
+			}
+		}
+
+		// IMPORTANT: We should not use gram environments if we are not in an authenticated context
 		selectedEnvironment = conv.PtrValOr(conv.FromPGText[string](toolset.DefaultEnvironmentSlug), "")
 		if passedEnv := r.Header.Get("Gram-Environment"); passedEnv != "" {
 			selectedEnvironment = conv.ToSlug(passedEnv)
@@ -846,9 +878,9 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
+		return handleToolsList(ctx, s.logger, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemetryService, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
@@ -856,7 +888,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "resources/list":
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "resources/read":
-		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemetryService)
+		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger)
 	default:
 		return nil, &rpcError{
 			ID:      req.ID,
@@ -1007,6 +1039,7 @@ func (s *Service) HandleToolsList(
 	result, err := handleToolsList(
 		ctx,
 		s.logger,
+		s.guardianPolicy,
 		s.db,
 		s.env,
 		payload,
@@ -1075,6 +1108,7 @@ func (s *Service) HandleToolsCall(
 		ctx,
 		s.logger,
 		s.metrics,
+		s.guardianPolicy,
 		s.db,
 		s.env,
 		payload,
@@ -1083,7 +1117,7 @@ func (s *Service) HandleToolsCall(
 		s.billingTracker,
 		s.billingRepository,
 		&s.toolsetCache,
-		s.telemetryService,
+		s.telemLogger,
 		s.vectorToolStore,
 		s.temporal,
 		s.mcpMetadataRepo,

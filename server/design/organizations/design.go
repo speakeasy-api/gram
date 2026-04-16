@@ -45,11 +45,14 @@ var OrganizationInvitationAccept = Type("OrganizationInvitationAccept", func() {
 	Required("email", "state", "organization_name", "accept_invitation_url")
 })
 
-// OrganizationUser is a row from organization_user_relationships (active members).
+// OrganizationUser is a row from organization_user_relationships joined with the users table.
 var OrganizationUser = Type("OrganizationUser", func() {
 	Attribute("id", String, "Gram relationship row ID.")
 	Attribute("organization_id", String, "Gram organization ID.")
 	Attribute("user_id", String, "Gram user ID.")
+	Attribute("name", String, "User display name.")
+	Attribute("email", String, "User email address.")
+	Attribute("photo_url", String, "User photo URL.")
 	Attribute("workos_membership_id", String, "WorkOS organization membership ID when known.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
@@ -58,7 +61,7 @@ var OrganizationUser = Type("OrganizationUser", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "organization_id", "user_id", "created_at", "updated_at")
+	Required("id", "organization_id", "user_id", "name", "email", "created_at", "updated_at")
 })
 
 var ListInvitesResult = Type("ListInvitesResult", func() {

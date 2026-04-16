@@ -9,6 +9,7 @@ type ToolCallType string
 const (
 	ToolCallTypeHTTP        ToolCallType = "http"
 	ToolCallTypeFunction    ToolCallType = "function"
+	ToolCallTypePlatform    ToolCallType = "platform"
 	ToolCallTypeHigherOrder ToolCallType = "higher-order"
 	ToolCallTypeExternalMCP ToolCallType = "external-mcp"
 )

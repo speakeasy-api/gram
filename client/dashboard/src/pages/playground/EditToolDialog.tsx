@@ -4,43 +4,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
-import { Tool } from "@/lib/toolTypes";
+import {
+  Tool,
+  getToolSourceLabel,
+  getToolTypeLabel,
+  toolSupportsAnnotations,
+} from "@/lib/toolTypes";
 import { Button } from "@speakeasy-api/moonshine";
 import { FileCode, PencilRuler, SquareFunction } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { McpIcon } from "@/components/ui/mcp-icon";
 
 function getToolIcon(tool: Tool) {
   if (tool.type === "http") return FileCode;
   if (tool.type === "function") return SquareFunction;
+  if (tool.type === "platform") return McpIcon;
   return PencilRuler;
-}
-
-function getToolSource(
-  tool: Tool,
-  documentIdToName?: Record<string, string>,
-  functionIdToName?: Record<string, string>,
-): string {
-  if (tool.type === "http") {
-    if (tool.packageName) return tool.packageName;
-    if (tool.openapiv3DocumentId && documentIdToName) {
-      return documentIdToName[tool.openapiv3DocumentId] || "OpenAPI";
-    }
-    if (tool.deploymentId) return tool.deploymentId;
-    return "Custom";
-  } else if (tool.type === "function") {
-    if (tool.functionId && functionIdToName) {
-      return functionIdToName[tool.functionId] || "Functions";
-    }
-    return "Functions";
-  }
-  return "Unknown";
-}
-
-function getToolTypeLabel(tool: Tool): string {
-  if (tool.type === "http") return "HTTP";
-  if (tool.type === "function") return "Function";
-  if (tool.type === "prompt") return "Prompt";
-  return "Unknown";
 }
 
 /** Get the effective annotation value: variation override > base annotation > undefined */
@@ -52,7 +31,7 @@ function getAnnotationValue(
     | "idempotentHint"
     | "openWorldHint",
 ): boolean | undefined {
-  if (tool.type === "prompt" || tool.type === "external-mcp") return undefined;
+  if (!toolSupportsAnnotations(tool)) return undefined;
   const variationVal = tool.variation?.[field];
   if (variationVal !== undefined) return variationVal;
   return tool.annotations?.[field];
@@ -97,7 +76,7 @@ export function EditToolDialog({
   const [saving, setSaving] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  const hasAnnotations = tool?.type === "http" || tool?.type === "function";
+  const hasAnnotations = tool ? toolSupportsAnnotations(tool) : false;
 
   // Reset form when tool changes
   useEffect(() => {
@@ -180,7 +159,10 @@ export function EditToolDialog({
   if (!tool) return null;
 
   const ToolIcon = getToolIcon(tool);
-  const source = getToolSource(tool, documentIdToName, functionIdToName);
+  const source = getToolSourceLabel(tool, {
+    documentIdToName,
+    functionIdToName,
+  });
   const typeLabel = getToolTypeLabel(tool);
 
   const origTitle = tool.variation?.title ?? tool.annotations?.title ?? "";
@@ -200,10 +182,10 @@ export function EditToolDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="min-w-2xl max-w-3xl">
+      <Dialog.Content className="max-w-3xl min-w-2xl">
         <Dialog.Header>
           <Dialog.Title className="flex items-center gap-2">
-            <ToolIcon className="size-4 text-muted-foreground" />
+            <ToolIcon className="text-muted-foreground size-4" />
             <span>{source}</span>
             <Badge variant="secondary" className="text-xs">
               {typeLabel}
@@ -212,7 +194,7 @@ export function EditToolDialog({
         </Dialog.Header>
 
         {/* Editable fields */}
-        <div className="py-4 space-y-4">
+        <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="tool-name" className="text-sm font-medium">
               Name
@@ -257,14 +239,14 @@ export function EditToolDialog({
           {hasAnnotations && (
             <div className="space-y-3">
               <Label className="text-sm font-medium">Behavior Hints</Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Override how this tool is presented to AI models.
               </p>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm">Read-only</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-muted-foreground text-xs">
                       Tool does not modify its environment
                     </p>
                   </div>
@@ -277,7 +259,7 @@ export function EditToolDialog({
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm">Destructive</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-muted-foreground text-xs">
                       Tool may perform destructive updates
                     </p>
                   </div>
@@ -290,7 +272,7 @@ export function EditToolDialog({
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm">Idempotent</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-muted-foreground text-xs">
                       Repeated calls with same arguments have no additional
                       effect
                     </p>
@@ -304,7 +286,7 @@ export function EditToolDialog({
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm">Open-world</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-muted-foreground text-xs">
                       Tool interacts with external entities
                     </p>
                   </div>
@@ -320,7 +302,7 @@ export function EditToolDialog({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-between pt-4 border-t">
+        <div className="flex items-center justify-between border-t pt-4">
           <Button variant="destructive-secondary" onClick={handleRemove}>
             Remove
           </Button>

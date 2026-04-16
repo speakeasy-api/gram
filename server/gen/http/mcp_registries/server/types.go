@@ -39,8 +39,10 @@ type GetServerDetailsResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
-	// ID of the registry this server came from
-	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
+	// ID of the external MCP registry this server came from
+	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
+	// ID of the internal collection registry this server came from
+	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -820,8 +822,10 @@ type ExternalMCPServerResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
-	// ID of the registry this server came from
-	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
+	// ID of the external MCP registry this server came from
+	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
+	// ID of the internal collection registry this server came from
+	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -899,13 +903,14 @@ func NewListCatalogResponseBody(res *mcpregistries.ListCatalogResult) *ListCatal
 // result of the "getServerDetails" endpoint of the "mcpRegistries" service.
 func NewGetServerDetailsResponseBody(res *types.ExternalMCPServer) *GetServerDetailsResponseBody {
 	body := &GetServerDetailsResponseBody{
-		RegistrySpecifier: res.RegistrySpecifier,
-		Version:           res.Version,
-		Description:       res.Description,
-		RegistryID:        res.RegistryID,
-		Title:             res.Title,
-		IconURL:           res.IconURL,
-		Meta:              res.Meta,
+		RegistrySpecifier:                   res.RegistrySpecifier,
+		Version:                             res.Version,
+		Description:                         res.Description,
+		RegistryID:                          res.RegistryID,
+		OrganizationMcpCollectionRegistryID: res.OrganizationMcpCollectionRegistryID,
+		Title:                               res.Title,
+		IconURL:                             res.IconURL,
+		Meta:                                res.Meta,
 	}
 	if res.Tools != nil {
 		body.Tools = make([]*ExternalMCPToolResponseBody, len(res.Tools))

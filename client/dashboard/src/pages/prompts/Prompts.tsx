@@ -41,7 +41,7 @@ export default function Prompts() {
       <Page.Section.CTA>
         <Button onClick={() => routes.prompts.newPrompt.goTo()}>
           <Button.LeftIcon>
-            <Plus className="w-4 h-4" />
+            <Plus className="h-4 w-4" />
           </Button.LeftIcon>
           <Button.Text>New Prompt</Button.Text>
         </Button>

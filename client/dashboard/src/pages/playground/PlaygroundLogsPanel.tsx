@@ -19,14 +19,14 @@ import { useMemo, useState } from "react";
 function StatusIcon({ isSuccess }: { isSuccess: boolean }) {
   if (isSuccess) {
     return (
-      <div className="rounded-full bg-success-default/10 p-0.5 shrink-0">
-        <CheckIcon className="size-3 stroke-success-default stroke-2" />
+      <div className="bg-success-default/10 shrink-0 rounded-full p-0.5">
+        <CheckIcon className="stroke-success-default size-3 stroke-2" />
       </div>
     );
   }
   return (
-    <div className="rounded-full bg-destructive-default/10 p-0.5 shrink-0">
-      <XIcon className="size-3 stroke-destructive-default stroke-2" />
+    <div className="bg-destructive-default/10 shrink-0 rounded-full p-0.5">
+      <XIcon className="stroke-destructive-default size-3 stroke-2" />
     </div>
   );
 }
@@ -128,10 +128,10 @@ export function PlaygroundLogsPanel({
     error instanceof ServiceError && error.statusCode === 404;
 
   return (
-    <div className="h-full flex flex-col border-l">
+    <div className="flex h-full flex-col border-l">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
           Logs ({logs.length})
         </span>
         <div className="flex items-center gap-1">
@@ -180,41 +180,41 @@ export function PlaygroundLogsPanel({
                 <button
                   key={log.id}
                   onClick={() => setSelectedLog(log)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-muted/30 transition-colors flex items-start gap-2.5 border-b border-border/40"
+                  className="hover:bg-muted/30 border-border/40 flex w-full items-start gap-2.5 border-b px-4 py-2.5 text-left transition-colors"
                 >
                   <StatusIcon isSuccess={isSuccess} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-0.5 flex items-center gap-1.5">
                       {toolName && (
-                        <span className="font-medium text-xs truncate">
+                        <span className="truncate text-xs font-medium">
                           {toolName}
                         </span>
                       )}
                       {log.severityText && (
                         <Badge
                           variant={getSeverityVariant(log.severityText)}
-                          className="text-[10px] px-1 py-0 h-4 font-semibold"
+                          className="h-4 px-1 py-0 text-[10px] font-semibold"
                         >
                           {log.severityText}
                         </Badge>
                       )}
                     </div>
-                    <div className="font-mono text-[10px] text-muted-foreground truncate mb-0.5">
+                    <div className="text-muted-foreground mb-0.5 truncate font-mono text-[10px]">
                       {log.body}
                     </div>
-                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <div className="text-muted-foreground flex items-center gap-1.5 text-[10px]">
                       <span className="font-mono">{timestamp}</span>
                       {log.traceId && (
                         <>
                           <span>•</span>
-                          <span className="font-mono truncate max-w-[100px]">
+                          <span className="max-w-[100px] truncate font-mono">
                             {log.traceId.slice(0, 8)}...
                           </span>
                         </>
                       )}
                     </div>
                   </div>
-                  <ChevronRightIcon className="size-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                  <ChevronRightIcon className="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
                 </button>
               );
             })}
@@ -224,8 +224,8 @@ export function PlaygroundLogsPanel({
 
       {/* Detail View */}
       {selectedLog && (
-        <div className="border-t bg-muted/20">
-          <div className="px-3 py-2.5 border-b flex items-center justify-between bg-inherit">
+        <div className="bg-muted/20 border-t">
+          <div className="flex items-center justify-between border-b bg-inherit px-3 py-2.5">
             <span className="text-xs font-semibold">
               {getToolName(selectedLog) || "Log Details"}
             </span>
@@ -238,25 +238,25 @@ export function PlaygroundLogsPanel({
               <XCircleIcon className="size-3.5" />
             </Button>
           </div>
-          <div className="h-[280px] p-3 overflow-y-auto">
+          <div className="h-[280px] overflow-y-auto p-3">
             <div className="space-y-3">
               {/* Log Details */}
               <div className="space-y-1.5">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                <div className="text-muted-foreground mb-1.5 text-[11px] font-semibold tracking-wider uppercase">
                   Details
                 </div>
-                <div className="bg-background/60 rounded border border-border/40 divide-y divide-border/40">
-                  <div className="px-2.5 py-1.5 flex justify-between text-[11px]">
+                <div className="bg-background/60 border-border/40 divide-border/40 divide-y rounded border">
+                  <div className="flex justify-between px-2.5 py-1.5 text-[11px]">
                     <span className="text-muted-foreground font-medium">
                       Service
                     </span>
-                    <span className="font-mono text-right">
+                    <span className="text-right font-mono">
                       {selectedLog.service?.name}
                       {selectedLog.service?.version &&
                         ` (${selectedLog.service.version})`}
                     </span>
                   </div>
-                  <div className="px-2.5 py-1.5 flex justify-between text-[11px]">
+                  <div className="flex justify-between px-2.5 py-1.5 text-[11px]">
                     <span className="text-muted-foreground font-medium">
                       Severity
                     </span>
@@ -264,32 +264,32 @@ export function PlaygroundLogsPanel({
                       {selectedLog.severityText || "N/A"}
                     </span>
                   </div>
-                  <div className="px-2.5 py-1.5 flex justify-between text-[11px]">
+                  <div className="flex justify-between px-2.5 py-1.5 text-[11px]">
                     <span className="text-muted-foreground font-medium">
                       Timestamp
                     </span>
-                    <span className="font-mono text-right">
+                    <span className="text-right font-mono">
                       {new Date(
                         Number(BigInt(selectedLog.timeUnixNano) / 1_000_000n),
                       ).toISOString()}
                     </span>
                   </div>
                   {selectedLog.traceId && (
-                    <div className="px-2.5 py-1.5 flex justify-between text-[11px]">
+                    <div className="flex justify-between px-2.5 py-1.5 text-[11px]">
                       <span className="text-muted-foreground font-medium">
                         Trace ID
                       </span>
-                      <span className="font-mono text-right truncate max-w-[200px]">
+                      <span className="max-w-[200px] truncate text-right font-mono">
                         {selectedLog.traceId}
                       </span>
                     </div>
                   )}
                   {selectedLog.spanId && (
-                    <div className="px-2.5 py-1.5 flex justify-between text-[11px]">
+                    <div className="flex justify-between px-2.5 py-1.5 text-[11px]">
                       <span className="text-muted-foreground font-medium">
                         Span ID
                       </span>
-                      <span className="font-mono text-right">
+                      <span className="text-right font-mono">
                         {selectedLog.spanId}
                       </span>
                     </div>
@@ -300,10 +300,10 @@ export function PlaygroundLogsPanel({
               {/* Body */}
               {selectedLog.body && (
                 <div className="space-y-1.5">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <div className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
                     Message
                   </div>
-                  <pre className="bg-background/60 border border-border/40 p-2 rounded text-[10px] overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
+                  <pre className="bg-background/60 border-border/40 overflow-x-auto rounded border p-2 font-mono text-[10px] leading-relaxed whitespace-pre-wrap">
                     {selectedLog.body}
                   </pre>
                 </div>
@@ -314,10 +314,10 @@ export function PlaygroundLogsPanel({
                 typeof selectedLog.attributes === "object" &&
                 Object.keys(selectedLog.attributes).length > 0 && (
                   <div className="space-y-1.5">
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <div className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
                       Attributes
                     </div>
-                    <pre className="bg-background/60 border border-border/40 p-2 rounded text-[10px] overflow-x-auto font-mono leading-relaxed">
+                    <pre className="bg-background/60 border-border/40 overflow-x-auto rounded border p-2 font-mono text-[10px] leading-relaxed">
                       {JSON.stringify(selectedLog.attributes, null, 2)}
                     </pre>
                   </div>
@@ -328,10 +328,10 @@ export function PlaygroundLogsPanel({
                 typeof selectedLog.resourceAttributes === "object" &&
                 Object.keys(selectedLog.resourceAttributes).length > 0 && (
                   <div className="space-y-1.5">
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <div className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
                       Resource Attributes
                     </div>
-                    <pre className="bg-background/60 border border-border/40 p-2 rounded text-[10px] overflow-x-auto font-mono leading-relaxed">
+                    <pre className="bg-background/60 border-border/40 overflow-x-auto rounded border p-2 font-mono text-[10px] leading-relaxed">
                       {JSON.stringify(selectedLog.resourceAttributes, null, 2)}
                     </pre>
                   </div>

@@ -15,14 +15,14 @@ export function MCPHostedPage() {
   });
 
   return (
-    <Stack className="w-full h-full">
+    <Stack className="h-full w-full">
       <Heading variant="h2" className="mb-8">
         Hosted Page Preview
       </Heading>
       <MCPPagePreview
         toolset={toolset}
         height={600}
-        className="border-2 rounded-xl mb-12 max-w-[1200px]"
+        className="mb-12 max-w-[1200px] rounded-xl border-2"
       />
     </Stack>
   );
@@ -144,7 +144,7 @@ export function MCPPagePreview({
   return (
     <div
       className={cn(
-        `w-full max-h-[${height}px] border-1 rounded-lg overflow-hidden pointer-events-none`,
+        `pointer-events-none w-full overflow-hidden rounded-lg border`,
         className,
       )}
     >

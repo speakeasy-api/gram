@@ -1961,6 +1961,249 @@ func DecodeGetObservabilityOverviewResponse(decoder func(*http.Response) goahttp
 	}
 }
 
+// BuildGetProjectOverviewRequest instantiates a HTTP request object with
+// method and path set to call the "telemetry" service "getProjectOverview"
+// endpoint
+func (c *Client) BuildGetProjectOverviewRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetProjectOverviewTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "getProjectOverview", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetProjectOverviewRequest returns an encoder for requests sent to the
+// telemetry getProjectOverview server.
+func EncodeGetProjectOverviewRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.GetProjectOverviewPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "getProjectOverview", "*telemetry.GetProjectOverviewPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewGetProjectOverviewRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "getProjectOverview", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetProjectOverviewResponse returns a decoder for responses returned by
+// the telemetry getProjectOverview endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetProjectOverviewResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetProjectOverviewResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetProjectOverviewResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectOverview", err)
+			}
+			err = ValidateGetProjectOverviewResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectOverview", err)
+			}
+			res := NewGetProjectOverviewResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetProjectOverviewUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectOverview", err)
+			}
+			err = ValidateGetProjectOverviewUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectOverview", err)
+			}
+			return nil, NewGetProjectOverviewUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetProjectOverviewForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectOverview", err)
+			}
+			err = ValidateGetProjectOverviewForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectOverview", err)
+			}
+			return nil, NewGetProjectOverviewForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetProjectOverviewBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectOverview", err)
+			}
+			err = ValidateGetProjectOverviewBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectOverview", err)
+			}
+			return nil, NewGetProjectOverviewBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetProjectOverviewNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectOverview", err)
+			}
+			err = ValidateGetProjectOverviewNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectOverview", err)
+			}
+			return nil, NewGetProjectOverviewNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetProjectOverviewConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectOverview", err)
+			}
+			err = ValidateGetProjectOverviewConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectOverview", err)
+			}
+			return nil, NewGetProjectOverviewConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetProjectOverviewUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectOverview", err)
+			}
+			err = ValidateGetProjectOverviewUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectOverview", err)
+			}
+			return nil, NewGetProjectOverviewUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetProjectOverviewInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectOverview", err)
+			}
+			err = ValidateGetProjectOverviewInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectOverview", err)
+			}
+			return nil, NewGetProjectOverviewInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetProjectOverviewInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getProjectOverview", err)
+				}
+				err = ValidateGetProjectOverviewInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getProjectOverview", err)
+				}
+				return nil, NewGetProjectOverviewInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetProjectOverviewUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getProjectOverview", err)
+				}
+				err = ValidateGetProjectOverviewUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getProjectOverview", err)
+				}
+				return nil, NewGetProjectOverviewUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getProjectOverview", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetProjectOverviewGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getProjectOverview", err)
+			}
+			err = ValidateGetProjectOverviewGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getProjectOverview", err)
+			}
+			return nil, NewGetProjectOverviewGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getProjectOverview", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListFilterOptionsRequest instantiates a HTTP request object with method
 // and path set to call the "telemetry" service "listFilterOptions" endpoint
 func (c *Client) BuildListFilterOptionsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -3389,6 +3632,82 @@ func unmarshalToolMetricResponseBodyToTelemetryToolMetric(v *ToolMetricResponseB
 		FailureCount: *v.FailureCount,
 		AvgLatencyMs: *v.AvgLatencyMs,
 		FailureRate:  *v.FailureRate,
+	}
+
+	return res
+}
+
+// unmarshalProjectOverviewSummaryResponseBodyToTelemetryProjectOverviewSummary
+// builds a value of type *telemetry.ProjectOverviewSummary from a value of
+// type *ProjectOverviewSummaryResponseBody.
+func unmarshalProjectOverviewSummaryResponseBodyToTelemetryProjectOverviewSummary(v *ProjectOverviewSummaryResponseBody) *telemetry.ProjectOverviewSummary {
+	res := &telemetry.ProjectOverviewSummary{
+		TotalChats:         *v.TotalChats,
+		ResolvedChats:      *v.ResolvedChats,
+		FailedChats:        *v.FailedChats,
+		TotalToolCalls:     *v.TotalToolCalls,
+		FailedToolCalls:    *v.FailedToolCalls,
+		ActiveServersCount: *v.ActiveServersCount,
+		ActiveUsersCount:   *v.ActiveUsersCount,
+	}
+	res.TopUsers = make([]*telemetry.TopUser, len(v.TopUsers))
+	for i, val := range v.TopUsers {
+		if val == nil {
+			res.TopUsers[i] = nil
+			continue
+		}
+		res.TopUsers[i] = unmarshalTopUserResponseBodyToTelemetryTopUser(val)
+	}
+	res.TopServers = make([]*telemetry.TopServer, len(v.TopServers))
+	for i, val := range v.TopServers {
+		if val == nil {
+			res.TopServers[i] = nil
+			continue
+		}
+		res.TopServers[i] = unmarshalTopServerResponseBodyToTelemetryTopServer(val)
+	}
+	res.LlmClientBreakdown = make([]*telemetry.LLMClientUsage, len(v.LlmClientBreakdown))
+	for i, val := range v.LlmClientBreakdown {
+		if val == nil {
+			res.LlmClientBreakdown[i] = nil
+			continue
+		}
+		res.LlmClientBreakdown[i] = unmarshalLLMClientUsageResponseBodyToTelemetryLLMClientUsage(val)
+	}
+
+	return res
+}
+
+// unmarshalTopUserResponseBodyToTelemetryTopUser builds a value of type
+// *telemetry.TopUser from a value of type *TopUserResponseBody.
+func unmarshalTopUserResponseBodyToTelemetryTopUser(v *TopUserResponseBody) *telemetry.TopUser {
+	res := &telemetry.TopUser{
+		UserID:        *v.UserID,
+		UserType:      *v.UserType,
+		ActivityCount: *v.ActivityCount,
+	}
+
+	return res
+}
+
+// unmarshalTopServerResponseBodyToTelemetryTopServer builds a value of type
+// *telemetry.TopServer from a value of type *TopServerResponseBody.
+func unmarshalTopServerResponseBodyToTelemetryTopServer(v *TopServerResponseBody) *telemetry.TopServer {
+	res := &telemetry.TopServer{
+		ServerName:    *v.ServerName,
+		ToolCallCount: *v.ToolCallCount,
+	}
+
+	return res
+}
+
+// unmarshalLLMClientUsageResponseBodyToTelemetryLLMClientUsage builds a value
+// of type *telemetry.LLMClientUsage from a value of type
+// *LLMClientUsageResponseBody.
+func unmarshalLLMClientUsageResponseBodyToTelemetryLLMClientUsage(v *LLMClientUsageResponseBody) *telemetry.LLMClientUsage {
+	res := &telemetry.LLMClientUsage{
+		ClientName:    *v.ClientName,
+		ActivityCount: *v.ActivityCount,
 	}
 
 	return res

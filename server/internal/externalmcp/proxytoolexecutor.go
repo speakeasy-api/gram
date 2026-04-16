@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -53,8 +54,9 @@ type HeaderDefinition struct {
 // external tool name. Actual execution happens elsewhere using the returned
 // URN to get a plan and create a client.
 type ProxyToolExecutor struct {
-	logger  *slog.Logger
-	entries []ProxyToolEntry
+	logger         *slog.Logger
+	guardianPolicy *guardian.Policy
+	entries        []ProxyToolEntry
 }
 
 // HasEntries returns true if this executor has any proxy tool entries.
@@ -151,7 +153,7 @@ func (e *ProxyToolExecutor) listToolsForEntry(
 
 	headers := BuildHeaders(systemEnv, userConfig, plan.HeaderDefinitions, tokenForHeaders)
 
-	client, err := NewClient(ctx, e.logger, plan.RemoteURL, plan.TransportType, &ClientOptions{
+	client, err := NewClient(ctx, e.logger, e.guardianPolicy, plan.RemoteURL, plan.TransportType, &ClientOptions{
 		Authorization: "",
 		Headers:       headers,
 	})
@@ -165,7 +167,7 @@ func (e *ProxyToolExecutor) listToolsForEntry(
 
 // BuildProxyToolExecutor creates a ProxyToolExecutor from a list of tools.
 // Filters internally to only include external MCP tools with Type "proxy".
-func BuildProxyToolExecutor(logger *slog.Logger, tools []*types.Tool) *ProxyToolExecutor {
+func BuildProxyToolExecutor(logger *slog.Logger, guardianPolicy *guardian.Policy, tools []*types.Tool) *ProxyToolExecutor {
 	var entries []ProxyToolEntry
 
 	for _, tool := range tools {
@@ -189,7 +191,8 @@ func BuildProxyToolExecutor(logger *slog.Logger, tools []*types.Tool) *ProxyTool
 	}
 
 	return &ProxyToolExecutor{
-		logger:  logger,
-		entries: entries,
+		logger:         logger,
+		guardianPolicy: guardianPolicy,
+		entries:        entries,
 	}
 }

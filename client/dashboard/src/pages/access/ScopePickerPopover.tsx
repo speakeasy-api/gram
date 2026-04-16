@@ -58,7 +58,7 @@ export function ScopePickerPopover({
   // Org-scoped permissions have no resource picker — they're always org-wide
   if (resourceType === "org") {
     return (
-      <span className="inline-flex items-center rounded-md border border-input bg-transparent px-2 py-1 text-xs text-muted-foreground h-7">
+      <span className="border-input text-muted-foreground inline-flex h-7 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
         All
       </span>
     );
@@ -83,15 +83,15 @@ export function ScopePickerPopover({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-xs hover:bg-muted/50 transition-colors shrink-0 h-7"
+          className="border-input hover:bg-muted/50 inline-flex h-7 shrink-0 items-center gap-1 rounded-md border bg-transparent px-2 py-1 text-xs shadow-xs transition-colors"
         >
-          <span className="truncate max-w-[120px]">{label}</span>
-          <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
+          <span className="max-w-[120px] truncate">{label}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
         </button>
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-56 p-1 max-h-[300px] overflow-y-auto"
+        className="max-h-[300px] w-56 overflow-y-auto p-1"
       >
         {/* Scope mode options */}
         <ScopeOption
@@ -114,7 +114,7 @@ export function ScopePickerPopover({
         {/* Resource list when scoped */}
         {!isUnrestricted && (
           <>
-            <div className="my-1 h-px bg-border" />
+            <div className="bg-border my-1 h-px" />
             {resourceType === "project"
               ? projectList.map((resource) => (
                   <ResourceCheckbox
@@ -127,7 +127,7 @@ export function ScopePickerPopover({
                 ))
               : mcpServers.map((group) => (
                   <div key={group.projectId}>
-                    <div className="px-2 py-1 text-xs text-muted-foreground font-medium">
+                    <div className="text-muted-foreground px-2 py-1 text-xs font-medium">
                       {group.projectName}
                     </div>
                     {group.servers.map((server) => (
@@ -164,7 +164,7 @@ function ResourceCheckbox({
       type="button"
       onClick={() => onToggle(id)}
       className={cn(
-        "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent cursor-pointer",
+        "hover:bg-accent flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm",
         checked && "font-medium",
       )}
     >
@@ -192,11 +192,11 @@ function ScopeOption({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent cursor-pointer",
+        "hover:bg-accent flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm",
         selected && "font-medium",
       )}
     >
-      <span className="w-4 flex items-center justify-center shrink-0">
+      <span className="flex w-4 shrink-0 items-center justify-center">
         {selected && <Check className="h-3.5 w-3.5" />}
       </span>
       <span>{label}</span>

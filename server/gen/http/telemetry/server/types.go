@@ -125,6 +125,15 @@ type GetObservabilityOverviewRequestBody struct {
 	IncludeTimeSeries *bool `form:"include_time_series,omitempty" json:"include_time_series,omitempty" xml:"include_time_series,omitempty"`
 }
 
+// GetProjectOverviewRequestBody is the type of the "telemetry" service
+// "getProjectOverview" endpoint HTTP request body.
+type GetProjectOverviewRequestBody struct {
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+}
+
 // ListFilterOptionsRequestBody is the type of the "telemetry" service
 // "listFilterOptions" endpoint HTTP request body.
 type ListFilterOptionsRequestBody struct {
@@ -246,6 +255,17 @@ type GetObservabilityOverviewResponseBody struct {
 	TopToolsByFailureRate []*ToolMetricResponseBody `form:"top_tools_by_failure_rate" json:"top_tools_by_failure_rate" xml:"top_tools_by_failure_rate"`
 	// The time bucket interval in seconds used for the time series data
 	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
+}
+
+// GetProjectOverviewResponseBody is the type of the "telemetry" service
+// "getProjectOverview" endpoint HTTP response body.
+type GetProjectOverviewResponseBody struct {
+	// Current period summary metrics
+	Summary *ProjectOverviewSummaryResponseBody `form:"summary" json:"summary" xml:"summary"`
+	// Previous period summary metrics for trend calculation
+	Comparison *ProjectOverviewSummaryResponseBody `form:"comparison" json:"comparison" xml:"comparison"`
+	// Indicates whether metrics are session-based or tool-call-based
+	MetricsMode string `form:"metrics_mode" json:"metrics_mode" xml:"metrics_mode"`
 }
 
 // ListFilterOptionsResponseBody is the type of the "telemetry" service
@@ -1768,6 +1788,195 @@ type GetObservabilityOverviewGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetProjectOverviewUnauthorizedResponseBody is the type of the "telemetry"
+// service "getProjectOverview" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetProjectOverviewUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectOverviewForbiddenResponseBody is the type of the "telemetry"
+// service "getProjectOverview" endpoint HTTP response body for the "forbidden"
+// error.
+type GetProjectOverviewForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectOverviewBadRequestResponseBody is the type of the "telemetry"
+// service "getProjectOverview" endpoint HTTP response body for the
+// "bad_request" error.
+type GetProjectOverviewBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectOverviewNotFoundResponseBody is the type of the "telemetry"
+// service "getProjectOverview" endpoint HTTP response body for the "not_found"
+// error.
+type GetProjectOverviewNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectOverviewConflictResponseBody is the type of the "telemetry"
+// service "getProjectOverview" endpoint HTTP response body for the "conflict"
+// error.
+type GetProjectOverviewConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectOverviewUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getProjectOverview" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetProjectOverviewUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectOverviewInvalidResponseBody is the type of the "telemetry" service
+// "getProjectOverview" endpoint HTTP response body for the "invalid" error.
+type GetProjectOverviewInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectOverviewInvariantViolationResponseBody is the type of the
+// "telemetry" service "getProjectOverview" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetProjectOverviewInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectOverviewUnexpectedResponseBody is the type of the "telemetry"
+// service "getProjectOverview" endpoint HTTP response body for the
+// "unexpected" error.
+type GetProjectOverviewUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectOverviewGatewayErrorResponseBody is the type of the "telemetry"
+// service "getProjectOverview" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetProjectOverviewGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListFilterOptionsUnauthorizedResponseBody is the type of the "telemetry"
 // service "listFilterOptions" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -2793,6 +3002,58 @@ type ToolMetricResponseBody struct {
 	FailureRate float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
 }
 
+// ProjectOverviewSummaryResponseBody is used to define fields on response body
+// types.
+type ProjectOverviewSummaryResponseBody struct {
+	// Total number of chat sessions
+	TotalChats int64 `form:"total_chats" json:"total_chats" xml:"total_chats"`
+	// Number of resolved chat sessions
+	ResolvedChats int64 `form:"resolved_chats" json:"resolved_chats" xml:"resolved_chats"`
+	// Number of failed chat sessions
+	FailedChats int64 `form:"failed_chats" json:"failed_chats" xml:"failed_chats"`
+	// Total number of tool calls
+	TotalToolCalls int64 `form:"total_tool_calls" json:"total_tool_calls" xml:"total_tool_calls"`
+	// Number of failed tool calls
+	FailedToolCalls int64 `form:"failed_tool_calls" json:"failed_tool_calls" xml:"failed_tool_calls"`
+	// Number of MCP servers with at least one tool call in the time period
+	ActiveServersCount int64 `form:"active_servers_count" json:"active_servers_count" xml:"active_servers_count"`
+	// Number of unique users with activity in the time period
+	ActiveUsersCount int64 `form:"active_users_count" json:"active_users_count" xml:"active_users_count"`
+	// Top 10 users by activity (# of messages or tool calls depending on
+	// metrics_mode)
+	TopUsers []*TopUserResponseBody `form:"top_users" json:"top_users" xml:"top_users"`
+	// Top 10 MCP servers by tool call count
+	TopServers []*TopServerResponseBody `form:"top_servers" json:"top_servers" xml:"top_servers"`
+	// Breakdown of messages/activity by LLM client/agent
+	LlmClientBreakdown []*LLMClientUsageResponseBody `form:"llm_client_breakdown" json:"llm_client_breakdown" xml:"llm_client_breakdown"`
+}
+
+// TopUserResponseBody is used to define fields on response body types.
+type TopUserResponseBody struct {
+	// User ID (internal or external depending on availability)
+	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// Type of user ID
+	UserType string `form:"user_type" json:"user_type" xml:"user_type"`
+	// Number of messages (session mode) or tool calls (tool_call mode)
+	ActivityCount int64 `form:"activity_count" json:"activity_count" xml:"activity_count"`
+}
+
+// TopServerResponseBody is used to define fields on response body types.
+type TopServerResponseBody struct {
+	// MCP server name
+	ServerName string `form:"server_name" json:"server_name" xml:"server_name"`
+	// Total number of tool calls
+	ToolCallCount int64 `form:"tool_call_count" json:"tool_call_count" xml:"tool_call_count"`
+}
+
+// LLMClientUsageResponseBody is used to define fields on response body types.
+type LLMClientUsageResponseBody struct {
+	// Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
+	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
+	// Number of messages (session mode) or tool calls (tool_call mode)
+	ActivityCount int64 `form:"activity_count" json:"activity_count" xml:"activity_count"`
+}
+
 // FilterOptionResponseBody is used to define fields on response body types.
 type FilterOptionResponseBody struct {
 	// Unique identifier for the option
@@ -3126,6 +3387,21 @@ func NewGetObservabilityOverviewResponseBody(res *telemetry.GetObservabilityOver
 		}
 	} else {
 		body.TopToolsByFailureRate = []*ToolMetricResponseBody{}
+	}
+	return body
+}
+
+// NewGetProjectOverviewResponseBody builds the HTTP response body from the
+// result of the "getProjectOverview" endpoint of the "telemetry" service.
+func NewGetProjectOverviewResponseBody(res *telemetry.GetProjectOverviewResult) *GetProjectOverviewResponseBody {
+	body := &GetProjectOverviewResponseBody{
+		MetricsMode: res.MetricsMode,
+	}
+	if res.Summary != nil {
+		body.Summary = marshalTelemetryProjectOverviewSummaryToProjectOverviewSummaryResponseBody(res.Summary)
+	}
+	if res.Comparison != nil {
+		body.Comparison = marshalTelemetryProjectOverviewSummaryToProjectOverviewSummaryResponseBody(res.Comparison)
 	}
 	return body
 }
@@ -4382,6 +4658,153 @@ func NewGetObservabilityOverviewGatewayErrorResponseBody(res *goa.ServiceError) 
 	return body
 }
 
+// NewGetProjectOverviewUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getProjectOverview" endpoint of the "telemetry"
+// service.
+func NewGetProjectOverviewUnauthorizedResponseBody(res *goa.ServiceError) *GetProjectOverviewUnauthorizedResponseBody {
+	body := &GetProjectOverviewUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectOverviewForbiddenResponseBody builds the HTTP response body
+// from the result of the "getProjectOverview" endpoint of the "telemetry"
+// service.
+func NewGetProjectOverviewForbiddenResponseBody(res *goa.ServiceError) *GetProjectOverviewForbiddenResponseBody {
+	body := &GetProjectOverviewForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectOverviewBadRequestResponseBody builds the HTTP response body
+// from the result of the "getProjectOverview" endpoint of the "telemetry"
+// service.
+func NewGetProjectOverviewBadRequestResponseBody(res *goa.ServiceError) *GetProjectOverviewBadRequestResponseBody {
+	body := &GetProjectOverviewBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectOverviewNotFoundResponseBody builds the HTTP response body from
+// the result of the "getProjectOverview" endpoint of the "telemetry" service.
+func NewGetProjectOverviewNotFoundResponseBody(res *goa.ServiceError) *GetProjectOverviewNotFoundResponseBody {
+	body := &GetProjectOverviewNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectOverviewConflictResponseBody builds the HTTP response body from
+// the result of the "getProjectOverview" endpoint of the "telemetry" service.
+func NewGetProjectOverviewConflictResponseBody(res *goa.ServiceError) *GetProjectOverviewConflictResponseBody {
+	body := &GetProjectOverviewConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectOverviewUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getProjectOverview" endpoint of the "telemetry"
+// service.
+func NewGetProjectOverviewUnsupportedMediaResponseBody(res *goa.ServiceError) *GetProjectOverviewUnsupportedMediaResponseBody {
+	body := &GetProjectOverviewUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectOverviewInvalidResponseBody builds the HTTP response body from
+// the result of the "getProjectOverview" endpoint of the "telemetry" service.
+func NewGetProjectOverviewInvalidResponseBody(res *goa.ServiceError) *GetProjectOverviewInvalidResponseBody {
+	body := &GetProjectOverviewInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectOverviewInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getProjectOverview" endpoint of the "telemetry"
+// service.
+func NewGetProjectOverviewInvariantViolationResponseBody(res *goa.ServiceError) *GetProjectOverviewInvariantViolationResponseBody {
+	body := &GetProjectOverviewInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectOverviewUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getProjectOverview" endpoint of the "telemetry"
+// service.
+func NewGetProjectOverviewUnexpectedResponseBody(res *goa.ServiceError) *GetProjectOverviewUnexpectedResponseBody {
+	body := &GetProjectOverviewUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectOverviewGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getProjectOverview" endpoint of the "telemetry"
+// service.
+func NewGetProjectOverviewGatewayErrorResponseBody(res *goa.ServiceError) *GetProjectOverviewGatewayErrorResponseBody {
+	body := &GetProjectOverviewGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListFilterOptionsUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listFilterOptions" endpoint of the "telemetry"
 // service.
@@ -5154,6 +5577,20 @@ func NewGetObservabilityOverviewPayload(body *GetObservabilityOverviewRequestBod
 	return v
 }
 
+// NewGetProjectOverviewPayload builds a telemetry service getProjectOverview
+// endpoint payload.
+func NewGetProjectOverviewPayload(body *GetProjectOverviewRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetProjectOverviewPayload {
+	v := &telemetry.GetProjectOverviewPayload{
+		From: *body.From,
+		To:   *body.To,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewListFilterOptionsPayload builds a telemetry service listFilterOptions
 // endpoint payload.
 func NewListFilterOptionsPayload(body *ListFilterOptionsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.ListFilterOptionsPayload {
@@ -5426,6 +5863,24 @@ func ValidateGetUserMetricsSummaryRequestBody(body *GetUserMetricsSummaryRequest
 // ValidateGetObservabilityOverviewRequestBody runs the validations defined on
 // GetObservabilityOverviewRequestBody
 func ValidateGetObservabilityOverviewRequestBody(body *GetObservabilityOverviewRequestBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetProjectOverviewRequestBody runs the validations defined on
+// GetProjectOverviewRequestBody
+func ValidateGetProjectOverviewRequestBody(body *GetProjectOverviewRequestBody) (err error) {
 	if body.From == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
 	}

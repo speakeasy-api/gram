@@ -1,10 +1,22 @@
 import { Heading } from "@/components/ui/heading";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Type } from "@/components/ui/type";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { useDeploymentLogsSuspense } from "@gram/client/react-query";
+import {
+  useDeploymentLogsSuspense,
+  useDeploymentSuspense,
+} from "@gram/client/react-query";
 import { Icon, Input } from "@speakeasy-api/moonshine";
 import React, {
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -14,6 +26,38 @@ import { useParams } from "react-router";
 import { useDeploymentSearchParams } from "./use-deployment-search-params";
 
 type LogLevel = "WARN" | "INFO" | "DEBUG" | "ERROR" | "OK" | "SKIP";
+
+// Uses design system tokens where available (destructive, warning, success, muted).
+// INFO/DEBUG have no semantic tokens — hardcoded Tailwind is intentional.
+const levelColors = {
+  INFO: { dot: "bg-blue-500", text: "text-blue-700", bg: "bg-blue-50" },
+  WARN: { dot: "bg-warning", text: "text-warning", bg: "bg-warning/10" },
+  ERROR: {
+    dot: "bg-destructive",
+    text: "text-destructive",
+    bg: "bg-destructive/10",
+  },
+  SKIP: {
+    dot: "bg-muted-foreground",
+    text: "text-muted-foreground",
+    bg: "bg-muted",
+  },
+  OK: {
+    dot: "bg-success",
+    text: "text-success-foreground",
+    bg: "bg-success/10",
+  },
+  DEBUG: {
+    dot: "bg-muted-foreground",
+    text: "text-muted-foreground",
+    bg: "bg-muted",
+  },
+} as const;
+
+function getLevelColors(level: LogLevel) {
+  return levelColors[level] ?? levelColors.INFO;
+}
+
 type LogFocus = "all" | "warns" | "errors" | "skipped";
 
 interface ParsedLogEntry {
@@ -128,7 +172,18 @@ export const LogsTabContent = ({
     },
   );
 
+  const { data: deployment } = useDeploymentSuspense(
+    { id: deploymentId },
+    undefined,
+    {
+      staleTime: Infinity,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  );
+
   const [focus, setFocus] = useState<LogFocus>("all");
+  const [selectedSource, setSelectedSource] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentLogIndex, setCurrentLogIndex] = useState<number | null>(null);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
@@ -160,13 +215,57 @@ export const LogsTabContent = ({
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const logRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
+  // Build a map of attachmentId → asset name from the deployment data.
+  // Log events store the deployment asset ID (not the uploaded assetId).
+  const assetNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const asset of deployment.openapiv3Assets ?? []) {
+      map.set(asset.id, asset.name);
+    }
+    for (const asset of deployment.functionsAssets ?? []) {
+      map.set(asset.id, asset.name);
+    }
+    for (const mcp of deployment.externalMcps ?? []) {
+      if ("id" in mcp && "name" in mcp) {
+        map.set(String(mcp.id), String(mcp.name));
+      }
+    }
+    return map;
+  }, [deployment]);
+
+  // Build source filter options from individual assets in the log events
+  const sourceOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const event of deploymentLogs.events) {
+      if (event.attachmentId) {
+        counts.set(
+          event.attachmentId,
+          (counts.get(event.attachmentId) ?? 0) + 1,
+        );
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => {
+        const nameA = assetNameMap.get(a[0]) ?? a[0];
+        const nameB = assetNameMap.get(b[0]) ?? b[0];
+        return nameA.localeCompare(nameB);
+      })
+      .map(([id, count]) => ({
+        value: id,
+        label: assetNameMap.get(id) ?? id.slice(0, 8),
+        count,
+      }));
+  }, [deploymentLogs.events, assetNameMap]);
+
+  const activeSourceFilter =
+    attachmentType ?? (selectedSource !== "all" ? selectedSource : undefined);
+
   const visibleEvents = useMemo(() => {
-    if (!attachmentType) return deploymentLogs.events;
+    if (!activeSourceFilter) return deploymentLogs.events;
     return deploymentLogs.events.filter(
-      (event) =>
-        !event.attachmentType || event.attachmentType === attachmentType,
+      (event) => event.attachmentId === activeSourceFilter,
     );
-  }, [deploymentLogs.events, attachmentType]);
+  }, [deploymentLogs.events, activeSourceFilter]);
 
   const parsedLogs = useMemo(
     () =>
@@ -174,14 +273,8 @@ export const LogsTabContent = ({
     [visibleEvents],
   );
 
-  const logStats = useMemo(() => {
-    const stats = { warns: 0, errors: 0, skipped: 0 };
-    parsedLogs.forEach((log) => {
-      if (log.level === "WARN") stats.warns++;
-      if (log.level === "ERROR") stats.errors++;
-      if (log.level === "SKIP") stats.skipped++;
-    });
-    return stats;
+  useEffect(() => {
+    setCurrentLogIndex(null);
   }, [parsedLogs]);
 
   const groupedLogs = useMemo(() => {
@@ -206,8 +299,10 @@ export const LogsTabContent = ({
     );
   }, [parsedLogs, groupBySource]);
 
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+
   const filteredIndices = useMemo(() => {
-    if (focus === "all" && !searchQuery) return [];
+    if (focus === "all" && !deferredSearchQuery) return [];
 
     const indices: number[] = [];
     parsedLogs.forEach((log, index) => {
@@ -218,8 +313,8 @@ export const LogsTabContent = ({
         (focus === "skipped" && log.level === "SKIP");
 
       const matchesSearch =
-        !searchQuery ||
-        log.message.toLowerCase().includes(searchQuery.toLowerCase());
+        !deferredSearchQuery ||
+        log.message.toLowerCase().includes(deferredSearchQuery.toLowerCase());
 
       if (matchesFocus && matchesSearch) {
         indices.push(index);
@@ -227,7 +322,12 @@ export const LogsTabContent = ({
     });
 
     return indices;
-  }, [focus, searchQuery, parsedLogs]);
+  }, [focus, deferredSearchQuery, parsedLogs]);
+
+  const effectiveSearchIndex =
+    filteredIndices.length > 0
+      ? Math.min(currentSearchIndex, filteredIndices.length - 1)
+      : 0;
 
   const scrollToLog = useCallback((index: number) => {
     const element = logRefs.current.get(index);
@@ -243,12 +343,12 @@ export const LogsTabContent = ({
 
       let newIndex: number;
       if (direction === "next") {
-        newIndex = (currentSearchIndex + 1) % filteredIndices.length;
+        newIndex = (effectiveSearchIndex + 1) % filteredIndices.length;
       } else {
         newIndex =
-          currentSearchIndex === 0
+          effectiveSearchIndex === 0
             ? filteredIndices.length - 1
-            : currentSearchIndex - 1;
+            : effectiveSearchIndex - 1;
       }
 
       setCurrentSearchIndex(newIndex);
@@ -257,7 +357,7 @@ export const LogsTabContent = ({
         scrollToLog(targetIndex);
       }
     },
-    [currentSearchIndex, filteredIndices, scrollToLog],
+    [effectiveSearchIndex, filteredIndices, scrollToLog],
   );
 
   const handleFocusChange = (newFocus: LogFocus) => {
@@ -441,152 +541,130 @@ export const LogsTabContent = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [currentLogIndex, parsedLogs.length, navigateToResult, groupBySource]);
 
-  const highlightMatch = (text: string) => {
-    if (!searchQuery) return text;
+  const searchRegex = useMemo(() => {
+    if (!searchQuery) return null;
+    const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(${escaped})`, "gi");
+  }, [searchQuery]);
 
-    const parts = text.split(new RegExp(`(${searchQuery})`, "gi"));
-    return (
-      <>
-        {parts.map((part, i) =>
-          part.toLowerCase() === searchQuery.toLowerCase() ? (
-            <mark
-              key={i}
-              className="bg-yellow-200 dark:bg-yellow-800 text-inherit"
-            >
-              {part}
-            </mark>
-          ) : (
-            part
-          ),
-        )}
-      </>
-    );
-  };
+  const highlightMatch = useCallback(
+    (text: string) => {
+      if (!searchRegex) return text;
+      const parts = text.split(searchRegex);
+      return (
+        <>
+          {parts.map((part, i) =>
+            part.toLowerCase() === searchQuery.toLowerCase() ? (
+              <mark
+                key={i}
+                className="bg-yellow-200 text-inherit dark:bg-yellow-800"
+              >
+                {part}
+              </mark>
+            ) : (
+              part
+            ),
+          )}
+        </>
+      );
+    },
+    [searchQuery, searchRegex],
+  );
 
   return (
     <>
-      <Heading variant="h2" className="mb-6">
+      <Heading variant="h2" className="mb-4">
         Logs
       </Heading>
 
+      {/* Filters row */}
+      {!embeddedMode && sourceOptions.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Type small muted>
+              Source
+            </Type>
+            <Select value={selectedSource} onValueChange={setSelectedSource}>
+              <SelectTrigger size="sm" className="bg-background min-w-[180px]">
+                <SelectValue placeholder="All sources" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All sources</SelectItem>
+                {sourceOptions.map((opt) => (
+                  <SelectItem
+                    key={opt.value}
+                    value={opt.value}
+                    description={`${opt.count} log${opt.count === 1 ? "" : "s"}`}
+                  >
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
+
       {/* Logs container */}
-      <div className="relative bg-surface rounded-lg border border-border overflow-hidden">
+      <div className="bg-surface border-border relative overflow-hidden rounded-lg border">
         <div
           className={cn(
-            "flex items-center gap-2 p-2 bg-surface/50 transition-all",
-            isScrolled && "border-b border-border",
+            "bg-surface/50 flex items-center gap-2 p-2 transition-all",
+            isScrolled && "border-border border-b",
           )}
         >
-          <button
-            onClick={() => handleFocusChange("all")}
-            className={cn(
-              "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-              focus === "all" ? "bg-btn-secondary" : "hover:bg-muted/50",
+          <div className="text-muted-foreground flex items-center gap-3 text-[11px]">
+            {searchQuery ? (
+              <>
+                <span className="flex items-center gap-1">
+                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    N
+                  </kbd>
+                  <span>/</span>
+                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    ⇧N
+                  </kbd>
+                  <span className="ml-0.5">results</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    ESC
+                  </kbd>
+                  <span>clear</span>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="flex items-center gap-1">
+                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    J
+                  </kbd>
+                  <span>/</span>
+                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    K
+                  </kbd>
+                  <span className="ml-0.5">navigate</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    G
+                  </kbd>
+                  <span>first</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    ⇧G
+                  </kbd>
+                  <span>last</span>
+                </span>
+              </>
             )}
-          >
-            <Icon
-              name="list"
-              className={cn(
-                "size-3",
-                focus === "all" ? "" : "text-muted-foreground",
-              )}
-            />
-            <span>All logs</span>
-            <span className="text-muted-foreground opacity-60">
-              {parsedLogs.length}
-            </span>
-          </button>
-
-          {logStats.warns > 0 && (
-            <button
-              onClick={() => handleFocusChange("warns")}
-              className={cn(
-                "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-                focus === "warns" ? "bg-btn-secondary" : "hover:bg-muted/50",
-              )}
-            >
-              <Icon
-                name="triangle-alert"
-                className={cn(
-                  "size-3",
-                  focus === "warns" ? "text-warning" : "text-muted-foreground",
-                )}
-              />
-              <span>Warns</span>
-              <span className="text-muted-foreground opacity-60">
-                {logStats.warns}
-              </span>
-            </button>
-          )}
-
-          {logStats.errors > 0 && (
-            <button
-              onClick={() => handleFocusChange("errors")}
-              className={cn(
-                "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-                focus === "errors" ? "bg-btn-secondary" : "hover:bg-muted/50",
-              )}
-            >
-              <Icon
-                name="circle-x"
-                className={cn(
-                  "size-3",
-                  focus === "errors"
-                    ? "text-destructive"
-                    : "text-muted-foreground",
-                )}
-              />
-              <span>Errors</span>
-              <span className="text-muted-foreground opacity-60">
-                {logStats.errors}
-              </span>
-            </button>
-          )}
-
-          {logStats.skipped > 0 && (
-            <button
-              onClick={() => handleFocusChange("skipped")}
-              className={cn(
-                "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-                focus === "skipped" ? "bg-btn-secondary" : "hover:bg-muted/50",
-              )}
-            >
-              <Icon
-                name="skip-forward"
-                className={cn(
-                  "size-3",
-                  focus === "skipped" ? "" : "text-muted-foreground",
-                )}
-              />
-              <span>Skipped</span>
-              <span className="text-muted-foreground opacity-60">
-                {logStats.skipped}
-              </span>
-            </button>
-          )}
-
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              onClick={() => setGroupBySource(!groupBySource)}
-              className={cn(
-                "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-                groupBySource ? "bg-btn-secondary" : "hover:bg-muted/50",
-              )}
-            >
-              <Icon
-                name="layers"
-                className={cn(
-                  "size-3",
-                  groupBySource ? "" : "text-muted-foreground",
-                )}
-              />
-              <span>{groupBySource ? "Grouped" : "Group"}</span>
-            </button>
-
+          </div>
+          <div className="ml-auto">
             <div className="relative">
               <Icon
                 name="search"
-                className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none"
+                className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2"
               />
               <Input
                 data-search-input
@@ -596,28 +674,28 @@ export const LogsTabContent = ({
                 onChange={(e) => handleSearchChange(e.target.value)}
                 onFocus={() => setSearchInputFocused(true)}
                 onBlur={() => setSearchInputFocused(false)}
-                className="pl-7 pr-16 w-48 text-xs py-1 rounded-sm"
+                className="w-48 rounded-sm py-1 pr-16 pl-7 text-xs"
               />
               {searchQuery || searchInputFocused ? (
                 filteredIndices.length > 0 ? (
-                  <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                    <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm">
+                  <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
+                    <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
                       ESC
                     </span>
-                    <span className="text-[10px] text-muted-foreground mx-0.5">
-                      {currentSearchIndex + 1}/{filteredIndices.length}
+                    <span className="text-muted-foreground mx-0.5 text-[10px]">
+                      {effectiveSearchIndex + 1}/{filteredIndices.length}
                     </span>
                     <div className="flex items-center">
                       <button
                         onClick={() => navigateToResult("prev")}
-                        className="p-0.5 hover:bg-muted rounded-sm opacity-60 hover:opacity-100 transition-opacity"
+                        className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
                         title="Previous (Shift+N)"
                       >
                         <Icon name="chevron-up" className="size-2.5" />
                       </button>
                       <button
                         onClick={() => navigateToResult("next")}
-                        className="p-0.5 hover:bg-muted rounded-sm opacity-60 hover:opacity-100 transition-opacity"
+                        className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
                         title="Next (N)"
                       >
                         <Icon name="chevron-down" className="size-2.5" />
@@ -625,19 +703,19 @@ export const LogsTabContent = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                    <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm">
+                  <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
+                    <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
                       ESC
                     </span>
-                    <span className="text-[10px] text-muted-foreground ml-0.5">
+                    <span className="text-muted-foreground ml-0.5 text-[10px]">
                       0/0
                     </span>
                   </div>
                 )
               ) : (
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
-                  <span className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded-sm">
-                    ⌘F
+                <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
+                  <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    /
                   </span>
                 </div>
               )}
@@ -648,21 +726,21 @@ export const LogsTabContent = ({
         <div
           ref={logsContainerRef}
           tabIndex={0}
-          className="font-mono text-xs max-h-[500px] overflow-y-auto pb-2 focus:outline-none"
+          className="max-h-[500px] overflow-y-auto pb-2 font-mono text-xs focus:outline-none"
         >
           {parsedLogs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <Icon name="file-text" className="size-8 mb-3 opacity-30" />
-              <p className="text-sm font-sans">No logs to display</p>
+            <div className="text-muted-foreground flex flex-col items-center justify-center py-12">
+              <Icon name="file-text" className="mb-3 size-8 opacity-30" />
+              <p className="font-sans text-sm">No logs to display</p>
             </div>
           ) : groupBySource && groupedLogs ? (
             // Grouped view
             groupedLogs.map(([source, group]) => (
               <details key={source} className="group" open>
-                <summary className="px-3 py-3 cursor-pointer hover:bg-muted/30 flex items-center gap-2 border-b border-border">
+                <summary className="hover:bg-muted/30 border-border flex cursor-pointer items-center gap-2 border-b px-3 py-3">
                   <Icon
                     name="chevron-right"
-                    className="size-3 group-open:rotate-90 transition-transform"
+                    className="size-3 transition-transform group-open:rotate-90"
                   />
                   <span className="font-sans font-medium">{source}</span>
                   <span className="text-muted-foreground font-sans text-xs">
@@ -689,20 +767,30 @@ export const LogsTabContent = ({
                           `fallback-${globalIndex}`
                         }
                         className={cn(
-                          "px-3 py-2 transition-colors relative",
+                          "relative px-3 py-1.5 transition-colors",
                           "hover:bg-muted/20",
                           isError && "bg-destructive/10 text-destructive",
                           isWarn && "bg-warning/10 text-warning",
                           isSkipped && "bg-muted/50 text-muted-foreground",
                           isHighlighted &&
-                            "border-l-4 border-l-foreground pl-2",
+                            "border-l-foreground border-l-4 pl-2",
                         )}
                       >
-                        <div className="flex items-start gap-4">
+                        <div className="flex min-w-0 items-center gap-2.5">
                           <span
                             className={cn(
-                              "text-muted-foreground tabular-nums",
-                              (isError || isWarn) && "text-inherit",
+                              "size-1.5 shrink-0 rounded-full",
+                              getLevelColors(log.level).dot,
+                            )}
+                          />
+                          <span
+                            className={cn(
+                              "shrink-0 text-[11px] tabular-nums",
+                              isError
+                                ? "text-destructive"
+                                : isWarn
+                                  ? "text-warning"
+                                  : "text-muted-foreground/60",
                             )}
                           >
                             {formatLogTimestamp(
@@ -711,19 +799,14 @@ export const LogsTabContent = ({
                           </span>
                           <span
                             className={cn(
-                              "font-medium uppercase",
-                              isError && "text-destructive",
-                              isWarn && "text-warning",
-                              isSkipped && "text-muted-foreground",
-                              !isError &&
-                                !isWarn &&
-                                !isSkipped &&
-                                "text-muted-foreground",
+                              "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
+                              getLevelColors(log.level).bg,
+                              getLevelColors(log.level).text,
                             )}
                           >
-                            [{log.level}]
+                            {log.level}
                           </span>
-                          <span className="flex-1">
+                          <span className="min-w-0 flex-1">
                             {highlightMatch(log.message)}
                           </span>
                         </div>
@@ -748,38 +831,43 @@ export const LogsTabContent = ({
                   }}
                   key={visibleEvents[index]?.id || `fallback-${index}`}
                   className={cn(
-                    "px-3 py-2 transition-colors relative",
+                    "relative px-3 py-1.5 transition-colors",
                     "hover:bg-muted/20",
                     isError && "bg-destructive/10 text-destructive",
                     isWarn && "bg-warning/10 text-warning",
                     isSkipped && "bg-muted/50 text-muted-foreground",
-                    isHighlighted && "border-l-4 border-l-foreground pl-2",
+                    isHighlighted && "border-l-foreground border-l-4 pl-2",
                   )}
                 >
-                  <div className="flex items-start gap-4">
+                  <div className="flex min-w-0 items-center gap-2.5">
                     <span
                       className={cn(
-                        "text-muted-foreground tabular-nums",
-                        (isError || isWarn) && "text-inherit",
+                        "size-1.5 shrink-0 rounded-full",
+                        getLevelColors(log.level).dot,
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "shrink-0 text-[11px] tabular-nums",
+                        isError
+                          ? "text-destructive"
+                          : isWarn
+                            ? "text-warning"
+                            : "text-muted-foreground/60",
                       )}
                     >
                       {formatLogTimestamp(visibleEvents[index]!.createdAt)}
                     </span>
                     <span
                       className={cn(
-                        "font-medium uppercase",
-                        isError && "text-destructive",
-                        isWarn && "text-warning",
-                        isSkipped && "text-muted-foreground",
-                        !isError &&
-                          !isWarn &&
-                          !isSkipped &&
-                          "text-muted-foreground",
+                        "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
+                        getLevelColors(log.level).bg,
+                        getLevelColors(log.level).text,
                       )}
                     >
-                      [{log.level}]
+                      {log.level}
                     </span>
-                    <span className="flex-1">
+                    <span className="min-w-0 flex-1">
                       {highlightMatch(log.message)}
                     </span>
                   </div>
@@ -790,48 +878,8 @@ export const LogsTabContent = ({
         </div>
 
         {showBottomFade && (
-          <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background to-transparent pointer-events-none rounded-b-lg" />
+          <div className="from-background pointer-events-none absolute right-0 bottom-0 left-0 h-12 rounded-b-lg bg-gradient-to-t to-transparent" />
         )}
-      </div>
-
-      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-        <div className="flex items-center gap-4">
-          {searchQuery ? (
-            <>
-              <div className="flex items-center gap-1">
-                <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">N</kbd>
-                <span>/</span>
-                <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">⇧N</kbd>
-                <span className="ml-1">navigate results</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">ESC</kbd>
-                <span>clear search</span>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-1">
-                <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">⌘F</kbd>
-                <span>or</span>
-                <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">/</kbd>
-                <span>to search</span>
-              </div>
-              {!groupBySource && (
-                <div className="flex items-center gap-1">
-                  <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">^G</kbd>
-                  <span>group by source</span>
-                </div>
-              )}
-              <div className="flex items-center gap-1">
-                <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">J</kbd>
-                <span>/</span>
-                <kbd className="bg-muted px-1.5 py-0.5 rounded-sm">K</kbd>
-                <span className="ml-1">navigate logs</span>
-              </div>
-            </>
-          )}
-        </div>
       </div>
     </>
   );

@@ -23,6 +23,7 @@ description: Rules and best practices for writing and editing mise tasks.
 - Tasks options MUST come right after the initial shebang line
 - Each task option must be listed one a separate line and MUST follow the form `#MISE <option>=<value>`.
 - All shell scripts MUST start with `#!/usr/bin/env bash` followed by a blank line without exception.
+- Tasks MUST be compatible with bash 3.2+ since that is the default version on macOS.
 - `gum` is a really good tool for building interactive scripts if these are needed.
 
 <detail open><summary>Example</summary>

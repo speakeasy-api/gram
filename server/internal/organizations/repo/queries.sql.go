@@ -151,21 +151,40 @@ func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOr
 }
 
 const listOrganizationUsers = `-- name: ListOrganizationUsers :many
-SELECT id, organization_id, user_id, workos_membership_id, created_at, updated_at, deleted_at, deleted
-FROM organization_user_relationships
-WHERE organization_id = $1
-  AND deleted_at IS NULL
+SELECT
+  our.id, our.organization_id, our.user_id, our.workos_membership_id, our.created_at, our.updated_at, our.deleted_at, our.deleted,
+  u.email AS user_email,
+  u.display_name AS user_display_name,
+  u.photo_url AS user_photo_url
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted_at IS NULL
 `
 
-func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID string) ([]OrganizationUserRelationship, error) {
+type ListOrganizationUsersRow struct {
+	ID                 int64
+	OrganizationID     string
+	UserID             string
+	WorkosMembershipID pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
+	UserEmail          string
+	UserDisplayName    string
+	UserPhotoUrl       pgtype.Text
+}
+
+func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID string) ([]ListOrganizationUsersRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationUsers, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []OrganizationUserRelationship
+	var items []ListOrganizationUsersRow
 	for rows.Next() {
-		var i OrganizationUserRelationship
+		var i ListOrganizationUsersRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizationID,
@@ -175,6 +194,9 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+			&i.UserEmail,
+			&i.UserDisplayName,
+			&i.UserPhotoUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -235,6 +257,54 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const setUserWorkOSMemberships = `-- name: SetUserWorkOSMemberships :exec
+WITH input_memberships AS (
+    SELECT unnest($2::text[]) AS workos_org_id,
+           unnest($3::text[]) AS workos_membership_id
+),
+resolved AS (
+    SELECT organization_metadata.id AS organization_id,
+           input_memberships.workos_membership_id
+    FROM input_memberships
+    JOIN organization_metadata ON organization_metadata.workos_id = input_memberships.workos_org_id
+),
+upserted AS (
+    INSERT INTO organization_user_relationships (organization_id, user_id, workos_membership_id)
+    SELECT resolved.organization_id, $1, resolved.workos_membership_id
+    FROM resolved
+    ON CONFLICT (organization_id, user_id) DO UPDATE SET
+        workos_membership_id = EXCLUDED.workos_membership_id,
+        deleted_at = NULL,
+        updated_at = clock_timestamp()
+    RETURNING organization_id
+)
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_user_relationships.user_id = $1
+  AND organization_user_relationships.deleted_at IS NULL
+  AND organization_user_relationships.organization_id NOT IN (SELECT organization_id FROM resolved)
+  AND organization_user_relationships.organization_id IN (
+      SELECT id FROM organization_metadata WHERE workos_id IS NOT NULL
+  )
+`
+
+type SetUserWorkOSMembershipsParams struct {
+	UserID              string
+	WorkosOrgIds        []string
+	WorkosMembershipIds []string
+}
+
+// Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs
+// (not Speakeasy org IDs) and resolves them via organization_metadata. Upserts
+// the provided (workos_org_id, workos_membership_id) pairs and soft-deletes any
+// other relationships where the org has a non-NULL workos_id. Orgs without a
+// workos_id are unaffected. Other users' memberships are never modified.
+func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkOSMembershipsParams) error {
+	_, err := q.db.Exec(ctx, setUserWorkOSMemberships, arg.UserID, arg.WorkosOrgIds, arg.WorkosMembershipIds)
+	return err
 }
 
 const upsertOrganizationMetadata = `-- name: UpsertOrganizationMetadata :one

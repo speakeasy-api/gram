@@ -26,7 +26,7 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 export function SortDropdown({ value, onChange }: SortDropdownProps) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as SortOption)}>
-      <SelectTrigger className="w-[164px] !h-10 bg-background">
+      <SelectTrigger className="bg-background !h-10 w-[164px]">
         <SelectValue placeholder="Sort by" />
       </SelectTrigger>
       <SelectContent>

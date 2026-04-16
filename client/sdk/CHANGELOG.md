@@ -1,5 +1,27 @@
 # @gram/client
 
+## 0.33.0
+
+### Minor Changes
+
+- 98d322b: Add support for triggers across Gram.
+
+  This introduces webhook and scheduled triggers end to end, including server APIs, worker execution for trigger dispatch and cron processing, SDK support, and dashboard UI for managing trigger definitions and instances.
+
+## 0.33.0
+
+### Minor Changes
+
+- b328938: Add static platform tools to tool discovery and the built-in MCP logs server.
+
+### Patch Changes
+
+- 3a3acd3: Add editable OAuth proxy server configuration.
+
+  Admins can now edit an existing OAuth proxy server's audience, authorization endpoint, token endpoint, scopes, token endpoint auth methods, and environment slug without having to unlink and recreate the configuration. The new `POST /rpc/toolsets.updateOAuthProxyServer` endpoint accepts partial updates with PATCH semantics (omit fields to leave them unchanged; pass an empty array to clear array fields). The dashboard's OAuth proxy details modal now exposes an Edit button that opens the existing OAuth modal in edit mode with the current values pre-filled.
+
+  Slug and provider type remain immutable after creation. Gram-managed OAuth proxy servers stay view-only.
+
 ## 0.32.38
 
 ### Patch Changes

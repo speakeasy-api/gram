@@ -29,6 +29,10 @@ export type ChatOverviewWithResolutions = {
    */
   id: string;
   /**
+   * When the last message in the chat was created.
+   */
+  lastMessageTimestamp: Date;
+  /**
    * The number of messages in the chat
    */
   numMessages: number;
@@ -82,6 +86,10 @@ export const ChatOverviewWithResolutions$inboundSchema: z.ZodMiniType<
     ),
     external_user_id: z.optional(z.string()),
     id: z.string(),
+    last_message_timestamp: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
     num_messages: z.int(),
     resolutions: z.array(ChatResolution$inboundSchema),
     source: z.optional(z.string()),
@@ -100,6 +108,7 @@ export const ChatOverviewWithResolutions$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "created_at": "createdAt",
       "external_user_id": "externalUserId",
+      "last_message_timestamp": "lastMessageTimestamp",
       "num_messages": "numMessages",
       "total_cost": "totalCost",
       "total_input_tokens": "totalInputTokens",

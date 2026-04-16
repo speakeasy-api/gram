@@ -201,15 +201,20 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		}
 
 		for _, chat := range chats {
+			var lastMessageTimestamp string
+			if chat.LastMessageTimestamp.Valid {
+				lastMessageTimestamp = chat.LastMessageTimestamp.Time.Format(time.RFC3339)
+			}
 			result = append(result, &gen.ChatOverview{
-				ID:             chat.ID.String(),
-				UserID:         nil,
-				ExternalUserID: &chat.ExternalUserID.String,
-				Source:         conv.FromPGText[string](chat.Source),
-				Title:          chat.Title.String,
-				NumMessages:    int(chat.NumMessages),
-				CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
+				ID:                   chat.ID.String(),
+				UserID:               nil,
+				ExternalUserID:       &chat.ExternalUserID.String,
+				Source:               conv.FromPGText[string](chat.Source),
+				Title:                chat.Title.String,
+				NumMessages:          int(chat.NumMessages),
+				CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
+				LastMessageTimestamp: lastMessageTimestamp,
 			})
 		}
 
@@ -229,15 +234,20 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		}
 
 		for _, chat := range chats {
+			var lastMessageTimestamp string
+			if chat.LastMessageTimestamp.Valid {
+				lastMessageTimestamp = chat.LastMessageTimestamp.Time.Format(time.RFC3339)
+			}
 			result = append(result, &gen.ChatOverview{
-				ID:             chat.ID.String(),
-				UserID:         &chat.UserID.String,
-				ExternalUserID: nil,
-				Source:         conv.FromPGText[string](chat.Source),
-				Title:          chat.Title.String,
-				NumMessages:    int(chat.NumMessages),
-				CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
+				ID:                   chat.ID.String(),
+				UserID:               &chat.UserID.String,
+				ExternalUserID:       nil,
+				Source:               conv.FromPGText[string](chat.Source),
+				Title:                chat.Title.String,
+				NumMessages:          int(chat.NumMessages),
+				CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
+				LastMessageTimestamp: lastMessageTimestamp,
 			})
 		}
 
@@ -263,15 +273,20 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	for _, chat := range chats {
+		var lastMessageTimestamp string
+		if chat.LastMessageTimestamp.Valid {
+			lastMessageTimestamp = chat.LastMessageTimestamp.Time.Format(time.RFC3339)
+		}
 		result = append(result, &gen.ChatOverview{
-			ID:             chat.ID.String(),
-			UserID:         &chat.UserID.String,
-			ExternalUserID: nil,
-			Source:         conv.FromPGText[string](chat.Source),
-			Title:          chat.Title.String,
-			NumMessages:    int(chat.NumMessages),
-			CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
+			ID:                   chat.ID.String(),
+			UserID:               &chat.UserID.String,
+			ExternalUserID:       nil,
+			Source:               conv.FromPGText[string](chat.Source),
+			Title:                chat.Title.String,
+			NumMessages:          int(chat.NumMessages),
+			CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
+			LastMessageTimestamp: lastMessageTimestamp,
 		})
 	}
 
@@ -372,16 +387,21 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 
 		// If this is the first row for this chat, create the chat entry
 		if _, exists := chatMap[chatID]; !exists {
+			var lastMessageTimestamp string
+			if row.LastMessageTimestamp.Valid {
+				lastMessageTimestamp = row.LastMessageTimestamp.Time.Format(time.RFC3339)
+			}
 			chatMap[chatID] = &gen.ChatOverviewWithResolutions{
-				ID:             chatID,
-				Title:          row.Title.String,
-				UserID:         conv.FromPGText[string](row.UserID),
-				ExternalUserID: conv.FromPGText[string](row.ExternalUserID),
-				Source:         conv.FromPGText[string](row.Source),
-				NumMessages:    int(row.NumMessages),
-				CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
-				Resolutions:    make([]*gen.ChatResolution, 0),
+				ID:                   chatID,
+				Title:                row.Title.String,
+				UserID:               conv.FromPGText[string](row.UserID),
+				ExternalUserID:       conv.FromPGText[string](row.ExternalUserID),
+				Source:               conv.FromPGText[string](row.Source),
+				NumMessages:          int(row.NumMessages),
+				CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
+				LastMessageTimestamp: lastMessageTimestamp,
+				Resolutions:          make([]*gen.ChatResolution, 0),
 			}
 			chatOrder = append(chatOrder, chatID)
 		}
@@ -499,16 +519,23 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 	}
 
+	// Get last message timestamp from the most recent message
+	var lastMessageTimestamp string
+	if len(messages) > 0 {
+		lastMessageTimestamp = messages[len(messages)-1].CreatedAt.Time.Format(time.RFC3339)
+	}
+
 	result := &gen.Chat{
-		ID:             chat.ID.String(),
-		Title:          chat.Title.String,
-		UserID:         &chat.UserID.String,
-		ExternalUserID: &chat.ExternalUserID.String,
-		Source:         source,
-		NumMessages:    len(messages),
-		CreatedAt:      chat.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      chat.UpdatedAt.Time.Format(time.RFC3339),
-		Messages:       resultMessages,
+		ID:                   chat.ID.String(),
+		Title:                chat.Title.String,
+		UserID:               &chat.UserID.String,
+		ExternalUserID:       &chat.ExternalUserID.String,
+		Source:               source,
+		NumMessages:          len(messages),
+		CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
+		LastMessageTimestamp: lastMessageTimestamp,
+		Messages:             resultMessages,
 	}
 
 	// Enrich with metrics from ClickHouse
@@ -635,9 +662,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	// Extract JSON schema from response_format if present
 	// This enables structured output mode (e.g., for generateObject in AI SDK)
-	var jsonSchema *or.JSONSchemaConfig
-	if chatRequest.ResponseFormat != nil && chatRequest.ResponseFormat.ResponseFormatJSONSchema != nil {
-		schema := chatRequest.ResponseFormat.ResponseFormatJSONSchema.GetJSONSchema()
+	var jsonSchema *or.ChatJSONSchemaConfig
+	if chatRequest.ResponseFormat != nil && chatRequest.ResponseFormat.ChatFormatJSONSchemaConfig != nil {
+		schema := chatRequest.ResponseFormat.ChatFormatJSONSchemaConfig.GetJSONSchema()
 		jsonSchema = &schema
 	}
 
@@ -719,8 +746,8 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		Created: time.Now().Unix(),
 		Model:   response.Model,
 		Choices: []struct {
-			Message      or.Message `json:"message"`
-			FinishReason string     `json:"finish_reason"`
+			Message      or.ChatMessages `json:"message"`
+			FinishReason string          `json:"finish_reason"`
 		}{
 			{
 				Message:      *response.Message,
@@ -788,6 +815,28 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 		title = chat.Title.String
 	}
 	return &gen.GenerateTitleResult{Title: title}, nil
+}
+
+func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid chat id").Log(ctx, s.logger)
+	}
+
+	err = s.repo.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{
+		ID:        chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "soft delete chat").Log(ctx, s.logger)
+	}
+
+	return nil
 }
 
 func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbackPayload) (*gen.SubmitFeedbackResult, error) {
@@ -918,7 +967,7 @@ type chatMessageRow struct {
 
 	role             string
 	model            string
-	content          or.Message
+	content          or.ChatMessages
 	finishReason     *string
 	toolCalls        []string
 	promptTokens     int64

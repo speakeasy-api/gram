@@ -166,10 +166,10 @@ function EnvironmentEntryInput({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 items-center">
+    <div className="grid grid-cols-2 items-center gap-4">
       <label
         htmlFor={`env-${entry.varName}`}
-        className="text-sm font-medium text-foreground"
+        className="text-foreground text-sm font-medium"
       >
         {entry.varName}
       </label>
@@ -199,8 +199,8 @@ export function EnvironmentEntriesFormFields({
 }: EnvironmentEntriesFormFieldsProps) {
   if (relevantEnvVars.length === 0) {
     return (
-      <div className="text-center py-8">
-        <p className="text-sm text-muted-foreground">
+      <div className="py-8 text-center">
+        <p className="text-muted-foreground text-sm">
           No authentication required for this toolset
         </p>
       </div>

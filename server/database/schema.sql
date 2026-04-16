@@ -490,6 +490,37 @@ CREATE UNIQUE INDEX IF NOT EXISTS environments_project_id_slug_key
 ON environments (project_id, slug)
 WHERE deleted IS FALSE;
 
+CREATE TABLE IF NOT EXISTS trigger_instances (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  definition_slug TEXT NOT NULL CHECK (definition_slug <> '' AND CHAR_LENGTH(definition_slug) <= 60),
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 120),
+  environment_id uuid,
+  target_kind TEXT NOT NULL CHECK (target_kind <> '' AND CHAR_LENGTH(target_kind) <= 60),
+  target_ref TEXT NOT NULL CHECK (target_ref <> '' AND CHAR_LENGTH(target_ref) <= 255),
+  target_display TEXT NOT NULL CHECK (target_display <> '' AND CHAR_LENGTH(target_display) <= 255),
+  config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status TEXT NOT NULL CHECK (status IN ('active', 'paused')) DEFAULT 'active',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT trigger_instances_pkey PRIMARY KEY (id),
+  CONSTRAINT trigger_instances_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT trigger_instances_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS trigger_instances_project_id_idx
+ON trigger_instances (project_id, created_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS trigger_instances_environment_id_idx
+ON trigger_instances (environment_id)
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS environment_entries (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   value TEXT NOT NULL CHECK (value <> '' AND CHAR_LENGTH(value) <= 4000),
@@ -1347,7 +1378,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments
 CREATE TABLE IF NOT EXISTS external_mcp_attachments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
-  registry_id uuid NOT NULL,
+  registry_id uuid,
+  organization_mcp_collection_registry_id uuid,
   name TEXT NOT NULL CHECK (name <> ''),
   slug TEXT NOT NULL CHECK (slug <> ''),
   registry_server_specifier TEXT NOT NULL CHECK (registry_server_specifier <> ''),
@@ -1360,7 +1392,8 @@ CREATE TABLE IF NOT EXISTS external_mcp_attachments (
 
   CONSTRAINT external_mcp_attachments_pkey PRIMARY KEY (id),
   CONSTRAINT external_mcp_attachments_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments(id) ON DELETE CASCADE,
-  CONSTRAINT external_mcp_attachments_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries(id) ON DELETE SET NULL
+  CONSTRAINT external_mcp_attachments_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries(id) ON DELETE CASCADE,
+  CONSTRAINT external_mcp_attachments_collection_registry_id_fkey FOREIGN KEY (organization_mcp_collection_registry_id) REFERENCES organization_mcp_collection_registries(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS external_mcp_attachments_deployment_id_idx
@@ -1603,3 +1636,131 @@ ON audit_logs (organization_id, seq DESC);
 
 CREATE INDEX IF NOT EXISTS audit_logs_organization_id_project_id_seq_idx
 ON audit_logs (organization_id, project_id, seq DESC);
+
+-- Remote MCP servers are upstream MCP endpoints that Gram proxies requests to.
+-- See https://modelcontextprotocol.io/registry/remote-servers
+CREATE TABLE IF NOT EXISTS remote_mcp_servers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  transport_type TEXT NOT NULL CHECK (transport_type <> ''),
+  url TEXT NOT NULL CHECK (url <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_mcp_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS remote_mcp_servers_project_id_idx
+ON remote_mcp_servers (project_id)
+WHERE deleted IS FALSE;
+
+-- Headers sent to a remote MCP server when proxying requests. Either value
+-- (a static/system-defined value) or value_from_request_header (pass-through
+-- from the incoming client request) is set, never both.
+-- See https://modelcontextprotocol.io/registry/remote-servers#http-headers
+CREATE TABLE IF NOT EXISTS remote_mcp_server_headers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  remote_mcp_server_id uuid NOT NULL,
+  name TEXT NOT NULL CHECK (name <> ''),
+  description TEXT,
+  is_required BOOLEAN NOT NULL DEFAULT FALSE,
+  is_secret BOOLEAN NOT NULL DEFAULT FALSE,
+  value TEXT,
+  value_from_request_header TEXT CHECK (value_from_request_header IS NULL OR value_from_request_header <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_mcp_server_headers_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_mcp_server_headers_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers (id) ON DELETE CASCADE,
+  CONSTRAINT remote_mcp_server_headers_value_source_check CHECK ((value IS NULL) != (value_from_request_header IS NULL))
+);
+
+CREATE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_idx
+ON remote_mcp_server_headers (remote_mcp_server_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_name_key
+ON remote_mcp_server_headers (remote_mcp_server_id, name)
+WHERE deleted IS FALSE;
+
+-- Plugin definitions: project-scoped distributable bundles of MCP servers.
+-- Admins create plugins and assign them to roles for distribution.
+CREATE TABLE IF NOT EXISTS plugins (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  name TEXT NOT NULL CHECK (name <> ''),
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
+  description TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT plugins_pkey PRIMARY KEY (id),
+  CONSTRAINT plugins_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT plugins_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_project_id_slug_key
+  ON plugins (organization_id, project_id, slug)
+  WHERE deleted IS FALSE;
+
+-- Links a plugin to a toolset-backed MCP server.
+CREATE TABLE IF NOT EXISTS plugin_servers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  plugin_id uuid NOT NULL,
+  toolset_id uuid NOT NULL,
+  display_name TEXT NOT NULL CHECK (display_name <> ''),
+  policy TEXT NOT NULL DEFAULT 'required',
+  sort_order INT NOT NULL DEFAULT 0,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT plugin_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT plugin_servers_plugin_id_fkey FOREIGN KEY (plugin_id) REFERENCES plugins (id) ON DELETE CASCADE,
+  -- RESTRICT is intentional: CASCADE would silently destroy rows.
+  -- Toolsets use soft deletes so RESTRICT only blocks manual hard deletes.
+  -- If a hard-delete path is added later, it must purge soft-deleted
+  -- plugin_servers referencing the target first.
+  CONSTRAINT plugin_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
+  CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_display_name_key
+  ON plugin_servers (plugin_id, display_name)
+  WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_toolset_id_key
+  ON plugin_servers (plugin_id, toolset_id)
+  WHERE deleted IS FALSE;
+
+-- Controls who receives a plugin. Reuses the RBAC principal URN pattern
+-- (role:slug, user:id, or * for all org members).
+CREATE TABLE IF NOT EXISTS plugin_assignments (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  plugin_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  principal_urn TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT plugin_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT plugin_assignments_plugin_id_fkey FOREIGN KEY (plugin_id) REFERENCES plugins (id) ON DELETE CASCADE,
+  CONSTRAINT plugin_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_assignments_plugin_id_principal_urn_key
+  ON plugin_assignments (plugin_id, principal_urn);

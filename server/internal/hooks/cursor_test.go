@@ -159,6 +159,167 @@ func TestBuildCursorTelemetryAttributes_NilUserEmail(t *testing.T) {
 	assert.Empty(t, attrs[attr.UserEmailKey])
 }
 
+func TestCursor_BeforeSubmitPrompt_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	prompt := "How do I fix this bug?"
+	conversationID := "conv-prompt-123"
+	userEmail := "dev@example.com"
+
+	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
+		HookEventName:  "beforeSubmitPrompt",
+		Prompt:         &prompt,
+		ConversationID: &conversationID,
+		UserEmail:      &userEmail,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Nil(t, result.Permission)
+}
+
+func TestCursor_Stop_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	conversationID := "conv-stop-123"
+	userEmail := "dev@example.com"
+	status := "completed"
+	inputTokens := 38950
+	outputTokens := 500
+
+	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
+		HookEventName:  "stop",
+		ConversationID: &conversationID,
+		UserEmail:      &userEmail,
+		Status:         &status,
+		InputTokens:    &inputTokens,
+		OutputTokens:   &outputTokens,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Nil(t, result.Permission)
+}
+
+func TestCursor_PersistEventRouting_AllEventTypes(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	conversationID := "conv-routing-test"
+	userEmail := "dev@example.com"
+	toolName := "Edit"
+	toolUseID := "toolu_routing_test"
+
+	// All event types should route through persistCursorEventToPG without error
+	events := []struct {
+		name    string
+		payload *hooks.CursorPayload
+	}{
+		{
+			name: "beforeSubmitPrompt",
+			payload: &hooks.CursorPayload{
+				HookEventName:  "beforeSubmitPrompt",
+				ConversationID: &conversationID,
+				UserEmail:      &userEmail,
+				Prompt:         new("test prompt"),
+			},
+		},
+		{
+			name: "preToolUse",
+			payload: &hooks.CursorPayload{
+				HookEventName:  "preToolUse",
+				ConversationID: &conversationID,
+				UserEmail:      &userEmail,
+				ToolName:       &toolName,
+				ToolUseID:      &toolUseID,
+			},
+		},
+		{
+			name: "postToolUse",
+			payload: &hooks.CursorPayload{
+				HookEventName:  "postToolUse",
+				ConversationID: &conversationID,
+				UserEmail:      &userEmail,
+				ToolName:       &toolName,
+				ToolUseID:      &toolUseID,
+				ToolResponse:   "success",
+			},
+		},
+		{
+			name: "postToolUseFailure",
+			payload: &hooks.CursorPayload{
+				HookEventName:  "postToolUseFailure",
+				ConversationID: &conversationID,
+				UserEmail:      &userEmail,
+				ToolName:       &toolName,
+				ToolUseID:      &toolUseID,
+				Error:          "something failed",
+			},
+		},
+		{
+			name: "stop",
+			payload: &hooks.CursorPayload{
+				HookEventName:  "stop",
+				ConversationID: &conversationID,
+				UserEmail:      &userEmail,
+			},
+		},
+	}
+
+	for _, e := range events {
+		result, err := ti.service.Cursor(ctx, e.payload)
+		require.NoError(t, err, "event %s should not error", e.name)
+		require.NotNil(t, result, "event %s should return a result", e.name)
+	}
+}
+
+func TestBuildCursorTelemetryAttributes_BeforeSubmitPromptNormalization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	prompt := "Fix the bug"
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "beforeSubmitPrompt",
+		Prompt:        &prompt,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	require.Equal(t, "BeforeSubmitPrompt", attrs[attr.HookEventKey])
+	// Prompt should be stored as LogBody for beforeSubmitPrompt
+	require.Equal(t, "Fix the bug", attrs[attr.LogBodyKey])
+	// ToolNameKey should be empty for conversation events
+	require.Empty(t, attrs[attr.ToolNameKey])
+}
+
+func TestBuildCursorTelemetryAttributes_StopNormalization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	status := "completed"
+	inputTokens := 38950
+	outputTokens := 500
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "stop",
+		Status:        &status,
+		InputTokens:   &inputTokens,
+		OutputTokens:  &outputTokens,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	require.Equal(t, "Stop", attrs[attr.HookEventKey])
+	// Token usage should be captured from stop events
+	require.Equal(t, 38950, attrs[attr.GenAIUsageInputTokensKey])
+	require.Equal(t, 500, attrs[attr.GenAIUsageOutputTokensKey])
+	// ToolNameKey should be empty for non-tool events
+	require.Empty(t, attrs[attr.ToolNameKey])
+	// LogBody should NOT contain prompt text (stop has no prompt)
+	require.Equal(t, "Hook: Stop", attrs[attr.LogBodyKey])
+}
+
 func TestBuildCursorTelemetryAttributes_ToolInputStringified(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

@@ -64,7 +64,7 @@ export function CommandPalette() {
                   <span>{action.label}</span>
                 </div>
                 {action.shortcut && (
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-muted-foreground text-xs">
                     {action.shortcut}
                   </span>
                 )}

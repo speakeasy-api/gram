@@ -15,11 +15,11 @@ function ContentErrorFallback({ error }: ContentErrorFallbackProps) {
   handleError(error, { silent: true });
 
   return (
-    <Card className="w-full max-w-lg m-8 py-8">
+    <Card className="m-8 w-full max-w-lg py-8">
       <Card.Header>
         <Card.Title>
           <Stack direction="horizontal" gap={2} align="center">
-            <Icon name="circle-alert" className="h-5 w-5 text-destructive" />
+            <Icon name="circle-alert" className="text-destructive h-5 w-5" />
             Error loading Page
           </Stack>
         </Card.Title>
@@ -28,8 +28,8 @@ function ContentErrorFallback({ error }: ContentErrorFallbackProps) {
         <Card.Description>
           We encountered an error while loading this page.
         </Card.Description>
-        <div className="bg-muted p-3 rounded-md">
-          <p className="text-sm text-muted-foreground font-mono">
+        <div className="bg-muted rounded-md p-3">
+          <p className="text-muted-foreground font-mono text-sm">
             {error.message}
           </p>
         </div>

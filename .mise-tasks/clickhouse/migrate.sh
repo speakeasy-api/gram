@@ -31,7 +31,7 @@ else
     args+=("--dry-run")
   fi
 
-  atlas login
+  atlas whoami &>/dev/null || atlas login
 
   exec atlas migrate apply \
     --dir file://clickhouse/migrations \

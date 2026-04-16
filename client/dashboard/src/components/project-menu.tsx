@@ -96,9 +96,9 @@ export function ProjectMenu() {
     <>
       <dl>
         <dt className="text-muted-foreground">Organization ID</dt>
-        <dd className="text-xs font-mono">{organization?.id}</dd>
+        <dd className="font-mono text-xs">{organization?.id}</dd>
         <dt className="text-muted-foreground">Project ID</dt>
-        <dd className="text-xs font-mono">{project?.id}</dd>
+        <dd className="font-mono text-xs">{project?.id}</dd>
       </dl>
       <Separator className="my-2" />
     </>
@@ -111,15 +111,15 @@ export function ProjectMenu() {
           variant="ghost"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between h-12 p-2"
+          className="h-12 w-full justify-between p-2"
         >
           <Stack direction={"horizontal"} gap={3} align="center">
             <ProjectAvatar project={project} className="h-8 w-8 rounded-md" />
             <Stack align="start">
-              <Type className="normal-case -mb-1">
+              <Type className="-mb-1 normal-case">
                 {project?.slug ?? "Select Project"}
               </Type>
-              <Type variant="small" muted className="truncate max-w-[120px]">
+              <Type variant="small" muted className="max-w-[120px] truncate">
                 {organization?.name}
               </Type>
             </Stack>
@@ -134,7 +134,7 @@ export function ProjectMenu() {
             <Type variant="small" className="px-2">
               {organization?.name}
             </Type>
-            <Type muted variant="small" className="px-2 truncate">
+            <Type muted variant="small" className="truncate px-2">
               {session.user.email}
             </Type>
           </Stack>
@@ -213,7 +213,7 @@ export function ProjectSelector() {
     value: project.slug,
     label: project.slug,
     icon: (
-      <ProjectAvatar project={project} className="h-4 w-4 min-w-4 min-h-4" />
+      <ProjectAvatar project={project} className="h-4 min-h-4 w-4 min-w-4" />
     ),
   }));
 
@@ -259,10 +259,10 @@ export function ProjectSelector() {
         onSelectionChange={(value) => changeProject(value.value)}
         items={projectWithIcons ?? []}
       >
-        <div className="flex items-center gap-2 w-full">
+        <div className="flex w-full items-center gap-2">
           <ProjectAvatar
             project={selected}
-            className="h-4 w-4 min-w-4 min-h-4"
+            className="h-4 min-h-4 w-4 min-w-4"
           />
           <Type className="truncate" variant="small">
             {selected?.label}

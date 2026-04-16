@@ -21,20 +21,20 @@ import (
 )
 
 type AnalyzeSegment struct {
-	logger           *slog.Logger
-	repo             *repo.Queries
-	chatClient       openrouter.CompletionClient
-	db               *pgxpool.Pool
-	telemetryService *telemetry.Service
+	logger          *slog.Logger
+	repo            *repo.Queries
+	chatClient      openrouter.CompletionClient
+	db              *pgxpool.Pool
+	telemetryLogger *telemetry.Logger
 }
 
-func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, telemetryService *telemetry.Service) *AnalyzeSegment {
+func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, telemetryLogger *telemetry.Logger) *AnalyzeSegment {
 	return &AnalyzeSegment{
-		logger:           logger,
-		repo:             repo.New(db),
-		chatClient:       chatClient,
-		db:               db,
-		telemetryService: telemetryService,
+		logger:          logger,
+		repo:            repo.New(db),
+		chatClient:      chatClient,
+		db:              db,
+		telemetryLogger: telemetryLogger,
 	}
 }
 
@@ -170,7 +170,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		attr.SlogChatID(args.ChatID.String()),
 	)
 
-	if a.telemetryService == nil {
+	if a.telemetryLogger == nil {
 		return nil
 	}
 
@@ -192,7 +192,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		attrs[attr.GenAIConversationDuration] = resolutionTimeSecs
 	}
 
-	a.telemetryService.CreateLog(telemetry.LogParams{
+	a.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp: time.Now(),
 		ToolInfo: telemetry.ToolInfo{
 			ID:             "",
@@ -303,7 +303,7 @@ If there are no tool calls, return an empty array.`, userPromptText)
 		"additionalProperties": false,
 	}
 
-	jsonSchemaConfig := or.JSONSchemaConfig{
+	jsonSchemaConfig := or.ChatJSONSchemaConfig{
 		Name:        "segment_analysis",
 		Schema:      schema,
 		Description: nil,

@@ -33,6 +33,7 @@ func newOidcServer(t *testing.T) (*httptest.Server, *server) {
 			ClientID:     "client_test",
 			ClientSecret: "sk_test",
 			ExternalURL:  "http://localhost:35291",
+			GramSiteURL:  "https://localhost:5173",
 		},
 	}
 	s := &server{
@@ -49,6 +50,7 @@ func newOidcServer(t *testing.T) (*httptest.Server, *server) {
 	mux.HandleFunc("GET /v1/speakeasy_provider/login", s.handleLogin)
 	mux.HandleFunc("GET /v1/speakeasy_provider/oidc/callback", s.handleOidcCallback)
 	mux.HandleFunc("GET /v1/speakeasy_provider/logout/callback", s.handleLogoutCallback)
+	mux.HandleFunc("GET /v1/auth/callback", s.handleInviteAuthCallback)
 	mux.HandleFunc("POST /v1/speakeasy_provider/exchange", s.withAuth(s.handleExchange))
 	mux.HandleFunc("GET /v1/speakeasy_provider/validate", s.withAuth(s.handleValidate))
 	mux.HandleFunc("POST /v1/speakeasy_provider/revoke", s.withAuth(s.handleRevoke))

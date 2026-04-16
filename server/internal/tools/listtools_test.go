@@ -16,6 +16,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/tools"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -100,10 +101,11 @@ func TestToolsService_ListTools_Success(t *testing.T) {
 
 	// Verify response structure
 	require.NotNil(t, result.Tools, "tools should not be nil")
-	require.GreaterOrEqual(t, len(result.Tools), 3, "should have at least 3 tools (1+ HTTP, 2 templates)")
+	require.GreaterOrEqual(t, len(result.Tools), 4, "should have at least 4 tools (1+ HTTP, 1 platform, 2 templates)")
 
 	// Count HTTP tools and prompt templates
 	httpToolCount := 0
+	platformToolCount := 0
 	templateCount := 0
 	templateIDs := map[string]bool{
 		template1.Template.ID: true,
@@ -120,6 +122,12 @@ func TestToolsService_ListTools_Success(t *testing.T) {
 			require.NotEmpty(t, tool.HTTPToolDefinition.Path, "path should not be empty")
 			require.NotEmpty(t, tool.HTTPToolDefinition.CreatedAt, "created at should not be empty")
 			require.NotEmpty(t, tool.HTTPToolDefinition.UpdatedAt, "updated at should not be empty")
+		} else if tool.PlatformToolDefinition != nil {
+			platformToolCount++
+			require.NotEmpty(t, tool.PlatformToolDefinition.ID, "platform tool ID should not be empty")
+			require.NotEmpty(t, tool.PlatformToolDefinition.ToolUrn, "platform tool URN should not be empty")
+			require.NotEmpty(t, tool.PlatformToolDefinition.Name, "platform tool name should not be empty")
+			require.NotEmpty(t, tool.PlatformToolDefinition.Schema, "platform tool schema should not be empty")
 		} else if tool.PromptTemplate != nil {
 			templateCount++
 			require.NotEmpty(t, tool.PromptTemplate.ID, "template ID should not be empty")
@@ -134,6 +142,7 @@ func TestToolsService_ListTools_Success(t *testing.T) {
 	}
 
 	require.GreaterOrEqual(t, httpToolCount, 1, "should have at least one http tool")
+	require.GreaterOrEqual(t, platformToolCount, 1, "should have at least one platform tool")
 	require.Equal(t, 2, templateCount, "should have exactly 2 prompt templates")
 }
 
@@ -153,7 +162,10 @@ func TestToolsService_ListTools_EmptyList(t *testing.T) {
 	})
 	require.NoError(t, err, "should not error when no tools exist")
 	require.NotNil(t, result.Tools, "tools should not be nil")
-	require.Empty(t, result.Tools, "tools should be empty when no tools exist")
+	require.Len(t, result.Tools, len(platformtools.ListPlatformTools()), "platform tools should still be listed when no project tools exist")
+	for _, tool := range result.Tools {
+		require.NotNil(t, tool.PlatformToolDefinition, "tools should all be platform tools when no project tools exist")
+	}
 	require.Nil(t, result.NextCursor, "next cursor should be nil for empty results")
 }
 
@@ -223,8 +235,9 @@ func TestToolsService_ListTools_WithCursor(t *testing.T) {
 	})
 	require.NoError(t, err, "get first page of tools")
 	require.NotNil(t, firstPage.Tools, "first page tools should not be nil")
-	require.Len(t, firstPage.Tools, int(*limit), "should have exactly %d tools", *limit)
+	require.Len(t, firstPage.Tools, int(*limit)+len(platformtools.ListPlatformTools()), "should include the paged tools plus platform tools on the first page")
 	require.NotNil(t, firstPage.NextCursor, "should have a next cursor with this many tools")
+	require.NotNil(t, firstPage.Tools[len(firstPage.Tools)-1].PlatformToolDefinition, "first page should retain the platform tool after trimming the pagination sentinel")
 
 	// Test pagination with the cursor
 	secondPage, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
@@ -236,6 +249,9 @@ func TestToolsService_ListTools_WithCursor(t *testing.T) {
 	})
 	require.NoError(t, err, "get second page of tools")
 	require.NotNil(t, secondPage.Tools, "second page tools should not be nil")
+	for _, tool := range secondPage.Tools {
+		require.Nil(t, tool.PlatformToolDefinition, "platform tools should only be appended on the first page")
+	}
 
 	// Verify the pages contain different tools
 	firstPageIDs := make(map[string]bool)
@@ -243,6 +259,8 @@ func TestToolsService_ListTools_WithCursor(t *testing.T) {
 		var id string
 		if tool.HTTPToolDefinition != nil {
 			id = tool.HTTPToolDefinition.ID
+		} else if tool.PlatformToolDefinition != nil {
+			id = tool.PlatformToolDefinition.ID
 		} else if tool.PromptTemplate != nil {
 			id = tool.PromptTemplate.ID
 		}
@@ -253,6 +271,8 @@ func TestToolsService_ListTools_WithCursor(t *testing.T) {
 		var id string
 		if tool.HTTPToolDefinition != nil {
 			id = tool.HTTPToolDefinition.ID
+		} else if tool.PlatformToolDefinition != nil {
+			id = tool.PlatformToolDefinition.ID
 		} else if tool.PromptTemplate != nil {
 			id = tool.PromptTemplate.ID
 		}
@@ -831,6 +851,7 @@ func TestToolsService_ListTools_WithMixedToolTypes(t *testing.T) {
 	// Count each tool type
 	httpToolCount := 0
 	functionToolCount := 0
+	platformToolCount := 0
 	templateCount := 0
 
 	for _, tool := range result.Tools {
@@ -840,6 +861,8 @@ func TestToolsService_ListTools_WithMixedToolTypes(t *testing.T) {
 		} else if tool.FunctionToolDefinition != nil {
 			functionToolCount++
 			require.Equal(t, deployment.Deployment.ID, tool.FunctionToolDefinition.DeploymentID, "function tool deployment ID should match")
+		} else if tool.PlatformToolDefinition != nil {
+			platformToolCount++
 		} else if tool.PromptTemplate != nil {
 			templateCount++
 			require.Equal(t, template.Template.ID, tool.PromptTemplate.ID, "template ID should match")
@@ -850,6 +873,7 @@ func TestToolsService_ListTools_WithMixedToolTypes(t *testing.T) {
 
 	require.GreaterOrEqual(t, httpToolCount, 1, "should have at least one http tool")
 	require.GreaterOrEqual(t, functionToolCount, 1, "should have at least one function tool")
+	require.GreaterOrEqual(t, platformToolCount, 1, "should have at least one platform tool")
 	require.Equal(t, 1, templateCount, "should have exactly 1 prompt template")
 }
 

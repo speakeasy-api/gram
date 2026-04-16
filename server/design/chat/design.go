@@ -180,6 +180,29 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChatsWithResolutions", "type": "query"}`)
 	})
 
+	Method("deleteChat", func() {
+		Description("Soft-delete a chat by its ID")
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The ID of the chat to delete")
+			Required("id")
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/chat.delete")
+			Param("id")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "deleteChat")
+		Meta("openapi:extension:x-speakeasy-name-override", "delete")
+	})
+
 	Method("submitFeedback", func() {
 		Description("Submit user feedback for a chat (success/failure)")
 
@@ -236,8 +259,12 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("total_output_tokens", Int64, "Total output tokens used in this chat")
 	Attribute("total_tokens", Int64, "Total tokens (input + output) used in this chat")
 	Attribute("total_cost", Float64, "Total cost in USD for this chat")
+	Attribute("last_message_timestamp", String, func() {
+		Description("When the last message in the chat was created.")
+		Format(FormatDateTime)
+	})
 
-	Required("id", "title", "num_messages", "created_at", "updated_at")
+	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
 })
 
 var Chat = Type("Chat", func() {

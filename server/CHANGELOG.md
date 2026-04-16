@@ -1,5 +1,44 @@
 # server
 
+## 0.39.0
+
+### Minor Changes
+
+- 98d322b: Add support for triggers across Gram.
+
+  This introduces webhook and scheduled triggers end to end, including server APIs, worker execution for trigger dispatch and cron processing, SDK support, and dashboard UI for managing trigger definitions and instances.
+
+### Patch Changes
+
+- 04e0240: Disabled the logger for the retryablehttp client to avoid noisy logs that can clutter the output.
+- 6a23890: Fixed an issue where toolset lookup for install pages had fallback logic that, when a custom-domain-scoped query returned no rows (e.g. because the toolset was deleted), would retry with a slug-only query ignoring the domain. This caused the install page to serve a different org's active toolset that shared the same MCP slug instead of returning 404.
+- 15a7b25: Ensure telemetry logs continue to be inserted into ClickHouse even if the
+  request context has been canceled.
+- 4b1aa8c: Allow resolving a server without a custom domain attached when the user is authenticated and a custom domain is available.
+
+## 0.38.0
+
+### Minor Changes
+
+- 0e42ed2: Add UserPromptSubmit, afterAgentThought and afterAgentResponse hooks capture for Cursor
+- 61cc193: Add team invite flow with accept page, configurable expiry, and security hardening
+
+### Patch Changes
+
+- 0b296d6: Stop serializing the full role object into the after_snapshot column of the audit log when a role is created. This data bloats the database unnecessarily. A future dashboard update will link directly to the role instead for this audit log event.
+
+## 0.37.0
+
+### Minor Changes
+
+- 3a3acd3: Add editable OAuth proxy server configuration.
+
+  Admins can now edit an existing OAuth proxy server's audience, authorization endpoint, token endpoint, scopes, token endpoint auth methods, and environment slug without having to unlink and recreate the configuration. The new `POST /rpc/toolsets.updateOAuthProxyServer` endpoint accepts partial updates with PATCH semantics (omit fields to leave them unchanged; pass an empty array to clear array fields). The dashboard's OAuth proxy details modal now exposes an Edit button that opens the existing OAuth modal in edit mode with the current values pre-filled.
+
+  Slug and provider type remain immutable after creation. Gram-managed OAuth proxy servers stay view-only.
+
+- b328938: Add static platform tools to tool discovery and the built-in MCP logs server.
+
 ## 0.36.0
 
 ### Minor Changes

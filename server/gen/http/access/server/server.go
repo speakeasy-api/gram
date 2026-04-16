@@ -28,6 +28,9 @@ type Server struct {
 	ListMembers      http.Handler
 	ListGrants       http.Handler
 	UpdateMemberRole http.Handler
+	GetRBACStatus    http.Handler
+	EnableRBAC       http.Handler
+	DisableRBAC      http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -66,6 +69,9 @@ func New(
 			{"ListMembers", "GET", "/rpc/access.listMembers"},
 			{"ListGrants", "GET", "/rpc/access.listGrants"},
 			{"UpdateMemberRole", "PUT", "/rpc/access.updateMemberRole"},
+			{"GetRBACStatus", "GET", "/rpc/access.getRBACStatus"},
+			{"EnableRBAC", "POST", "/rpc/access.enableRBAC"},
+			{"DisableRBAC", "POST", "/rpc/access.disableRBAC"},
 		},
 		ListRoles:        NewListRolesHandler(e.ListRoles, mux, decoder, encoder, errhandler, formatter),
 		GetRole:          NewGetRoleHandler(e.GetRole, mux, decoder, encoder, errhandler, formatter),
@@ -76,6 +82,9 @@ func New(
 		ListMembers:      NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
 		ListGrants:       NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
 		UpdateMemberRole: NewUpdateMemberRoleHandler(e.UpdateMemberRole, mux, decoder, encoder, errhandler, formatter),
+		GetRBACStatus:    NewGetRBACStatusHandler(e.GetRBACStatus, mux, decoder, encoder, errhandler, formatter),
+		EnableRBAC:       NewEnableRBACHandler(e.EnableRBAC, mux, decoder, encoder, errhandler, formatter),
+		DisableRBAC:      NewDisableRBACHandler(e.DisableRBAC, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -93,6 +102,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListMembers = m(s.ListMembers)
 	s.ListGrants = m(s.ListGrants)
 	s.UpdateMemberRole = m(s.UpdateMemberRole)
+	s.GetRBACStatus = m(s.GetRBACStatus)
+	s.EnableRBAC = m(s.EnableRBAC)
+	s.DisableRBAC = m(s.DisableRBAC)
 }
 
 // MethodNames returns the methods served.
@@ -109,6 +121,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListMembersHandler(mux, h.ListMembers)
 	MountListGrantsHandler(mux, h.ListGrants)
 	MountUpdateMemberRoleHandler(mux, h.UpdateMemberRole)
+	MountGetRBACStatusHandler(mux, h.GetRBACStatus)
+	MountEnableRBACHandler(mux, h.EnableRBAC)
+	MountDisableRBACHandler(mux, h.DisableRBAC)
 }
 
 // Mount configures the mux to serve the access endpoints.
@@ -570,6 +585,165 @@ func NewUpdateMemberRoleHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateMemberRole")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetRBACStatusHandler configures the mux to serve the "access" service
+// "getRBACStatus" endpoint.
+func MountGetRBACStatusHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.getRBACStatus", f)
+}
+
+// NewGetRBACStatusHandler creates a HTTP handler which loads the HTTP request
+// and calls the "access" service "getRBACStatus" endpoint.
+func NewGetRBACStatusHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetRBACStatusRequest(mux, decoder)
+		encodeResponse = EncodeGetRBACStatusResponse(encoder)
+		encodeError    = EncodeGetRBACStatusError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getRBACStatus")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountEnableRBACHandler configures the mux to serve the "access" service
+// "enableRBAC" endpoint.
+func MountEnableRBACHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.enableRBAC", f)
+}
+
+// NewEnableRBACHandler creates a HTTP handler which loads the HTTP request and
+// calls the "access" service "enableRBAC" endpoint.
+func NewEnableRBACHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeEnableRBACRequest(mux, decoder)
+		encodeResponse = EncodeEnableRBACResponse(encoder)
+		encodeError    = EncodeEnableRBACError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "enableRBAC")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDisableRBACHandler configures the mux to serve the "access" service
+// "disableRBAC" endpoint.
+func MountDisableRBACHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.disableRBAC", f)
+}
+
+// NewDisableRBACHandler creates a HTTP handler which loads the HTTP request
+// and calls the "access" service "disableRBAC" endpoint.
+func NewDisableRBACHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDisableRBACRequest(mux, decoder)
+		encodeResponse = EncodeDisableRBACResponse(encoder)
+		encodeError    = EncodeDisableRBACError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "disableRBAC")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

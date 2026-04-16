@@ -65,8 +65,8 @@ function DeploymentLogs(props: { deploymentId: string }) {
   };
 
   return (
-    <div className="grid gap-16 w-full overflow-x-hidden">
-      <section className="space-y-6 min-w-0">
+    <div className="grid w-full gap-16 overflow-x-hidden">
+      <section className="min-w-0 space-y-6">
         <HeadingSection />
 
         <Suspense
@@ -95,7 +95,7 @@ function DeploymentLogs(props: { deploymentId: string }) {
       <Tabs
         value={searchParams.tab}
         onValueChange={handleUpdateTab}
-        className="gap-16 min-w-0"
+        className="min-w-0 gap-16"
       >
         <TabsList>
           <TabsTrigger value="logs">Logs</TabsTrigger>
@@ -215,7 +215,7 @@ const StatsSection = ({
   assetCount += deployment.externalMcps?.length ?? 0;
 
   return (
-    <div className="text-sm flex items-center gap-3 h-4">
+    <div className="flex h-4 items-center gap-3 text-sm">
       <span>{deployment.id}</span>
       <Separator orientation="vertical" />
       <div className="flex items-center gap-0.5">
@@ -260,7 +260,7 @@ const HumanizedDeploymentStatus = memo((props: { status: string }) => {
   if (props.status === "completed") {
     return (
       <div className="flex items-center">
-        <CheckIcon className="size-4 text-default-success" />
+        <CheckIcon className="text-default-success size-4" />
         <span className="ml-2">Succeeded</span>
       </div>
     );
@@ -269,7 +269,7 @@ const HumanizedDeploymentStatus = memo((props: { status: string }) => {
   if (props.status === "failed") {
     return (
       <div className="flex items-center">
-        <XIcon className="size-4 text-destructive" />
+        <XIcon className="text-destructive size-4" />
         <span className="ml-2">Failed</span>
       </div>
     );

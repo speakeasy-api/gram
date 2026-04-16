@@ -126,6 +126,13 @@ const (
 	EnvVarNameKey                  = attribute.Key("gram.envvar.name")
 	EventSourceKey                 = attribute.Key("gram.event.source")
 	FilterExpressionKey            = attribute.Key("gram.filter.src")
+	TriggerCorrelationIDKey        = attribute.Key("gram.trigger.correlation_id")
+	TriggerDefinitionSlugKey       = attribute.Key("gram.trigger.definition_slug")
+	TriggerDeliveryStatusKey       = attribute.Key("gram.trigger.delivery_status")
+	TriggerEventIDKey              = attribute.Key("gram.trigger.event_id")
+	TriggerInstanceIDKey           = attribute.Key("gram.trigger.instance_id")
+	TriggerTargetKindKey           = attribute.Key("gram.trigger.target.kind")
+	TriggerTargetRefKey            = attribute.Key("gram.trigger.target.ref")
 	FlyAppInternalIDKey            = attribute.Key("gram.fly.app_id")
 	FunctionIDKey                  = attribute.Key("gram.function.id")
 	FunctionsBackendKey            = attribute.Key("gram.functions.backend")
@@ -597,6 +604,39 @@ func SlogErrorID(v string) slog.Attr      { return slog.String(string(ErrorIDKey
 
 func FilterExpression(v string) attribute.KeyValue { return FilterExpressionKey.String(v) }
 func SlogFilterExpression(v string) slog.Attr      { return slog.String(string(FilterExpressionKey), v) }
+
+func TriggerCorrelationID(v string) attribute.KeyValue { return TriggerCorrelationIDKey.String(v) }
+func SlogTriggerCorrelationID(v string) slog.Attr {
+	return slog.String(string(TriggerCorrelationIDKey), v)
+}
+
+func TriggerDefinitionSlug(v string) attribute.KeyValue { return TriggerDefinitionSlugKey.String(v) }
+func SlogTriggerDefinitionSlug(v string) slog.Attr {
+	return slog.String(string(TriggerDefinitionSlugKey), v)
+}
+
+func TriggerDeliveryStatus(v string) attribute.KeyValue { return TriggerDeliveryStatusKey.String(v) }
+func SlogTriggerDeliveryStatus(v string) slog.Attr {
+	return slog.String(string(TriggerDeliveryStatusKey), v)
+}
+
+func TriggerEventID(v string) attribute.KeyValue { return TriggerEventIDKey.String(v) }
+func SlogTriggerEventID(v string) slog.Attr      { return slog.String(string(TriggerEventIDKey), v) }
+
+func TriggerInstanceID(v string) attribute.KeyValue { return TriggerInstanceIDKey.String(v) }
+func SlogTriggerInstanceID(v string) slog.Attr {
+	return slog.String(string(TriggerInstanceIDKey), v)
+}
+
+func TriggerTargetKind(v string) attribute.KeyValue { return TriggerTargetKindKey.String(v) }
+func SlogTriggerTargetKind(v string) slog.Attr {
+	return slog.String(string(TriggerTargetKindKey), v)
+}
+
+func TriggerTargetRef(v string) attribute.KeyValue { return TriggerTargetRefKey.String(v) }
+func SlogTriggerTargetRef(v string) slog.Attr {
+	return slog.String(string(TriggerTargetRefKey), v)
+}
 
 func FlyAppInternalID(v string) attribute.KeyValue { return FlyAppInternalIDKey.String(v) }
 func SlogFlyAppInternalID(v string) slog.Attr      { return slog.String(string(FlyAppInternalIDKey), v) }

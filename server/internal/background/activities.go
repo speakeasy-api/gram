@@ -11,10 +11,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
 
-	"github.com/speakeasy-api/gram/server/internal/agentworkflows/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -52,11 +53,8 @@ type Activities struct {
 	validateDeployment            *activities.ValidateDeployment
 	verifyCustomDomain            *activities.VerifyCustomDomain
 	generateToolsetEmbeddings     *activities.GenerateToolsetEmbeddings
-	preprocessAgentsInput         *activities.PreprocessAgentsInput
-	executeToolCall               *activities.ExecuteToolCall
-	executeModelCall              *activities.ExecuteModelCall
-	loadAgentTools                *activities.LoadAgentTools
-	recordAgentExecution          *activities.RecordAgentExecution
+	dispatchTrigger               *activities.DispatchTrigger
+	processScheduledTrigger       *activities.ProcessScheduledTrigger
 	segmentChat                   *resolution_activities.SegmentChat
 	deleteChatResolutions         *resolution_activities.DeleteChatResolutions
 	analyzeSegment                *resolution_activities.AnalyzeSegment
@@ -67,6 +65,7 @@ func NewActivities(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	encryption *encryption.Client,
 	features feature.Provider,
@@ -82,10 +81,10 @@ func NewActivities(
 	functionsDeployer functions.Deployer,
 	functionsVersion functions.RunnerVersion,
 	ragService *rag.ToolsetVectorStore,
-	agentsService *agents.Service,
 	mcpRegistryClient *externalmcp.RegistryClient,
 	temporalClient client.Client,
-	telemetryService *telemetry.Service,
+	telemetryLogger *telemetry.Logger,
+	triggerApp *bgtriggers.App,
 	cacheAdapter cache.Cache,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
@@ -100,7 +99,7 @@ func NewActivities(
 		getAllOrganizations:           activities.NewGetAllOrganizations(logger, db),
 		getSlackProjectContext:        activities.NewSlackProjectContextActivity(logger, db, slackClient),
 		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),
-		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, db, features, assetStorage, billingRepo, mcpRegistryClient),
+		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
 		provisionFunctionsAccess:      activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:         activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                   activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 3),
@@ -111,14 +110,11 @@ func NewActivities(
 		validateDeployment:            activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 		generateToolsetEmbeddings:     activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
-		preprocessAgentsInput:         activities.NewPreprocessAgentsInput(logger, agentsService, temporalClient),
-		executeToolCall:               activities.NewExecuteToolCall(logger, agentsService),
-		executeModelCall:              activities.NewExecuteModelCall(logger, agentsService),
-		loadAgentTools:                activities.NewLoadAgentTools(logger, agentsService),
-		recordAgentExecution:          activities.NewRecordAgentExecution(logger, db),
+		dispatchTrigger:               activities.NewDispatchTrigger(triggerApp),
+		processScheduledTrigger:       activities.NewProcessScheduledTrigger(triggerApp),
 		segmentChat:                   resolution_activities.NewSegmentChat(logger, db, chatClient),
 		deleteChatResolutions:         resolution_activities.NewDeleteChatResolutions(db),
-		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryService),
+		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
 	}
 }
@@ -195,28 +191,8 @@ func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyApps
 	return a.reapFlyApps.Do(ctx, req)
 }
 
-func (a *Activities) PreprocessAgentsInput(ctx context.Context, input activities.PreprocessAgentsInputInput) (*activities.PreprocessAgentsInputOutput, error) {
-	return a.preprocessAgentsInput.Do(ctx, input)
-}
-
-func (a *Activities) ExecuteToolCall(ctx context.Context, input activities.ExecuteToolCallInput) (*activities.ExecuteToolCallOutput, error) {
-	return a.executeToolCall.Do(ctx, input)
-}
-
-func (a *Activities) ExecuteModelCall(ctx context.Context, input activities.ExecuteModelCallInput) (*activities.ExecuteModelCallOutput, error) {
-	return a.executeModelCall.Do(ctx, input)
-}
-
-func (a *Activities) LoadAgentTools(ctx context.Context, input activities.LoadAgentToolsInput) (*activities.LoadAgentToolsOutput, error) {
-	return a.loadAgentTools.Do(ctx, input)
-}
-
 func (a *Activities) FallbackModelUsageTracking(ctx context.Context, input activities.FallbackModelUsageTrackingArgs) error {
 	return a.fallbackModelUsageTracking.Do(ctx, input)
-}
-
-func (a *Activities) RecordAgentExecution(ctx context.Context, input activities.RecordAgentExecutionInput) error {
-	return a.recordAgentExecution.Do(ctx, input)
 }
 
 func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.GenerateChatTitleArgs) error {
@@ -251,4 +227,12 @@ func (a *Activities) GetUserFeedbackForChat(ctx context.Context, input resolutio
 		return nil, fmt.Errorf("get user feedback for chat: %w", err)
 	}
 	return result, nil
+}
+
+func (a *Activities) DispatchTrigger(ctx context.Context, input activities.DispatchTriggerInput) error {
+	return a.dispatchTrigger.Do(ctx, input)
+}
+
+func (a *Activities) ProcessScheduledTrigger(ctx context.Context, input activities.ProcessScheduledTriggerInput) (*activities.ProcessScheduledTriggerResult, error) {
+	return a.processScheduledTrigger.Do(ctx, input)
 }

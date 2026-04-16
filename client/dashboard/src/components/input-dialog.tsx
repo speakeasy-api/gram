@@ -122,7 +122,7 @@ export function InputDialog({
                 />
               )}
               {input.hint && (
-                <div className="text-sm text-muted-foreground">
+                <div className="text-muted-foreground text-sm">
                   {typeof input.hint === "function"
                     ? input.hint(input.value)
                     : input.hint}

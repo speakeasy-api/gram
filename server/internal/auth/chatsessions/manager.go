@@ -113,6 +113,7 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		HasActiveSubscription: false,
 		Whitelisted:           false,
 		APIKeyScopes:          nil,
+		IsAdmin:               false,
 	}
 
 	return contextvalues.SetAuthContext(ctx, authCtx), nil

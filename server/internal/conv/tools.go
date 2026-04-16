@@ -34,6 +34,13 @@ func GetToolURN(tool types.Tool) (*urn.Tool, error) {
 		}
 		return &toolURN, nil
 	}
+	if tool.PlatformToolDefinition != nil {
+		err := toolURN.UnmarshalText([]byte(tool.PlatformToolDefinition.ToolUrn))
+		if err != nil {
+			return nil, urn.ErrInvalid
+		}
+		return &toolURN, nil
+	}
 	if tool.ExternalMcpToolDefinition != nil {
 		err := toolURN.UnmarshalText([]byte(tool.ExternalMcpToolDefinition.ToolUrn))
 		if err != nil {
@@ -123,6 +130,30 @@ func ToBaseTool(tool *types.Tool) (types.BaseToolAttributes, error) {
 			Canonical:     tool.FunctionToolDefinition.Canonical,
 			Variation:     tool.FunctionToolDefinition.Variation,
 			Annotations:   tool.FunctionToolDefinition.Annotations,
+		}, nil
+	}
+
+	if tool.PlatformToolDefinition != nil {
+		if len(tool.PlatformToolDefinition.Schema) > 0 {
+			schema = tool.PlatformToolDefinition.Schema
+		}
+		return types.BaseToolAttributes{
+			ID:            tool.PlatformToolDefinition.ID,
+			ToolUrn:       tool.PlatformToolDefinition.ToolUrn,
+			ProjectID:     tool.PlatformToolDefinition.ProjectID,
+			Name:          tool.PlatformToolDefinition.Name,
+			CanonicalName: tool.PlatformToolDefinition.CanonicalName,
+			Description:   tool.PlatformToolDefinition.Description,
+			SchemaVersion: tool.PlatformToolDefinition.SchemaVersion,
+			Schema:        schema,
+			Confirm:       tool.PlatformToolDefinition.Confirm,
+			ConfirmPrompt: tool.PlatformToolDefinition.ConfirmPrompt,
+			Summarizer:    tool.PlatformToolDefinition.Summarizer,
+			CreatedAt:     tool.PlatformToolDefinition.CreatedAt,
+			UpdatedAt:     tool.PlatformToolDefinition.UpdatedAt,
+			Canonical:     tool.PlatformToolDefinition.Canonical,
+			Variation:     tool.PlatformToolDefinition.Variation,
+			Annotations:   tool.PlatformToolDefinition.Annotations,
 		}, nil
 	}
 
@@ -216,6 +247,22 @@ func ApplyVariation(tool types.Tool, variation types.ToolVariation) {
 
 		if newSchema, err := variedToolSchema(baseTool.Schema, baseTool.Summarizer); err == nil {
 			tool.FunctionToolDefinition.Schema = newSchema
+		}
+	}
+
+	if tool.PlatformToolDefinition != nil {
+		tool.PlatformToolDefinition.Name = PtrValOrEmpty(variation.Name, tool.PlatformToolDefinition.Name)
+		tool.PlatformToolDefinition.Description = PtrValOrEmpty(variation.Description, tool.PlatformToolDefinition.Description)
+		tool.PlatformToolDefinition.Confirm = Default(variation.Confirm, tool.PlatformToolDefinition.Confirm)
+		tool.PlatformToolDefinition.ConfirmPrompt = Default(variation.ConfirmPrompt, tool.PlatformToolDefinition.ConfirmPrompt)
+		tool.PlatformToolDefinition.Summarizer = Default(variation.Summarizer, tool.PlatformToolDefinition.Summarizer)
+		tool.PlatformToolDefinition.Annotations = annotationOverrides
+
+		tool.PlatformToolDefinition.Canonical = &canonicalAttributes
+		tool.PlatformToolDefinition.Variation = &variation
+
+		if newSchema, err := variedToolSchema(baseTool.Schema, baseTool.Summarizer); err == nil {
+			tool.PlatformToolDefinition.Schema = newSchema
 		}
 	}
 

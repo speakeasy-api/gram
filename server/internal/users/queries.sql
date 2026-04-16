@@ -23,6 +23,10 @@ SELECT id FROM users
 WHERE workos_id = $1
 LIMIT 1;
 
+-- name: GetUsersByWorkosIDs :many
+SELECT * FROM users
+WHERE workos_id = ANY(@workos_ids::text[]);
+
 -- name: SetUserWorkosID :exec
 UPDATE users 
 SET workos_id = @workos_id, 

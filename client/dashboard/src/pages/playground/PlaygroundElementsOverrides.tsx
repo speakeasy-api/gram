@@ -22,7 +22,7 @@ export const GramThreadWelcome: FC = () => {
         </Type>
       </div>
       {suggestions && suggestions.length > 0 && (
-        <div className="flex flex-wrap justify-center gap-2 mt-4">
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
           {suggestions.map((suggestion, index) => (
             <ThreadPrimitive.Suggestion
               key={index}
@@ -32,7 +32,7 @@ export const GramThreadWelcome: FC = () => {
             >
               <button
                 type="button"
-                className="inline-flex items-center rounded-full border border-input bg-background px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
+                className="border-input bg-background hover:bg-accent hover:text-accent-foreground inline-flex cursor-pointer items-center rounded-full border px-3 py-1.5 text-sm transition-colors"
               >
                 {suggestion.title}
               </button>

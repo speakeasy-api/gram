@@ -32,8 +32,8 @@ export function ServerTabContent({ toolset }: ServerTabContentProps) {
       <Card>
         <Card.Title>
           <Stack direction="horizontal" gap={3} align="center">
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Server className="w-5 h-5 text-primary" />
+            <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
+              <Server className="text-primary h-5 w-5" />
             </div>
             <Stack gap={1}>
               <Type variant="subheading">External MCP Server</Type>
@@ -46,14 +46,14 @@ export function ServerTabContent({ toolset }: ServerTabContentProps) {
         <Card.Description>
           <Stack direction="vertical" gap={4} className="mt-4">
             <div>
-              <Type small muted className="block mb-1">
+              <Type small muted className="mb-1 block">
                 Remote URL
               </Type>
               <Type className="font-mono text-sm">{tool.remoteUrl}</Type>
             </div>
             {tool.requiresOauth && (
               <div>
-                <Type small muted className="block mb-1">
+                <Type small muted className="mb-1 block">
                   Authentication
                 </Type>
                 <Type>OAuth required</Type>

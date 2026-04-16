@@ -104,12 +104,12 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
   }
 
   return (
-    <div className="flex flex-col gap-6 pt-6 px-5 pb-6">
+    <div className="flex flex-col gap-6 px-5 pt-6 pb-6">
       {/* Header with span info */}
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3">
           <div
-            className={`text-xs font-semibold uppercase px-2 py-1 rounded ${severityClass} bg-muted`}
+            className={`rounded px-2 py-1 text-xs font-semibold uppercase ${severityClass} bg-muted`}
           >
             {log.severityText || "INFO"}
           </div>
@@ -166,14 +166,14 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="details" className="flex flex-col gap-5 mt-5">
+        <TabsContent value="details" className="mt-5 flex flex-col gap-5">
           {/* Message */}
           <div className="flex flex-col gap-2">
-            <div className="text-xs font-medium uppercase text-muted-foreground tracking-wide">
+            <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               Message
             </div>
-            <div className="bg-muted border border-border rounded-lg p-4">
-              <pre className="font-mono text-sm whitespace-pre-wrap break-words">
+            <div className="bg-muted border-border rounded-lg border p-4">
+              <pre className="font-mono text-sm break-words whitespace-pre-wrap">
                 {log.body || "(no message)"}
               </pre>
             </div>
@@ -204,13 +204,13 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
             )}
         </TabsContent>
 
-        <TabsContent value="raw" className="flex flex-col gap-3 mt-5">
+        <TabsContent value="raw" className="mt-5 flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <div className="text-xs font-medium uppercase text-muted-foreground tracking-wide">
+            <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               Full Log Record
             </div>
             <button
-              className="p-1.5 rounded hover:bg-muted"
+              className="hover:bg-muted rounded p-1.5"
               onClick={() => {
                 void navigator.clipboard.writeText(
                   JSON.stringify(log, null, 2),
@@ -220,8 +220,8 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
               <Copy className="size-4" />
             </button>
           </div>
-          <div className="bg-muted border border-border rounded-lg p-4 overflow-y-auto flex-1">
-            <pre className="font-mono text-sm whitespace-pre-wrap break-all">
+          <div className="bg-muted border-border flex-1 overflow-y-auto rounded-lg border p-4">
+            <pre className="font-mono text-sm break-all whitespace-pre-wrap">
               {JSON.stringify(log, null, 2)}
             </pre>
           </div>
@@ -253,14 +253,14 @@ function CollapsibleBodySection({
     <div className="flex flex-col gap-2">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between group"
+        className="group flex items-center justify-between"
       >
-        <div className="text-xs font-medium uppercase text-muted-foreground tracking-wide">
+        <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
           {title}
         </div>
         <div className="flex items-center gap-1">
           <button
-            className="p-1.5 rounded hover:bg-muted"
+            className="hover:bg-muted rounded p-1.5"
             onClick={(e) => {
               e.stopPropagation();
               void navigator.clipboard.writeText(content);
@@ -270,15 +270,15 @@ function CollapsibleBodySection({
           </button>
           <ChevronDown
             className={cn(
-              "size-4 text-muted-foreground transition-transform",
+              "text-muted-foreground size-4 transition-transform",
               !isOpen && "-rotate-90",
             )}
           />
         </div>
       </button>
       {isOpen && (
-        <div className="bg-muted border border-border rounded-lg p-4 max-h-96 overflow-y-auto">
-          <pre className="font-mono text-sm whitespace-pre-wrap break-words">
+        <div className="bg-muted border-border max-h-96 overflow-y-auto rounded-lg border p-4">
+          <pre className="font-mono text-sm break-words whitespace-pre-wrap">
             {displayContent}
           </pre>
         </div>
@@ -300,7 +300,7 @@ function MetadataBadge({
 }) {
   return (
     <button
-      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-sm"
+      className="bg-muted/50 hover:bg-muted flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors"
       onClick={() => {
         if (copyValue) {
           void navigator.clipboard.writeText(copyValue);
@@ -328,11 +328,11 @@ function AttributesSection({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <div className="text-xs font-medium uppercase text-muted-foreground tracking-wide">
+        <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
           {title}
         </div>
         <button
-          className="p-1.5 rounded hover:bg-muted"
+          className="hover:bg-muted rounded p-1.5"
           onClick={() => {
             void navigator.clipboard.writeText(JSON.stringify(data, null, 2));
           }}
@@ -340,14 +340,14 @@ function AttributesSection({
           <Copy className="size-4" />
         </button>
       </div>
-      <div className="bg-muted border border-border rounded-lg divide-y divide-border">
+      <div className="bg-muted border-border divide-border divide-y rounded-lg border">
         {flatEntries.map(([key, value]) => (
           <div
             key={key}
-            className="flex flex-col gap-1 px-4 py-2.5 hover:bg-muted/50 transition-colors"
+            className="hover:bg-muted/50 flex flex-col gap-1 px-4 py-2.5 transition-colors"
           >
-            <span className="text-xs text-muted-foreground">{key}</span>
-            <span className="text-sm font-mono break-all">{value}</span>
+            <span className="text-muted-foreground text-xs">{key}</span>
+            <span className="font-mono text-sm break-all">{value}</span>
           </div>
         ))}
       </div>

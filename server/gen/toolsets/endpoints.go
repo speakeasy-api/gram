@@ -27,6 +27,7 @@ type Endpoints struct {
 	AddExternalOAuthServer   goa.Endpoint
 	RemoveOAuthServer        goa.Endpoint
 	AddOAuthProxyServer      goa.Endpoint
+	UpdateOAuthProxyServer   goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "toolsets" service with endpoints.
@@ -45,6 +46,7 @@ func NewEndpoints(s Service) *Endpoints {
 		AddExternalOAuthServer:   NewAddExternalOAuthServerEndpoint(s, a.APIKeyAuth),
 		RemoveOAuthServer:        NewRemoveOAuthServerEndpoint(s, a.APIKeyAuth),
 		AddOAuthProxyServer:      NewAddOAuthProxyServerEndpoint(s, a.APIKeyAuth),
+		UpdateOAuthProxyServer:   NewUpdateOAuthProxyServerEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -61,6 +63,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.AddExternalOAuthServer = m(e.AddExternalOAuthServer)
 	e.RemoveOAuthServer = m(e.RemoveOAuthServer)
 	e.AddOAuthProxyServer = m(e.AddOAuthProxyServer)
+	e.UpdateOAuthProxyServer = m(e.UpdateOAuthProxyServer)
 }
 
 // NewCreateToolsetEndpoint returns an endpoint function that calls the method
@@ -685,5 +688,64 @@ func NewAddOAuthProxyServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return s.AddOAuthProxyServer(ctx, p)
+	}
+}
+
+// NewUpdateOAuthProxyServerEndpoint returns an endpoint function that calls
+// the method "updateOAuthProxyServer" of service "toolsets".
+func NewUpdateOAuthProxyServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateOAuthProxyServerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateOAuthProxyServer(ctx, p)
 	}
 }

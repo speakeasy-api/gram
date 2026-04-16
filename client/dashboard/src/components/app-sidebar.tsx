@@ -1,4 +1,4 @@
-import { NavMenu } from "@/components/nav-menu";
+import { NavButton, NavMenu } from "@/components/nav-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -6,16 +6,17 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useSlugs } from "@/contexts/Sdk";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
-import { MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
+import { Building2Icon, MinusIcon, TestTube2Icon } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
-import { Link } from "react-router";
+import { RequireScope } from "./require-scope";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { Button } from "./ui/button";
 import { Type } from "./ui/type";
@@ -29,14 +30,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const navGroups = {
     connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
-    build: [routes.elements, routes.mcp, routes.slackApps, routes.clis],
+    build: [
+      routes.elements,
+      routes.mcp,
+      routes.plugins,
+      routes.slackApps,
+      routes.clis,
+    ],
     observe: [
       routes.observability,
       routes.logs,
       routes.chatSessions,
       routes.hooks,
     ],
-    settings: settingsItems,
   };
 
   return (
@@ -56,15 +62,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
-        <div className="mt-auto px-2 py-3">
-          <Link
-            to={`/${orgSlug}`}
-            className="flex items-center gap-1.5 px-2 py-1 text-sm text-muted-foreground hover:text-foreground transition-colors hover:no-underline"
-          >
-            <Undo2 className="w-3.5 h-3.5" />
-            <span>Back to org</span>
-          </Link>
-        </div>
+        <SidebarGroup>
+          <SidebarGroupLabel>settings</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <NavMenu items={settingsItems}>
+              <RequireScope scope={["org:read", "org:admin"]} level="section">
+                <SidebarMenuItem>
+                  <NavButton
+                    title="Organization settings"
+                    href={`/${orgSlug}`}
+                    Icon={Building2Icon}
+                  />
+                </SidebarMenuItem>
+              </RequireScope>
+            </NavMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
         <FreeTierExceededNotification />
@@ -107,7 +120,7 @@ const FreeTierExceededNotification = () => {
           <Type small>
             Free tier limits exceeded. Upgrade to continue using Gram.
           </Type>
-          <orgRoutes.billing.Link className="w-full mt-auto">
+          <orgRoutes.billing.Link className="mt-auto w-full">
             <Button size="sm" className="w-full">
               Billing →
             </Button>
@@ -145,7 +158,7 @@ const PersistentNotification = ({
       className="absolute top-0 right-0 hover:bg-transparent"
       onClick={() => setIsMinimized(true)}
     >
-      <MinusIcon className="w-4 h-4" />
+      <MinusIcon className="h-4 w-4" />
     </Button>
   );
 
@@ -167,7 +180,7 @@ const PersistentNotification = ({
         <Button
           variant="ghost"
           size="icon"
-          className="flex items-center justify-center h-full w-full"
+          className="flex h-full w-full items-center justify-center"
         >
           <Type>?</Type>
         </Button>

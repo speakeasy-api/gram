@@ -11,12 +11,20 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/testcontainers/testcontainers-go"
 	tcr "github.com/testcontainers/testcontainers-go/modules/redis"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 type RedisClientFunc func(t *testing.T, db int) (*redis.Client, error)
 
 func NewTestRedis(ctx context.Context) (*tcr.RedisContainer, RedisClientFunc, error) {
-	container, err := tcr.Run(ctx, "redis:6.2-alpine", testcontainers.WithLogger(NewTestcontainersLogger()))
+	container, err := tcr.Run(
+		ctx, "redis:6.2-alpine",
+		testcontainers.WithLogger(NewTestcontainersLogger()),
+		testcontainers.WithAdditionalWaitStrategy(
+			wait.ForExec([]string{"redis-cli", "ping"}),
+		),
+	)
+
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to start redis container: %w", err)
 	}
@@ -58,6 +66,21 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 			ReadTimeout:  300 * time.Millisecond,
 			WriteTimeout: 1 * time.Second,
 		})
+
+		// Verify the connection is alive before returning. Without this,
+		// the container's mapped port may be open before the Docker
+		// port-forwarding is fully routing to Redis, causing transient
+		// connection errors under CI load.
+		ctx := t.Context()
+		for attempt := range 10 {
+			if err := client.Ping(ctx).Err(); err == nil {
+				break
+			} else if attempt == 9 {
+				_ = client.Close()
+				return nil, fmt.Errorf("redis not ready after retries: %w", err)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
 
 		t.Cleanup(func() {
 			if err := client.Close(); err != nil {

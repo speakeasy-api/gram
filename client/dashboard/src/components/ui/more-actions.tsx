@@ -41,10 +41,10 @@ export function MoreActions({
         {triggerLabel ? (
           <Button size="sm">
             {triggerLabel}
-            <Icon name="chevron-down" className="size-4 ml-1" />
+            <Icon name="chevron-down" className="ml-1 size-4" />
           </Button>
         ) : (
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 mx-[-4px]">
+          <Button variant="ghost" size="sm" className="mx-[-4px] h-8 w-8 p-0">
             <Icon name="ellipsis-vertical" className="size-4" />
             <span className="sr-only">Open menu</span>
           </Button>
@@ -62,7 +62,7 @@ export function MoreActions({
             onClick={wrapOnClick(action.onClick)}
             disabled={action.disabled}
             className={cn(
-              "cursor-pointer justify-between flex items-center group",
+              "group flex cursor-pointer items-center justify-between",
               action.destructive &&
                 "text-destructive hover:bg-destructive! hover:text-background! trans",
             )}

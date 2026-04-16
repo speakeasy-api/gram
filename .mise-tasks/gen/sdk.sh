@@ -15,7 +15,10 @@ check_inputs() {
   source_key=".sources.Gram-Internal"
   schema=$(yq "${source_key}.inputs[0].location" "$workflow")
   output=$(yq "${source_key}.output" "$workflow")
-  readarray -t overlays < <(yq -r "${source_key}.overlays[].location" "$workflow")
+  overlays=()
+  while IFS= read -r line; do
+    overlays+=("$line")
+  done < <(yq -r "${source_key}.overlays[].location" "$workflow")
 
   args=(--schema "$schema")
   for overlay in "${overlays[@]}"; do

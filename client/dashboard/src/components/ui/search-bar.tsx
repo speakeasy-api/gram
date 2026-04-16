@@ -20,8 +20,8 @@ export function SearchBar({
       direction="horizontal"
       gap={2}
       className={cn(
-        "h-[42px] border border-border rounded-md px-3",
-        disabled && "opacity-50 cursor-not-allowed",
+        "border-border h-[42px] rounded-md border px-3",
+        disabled && "cursor-not-allowed opacity-50",
         className,
       )}
       align="center"
@@ -32,12 +32,12 @@ export function SearchBar({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="flex-1 bg-transparent outline-none min-w-0 disabled:cursor-not-allowed"
+        className="min-w-0 flex-1 bg-transparent outline-none disabled:cursor-not-allowed"
       />
       {value && !disabled && (
         <button
           onClick={() => onChange("")}
-          className="opacity-50 hover:opacity-100 transition-opacity"
+          className="opacity-50 transition-opacity hover:opacity-100"
           aria-label="Clear search"
         >
           <X className="size-4" />

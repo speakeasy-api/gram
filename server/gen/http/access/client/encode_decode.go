@@ -2129,6 +2129,670 @@ func DecodeUpdateMemberRoleResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildGetRBACStatusRequest instantiates a HTTP request object with method and
+// path set to call the "access" service "getRBACStatus" endpoint
+func (c *Client) BuildGetRBACStatusRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRBACStatusAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "getRBACStatus", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRBACStatusRequest returns an encoder for requests sent to the
+// access getRBACStatus server.
+func EncodeGetRBACStatusRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.GetRBACStatusPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "getRBACStatus", "*access.GetRBACStatusPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetRBACStatusResponse returns a decoder for responses returned by the
+// access getRBACStatus endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeGetRBACStatusResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetRBACStatusResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetRBACStatusResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRBACStatus", err)
+			}
+			err = ValidateGetRBACStatusResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRBACStatus", err)
+			}
+			res := NewGetRBACStatusRBACStatusOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetRBACStatusUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRBACStatus", err)
+			}
+			err = ValidateGetRBACStatusUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRBACStatus", err)
+			}
+			return nil, NewGetRBACStatusUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetRBACStatusForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRBACStatus", err)
+			}
+			err = ValidateGetRBACStatusForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRBACStatus", err)
+			}
+			return nil, NewGetRBACStatusForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetRBACStatusBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRBACStatus", err)
+			}
+			err = ValidateGetRBACStatusBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRBACStatus", err)
+			}
+			return nil, NewGetRBACStatusBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetRBACStatusNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRBACStatus", err)
+			}
+			err = ValidateGetRBACStatusNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRBACStatus", err)
+			}
+			return nil, NewGetRBACStatusNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetRBACStatusConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRBACStatus", err)
+			}
+			err = ValidateGetRBACStatusConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRBACStatus", err)
+			}
+			return nil, NewGetRBACStatusConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetRBACStatusUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRBACStatus", err)
+			}
+			err = ValidateGetRBACStatusUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRBACStatus", err)
+			}
+			return nil, NewGetRBACStatusUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetRBACStatusInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRBACStatus", err)
+			}
+			err = ValidateGetRBACStatusInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRBACStatus", err)
+			}
+			return nil, NewGetRBACStatusInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetRBACStatusInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "getRBACStatus", err)
+				}
+				err = ValidateGetRBACStatusInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "getRBACStatus", err)
+				}
+				return nil, NewGetRBACStatusInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetRBACStatusUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "getRBACStatus", err)
+				}
+				err = ValidateGetRBACStatusUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "getRBACStatus", err)
+				}
+				return nil, NewGetRBACStatusUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "getRBACStatus", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetRBACStatusGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRBACStatus", err)
+			}
+			err = ValidateGetRBACStatusGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRBACStatus", err)
+			}
+			return nil, NewGetRBACStatusGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "getRBACStatus", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildEnableRBACRequest instantiates a HTTP request object with method and
+// path set to call the "access" service "enableRBAC" endpoint
+func (c *Client) BuildEnableRBACRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: EnableRBACAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "enableRBAC", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeEnableRBACRequest returns an encoder for requests sent to the access
+// enableRBAC server.
+func EncodeEnableRBACRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.EnableRBACPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "enableRBAC", "*access.EnableRBACPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeEnableRBACResponse returns a decoder for responses returned by the
+// access enableRBAC endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeEnableRBACResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeEnableRBACResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body EnableRBACUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "enableRBAC", err)
+			}
+			err = ValidateEnableRBACUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "enableRBAC", err)
+			}
+			return nil, NewEnableRBACUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body EnableRBACForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "enableRBAC", err)
+			}
+			err = ValidateEnableRBACForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "enableRBAC", err)
+			}
+			return nil, NewEnableRBACForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body EnableRBACBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "enableRBAC", err)
+			}
+			err = ValidateEnableRBACBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "enableRBAC", err)
+			}
+			return nil, NewEnableRBACBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body EnableRBACNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "enableRBAC", err)
+			}
+			err = ValidateEnableRBACNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "enableRBAC", err)
+			}
+			return nil, NewEnableRBACNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body EnableRBACConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "enableRBAC", err)
+			}
+			err = ValidateEnableRBACConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "enableRBAC", err)
+			}
+			return nil, NewEnableRBACConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body EnableRBACUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "enableRBAC", err)
+			}
+			err = ValidateEnableRBACUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "enableRBAC", err)
+			}
+			return nil, NewEnableRBACUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body EnableRBACInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "enableRBAC", err)
+			}
+			err = ValidateEnableRBACInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "enableRBAC", err)
+			}
+			return nil, NewEnableRBACInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body EnableRBACInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "enableRBAC", err)
+				}
+				err = ValidateEnableRBACInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "enableRBAC", err)
+				}
+				return nil, NewEnableRBACInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body EnableRBACUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "enableRBAC", err)
+				}
+				err = ValidateEnableRBACUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "enableRBAC", err)
+				}
+				return nil, NewEnableRBACUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "enableRBAC", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body EnableRBACGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "enableRBAC", err)
+			}
+			err = ValidateEnableRBACGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "enableRBAC", err)
+			}
+			return nil, NewEnableRBACGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "enableRBAC", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDisableRBACRequest instantiates a HTTP request object with method and
+// path set to call the "access" service "disableRBAC" endpoint
+func (c *Client) BuildDisableRBACRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DisableRBACAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "disableRBAC", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDisableRBACRequest returns an encoder for requests sent to the access
+// disableRBAC server.
+func EncodeDisableRBACRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.DisableRBACPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "disableRBAC", "*access.DisableRBACPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeDisableRBACResponse returns a decoder for responses returned by the
+// access disableRBAC endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeDisableRBACResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDisableRBACResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DisableRBACUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "disableRBAC", err)
+			}
+			err = ValidateDisableRBACUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "disableRBAC", err)
+			}
+			return nil, NewDisableRBACUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DisableRBACForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "disableRBAC", err)
+			}
+			err = ValidateDisableRBACForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "disableRBAC", err)
+			}
+			return nil, NewDisableRBACForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DisableRBACBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "disableRBAC", err)
+			}
+			err = ValidateDisableRBACBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "disableRBAC", err)
+			}
+			return nil, NewDisableRBACBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DisableRBACNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "disableRBAC", err)
+			}
+			err = ValidateDisableRBACNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "disableRBAC", err)
+			}
+			return nil, NewDisableRBACNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DisableRBACConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "disableRBAC", err)
+			}
+			err = ValidateDisableRBACConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "disableRBAC", err)
+			}
+			return nil, NewDisableRBACConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DisableRBACUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "disableRBAC", err)
+			}
+			err = ValidateDisableRBACUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "disableRBAC", err)
+			}
+			return nil, NewDisableRBACUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DisableRBACInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "disableRBAC", err)
+			}
+			err = ValidateDisableRBACInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "disableRBAC", err)
+			}
+			return nil, NewDisableRBACInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DisableRBACInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "disableRBAC", err)
+				}
+				err = ValidateDisableRBACInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "disableRBAC", err)
+				}
+				return nil, NewDisableRBACInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DisableRBACUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "disableRBAC", err)
+				}
+				err = ValidateDisableRBACUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "disableRBAC", err)
+				}
+				return nil, NewDisableRBACUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "disableRBAC", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DisableRBACGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "disableRBAC", err)
+			}
+			err = ValidateDisableRBACGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "disableRBAC", err)
+			}
+			return nil, NewDisableRBACGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "disableRBAC", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalRoleResponseBodyToAccessRole builds a value of type *access.Role
 // from a value of type *RoleResponseBody.
 func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
@@ -2224,6 +2888,28 @@ func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberRespon
 		PhotoURL: v.PhotoURL,
 		RoleID:   *v.RoleID,
 		JoinedAt: *v.JoinedAt,
+	}
+
+	return res
+}
+
+// unmarshalListRoleGrantResponseBodyToAccessListRoleGrant builds a value of
+// type *access.ListRoleGrant from a value of type *ListRoleGrantResponseBody.
+func unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(v *ListRoleGrantResponseBody) *access.ListRoleGrant {
+	res := &access.ListRoleGrant{
+		Scope: *v.Scope,
+	}
+	if v.SubScopes != nil {
+		res.SubScopes = make([]string, len(v.SubScopes))
+		for i, val := range v.SubScopes {
+			res.SubScopes[i] = val
+		}
+	}
+	if v.Resources != nil {
+		res.Resources = make([]string, len(v.Resources))
+		for i, val := range v.Resources {
+			res.Resources[i] = val
+		}
 	}
 
 	return res

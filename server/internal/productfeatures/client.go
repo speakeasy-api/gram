@@ -68,3 +68,21 @@ func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, fe
 
 	return res, nil
 }
+
+// UpdateFeatureCache stores the given enabled state for the feature directly
+// into the cache. Call this after writing the feature flag to the database
+// from a code path that bypasses this client, so the cache stays consistent.
+func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, feature Feature, enabled bool) {
+	cacheEntry := FeatureCache{
+		OrganizationID: organizationID,
+		Feature:        feature,
+		Enabled:        enabled,
+	}
+	if err := c.featureCache.Store(ctx, cacheEntry); err != nil {
+		c.logger.WarnContext(ctx, "failed to update feature flag cache",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProductFeatureName(string(feature)),
+		)
+	}
+}

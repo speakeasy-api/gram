@@ -194,7 +194,7 @@ export function PromptsSection() {
   return (
     <div
       ref={sectionRef}
-      className="relative w-full md:w-1/2 min-h-screen bg-[#F9F9F9] overflow-hidden"
+      className="relative min-h-screen w-full overflow-hidden bg-[#F9F9F9] md:w-1/2"
     >
       {/* Add CSS for animations directly in the component */}
       <style>{`
@@ -220,7 +220,7 @@ export function PromptsSection() {
       {/* Angled grid container */}
       <div
         ref={containerRef}
-        className="absolute inset-0 z-10 flex flex-col justify-center transform rotate-12 scale-[1.35]"
+        className="absolute inset-0 z-10 flex scale-[1.35] rotate-12 transform flex-col justify-center"
       >
         {ALL_ROWS.map((row, rowIndex) => {
           // Get color for this row (cycle through the colors)
@@ -230,7 +230,7 @@ export function PromptsSection() {
           return (
             <div
               key={rowIndex}
-              className={`prompt-row flex whitespace-nowrap py-2 hover-row`}
+              className={`prompt-row hover-row flex py-2 whitespace-nowrap`}
               style={{
                 willChange: "transform", // Optimize for animation performance
               }}
@@ -240,7 +240,7 @@ export function PromptsSection() {
                   key={`${rowIndex}-${promptIndex}`}
                   service={prompt.service}
                   prompt={prompt.prompt}
-                  className="mx-3 flex-shrink-0 prompt-card"
+                  className="prompt-card mx-3 flex-shrink-0"
                   borderColor={borderColor}
                 />
               ))}
@@ -250,7 +250,7 @@ export function PromptsSection() {
                   key={`${rowIndex}-${promptIndex}-dup`}
                   service={prompt.service}
                   prompt={prompt.prompt}
-                  className="mx-3 flex-shrink-0 prompt-card"
+                  className="prompt-card mx-3 flex-shrink-0"
                   borderColor={borderColor}
                 />
               ))}

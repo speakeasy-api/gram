@@ -175,7 +175,7 @@ export const ToolifyDialog = ({
         </Dialog.Header>
         <Stack gap={4}>
           <Stack gap={1}>
-            <Heading variant="h5" className="normal-case font-medium">
+            <Heading variant="h5" className="font-medium normal-case">
               What tools does this higher-order tool need access to?
             </Heading>
             <Stack direction="horizontal" gap={2} align="center">
@@ -190,7 +190,7 @@ export const ToolifyDialog = ({
             </Stack>
           </Stack>
           <Stack gap={1}>
-            <Heading variant="h5" className="normal-case font-medium">
+            <Heading variant="h5" className="font-medium normal-case">
               What should this tool do?
             </Heading>
             <TextArea

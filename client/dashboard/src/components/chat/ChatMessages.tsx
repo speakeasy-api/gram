@@ -23,7 +23,7 @@ export function ChatMessages({
   }, [messages]);
 
   return (
-    <div className={cn("flex flex-col gap-4 p-4 overflow-y-auto", className)}>
+    <div className={cn("flex flex-col gap-4 overflow-y-auto p-4", className)}>
       {messages.map((message) => (
         <div key={message.id}>
           {renderMessage ? (
@@ -34,7 +34,7 @@ export function ChatMessages({
         </div>
       ))}
       {isLoading && (
-        <div className="flex items-center gap-2 text-muted-foreground">
+        <div className="text-muted-foreground flex items-center gap-2">
           <div className="h-2 w-2 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
           <div className="h-2 w-2 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
           <div className="h-2 w-2 animate-bounce rounded-full bg-current" />
@@ -51,8 +51,8 @@ function DefaultMessageRenderer({ message }: { message: UIMessage }) {
       className={cn(
         "flex flex-col gap-2 rounded-lg p-4",
         message.role === "user"
-          ? "ml-auto max-w-[80%] bg-primary text-primary-foreground"
-          : "mr-auto max-w-[80%] bg-muted",
+          ? "bg-primary text-primary-foreground ml-auto max-w-[80%]"
+          : "bg-muted mr-auto max-w-[80%]",
       )}
     >
       <Type variant="small" className="font-medium opacity-70">

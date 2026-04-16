@@ -47,7 +47,7 @@ export default function Integrations() {
       </Page.Header>
       <Page.Body>
         {isAdmin && (
-          <div className="flex justify-end mb-4">
+          <div className="mb-4 flex justify-end">
             <AddButton onClick={() => setCreateIntegrationDialogOpen(true)} />
           </div>
         )}
@@ -279,12 +279,12 @@ export function IntegrationCard({
             {integration.packageImageAssetId && (
               <AssetImage
                 assetId={integration.packageImageAssetId}
-                className="w-8 h-8 rounded-md"
+                className="h-8 w-8 rounded-md"
               />
             )}
             <span>
               {integration.packageTitle}
-              <span className="text-muted-foreground text-sm ml-2">
+              <span className="text-muted-foreground ml-2 text-sm">
                 v{integration.version}
               </span>
             </span>
@@ -301,7 +301,7 @@ export function IntegrationCard({
           <Button variant="secondary" onClick={toggleEnabled}>
             {isEnabled ? (
               <>
-                <CheckIcon className="w-4 h-4" />
+                <CheckIcon className="h-4 w-4" />
                 Enabled
               </>
             ) : (
@@ -353,7 +353,7 @@ function RequestIntegrationDialog({
           Not seeing the integration you need? Request it here.
         </Dialog.Description>
         <Stack gap={2}>
-          <Heading variant="h5" className="normal-case font-medium">
+          <Heading variant="h5" className="font-medium normal-case">
             What integration are you looking for?
           </Heading>
           <Input

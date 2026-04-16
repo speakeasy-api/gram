@@ -12,7 +12,7 @@ type ButtonSize = "lg";
 
 const shareFocusAndHoverClasses = cn(
   // Focus
-  "focus-visible:ring-1 focus-visible:ring-offset-3 focus-visible:ring-[#979797] dark:focus-visible:ring-[#DCDCDC] focus-visible:ring-offset-background",
+  "focus-visible:ring-offset-background focus-visible:ring-1 focus-visible:ring-[#979797] focus-visible:ring-offset-3 dark:focus-visible:ring-[#DCDCDC]",
   // Disabled
   "disabled:opacity-50",
 );

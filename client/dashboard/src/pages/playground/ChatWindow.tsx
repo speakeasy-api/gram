@@ -551,7 +551,7 @@ function ChatInner({
     useMessageHistoryNavigation(chatMessages);
 
   const chatContent = (
-    <div className="relative h-full flex flex-col">
+    <div className="relative flex h-full flex-col">
       <Conversation className="flex-1">
         <ConversationContent>
           {messagesToDisplay.map((message) => (
@@ -576,7 +576,7 @@ function ChatInner({
           <PromptInputBody>
             <PromptInputTextarea placeholder="Send a message..." />
           </PromptInputBody>
-          <PromptInputFooter className="bg-secondary border-t border-neutral-softest rounded-bl-lg rounded-br-lg">
+          <PromptInputFooter className="bg-secondary border-neutral-softest rounded-br-lg rounded-bl-lg border-t">
             <PromptInputTools>{additionalActions}</PromptInputTools>
             <PromptInputSubmit
               disabled={status === "streaming"}

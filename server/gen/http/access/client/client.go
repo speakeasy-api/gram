@@ -53,6 +53,18 @@ type Client struct {
 	// updateMemberRole endpoint.
 	UpdateMemberRoleDoer goahttp.Doer
 
+	// GetRBACStatus Doer is the HTTP client used to make requests to the
+	// getRBACStatus endpoint.
+	GetRBACStatusDoer goahttp.Doer
+
+	// EnableRBAC Doer is the HTTP client used to make requests to the enableRBAC
+	// endpoint.
+	EnableRBACDoer goahttp.Doer
+
+	// DisableRBAC Doer is the HTTP client used to make requests to the disableRBAC
+	// endpoint.
+	DisableRBACDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -82,6 +94,9 @@ func NewClient(
 		ListMembersDoer:      doer,
 		ListGrantsDoer:       doer,
 		UpdateMemberRoleDoer: doer,
+		GetRBACStatusDoer:    doer,
+		EnableRBACDoer:       doer,
+		DisableRBACDoer:      doer,
 		RestoreResponseBody:  restoreBody,
 		scheme:               scheme,
 		host:                 host,
@@ -301,6 +316,78 @@ func (c *Client) UpdateMemberRole() goa.Endpoint {
 		resp, err := c.UpdateMemberRoleDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "updateMemberRole", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRBACStatus returns an endpoint that makes HTTP requests to the access
+// service getRBACStatus server.
+func (c *Client) GetRBACStatus() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRBACStatusRequest(c.encoder)
+		decodeResponse = DecodeGetRBACStatusResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRBACStatusRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRBACStatusDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "getRBACStatus", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// EnableRBAC returns an endpoint that makes HTTP requests to the access
+// service enableRBAC server.
+func (c *Client) EnableRBAC() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeEnableRBACRequest(c.encoder)
+		decodeResponse = DecodeEnableRBACResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildEnableRBACRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.EnableRBACDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "enableRBAC", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DisableRBAC returns an endpoint that makes HTTP requests to the access
+// service disableRBAC server.
+func (c *Client) DisableRBAC() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDisableRBACRequest(c.encoder)
+		decodeResponse = DecodeDisableRBACResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDisableRBACRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DisableRBACDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "disableRBAC", err)
 		}
 		return decodeResponse(resp)
 	}

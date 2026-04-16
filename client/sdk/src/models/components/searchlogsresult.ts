@@ -12,6 +12,9 @@ import {
   TelemetryLogRecord$inboundSchema,
 } from "./telemetrylogrecord.js";
 
+/**
+ * Result of searching telemetry logs
+ */
 export type SearchLogsResult = {
   /**
    * List of telemetry log records

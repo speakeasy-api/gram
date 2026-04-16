@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 var (
@@ -72,6 +73,7 @@ type testInstance struct {
 	tracerProvider trace.TracerProvider
 	cacheAdapter   cache.Cache
 	enc            *encryption.Client
+	accessManager  *access.Manager
 }
 
 func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
@@ -82,6 +84,8 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := noop.NewMeterProvider()
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "mcptest")
 	require.NoError(t, err)
@@ -91,7 +95,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-test"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -106,11 +110,10 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	guardianPolicy := guardian.NewDefaultPolicy()
 	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager)
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
-	chatClient := openrouter.NewUnifiedClient(logger, devProvisioner, nil, nil, nil, nil, nil)
+	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, nil, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
@@ -119,6 +122,9 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+
+	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled)
 	telemService := telemetry.NewService(
 		logger,
 		tracerProvider,
@@ -127,9 +133,8 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager,
 		chatSessions,
 		logsEnabled,
-		toolIOLogsEnabled,
 		posthog,
-		access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}),
+		accessManager,
 	)
 
 	temporalEnv, _ := infra.NewTemporalEnv(t)
@@ -137,7 +142,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemService, featClient, vectorToolStore, temporalEnv, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, featClient, vectorToolStore, nil, temporalEnv, accessManager)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -149,13 +154,14 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		tracerProvider: tracerProvider,
 		cacheAdapter:   cacheAdapter,
 		enc:            enc,
+		accessManager:  accessManager,
 	}
 }
 
 // createTestAPIKey creates an API key for the test context project
 func (ti *testInstance) createTestAPIKey(ctx context.Context, t *testing.T) string {
 	t.Helper()
-	keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.accessManager)
 
 	key, err := keysService.CreateKey(ctx, &keys_gen.CreateKeyPayload{
 		Name:   "test-key",

@@ -48,12 +48,10 @@ from TanStack Query.
 [use-query]: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
 
 ```tsx
-import { useRole } from "@gram/client/react-query/accessGetRole.js";
+import { useRbacStatus } from "@gram/client/react-query/accessGetRBACStatus.js";
 
 export function Example() {
-  const { data, error, status } = useRole({
-    id: "<id>",
-  });
+  const { data, error, status } = useRbacStatus();
 
   // Render the UI here...
 }
@@ -66,14 +64,11 @@ more options provided by the query hooks to control these behaviors.
 
 ```tsx
 import { useState } from "react";
-import { useRole } from "@gram/client/react-query/accessGetRole.js";
+import { useRbacStatus } from "@gram/client/react-query/accessGetRBACStatus.js";
 
 export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
-  const { data, error, status } = useRole(
-    {
-      id: "<id>",
-    },
+  const { data, error, status } = useRbacStatus(
     {
       // TanStack Query options:
       enabled,
@@ -183,7 +178,7 @@ query hook there are two functions that help invalidate cached data:
 
 ```tsx
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateRole, invalidateAllRole } from "@gram/client/react-query/accessGetRole.js";
+import { invalidateRbacStatus, invalidateAllRbacStatus } from "@gram/client/react-query/accessGetRBACStatus.js";
 // Replace this with a real mutation
 import { useExampleMutation } from "@gram/client/react-query/example.js";
 
@@ -201,9 +196,9 @@ export function Example() {
         mutate(formData, {
           onSuccess: () => {
             // Invalidate a single cache entry:
-            invalidateRole(queryClient, /* ... arguments ... */);
+            invalidateRbacStatus(queryClient, /* ... arguments ... */);
             // OR, invalidate all cache entries for the query targets:
-            invalidateAllRole(queryClient);
+            invalidateAllRbacStatus(queryClient);
           },
         });
       }}
@@ -264,7 +259,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { GramCore } from "@gram/client";
 import { GramProvider } from "@gram/client/react-query";
-import { useRoleSuspense } from "@gram/client/react-query/accessGetRole.js";
+import { useRbacStatusSuspense } from "@gram/client/react-query/accessGetRBACStatus.js";
 
 const queryClient = new QueryClient();
 const gram = new GramCore();
@@ -297,9 +292,7 @@ export function App() {
 }
 
 function Example() {
-  const { data } = useRoleSuspense({
-    id: "<id>",
-  });
+  const { data } = useRbacStatusSuspense();
 
   // Render the UI here...
 }
@@ -319,15 +312,13 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { GramCore } from "@gram/client";
-import { prefetchRole } from "@gram/client/react-query/accessGetRole.js";
+import { prefetchRbacStatus } from "@gram/client/react-query/accessGetRBACStatus.js";
 
 export default async function Page() {
   const queryClient = new QueryClient();
   const gram = new GramCore();
 
-  await prefetchRole(queryClient, gram, {
-    id: "<id>",
-  });
+  await prefetchRbacStatus(gram);
 
   return (
     // HydrationBoundary is a Client Component, so hydration will happen there.

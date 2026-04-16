@@ -240,6 +240,9 @@ function useEnrichedServers(servers: Server[], open: boolean) {
             }
 
             try {
+              if (!server.registryId) {
+                return server;
+              }
               const details = await client.mcpRegistries.getServerDetails({
                 registryId: server.registryId,
                 serverSpecifier: server.registrySpecifier,
@@ -306,6 +309,13 @@ export function AddServerDialog({
     }
   }, [open]);
 
+  // Clean up Radix body scroll-lock on unmount (e.g. when navigating away mid-dialog)
+  useEffect(() => {
+    return () => {
+      document.body.style.removeProperty("pointer-events");
+    };
+  }, []);
+
   // Notify parent when all toolsets are done
   const allToolsetsDone =
     releaseState.phase === "complete" &&
@@ -335,8 +345,8 @@ export function AddServerDialog({
             <Dialog.Title>Loading...</Dialog.Title>
             <Dialog.Description>Fetching server details...</Dialog.Description>
           </Dialog.Header>
-          <div className="py-8 flex items-center justify-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          <div className="flex items-center justify-center gap-2 py-8">
+            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
             <Type muted>Loading server configuration...</Type>
           </div>
         </Dialog.Content>
@@ -356,8 +366,8 @@ export function AddServerDialog({
             </Dialog.Description>
           </Dialog.Header>
           <div className="py-4">
-            <div className="flex items-start gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/5">
-              <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+            <div className="border-destructive/30 bg-destructive/5 flex items-start gap-3 rounded-lg border p-3">
+              <AlertCircle className="text-destructive mt-0.5 h-5 w-5 shrink-0" />
               <Type small className="text-destructive/80">
                 {detailsError}
               </Type>
@@ -373,8 +383,8 @@ export function AddServerDialog({
     );
   }
 
-  // Wait for enriched servers to be ready
-  if (enrichedServers.length === 0) return null;
+  // Don't unmount while the dialog is open or closing — Radix needs the DOM to animate
+  if (enrichedServers.length === 0 && !open) return null;
 
   const isSingle = enrichedServers.length === 1;
   // Check if we came from multi-remote flow (some servers have selectedRemotes)
@@ -556,19 +566,19 @@ function SelectRemotesPhaseContent({
 
         {/* Server icon and info */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+          <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
             {currentConfig.server.iconUrl ? (
               <img
                 src={currentConfig.server.iconUrl}
                 alt=""
-                className="w-6 h-6 rounded"
+                className="h-6 w-6 rounded"
               />
             ) : (
-              <ServerIcon className="w-5 h-5 text-muted-foreground" />
+              <ServerIcon className="text-muted-foreground h-5 w-5" />
             )}
           </div>
-          <div className="flex-1 min-w-0">
-            <Type className="font-medium truncate">
+          <div className="min-w-0 flex-1">
+            <Type className="truncate font-medium">
               {currentConfig.server.title ??
                 currentConfig.server.registrySpecifier}
             </Type>
@@ -594,7 +604,7 @@ function SelectRemotesPhaseContent({
         </div>
 
         {/* Remote checkboxes */}
-        <div className="flex flex-col gap-2 mt-2">
+        <div className="mt-2 flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <Label>Select endpoints to include</Label>
             <button
@@ -615,7 +625,7 @@ function SelectRemotesPhaseContent({
                   });
                 }
               }}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="text-muted-foreground hover:text-foreground text-sm transition-colors"
             >
               {currentConfig.selectedRemoteUrls.size ===
               currentConfig.remotes.length
@@ -623,7 +633,7 @@ function SelectRemotesPhaseContent({
                 : "Select all"}
             </button>
           </div>
-          <div className="space-y-2 max-h-64 overflow-y-auto rounded-lg border bg-muted/50 p-4">
+          <div className="bg-muted/50 max-h-64 space-y-2 overflow-y-auto rounded-lg border p-4">
             {currentConfig.remotes.map((remote) => {
               const isSelected = currentConfig.selectedRemoteUrls.has(
                 remote.url,
@@ -633,7 +643,7 @@ function SelectRemotesPhaseContent({
                 <label
                   key={remote.url}
                   className={cn(
-                    "flex items-start gap-3 p-3 rounded-md cursor-pointer transition-colors border bg-background",
+                    "bg-background flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors",
                     isSelected
                       ? "border-primary/40"
                       : "border-border hover:border-muted-foreground/30",
@@ -644,7 +654,7 @@ function SelectRemotesPhaseContent({
                     onCheckedChange={() => handleRemoteToggle(remote.url)}
                     className="mt-0.5"
                   />
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <Type small className="font-medium">
                       {name}
                     </Type>
@@ -669,7 +679,7 @@ function SelectRemotesPhaseContent({
         >
           <Button.Text>{isLast ? "Continue" : "Next"}</Button.Text>
           <Button.RightIcon>
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="h-4 w-4" />
           </Button.RightIcon>
         </Button>
       </Dialog.Footer>
@@ -729,8 +739,8 @@ function ConfigurePhaseContent({
   // If all servers were multi-remote, show loading state while auto-deploying
   if (!hasOnlySingleRemote && !allAlreadyAdded) {
     return (
-      <div className="py-4 flex items-center justify-center gap-2">
-        <Loader2 className="w-4 h-4 animate-spin" />
+      <div className="flex items-center justify-center gap-2 py-4">
+        <Loader2 className="h-4 w-4 animate-spin" />
         <Type small muted>
           Starting deployment...
         </Type>
@@ -742,8 +752,8 @@ function ConfigurePhaseContent({
     <div onKeyDown={handleKeyDown}>
       <Stack gap={4} className="py-2">
         {allAlreadyAdded ? (
-          <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
-            <AlertCircle className="size-4 text-muted-foreground shrink-0 mt-0.5" />
+          <div className="bg-muted/30 flex items-start gap-3 rounded-lg border p-3">
+            <AlertCircle className="text-muted-foreground mt-0.5 size-4 shrink-0" />
             <Type small muted>
               {releaseState.serverConfigs.length === 1
                 ? "This source is"
@@ -832,7 +842,7 @@ function BatchServerConfig({
 }) {
   const { existingSpecifiers } = releaseState;
   return (
-    <div className="space-y-3 max-h-80 overflow-y-auto">
+    <div className="max-h-80 space-y-3 overflow-y-auto">
       {singleRemoteConfigs.map((config) => {
         const isAlreadyAdded = existingSpecifiers.has(
           config.server.registrySpecifier,
@@ -845,22 +855,22 @@ function BatchServerConfig({
           <div
             key={config.server.registrySpecifier}
             className={cn(
-              "flex items-center gap-3 p-3 rounded-lg border",
+              "flex items-center gap-3 rounded-lg border p-3",
               isAlreadyAdded && "opacity-50",
             )}
           >
-            <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center shrink-0">
+            <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center rounded">
               {config.server.iconUrl ? (
                 <img
                   src={config.server.iconUrl}
                   alt=""
-                  className="w-4 h-4 rounded"
+                  className="h-4 w-4 rounded"
                 />
               ) : (
-                <ServerIcon className="w-3 h-3 text-muted-foreground" />
+                <ServerIcon className="text-muted-foreground h-3 w-3" />
               )}
             </div>
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               <Input
                 placeholder={
                   config.server.title || config.server.registrySpecifier
@@ -875,7 +885,7 @@ function BatchServerConfig({
               />
             </div>
             {isAlreadyAdded && (
-              <span className="text-xs text-muted-foreground shrink-0">
+              <span className="text-muted-foreground shrink-0 text-xs">
                 Already added
               </span>
             )}
@@ -907,15 +917,15 @@ function DeployingPhaseContent({
   })();
 
   return (
-    <div className="py-2 space-y-4">
+    <div className="space-y-4 py-2">
       <Stack direction="horizontal" gap={2} align="center">
-        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+        <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
         <Type small muted>
           {statusText}
         </Type>
       </Stack>
       {releaseState.deploymentLogs.length > 0 && (
-        <div className="rounded-lg border bg-muted/30 p-3 max-h-48 overflow-y-auto font-mono text-xs space-y-1">
+        <div className="bg-muted/30 max-h-48 space-y-1 overflow-y-auto rounded-lg border p-3 font-mono text-xs">
           {releaseState.deploymentLogs.map((log) => (
             <div
               key={log.id}
@@ -952,12 +962,12 @@ function CompletePhaseContent({
   ).length;
 
   return (
-    <div className="pb-2 space-y-4">
+    <div className="space-y-4 pb-2">
       {/* Success header when all done */}
       {allDone && allSucceeded && (
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-          <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
-            <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+        <div className="flex items-center gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20">
+            <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div>
             <Type className="font-medium text-emerald-700 dark:text-emerald-300">
@@ -1025,15 +1035,15 @@ function ToolsetStatusRow({
   const isCompleted = status.status === "completed" && status.toolsetSlug;
 
   const content = (
-    <div className="flex items-center gap-3 p-2 rounded-lg border">
-      <div className="flex-1 min-w-0 flex items-center gap-2">
+    <div className="flex items-center gap-3 rounded-lg border p-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         <Type small className="truncate">
           {status.name}
         </Type>
       </div>
       <div className="flex items-center gap-2">
         {isCompleted && (
-          <ArrowRight className="w-3 h-3 text-muted-foreground" />
+          <ArrowRight className="text-muted-foreground h-3 w-3" />
         )}
         <ToolsetStatusIcon status={status.status} />
       </div>
@@ -1044,7 +1054,7 @@ function ToolsetStatusRow({
     return (
       <routes.mcp.details.Link
         params={[status.toolsetSlug!]}
-        className="no-underline hover:no-underline block hover:opacity-80 transition-opacity"
+        className="block no-underline transition-opacity hover:no-underline hover:opacity-80"
       >
         {content}
       </routes.mcp.details.Link>
@@ -1061,15 +1071,15 @@ function ToolsetStatusIcon({
 }) {
   switch (status) {
     case "pending":
-      return <Circle className="w-4 h-4 text-muted-foreground shrink-0" />;
+      return <Circle className="text-muted-foreground h-4 w-4 shrink-0" />;
     case "creating":
       return (
-        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />
+        <Loader2 className="text-muted-foreground h-4 w-4 shrink-0 animate-spin" />
       );
     case "completed":
-      return <Check className="w-4 h-4 text-emerald-500 shrink-0" />;
+      return <Check className="h-4 w-4 shrink-0 text-emerald-500" />;
     case "failed":
-      return <X className="w-4 h-4 text-destructive shrink-0" />;
+      return <X className="text-destructive h-4 w-4 shrink-0" />;
   }
 }
 
@@ -1086,35 +1096,35 @@ function SingleServerNextSteps({
 
   return (
     <div>
-      <Type className="font-medium mb-2">Next steps</Type>
+      <Type className="mb-2 font-medium">Next steps</Type>
       <div className="grid grid-cols-2 gap-2">
         <routes.sources.Link className="no-underline hover:no-underline">
-          <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
-            <div className="w-8 h-8 rounded-md bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center shrink-0">
-              <Plus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-500/10 dark:bg-blue-500/20">
+              <Plus className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="flex-1">
               <Type className="text-sm font-medium no-underline">
                 Add more sources
               </Type>
             </div>
-            <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
         </routes.sources.Link>
         <routes.elements.Link
           className="no-underline hover:no-underline"
           queryParams={{ toolset: toolsetSlug }}
         >
-          <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
-            <div className="w-8 h-8 rounded-md bg-violet-500/10 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
-              <MessageCircle className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-500/10 dark:bg-violet-500/20">
+              <MessageCircle className="h-4 w-4 text-violet-600 dark:text-violet-400" />
             </div>
             <div className="flex-1">
               <Type className="text-sm font-medium no-underline">
                 Deploy as chat
               </Type>
             </div>
-            <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
         </routes.elements.Link>
         <a
@@ -1123,32 +1133,32 @@ function SingleServerNextSteps({
           rel="noopener noreferrer"
           className="no-underline hover:no-underline"
         >
-          <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
-            <div className="w-8 h-8 rounded-md bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
-              <Plug className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 dark:bg-emerald-500/20">
+              <Plug className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div className="flex-1">
               <Type className="text-sm font-medium no-underline">
                 Connect via Claude, Cursor
               </Type>
             </div>
-            <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
         </a>
         <routes.mcp.details.Link
           params={[toolsetSlug]}
           className="no-underline hover:no-underline"
         >
-          <div className="group flex items-center gap-3 p-3 rounded-lg border hover:border-foreground/20 hover:bg-muted/30 transition-all [&_*]:no-underline h-full">
-            <div className="w-8 h-8 rounded-md bg-orange-500/10 dark:bg-orange-500/20 flex items-center justify-center shrink-0">
-              <Settings className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-500/10 dark:bg-orange-500/20">
+              <Settings className="h-4 w-4 text-orange-600 dark:text-orange-400" />
             </div>
             <div className="flex-1">
               <Type className="text-sm font-medium no-underline">
                 Configure MCP settings
               </Type>
             </div>
-            <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
         </routes.mcp.details.Link>
       </div>
@@ -1168,11 +1178,11 @@ function ErrorPhaseContent({
   const routes = useTargetRoutes(releaseState);
 
   return (
-    <div className="py-2 space-y-4">
-      <div className="flex items-start gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/5">
-        <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+    <div className="space-y-4 py-2">
+      <div className="border-destructive/30 bg-destructive/5 flex items-start gap-3 rounded-lg border p-3">
+        <AlertCircle className="text-destructive mt-0.5 h-5 w-5 shrink-0" />
         <div className="flex-1">
-          <Type className="font-medium text-destructive">
+          <Type className="text-destructive font-medium">
             Deployment failed
           </Type>
           <Type small className="text-destructive/80 mt-1">
@@ -1181,7 +1191,7 @@ function ErrorPhaseContent({
         </div>
       </div>
       {releaseState.deploymentLogs.length > 0 && (
-        <div className="rounded-lg border bg-muted/30 p-3 max-h-48 overflow-y-auto font-mono text-xs space-y-1">
+        <div className="bg-muted/30 max-h-48 space-y-1 overflow-y-auto rounded-lg border p-3 font-mono text-xs">
           {releaseState.deploymentLogs.map((log) => (
             <div
               key={log.id}
@@ -1199,7 +1209,7 @@ function ErrorPhaseContent({
             className="no-underline hover:no-underline"
           >
             <Button variant="secondary">
-              <ExternalLink className="w-4 h-4" />
+              <ExternalLink className="h-4 w-4" />
               <Button.Text>View Deployment</Button.Text>
             </Button>
           </routes.deployments.deployment.Link>

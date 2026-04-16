@@ -135,20 +135,20 @@ export function ServerCard({
     <Badge
       variant="outline"
       size="sm"
-      className="cursor-pointer hover:bg-green-50 transition-colors flex items-center gap-1 uppercase font-mono"
+      className="flex cursor-pointer items-center gap-1 font-mono uppercase transition-colors hover:bg-green-50"
       onClick={(e) => e.stopPropagation()}
     >
-      <CheckCircleIcon className="w-3 h-3 text-green-500" />
+      <CheckCircleIcon className="h-3 w-3 text-green-500" />
       Public
     </Badge>
   ) : (
     <Badge
       variant="outline"
       size="sm"
-      className="cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-1 uppercase font-mono"
+      className="hover:bg-muted/50 flex cursor-pointer items-center gap-1 font-mono uppercase transition-colors"
       onClick={(e) => e.stopPropagation()}
     >
-      <LockIcon className="w-3 h-3 text-muted-foreground" />
+      <LockIcon className="text-muted-foreground h-3 w-3" />
       Private
     </Badge>
   );
@@ -158,10 +158,10 @@ export function ServerCard({
       <Badge
         variant="outline"
         size="sm"
-        className="cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-1 uppercase font-mono text-muted-foreground"
+        className="hover:bg-muted/50 text-muted-foreground flex cursor-pointer items-center gap-1 font-mono uppercase transition-colors"
         onClick={(e) => e.stopPropagation()}
       >
-        <XCircleIcon className="w-3 h-3 text-muted-foreground" />
+        <XCircleIcon className="text-muted-foreground h-3 w-3" />
         Disabled
       </Badge>
     );
@@ -171,12 +171,12 @@ export function ServerCard({
     (tool) => tool.type === ToolEntryType.Externalmcp,
   );
   const externalMcpBadge = isExternalMcp ? (
-    <ExternalMcpIcon className="text-neutral-600 size-5" />
+    <ExternalMcpIcon className="size-5 text-neutral-600" />
   ) : null;
 
   return (
     <Card
-      className={cn(className, "group transition-colors hover:bg-muted/50")}
+      className={cn(className, "group hover:bg-muted/50 transition-colors")}
     >
       <Card.Header
         className="cursor-pointer items-start"
@@ -184,7 +184,7 @@ export function ServerCard({
       >
         <div className="flex flex-col gap-1">
           <Card.Title className="text-base">
-            <div className="flex items-center gap-1 group">
+            <div className="group flex items-center gap-1">
               {externalMcpBadge}
               {toolset.name}
               <CopyButton
@@ -220,8 +220,8 @@ export function ServerCard({
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="text-base font-light">Server Enabled</h4>
-                      <p className="text-xs text-muted-foreground">
+                      <h4 className="text-base font-normal">Server Enabled</h4>
+                      <p className="text-muted-foreground text-xs">
                         {toolset.mcpEnabled
                           ? "Server is active, can receive requests"
                           : "Server is disabled, cannot receive requests"}
@@ -245,10 +245,10 @@ export function ServerCard({
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h4 className="text-base font-light">
+                          <h4 className="text-base font-normal">
                             Server Privacy
                           </h4>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-muted-foreground text-xs">
                             {toolset.mcpIsPublic
                               ? "Publicly accessible and installable"
                               : "Private, only accessible to you"}
@@ -269,11 +269,11 @@ export function ServerCard({
                       {/* MCP URL Section */}
                       {mcpUrl && (
                         <div className="space-y-2">
-                          <label className="text-xs text-muted-foreground">
+                          <label className="text-muted-foreground text-xs">
                             MCP URL
                           </label>
                           <div className="flex items-center gap-3">
-                            <code className="flex-1 text-xs bg-muted/50 px-2 py-1 rounded border text-muted-foreground font-mono overflow-x-auto whitespace-nowrap min-w-0">
+                            <code className="bg-muted/50 text-muted-foreground min-w-0 flex-1 overflow-x-auto rounded border px-2 py-1 font-mono text-xs whitespace-nowrap">
                               {mcpUrl}
                             </code>
                             <div className="flex-shrink-0">
@@ -285,12 +285,12 @@ export function ServerCard({
 
                       {/* Install URL Section */}
                       <div className="space-y-2">
-                        <label className="text-xs text-muted-foreground">
+                        <label className="text-muted-foreground text-xs">
                           Install Page
                         </label>
                         {installPageUrl ? (
                           <div className="flex items-center gap-3">
-                            <code className="flex-1 text-xs bg-muted/50 px-2 py-1 rounded border text-muted-foreground font-mono overflow-x-auto whitespace-nowrap min-w-0">
+                            <code className="bg-muted/50 text-muted-foreground min-w-0 flex-1 overflow-x-auto rounded border px-2 py-1 font-mono text-xs whitespace-nowrap">
                               {installPageUrl}
                             </code>
                             <div className="flex-shrink-0">
@@ -302,7 +302,7 @@ export function ServerCard({
                           </div>
                         ) : (
                           <div className="flex items-center gap-3">
-                            <code className="flex-1 text-xs bg-muted/30 px-2 py-1 rounded border border-dashed text-muted-foreground font-mono">
+                            <code className="bg-muted/30 text-muted-foreground flex-1 rounded border border-dashed px-2 py-1 font-mono text-xs">
                               No install page available
                             </code>
                           </div>
@@ -344,9 +344,9 @@ export function ServerCard({
             <Badge
               variant="outline"
               size="sm"
-              className="cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-1 uppercase font-mono"
+              className="hover:bg-muted/50 flex cursor-pointer items-center gap-1 font-mono uppercase transition-colors"
             >
-              <MessageCircleIcon className="w-3 h-3" />
+              <MessageCircleIcon className="h-3 w-3" />
               Test
             </Badge>
           </div>
@@ -367,9 +367,9 @@ export function ServerCard({
               <Badge
                 variant="outline"
                 size="sm"
-                className="cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-1 uppercase font-mono"
+                className="hover:bg-muted/50 flex cursor-pointer items-center gap-1 font-mono uppercase transition-colors"
               >
-                <ExternalLinkIcon className="w-3 h-3" />
+                <ExternalLinkIcon className="h-3 w-3" />
                 Install
               </Badge>
             </div>

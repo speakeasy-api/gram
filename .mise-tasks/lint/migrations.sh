@@ -18,7 +18,9 @@ files=()
 if [ -n "$usage_file" ]; then
   files=("${usage_file[@]}")
 else
-  mapfile -t files < <(git diff --relative --diff-filter=d --name-only "$base_ref" -- 'server/migrations/*.sql')
+  while IFS= read -r line; do
+    files+=("$line")
+  done < <(git diff --relative --diff-filter=d --name-only "$base_ref" -- 'server/migrations/*.sql')
 fi
 
 if [ ${#files[@]} -eq 0 ]; then

@@ -27,6 +27,8 @@ type Service interface {
 	CreditUsage(context.Context, *CreditUsagePayload) (res *CreditUsageResult, err error)
 	// List all chats for a project with their resolutions
 	ListChatsWithResolutions(context.Context, *ListChatsWithResolutionsPayload) (res *ListChatsWithResolutionsResult, err error)
+	// Soft-delete a chat by its ID
+	DeleteChat(context.Context, *DeleteChatPayload) (err error)
 	// Submit user feedback for a chat (success/failure)
 	SubmitFeedback(context.Context, *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error)
 }
@@ -53,7 +55,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"listChats", "loadChat", "generateTitle", "creditUsage", "listChatsWithResolutions", "submitFeedback"}
+var MethodNames = [7]string{"listChats", "loadChat", "generateTitle", "creditUsage", "listChatsWithResolutions", "deleteChat", "submitFeedback"}
 
 // Chat is the result type of the chat service loadChat method.
 type Chat struct {
@@ -84,6 +86,8 @@ type Chat struct {
 	TotalTokens *int64
 	// Total cost in USD for this chat
 	TotalCost *float64
+	// When the last message in the chat was created.
+	LastMessageTimestamp string
 }
 
 type ChatMessage struct {
@@ -135,6 +139,8 @@ type ChatOverview struct {
 	TotalTokens *int64
 	// Total cost in USD for this chat
 	TotalCost *float64
+	// When the last message in the chat was created.
+	LastMessageTimestamp string
 }
 
 // Chat overview with embedded resolution data
@@ -166,6 +172,8 @@ type ChatOverviewWithResolutions struct {
 	TotalTokens *int64
 	// Total cost in USD for this chat
 	TotalCost *float64
+	// When the last message in the chat was created.
+	LastMessageTimestamp string
 }
 
 // Resolution information for a chat
@@ -198,6 +206,14 @@ type CreditUsageResult struct {
 	CreditsUsed float64
 	// The number of monthly credits
 	MonthlyCredits int
+}
+
+// DeleteChatPayload is the payload type of the chat service deleteChat method.
+type DeleteChatPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the chat to delete
+	ID string
 }
 
 // GenerateTitlePayload is the payload type of the chat service generateTitle

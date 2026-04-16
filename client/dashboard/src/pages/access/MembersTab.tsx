@@ -9,6 +9,7 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 import { Button, Column, Icon, Table } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { ChangeRoleDialog } from "./ChangeRoleDialog";
+import { RequireScope } from "@/components/require-scope";
 
 function getInitials(name: string) {
   return name
@@ -81,20 +82,22 @@ export function MembersTab() {
       header: "",
       width: "100px",
       render: (member) => (
-        <Button
-          variant="tertiary"
-          size="sm"
-          onClick={() => setChangingMember(member)}
-        >
-          <Button.Text className="text-primary">Change</Button.Text>
-        </Button>
+        <RequireScope scope="org:admin" level="component">
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={() => setChangingMember(member)}
+          >
+            <Button.Text className="text-primary">Change</Button.Text>
+          </Button>
+        </RequireScope>
       ),
     },
   ];
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
+      <div className="mb-1 flex items-center justify-between">
         <div>
           <Heading variant="h4">Team Members</Heading>
           <Type muted small className="mt-1">
@@ -115,13 +118,15 @@ export function MembersTab() {
           className="mt-4 rounded-b-none"
         />
       )}
-      <div className="flex justify-center border border-t-0 border-border rounded-b-lg py-3">
-        <Button variant="tertiary" size="sm">
-          <Button.Text>Manage Team</Button.Text>
-          <Button.RightIcon>
-            <Icon name="arrow-right" className="h-4 w-4" />
-          </Button.RightIcon>
-        </Button>
+      <div className="border-border flex justify-center rounded-b-lg border border-t-0 py-3">
+        <RequireScope scope="org:admin" level="component">
+          <Button variant="tertiary" size="sm">
+            <Button.Text>Manage Team</Button.Text>
+            <Button.RightIcon>
+              <Icon name="arrow-right" className="h-4 w-4" />
+            </Button.RightIcon>
+          </Button>
+        </RequireScope>
       </div>
 
       <ChangeRoleDialog

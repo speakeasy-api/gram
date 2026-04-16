@@ -60,11 +60,15 @@ type OrgConfig struct {
 	Name        string
 	Slug        string
 	AccountType string
+	// WorkOSID is the WorkOS organization id included in /validate (json workos_id).
+	// Nil means omit the field so Gram's syncWorkOSIDs skips SetOrgWorkosID for that org.
+	WorkOSID *string
 }
 
 // NewConfig returns a Config with hardcoded test defaults (no env var lookup).
 // Use this in tests for deterministic behavior. Always runs in mock mode.
 func NewConfig() Config {
+	mockOrgWorkOSID := MockOrgID
 	return Config{
 		SecretKey: MockSecretKey,
 		User: UserConfig{
@@ -79,6 +83,7 @@ func NewConfig() Config {
 			Name:        MockOrgName,
 			Slug:        MockOrgSlug,
 			AccountType: "free",
+			WorkOSID:    &mockOrgWorkOSID,
 		},
 	}
 }
@@ -87,6 +92,7 @@ func NewConfig() Config {
 // When OIDC env vars are set, OIDC mode is enabled and the mock user/org
 // config is ignored (real identity comes from the OIDC provider).
 func DefaultConfig() Config {
+	orgID := envStr("MOCK_IDP_ORG_ID", "550e8400-e29b-41d4-a716-446655440000")
 	cfg := Config{
 		SecretKey: envStr("SPEAKEASY_SECRET_KEY", MockSecretKey),
 		User: UserConfig{
@@ -97,16 +103,18 @@ func DefaultConfig() Config {
 			Whitelisted: envBool("MOCK_IDP_USER_WHITELISTED", true),
 		},
 		Organization: OrgConfig{
-			ID:          envStr("MOCK_IDP_ORG_ID", "550e8400-e29b-41d4-a716-446655440000"),
+			ID:          orgID,
 			Name:        envStr("MOCK_IDP_ORG_NAME", "Local Dev Org"),
 			Slug:        envStr("MOCK_IDP_ORG_SLUG", "local-dev-org"),
 			AccountType: envStr("MOCK_IDP_ORG_ACCOUNT_TYPE", "free"),
+			WorkOSID:    &orgID,
 		},
 		Oidc: OidcConfig{
 			Issuer:       envStrNoUnset("OIDC_ISSUER"),
 			ClientID:     envStrNoUnset("OIDC_CLIENT_ID"),
 			ClientSecret: envStrNoUnset("OIDC_CLIENT_SECRET"),
 			ExternalURL:  envStr("OIDC_EXTERNAL_URL", ""),
+			GramSiteURL:  envStr("GRAM_SITE_URL", "https://localhost:5173"),
 		},
 	}
 	if v := os.Getenv("MOCK_IDP_USER_PHOTO_URL"); v != "" {
@@ -139,6 +147,7 @@ func Handler(cfg Config) http.Handler {
 	if cfg.Oidc.IsOidcMode() {
 		mux.HandleFunc("GET /v1/speakeasy_provider/oidc/callback", s.handleOidcCallback)
 		mux.HandleFunc("GET /v1/speakeasy_provider/logout/callback", s.handleLogoutCallback)
+		mux.HandleFunc("GET /v1/auth/callback", s.handleInviteAuthCallback)
 	}
 
 	// Server-to-server endpoints (require secret key)
@@ -177,6 +186,7 @@ type organization struct {
 	UpdatedAt          string   `json:"updated_at"`
 	AccountType        string   `json:"account_type"`
 	SSOConnectionID    *string  `json:"sso_connection_id"`
+	WorkOSID           *string  `json:"workos_id,omitempty"`
 	UserWorkspaceSlugs []string `json:"user_workspaces_slugs"`
 }
 
@@ -450,6 +460,7 @@ func (s *server) handleOidcCallback(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[oidc/callback] authenticated sub=%s email=%s org=%s", claims.Sub, claims.Email, claims.OrgID)
 
 	userSess := mapClaimsToSession(claims)
+	userSess.User.Admin = s.cfg.User.Admin
 
 	// Extract the WorkOS session ID from the access token (JWT) for logout.
 	var workosSessionID string
@@ -485,6 +496,85 @@ func (s *server) handleOidcCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	target.RawQuery = q.Encode()
 
+	http.Redirect(w, r, target.String(), http.StatusFound)
+}
+
+// ---------------------------------------------------------------------------
+// Invite Auth Callback (WorkOS invite acceptance redirect)
+// ---------------------------------------------------------------------------
+
+// handleInviteAuthCallback handles the redirect from WorkOS after a user
+// accepts an organization invitation. WorkOS redirects to /v1/auth/callback
+// with a one-time authorization code. We exchange it, create a local session,
+// and redirect to the Gram server's auth callback to complete login.
+func (s *server) handleInviteAuthCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		log.Printf("[invite/callback] missing code parameter")
+		http.Error(w, "missing code parameter", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("[invite/callback] received WorkOS invite callback, exchanging code...")
+
+	// Exchange the code with WorkOS. No PKCE verifier because this flow
+	// was initiated by WorkOS (invite acceptance), not by the mock IDP.
+	authResp, err := exchangeOidcCode(r.Context(), s.cfg.Oidc, code, "")
+	if err != nil {
+		log.Printf("[invite/callback] code exchange failed: %v — redirecting to app for manual login", err)
+		http.Redirect(w, r, s.cfg.Oidc.GramSiteURL, http.StatusFound)
+		return
+	}
+
+	// Build claims from WorkOS response (same as OIDC callback).
+	displayName := strings.TrimSpace(authResp.User.FirstName + " " + authResp.User.LastName)
+	if displayName == "" {
+		displayName = authResp.User.Email
+	}
+	claims := &OidcClaims{
+		Sub:     authResp.User.ID,
+		Email:   authResp.User.Email,
+		Name:    displayName,
+		Picture: authResp.User.ProfilePictureURL,
+		OrgID:   authResp.OrganizationID,
+	}
+	if authResp.OrganizationID != "" {
+		if orgName, err := fetchWorkOSOrgName(r.Context(), s.cfg.Oidc.ClientSecret, authResp.OrganizationID); err == nil {
+			claims.OrgName = orgName
+		} else {
+			log.Printf("[invite/callback] failed to fetch org name: %v (using org ID)", err)
+			claims.OrgName = authResp.OrganizationID
+		}
+	}
+	log.Printf("[invite/callback] authenticated sub=%s email=%s org=%s", claims.Sub, claims.Email, claims.OrgID)
+
+	userSess := mapClaimsToSession(claims)
+	userSess.User.Admin = s.cfg.User.Admin
+	var workosSessionID string
+	if sid, err := extractJWTClaim(authResp.AccessToken, "sid"); err == nil {
+		workosSessionID = sid
+		log.Printf("[invite/callback] extracted WorkOS session_id=%s", workosSessionID)
+	}
+
+	sess := &oidcSession{
+		userSession:     userSess,
+		workosSessionID: workosSessionID,
+	}
+
+	ourCode := s.createOidcAuthCode(sess)
+
+	// Redirect to the Gram server's auth callback to complete the login.
+	target, err := url.Parse(strings.TrimRight(s.cfg.Oidc.GramSiteURL, "/") + "/rpc/auth.callback")
+	if err != nil {
+		log.Printf("[invite/callback] invalid GramSiteURL: %v", err)
+		http.Error(w, "invalid GRAM_SITE_URL configuration", http.StatusInternalServerError)
+		return
+	}
+	q := target.Query()
+	q.Set("code", ourCode)
+	target.RawQuery = q.Encode()
+
+	log.Printf("[invite/callback] redirecting to Gram auth callback → %s", target.String())
 	http.Redirect(w, r, target.String(), http.StatusFound)
 }
 
@@ -644,6 +734,7 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:          now,
 		AccountType:        accountType,
 		SSOConnectionID:    nil,
+		WorkOSID:           nil,
 		UserWorkspaceSlugs: []string{slug},
 	}
 
@@ -812,6 +903,7 @@ func (s *server) buildOrg() organization {
 		UpdatedAt:          fixedTime,
 		AccountType:        s.cfg.Organization.AccountType,
 		SSOConnectionID:    nil,
+		WorkOSID:           s.cfg.Organization.WorkOSID,
 		UserWorkspaceSlugs: []string{s.cfg.Organization.Slug},
 	}
 }
@@ -890,6 +982,7 @@ func LogConfig(cfg Config, port int) {
 	if cfg.Oidc.IsOidcMode() {
 		fmt.Println("  GET  /v1/speakeasy_provider/oidc/callback")
 		fmt.Println("  GET  /v1/speakeasy_provider/logout/callback")
+		fmt.Println("  GET  /v1/auth/callback  (WorkOS invite acceptance)")
 	}
 	fmt.Println("  POST /v1/speakeasy_provider/exchange")
 	fmt.Println("  GET  /v1/speakeasy_provider/validate")

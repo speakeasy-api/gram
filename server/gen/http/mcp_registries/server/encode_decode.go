@@ -950,13 +950,14 @@ func marshalTypesMCPRegistryToMCPRegistryResponseBody(v *types.MCPRegistry) *MCP
 // *types.ExternalMCPServer.
 func marshalTypesExternalMCPServerToExternalMCPServerResponseBody(v *types.ExternalMCPServer) *ExternalMCPServerResponseBody {
 	res := &ExternalMCPServerResponseBody{
-		RegistrySpecifier: v.RegistrySpecifier,
-		Version:           v.Version,
-		Description:       v.Description,
-		RegistryID:        v.RegistryID,
-		Title:             v.Title,
-		IconURL:           v.IconURL,
-		Meta:              v.Meta,
+		RegistrySpecifier:                   v.RegistrySpecifier,
+		Version:                             v.Version,
+		Description:                         v.Description,
+		RegistryID:                          v.RegistryID,
+		OrganizationMcpCollectionRegistryID: v.OrganizationMcpCollectionRegistryID,
+		Title:                               v.Title,
+		IconURL:                             v.IconURL,
+		Meta:                                v.Meta,
 	}
 	if v.Tools != nil {
 		res.Tools = make([]*ExternalMCPToolResponseBody, len(v.Tools))

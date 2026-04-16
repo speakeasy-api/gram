@@ -113,7 +113,10 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
 	)
-	if err := s.requireOrgTeamManagementAccess(ctx, logger, ac, workosOrgID); err != nil {
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+	if err := s.requireWorkOSOrgAdminRole(ctx, logger, ac, workosOrgID); err != nil {
 		return nil, err
 	}
 
@@ -161,7 +164,10 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 		attr.SlogUserID(ac.UserID),
 		attr.SlogOrganizationInviteID(payload.InvitationID),
 	)
-	if err := s.requireOrgTeamManagementAccess(ctx, logger, ac, workosOrgID); err != nil {
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return err
+	}
+	if err := s.requireWorkOSOrgAdminRole(ctx, logger, ac, workosOrgID); err != nil {
 		return err
 	}
 
@@ -200,7 +206,10 @@ func (s *Service) ListInvites(ctx context.Context, _ *gen.ListInvitesPayload) (*
 		attr.SlogUserID(ac.UserID),
 	)
 
-	if err := s.requireOrgTeamManagementAccess(ctx, logger, ac, workosOrgID); err != nil {
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+	if err := s.requireWorkOSOrgAdminRole(ctx, logger, ac, workosOrgID); err != nil {
 		return nil, err
 	}
 
@@ -260,7 +269,7 @@ func (s *Service) GetInviteByToken(ctx context.Context, payload *gen.GetInviteBy
 func (s *Service) ListUsers(ctx context.Context, _ *gen.ListUsersPayload) (*gen.ListUsersResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return nil, err
 	}
 
 	logger := s.logger.With(
@@ -276,7 +285,11 @@ func (s *Service) ListUsers(ctx context.Context, _ *gen.ListUsersPayload) (*gen.
 	if org.WorkosID.Valid {
 		workosOrgID = org.WorkosID.String
 	}
-	if err := s.requireOrgTeamManagementAccess(ctx, logger, ac, workosOrgID); err != nil {
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+	if err := s.requireWorkOSOrgAdminRole(ctx, logger, ac, workosOrgID); err != nil {
 		return nil, err
 	}
 
@@ -307,7 +320,10 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
 	)
-	if err := s.requireOrgTeamManagementAccess(ctx, logger, ac, workosOrgID); err != nil {
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return err
+	}
+	if err := s.requireWorkOSOrgAdminRole(ctx, logger, ac, workosOrgID); err != nil {
 		return err
 	}
 
@@ -395,7 +411,10 @@ func (s *Service) orgContext(ctx context.Context) (*contextvalues.AuthContext, s
 	return ac, org.WorkosID.String, nil
 }
 
-func (s *Service) requireOrgTeamManagementAccess(ctx context.Context, logger *slog.Logger, ac *contextvalues.AuthContext, workosOrgID string) error {
+// requireWorkOSOrgAdminRole checks that the current user holds the admin role in WorkOS.
+// It is a no-op for enterprise accounts with the RBAC feature enabled, since those orgs
+// are gated by s.access.Require instead.
+func (s *Service) requireWorkOSOrgAdminRole(ctx context.Context, logger *slog.Logger, ac *contextvalues.AuthContext, workosOrgID string) error {
 	if s.features == nil {
 		return oops.E(oops.CodeUnexpected, errors.New("product features checker not configured"), "internal configuration error").Log(ctx, logger)
 	}
@@ -406,9 +425,6 @@ func (s *Service) requireOrgTeamManagementAccess(ctx context.Context, logger *sl
 	}
 
 	if enabled && ac.AccountType == "enterprise" {
-		if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
-			return mapOrgAccessError(err)
-		}
 		return nil
 	}
 
@@ -430,15 +446,6 @@ func (s *Service) requireOrgTeamManagementAccess(ctx context.Context, logger *sl
 	}
 
 	return nil
-}
-
-func mapOrgAccessError(err error) error {
-	switch {
-	case errors.Is(err, access.ErrMissingGrants), errors.Is(err, access.ErrDenied):
-		return oops.C(oops.CodeForbidden)
-	default:
-		return oops.E(oops.CodeUnexpected, err, "check organization access")
-	}
 }
 
 // resolveGramUserWorkOSUserID returns the WorkOS user id for a Gram user, optionally persisting it from email lookup.
@@ -527,14 +534,9 @@ func invitationToGenAccept(inv *workos.Invitation, organizationName string) *gen
 	}
 }
 
-func organizationUserToGen(row *orgrepo.OrganizationUserRelationship) *gen.OrganizationUser {
+func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.OrganizationUser {
 	if row == nil {
 		return nil
-	}
-	var workosMem *string
-	if row.WorkosMembershipID.Valid {
-		s := row.WorkosMembershipID.String
-		workosMem = &s
 	}
 	createdAt := ""
 	if row.CreatedAt.Valid {
@@ -548,7 +550,10 @@ func organizationUserToGen(row *orgrepo.OrganizationUserRelationship) *gen.Organ
 		ID:                 strconv.FormatInt(row.ID, 10),
 		OrganizationID:     row.OrganizationID,
 		UserID:             row.UserID,
-		WorkosMembershipID: workosMem,
+		Name:               row.UserDisplayName,
+		Email:              row.UserEmail,
+		PhotoURL:           conv.FromPGText[string](row.UserPhotoUrl),
+		WorkosMembershipID: conv.FromPGText[string](row.WorkosMembershipID),
 		CreatedAt:          createdAt,
 		UpdatedAt:          updatedAt,
 	}

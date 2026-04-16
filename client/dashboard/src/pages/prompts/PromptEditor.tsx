@@ -81,7 +81,7 @@ export function PromptEditor({
   return (
     <div className="flex gap-8">
       <form
-        className="flex-1 min-w-0 space-y-8"
+        className="min-w-0 flex-1 space-y-8"
         onSubmit={(e) => {
           e.preventDefault();
           const fd = new FormData(e.currentTarget);
@@ -151,7 +151,7 @@ export function PromptEditor({
           <div>
             <dialog
               open
-              className="bg-background text-inherit w-dvw h-dvh fixed inset-0 z-50"
+              className="bg-background fixed inset-0 z-50 h-dvh w-dvw text-inherit"
               style={{ all: fullScreenEditor ? void 0 : "unset" }}
               onKeyDown={(e) => {
                 if (e.key === "Escape") {
@@ -163,7 +163,7 @@ export function PromptEditor({
                 className={cn(
                   "relative",
                   fullScreenEditor
-                    ? "px-8 pb-8 pt-12 h-full w-full flex flex-col"
+                    ? "flex h-full w-full flex-col px-8 pt-12 pb-8"
                     : false,
                 )}
               >
@@ -187,12 +187,12 @@ export function PromptEditor({
                     onClick={() => setFullScreenEditor(false)}
                   >
                     <span className="sr-only">Exit full screen</span>
-                    <X className="w-4 h-4" />
+                    <X className="h-4 w-4" />
                   </Button>
                 ) : null}
                 {!fullScreenEditor ? (
                   <Button
-                    className="absolute bottom-4 right-4"
+                    className="absolute right-4 bottom-4"
                     type="button"
                     variant="tertiary"
                     onClick={() => {
@@ -201,7 +201,7 @@ export function PromptEditor({
                     }}
                   >
                     <span className="sr-only">Enter full screen</span>
-                    <Fullscreen className="w-4 h-4" />
+                    <Fullscreen className="h-4 w-4" />
                   </Button>
                 ) : null}
               </div>
@@ -209,10 +209,10 @@ export function PromptEditor({
           </div>
           <div className="pt-4">
             <fieldset className="space-y-4">
-              <legend className="text-base font-medium leading-none mb-3">
+              <legend className="mb-3 text-base leading-none font-medium">
                 Arguments
               </legend>
-              <p className="text-muted-foreground text-sm mb-4">
+              <p className="text-muted-foreground mb-4 text-sm">
                 Add useful descriptions for your prompt template arguments
                 (optional)
               </p>
@@ -229,10 +229,10 @@ export function PromptEditor({
                   })}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground border border-dashed border-muted-foreground/20 rounded-md p-4">
+                <p className="text-muted-foreground border-muted-foreground/20 rounded-md border border-dashed p-4 text-sm">
                   No arguments found in prompt template. You can add these using
                   the syntax{" "}
-                  <code className="text-red-600 bg-red-50 px-1 py-0.5 rounded text-xs">
+                  <code className="rounded bg-red-50 px-1 py-0.5 text-xs text-red-600">
                     {"{{argument_name}}"}
                   </code>
                   .
@@ -243,46 +243,46 @@ export function PromptEditor({
         </div>
         <div className="pt-6">
           {error ? (
-            <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4">
-              <p className="text-red-700 text-sm">{error.message}</p>
+            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3">
+              <p className="text-sm text-red-700">{error.message}</p>
             </div>
           ) : null}
           <Button type="submit" disabled={isPending} size="md">
             {isPending ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : null}
             {isPending ? "Saving..." : "Save Prompt"}
           </Button>
         </div>
       </form>
-      <aside className="w-80 flex-shrink-0 space-y-6 sticky top-8 bg-secondary p-6 rounded-lg">
+      <aside className="bg-secondary sticky top-8 w-80 flex-shrink-0 space-y-6 rounded-lg p-6">
         <div>
-          <h3 className="text-sm font-medium mb-2">Prompt Templates</h3>
-          <p className="text-sm text-muted-foreground">
+          <h3 className="mb-2 text-sm font-medium">Prompt Templates</h3>
+          <p className="text-muted-foreground text-sm">
             Create reusable prompts with dynamic variables using the Mustache
             syntax.
           </p>
         </div>
         <div>
-          <h3 className="text-sm font-medium mb-2">Using Variables</h3>
-          <p className="text-sm text-muted-foreground mb-2">
+          <h3 className="mb-2 text-sm font-medium">Using Variables</h3>
+          <p className="text-muted-foreground mb-2 text-sm">
             Add variables to your prompt using double curly braces:
           </p>
-          <code className="text-xs bg-muted px-2 py-1 rounded block">
+          <code className="bg-muted block rounded px-2 py-1 text-xs">
             {"{{variable_name}}"}
           </code>
         </div>
         <div>
-          <h3 className="text-sm font-medium mb-2">Arguments</h3>
-          <p className="text-sm text-muted-foreground">
+          <h3 className="mb-2 text-sm font-medium">Arguments</h3>
+          <p className="text-muted-foreground text-sm">
             Variables detected in your prompt will automatically appear in the
             Arguments section. Add descriptions to help users understand what
             each variable is for.
           </p>
         </div>
         <div>
-          <h3 className="text-sm font-medium mb-2">Tips</h3>
-          <ul className="text-sm text-muted-foreground space-y-1">
+          <h3 className="mb-2 text-sm font-medium">Tips</h3>
+          <ul className="text-muted-foreground space-y-1 text-sm">
             <li>• Use descriptive variable names</li>
             <li>• Keep prompts clear and concise</li>
             <li>• Test with different inputs</li>

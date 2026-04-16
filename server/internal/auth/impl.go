@@ -321,10 +321,19 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		}
 	}
 
-	// on auth info write through data for user/org relationship as a backfill mechanism
-	// user and org both will have been created by now
-	// admin is only exception where there is not a single user-org relationship written
-	if !userInfo.Admin {
+	// Write through the user-org relationship as a backfill mechanism.
+	// For admins, only upsert when the active org is one they actually belong to.
+	// Admins can override their active org to visit customer orgs via the admin
+	// override feature, and we must not insert a relationship row in those cases.
+	belongsToActiveOrg := !userInfo.Admin
+	for _, org := range userInfo.Organizations {
+		if org.ID == authCtx.ActiveOrganizationID {
+			belongsToActiveOrg = true
+			break
+		}
+	}
+
+	if belongsToActiveOrg {
 		if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			UserID:         authCtx.UserID,
@@ -485,9 +494,9 @@ func (s *Service) createDefaultProject(ctx context.Context, organizationID strin
 		Name:           "Default",
 		Slug:           "default",
 	})
-	var pgErr *pgconn.PgError
 	var empty projectsRepo.Project
 	if err != nil {
+		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return empty, oops.E(oops.CodeConflict, nil, "project already exists")
 		}

@@ -88,7 +88,7 @@ export function ToolCard({
       >
         <Stack direction="horizontal" align="center">
           {prefixTrimmed && (
-            <Heading variant="h4" className="normal-case text-foreground/50">
+            <Heading variant="h4" className="text-foreground/50 normal-case">
               {sourceName}_
             </Heading>
           )}
@@ -174,7 +174,7 @@ export function ToolCard({
         </Card.Description>
       </Card.Header>
       <Card.Content className="h-full">
-        <div className="border-l-2 pl-4 h-full">
+        <div className="h-full border-l-2 pl-4">
           <EditableText
             value={tool.description}
             onSubmit={(newValue) => updateVariation({ description: newValue })}
@@ -184,7 +184,7 @@ export function ToolCard({
           >
             <Type
               className={cn(
-                "line-clamp-3 text-muted-foreground wrap-anywhere!",
+                "text-muted-foreground line-clamp-3 wrap-anywhere!",
                 !tool.description && "italic",
               )}
             >

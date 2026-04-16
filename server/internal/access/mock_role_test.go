@@ -92,6 +92,14 @@ func (m *MockRoleProvider) ListOrgUsers(ctx context.Context, orgID string) (map[
 	return nil, mockErr(args, 1)
 }
 
+func (m *MockRoleProvider) GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*thirdpartyworkos.Member, error) {
+	args := m.Called(ctx, workOSUserID, workOSOrgID)
+	if member, ok := args.Get(0).(*thirdpartyworkos.Member); ok {
+		return member, mockErr(args, 1)
+	}
+	return nil, mockErr(args, 1)
+}
+
 func mockErr(args mock.Arguments, index int) error {
 	err := args.Error(index)
 	if err == nil {

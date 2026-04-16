@@ -50,7 +50,7 @@ export default function SlackAppDetailPage() {
           <Stack align="center" justify="center" className="py-16">
             <Icon
               name="loader-circle"
-              className="w-6 h-6 animate-spin text-muted-foreground"
+              className="text-muted-foreground h-6 w-6 animate-spin"
             />
           </Stack>
         </Page.Body>
@@ -70,7 +70,7 @@ export default function SlackAppDetailPage() {
               {app.iconAssetId && (
                 <AssetImage
                   assetId={app.iconAssetId}
-                  className="w-8 h-8 rounded-lg"
+                  className="h-8 w-8 rounded-lg"
                 />
               )}
               {app.name}
@@ -94,7 +94,7 @@ export default function SlackAppDetailPage() {
             {app.status === "unconfigured" ? (
               <DraftState app={app} />
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
                 <LeftPanel app={app} />
                 <RightPanel />
               </div>
@@ -177,7 +177,7 @@ function DraftState({ app }: { app: SlackAppResult }) {
           onClick={() => window.open(deepLinkUrl, "_blank")}
         >
           <Button.LeftIcon>
-            <Icon name="external-link" className="w-4 h-4" />
+            <Icon name="external-link" className="h-4 w-4" />
           </Button.LeftIcon>
           <Button.Text>Open in Slack</Button.Text>
         </Button>
@@ -193,7 +193,7 @@ function DraftState({ app }: { app: SlackAppResult }) {
         </Type>
         <Stack gap={3}>
           <div>
-            <Type variant="body" className="mb-1 font-medium text-sm">
+            <Type variant="body" className="mb-1 text-sm font-medium">
               Client ID
             </Type>
             <Input
@@ -203,7 +203,7 @@ function DraftState({ app }: { app: SlackAppResult }) {
             />
           </div>
           <div>
-            <Type variant="body" className="mb-1 font-medium text-sm">
+            <Type variant="body" className="mb-1 text-sm font-medium">
               Client Secret
             </Type>
             <Input
@@ -214,7 +214,7 @@ function DraftState({ app }: { app: SlackAppResult }) {
             />
           </div>
           <div>
-            <Type variant="body" className="mb-1 font-medium text-sm">
+            <Type variant="body" className="mb-1 text-sm font-medium">
               Signing Secret
             </Type>
             <Input
@@ -310,13 +310,13 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
           onClick={() => window.open("https://api.slack.com/apps", "_blank")}
         >
           <Button.LeftIcon>
-            <Icon name="external-link" className="w-3.5 h-3.5" />
+            <Icon name="external-link" className="h-3.5 w-3.5" />
           </Button.LeftIcon>
           <Button.Text>Manage on Slack</Button.Text>
         </Button>
         <Button variant="secondary" size="sm" onClick={handleCopyInviteLink}>
           <Button.LeftIcon>
-            <Icon name={copied ? "check" : "copy"} className="w-3.5 h-3.5" />
+            <Icon name={copied ? "check" : "copy"} className="h-3.5 w-3.5" />
           </Button.LeftIcon>
           <Button.Text>{copied ? "Copied!" : "Copy Invite Link"}</Button.Text>
         </Button>
@@ -336,13 +336,13 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
             {appToolsets.map((ts) => (
               <div
                 key={ts.id}
-                className="flex items-center justify-between rounded-lg border bg-card p-3"
+                className="bg-card flex items-center justify-between rounded-lg border p-3"
               >
                 <div className="min-w-0">
-                  <Type className="font-medium truncate block">
+                  <Type className="block truncate font-medium">
                     {ts.name || ts.slug}
                   </Type>
-                  <Type muted small className="truncate block">
+                  <Type muted small className="block truncate">
                     {ts.slug}
                     {ts.tools
                       ? ` \u00B7 ${ts.tools.length} tool${ts.tools.length !== 1 ? "s" : ""}`
@@ -355,7 +355,7 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
                 >
                   <Button variant="tertiary" size="sm">
                     <Button.LeftIcon>
-                      <Icon name="external-link" className="w-3.5 h-3.5" />
+                      <Icon name="external-link" className="h-3.5 w-3.5" />
                     </Button.LeftIcon>
                     <Button.Text>View</Button.Text>
                   </Button>
@@ -372,26 +372,26 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
           Installations
         </Type>
         {app.slackTeamId ? (
-          <div className="flex items-center justify-between rounded-lg border bg-card p-3">
+          <div className="bg-card flex items-center justify-between rounded-lg border p-3">
             <div className="min-w-0">
-              <Type className="font-medium truncate block">
+              <Type className="block truncate font-medium">
                 {app.slackTeamName || app.slackTeamId}
               </Type>
-              <Type muted small className="truncate block">
+              <Type muted small className="block truncate">
                 {app.slackTeamId}
               </Type>
             </div>
             <Button variant="tertiary" size="sm" onClick={() => {}}>
               <Button.LeftIcon>
-                <Icon name="scroll-text" className="w-3.5 h-3.5" />
+                <Icon name="scroll-text" className="h-3.5 w-3.5" />
               </Button.LeftIcon>
               <Button.Text>Logs</Button.Text>
             </Button>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-10 px-6">
-            <Icon name="slack" className="w-6 h-6 text-muted-foreground mb-3" />
-            <Type muted small className="text-center mb-3">
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed px-6 py-10">
+            <Icon name="slack" className="text-muted-foreground mb-3 h-6 w-6" />
+            <Type muted small className="mb-3 text-center">
               No installs yet. Share the invite link to get your first workspace
               connected.
             </Type>
@@ -403,7 +403,7 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
               <Button.LeftIcon>
                 <Icon
                   name={copied ? "check" : "copy"}
-                  className="w-3.5 h-3.5"
+                  className="h-3.5 w-3.5"
                 />
               </Button.LeftIcon>
               <Button.Text>
@@ -427,7 +427,7 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
           onChange={(e) => handlePromptChange(e.target.value)}
           placeholder="You are a helpful assistant..."
           rows={6}
-          className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
+          className="placeholder:text-muted-foreground focus-visible:ring-ring w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-sm focus-visible:ring-1 focus-visible:outline-none"
         />
       </Stack>
     </Stack>
@@ -440,8 +440,8 @@ function RightPanel() {
       <Type variant="body" className="font-medium">
         Chat Logs
       </Type>
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-warning/40 bg-warning/5 py-16 px-6">
-        <Icon name="triangle-alert" className="w-6 h-6 text-warning mb-3" />
+      <div className="border-warning/40 bg-warning/5 flex flex-col items-center justify-center rounded-lg border border-dashed px-6 py-16">
+        <Icon name="triangle-alert" className="text-warning mb-3 h-6 w-6" />
         <Type small className="text-warning text-center">
           I need to be wired up before we remove the feature flag
         </Type>

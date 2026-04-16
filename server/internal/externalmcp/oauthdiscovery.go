@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -102,7 +102,7 @@ type protectedResourceMetadata struct {
 // DiscoverOAuthMetadata discovers OAuth configuration for an external MCP server.
 // It parses the WWW-Authenticate header and fetches metadata from discovered URLs.
 // If no metadata URLs are in the header, it probes standard well-known locations.
-func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, wwwAuthenticate string, remoteURL string) (*OAuthDiscoveryResult, error) {
+func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, wwwAuthenticate string, remoteURL string) (*OAuthDiscoveryResult, error) {
 	// Parse the WWW-Authenticate header
 	params := parseWWWAuthenticate(wwwAuthenticate)
 
@@ -111,7 +111,7 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, wwwAuthenti
 
 	// Strategy 1: Check for auth_server_metadata in header (direct AS metadata URL)
 	if asURL, ok := params["auth_server_metadata"]; ok && asURL != "" {
-		meta, err := fetchJSON[authServerMetadata](ctx, logger, asURL)
+		meta, err := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
 		if err == nil && meta != nil {
 			authServerMeta = meta
 		}
@@ -119,13 +119,13 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, wwwAuthenti
 
 	// Strategy 2: Check for resource_metadata in header (Protected Resource metadata)
 	if rmURL, ok := params["resource_metadata"]; ok && rmURL != "" {
-		meta, err := fetchJSON[protectedResourceMetadata](ctx, logger, rmURL)
+		meta, err := fetchJSON[protectedResourceMetadata](ctx, logger, guardianPolicy, rmURL)
 		if err == nil && meta != nil {
 			resourceMeta = meta
 			// Follow the chain to get AS metadata
 			if len(meta.AuthorizationServers) > 0 {
 				asURL := buildWellKnownURL(meta.AuthorizationServers[0])
-				asMeta, err := fetchJSON[authServerMetadata](ctx, logger, asURL)
+				asMeta, err := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
 				if err == nil && asMeta != nil {
 					authServerMeta = asMeta
 				}
@@ -133,32 +133,29 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, wwwAuthenti
 		}
 	}
 
-	// Strategy 3: Probe well-known locations at the server origin
+	// Strategy 3: Probe well-known locations derived from the remote URL
 	if authServerMeta == nil {
-		origin, err := getOrigin(remoteURL)
-		if err == nil {
-			// Try OAuth Protected Resource metadata first
-			prURL := origin + "/.well-known/oauth-protected-resource"
-			meta, err := fetchJSON[protectedResourceMetadata](ctx, logger, prURL)
-			if err == nil && meta != nil {
-				resourceMeta = meta
-				// Follow the chain
-				if len(meta.AuthorizationServers) > 0 {
-					asURL := buildWellKnownURL(meta.AuthorizationServers[0])
-					asMeta, _ := fetchJSON[authServerMetadata](ctx, logger, asURL)
-					if asMeta != nil {
-						authServerMeta = asMeta
-					}
-				}
-			}
-
-			// Try OAuth Authorization Server metadata directly
-			if authServerMeta == nil {
-				asURL := origin + "/.well-known/oauth-authorization-server"
-				asMeta, _ := fetchJSON[authServerMetadata](ctx, logger, asURL)
+		// Try OAuth Protected Resource metadata first
+		prURL := buildWellKnownResourceURL(remoteURL)
+		meta, err := fetchJSON[protectedResourceMetadata](ctx, logger, guardianPolicy, prURL)
+		if err == nil && meta != nil {
+			resourceMeta = meta
+			// Follow the chain
+			if len(meta.AuthorizationServers) > 0 {
+				asURL := buildWellKnownURL(meta.AuthorizationServers[0])
+				asMeta, _ := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
 				if asMeta != nil {
 					authServerMeta = asMeta
 				}
+			}
+		}
+
+		// Try OAuth Authorization Server metadata directly
+		if authServerMeta == nil {
+			asURL := buildWellKnownURL(remoteURL)
+			asMeta, _ := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
+			if asMeta != nil {
+				authServerMeta = asMeta
 			}
 		}
 	}
@@ -220,23 +217,31 @@ func parseWWWAuthenticate(header string) map[string]string {
 	return params
 }
 
-// getOrigin extracts the origin (scheme + host) from a URL.
-func getOrigin(rawURL string) (string, error) {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return "", fmt.Errorf("parse URL: %w", err)
-	}
-	return fmt.Sprintf("%s://%s", u.Scheme, u.Host), nil
+// buildWellKnownURL constructs the well-known OAuth Authorization Server metadata URL.
+// Per RFC 8414 Section 3, the well-known suffix is inserted between the host and the path.
+// e.g. https://example.com/path → https://example.com/.well-known/oauth-authorization-server/path
+func buildWellKnownURL(baseURL string) string {
+	return buildWellKnownSuffixURL(baseURL, "oauth-authorization-server")
 }
 
-// buildWellKnownURL constructs the well-known OAuth Authorization Server metadata URL.
-func buildWellKnownURL(baseURL string) string {
-	baseURL = strings.TrimSuffix(baseURL, "/")
-	return baseURL + "/.well-known/oauth-authorization-server"
+// buildWellKnownResourceURL constructs the well-known OAuth Protected Resource metadata URL.
+// Per RFC 9728, the well-known suffix is inserted between the host and the path.
+// e.g. https://example.com/path → https://example.com/.well-known/oauth-protected-resource/path
+func buildWellKnownResourceURL(baseURL string) string {
+	return buildWellKnownSuffixURL(baseURL, "oauth-protected-resource")
+}
+
+// buildWellKnownSuffixURL inserts a /.well-known/<suffix> between the host and path of a URL.
+func buildWellKnownSuffixURL(baseURL, suffix string) string {
+	u, err := url.Parse(strings.TrimSuffix(baseURL, "/"))
+	if err != nil {
+		return baseURL + "/.well-known/" + suffix
+	}
+	return fmt.Sprintf("%s://%s/.well-known/%s%s", u.Scheme, u.Host, suffix, u.Path)
 }
 
 // fetchJSON fetches JSON from a URL and decodes it into the target.
-func fetchJSON[T any](ctx context.Context, logger *slog.Logger, url string) (*T, error) {
+func fetchJSON[T any](ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, url string) (*T, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -246,7 +251,7 @@ func fetchJSON[T any](ctx context.Context, logger *slog.Logger, url string) (*T,
 	}
 	req.Header.Set("Accept", "application/json")
 
-	client := retryablehttp.NewClient().StandardClient()
+	client := guardianPolicy.Client(guardian.WithDefaultRetryConfig())
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)
