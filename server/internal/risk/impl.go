@@ -214,13 +214,12 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
 	}
 
-	// Signal the drain workflow with the new version.
-	if enabled {
-		_ = s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-			ProjectID:    row.ProjectID,
-			RiskPolicyID: row.ID,
-		})
-	}
+	// Signal the drain workflow — it reads the current enabled/version
+	// from the DB, so it will clean up results if the policy was disabled.
+	_ = s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
+		ProjectID:    row.ProjectID,
+		RiskPolicyID: row.ID,
+	})
 
 	return s.policyToType(ctx, row)
 }
