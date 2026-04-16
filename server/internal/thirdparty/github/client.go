@@ -109,7 +109,7 @@ func (c *Client) installationToken(ctx context.Context, installationID int64) (s
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
 		return "", fmt.Errorf("request installation token: status %d: %s", resp.StatusCode, body)
 	}
 

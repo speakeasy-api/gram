@@ -7,12 +7,26 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 const apiBase = "https://api.github.com"
+
+// maxErrBodyLen limits how much of a GitHub API error response is included
+// in error messages to avoid leaking sensitive details into logs.
+const maxErrBodyLen = 256
+
+func truncatedBody(resp *http.Response) string {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrBodyLen+1))
+	s := string(body)
+	if len(s) > maxErrBodyLen {
+		s = s[:maxErrBodyLen] + "..."
+	}
+	return s
+}
 
 // CreateRepo creates a new repository under the given organization.
 // If the repo already exists, this is a no-op.
@@ -31,7 +45,7 @@ func (c *Client) CreateRepo(ctx context.Context, installationID int64, org, name
 		return fmt.Errorf("marshal create repo: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/orgs/%s/repos", apiBase, org)
+	url, _ := url.JoinPath(apiBase, "orgs", org, "repos")
 	resp, err := c.doAPI(ctx, installationID, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create repo: %w", err)
@@ -39,8 +53,7 @@ func (c *Client) CreateRepo(ctx context.Context, installationID int64, org, name
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusUnprocessableEntity {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("create repo: status %d: %s", resp.StatusCode, respBody)
+		return fmt.Errorf("create repo: status %d: %s", resp.StatusCode, truncatedBody(resp))
 	}
 
 	return nil
@@ -77,7 +90,7 @@ func (c *Client) PushFiles(ctx context.Context, installationID int64, owner, rep
 }
 
 func (c *Client) getRef(ctx context.Context, installationID int64, owner, repo, branch string) (string, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/git/ref/heads/%s", apiBase, owner, repo, branch)
+	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "ref", "heads", branch)
 	resp, err := c.doAPI(ctx, installationID, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
@@ -85,8 +98,7 @@ func (c *Client) getRef(ctx context.Context, installationID int64, owner, repo, 
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("status %d: %s", resp.StatusCode, body)
+		return "", fmt.Errorf("status %d: %s", resp.StatusCode, truncatedBody(resp))
 	}
 
 	var result struct {
@@ -101,7 +113,7 @@ func (c *Client) getRef(ctx context.Context, installationID int64, owner, repo, 
 }
 
 func (c *Client) getCommitTree(ctx context.Context, installationID int64, owner, repo, commitSHA string) (string, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/git/commits/%s", apiBase, owner, repo, commitSHA)
+	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "commits", commitSHA)
 	resp, err := c.doAPI(ctx, installationID, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
@@ -109,8 +121,7 @@ func (c *Client) getCommitTree(ctx context.Context, installationID int64, owner,
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("status %d: %s", resp.StatusCode, body)
+		return "", fmt.Errorf("status %d: %s", resp.StatusCode, truncatedBody(resp))
 	}
 
 	var result struct {
@@ -148,7 +159,7 @@ func (c *Client) createTree(ctx context.Context, installationID int64, owner, re
 		return "", fmt.Errorf("marshal tree: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/repos/%s/%s/git/trees", apiBase, owner, repo)
+	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "trees")
 	resp, err := c.doAPI(ctx, installationID, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return "", err
@@ -156,8 +167,7 @@ func (c *Client) createTree(ctx context.Context, installationID int64, owner, re
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusCreated {
-		respBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("status %d: %s", resp.StatusCode, respBody)
+		return "", fmt.Errorf("status %d: %s", resp.StatusCode, truncatedBody(resp))
 	}
 
 	var result struct {
@@ -180,7 +190,7 @@ func (c *Client) createCommit(ctx context.Context, installationID int64, owner, 
 		return "", fmt.Errorf("marshal commit: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/repos/%s/%s/git/commits", apiBase, owner, repo)
+	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "commits")
 	resp, err := c.doAPI(ctx, installationID, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return "", err
@@ -188,8 +198,7 @@ func (c *Client) createCommit(ctx context.Context, installationID int64, owner, 
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusCreated {
-		respBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("status %d: %s", resp.StatusCode, respBody)
+		return "", fmt.Errorf("status %d: %s", resp.StatusCode, truncatedBody(resp))
 	}
 
 	var result struct {
@@ -211,7 +220,7 @@ func (c *Client) updateRef(ctx context.Context, installationID int64, owner, rep
 		return fmt.Errorf("marshal ref update: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/repos/%s/%s/git/refs/heads/%s", apiBase, owner, repo, branch)
+	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "refs", "heads", branch)
 	resp, err := c.doAPI(ctx, installationID, http.MethodPatch, url, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -219,8 +228,7 @@ func (c *Client) updateRef(ctx context.Context, installationID int64, owner, rep
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("status %d: %s", resp.StatusCode, respBody)
+		return fmt.Errorf("status %d: %s", resp.StatusCode, truncatedBody(resp))
 	}
 
 	return nil

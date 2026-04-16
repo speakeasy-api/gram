@@ -65,6 +65,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -366,6 +367,7 @@ func newStartCommand() *cli.Command {
 
 	flags = append(flags, clickHouseFlags...)
 	flags = append(flags, functionsFlags...)
+	flags = append(flags, pluginsFlags...)
 	flags = append(flags, pulseMCPFlags...)
 
 	return &cli.Command{
@@ -728,7 +730,19 @@ func newStartCommand() *cli.Command {
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 
-			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, accessManager, nil, c.String("server-url")))
+			var pluginsGitHub *plugins.GitHubConfig
+			if appID := c.Int64("plugins-github-app-id"); appID != 0 {
+				ghClient, err := ghclient.NewClient(appID, []byte(c.String("plugins-github-private-key")), guardianPolicy.Client())
+				if err != nil {
+					return fmt.Errorf("create github client for plugins: %w", err)
+				}
+				pluginsGitHub = &plugins.GitHubConfig{
+					Client:         ghClient,
+					Org:            c.String("plugins-github-org"),
+					InstallationID: c.Int64("plugins-github-installation-id"),
+				}
+			}
+			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, accessManager, pluginsGitHub, c.String("server-url")))
 			// access depends on productfeatures for the RBAC feature gate, so inject
 			// the concrete checks here instead of importing access in that package.
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, accessManager, func(ctx context.Context, organizationID string) error {

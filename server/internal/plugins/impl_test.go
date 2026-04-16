@@ -342,3 +342,30 @@ func TestPluginsService_DownloadPluginPackage(t *testing.T) {
 	require.NotNil(t, body)
 	require.NoError(t, body.Close())
 }
+
+func TestPluginsService_GetPublishStatus_NotConfigured(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	result, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.False(t, result.Configured)
+	require.False(t, result.Connected)
+	require.Nil(t, result.RepoOwner)
+	require.Nil(t, result.RepoName)
+	require.Nil(t, result.RepoURL)
+}
+
+func TestPluginsService_PublishPlugins_NotConfigured(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	_, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
