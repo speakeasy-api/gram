@@ -15,7 +15,7 @@ import { XYFade } from "./ui/xy-fade.tsx";
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
     // The height calculation accounts for the page body "visual" gutter
-    <div className="h-[calc(100vh-16px)] flex flex-col overflow-hidden">
+    <div className="flex h-[calc(100vh-16px)] flex-col overflow-hidden">
       <ContentErrorBoundary>{children}</ContentErrorBoundary>
     </div>
   );
@@ -41,17 +41,17 @@ function PageBody({
     <div
       className={cn(
         "h-full w-full",
-        overflowHidden ? "overflow-hidden flex flex-col" : "overflow-y-auto",
+        overflowHidden ? "flex flex-col overflow-hidden" : "overflow-y-auto",
       )}
     >
       <div
         className={cn(
-          "@container/main flex flex-col gap-4 w-full",
+          "@container/main flex w-full flex-col gap-4",
           noPadding ? "p-0" : "p-8",
           !noPadding && "pb-24",
-          !fullWidth && "max-w-7xl mx-auto",
+          !fullWidth && "mx-auto max-w-7xl",
           fullHeight && "h-full",
-          overflowHidden && "flex-1 min-h-0",
+          overflowHidden && "min-h-0 flex-1",
           className,
         )}
       >
@@ -97,7 +97,7 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
   });
 
   return (
-    <Stack gap={2} className="mb-6 mt-3">
+    <Stack gap={2} className="mt-3 mb-6">
       {/* Render header with title, description, and CTA if they exist */}
       {(slots.title || slots.description || slots.ctas.length > 0) && (
         <Stack
@@ -195,7 +195,7 @@ export function EmptyState({
   // For empty projects, show the onboarding choice cards
   if (isEmpty && !isLoading) {
     return (
-      <Stack gap={8} className="w-full max-w-xl m-8">
+      <Stack gap={8} className="m-8 w-full max-w-xl">
         <InitialChoiceStep
           routes={routes}
           isFunctionsEnabled={isFunctionsEnabled}
@@ -222,15 +222,15 @@ export function EmptyState({
   }
 
   return (
-    <div className="w-full h-[600px] flex items-center justify-center bg-background rounded-xl border">
+    <div className="bg-background flex h-[600px] w-full items-center justify-center rounded-xl border">
       <Stack
         gap={1}
-        className="w-full max-w-sm m-8"
+        className="m-8 w-full max-w-sm"
         align="center"
         justify="center"
       >
         <XYFade
-          className={cn("w-full h-[250px]", graphicClassName)}
+          className={cn("h-[250px] w-full", graphicClassName)}
           fadeColor="var(--background)"
         >
           {graphic}

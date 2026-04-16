@@ -72,18 +72,18 @@ export default function SlackRegister() {
   }, [token]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md rounded-xl border bg-card p-8 shadow-sm">
+    <div className="bg-background flex min-h-screen items-center justify-center p-4">
+      <div className="bg-card w-full max-w-md rounded-xl border p-8 shadow-sm">
         <Stack gap={6} align="center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted/50">
-            <Icon name="slack" className="h-6 w-6 text-muted-foreground" />
+          <div className="bg-muted/50 flex h-12 w-12 items-center justify-center rounded-full">
+            <Icon name="slack" className="text-muted-foreground h-6 w-6" />
           </div>
 
           {state === "loading" && (
             <Stack gap={2} align="center">
               <Icon
                 name="loader-circle"
-                className="h-6 w-6 animate-spin text-muted-foreground"
+                className="text-muted-foreground h-6 w-6 animate-spin"
               />
               <Type muted small>
                 Loading...
@@ -95,7 +95,7 @@ export default function SlackRegister() {
             <Stack gap={2} align="center">
               <Icon
                 name="loader-circle"
-                className="h-6 w-6 animate-spin text-muted-foreground"
+                className="text-muted-foreground h-6 w-6 animate-spin"
               />
               <Type muted small>
                 Linking your account...
@@ -114,7 +114,7 @@ export default function SlackRegister() {
               </Stack>
 
               {appInfo.toolsets.length > 0 && (
-                <div className="w-full rounded-lg border bg-muted/20 p-3">
+                <div className="bg-muted/20 w-full rounded-lg border p-3">
                   <Type muted small className="mb-2 block font-medium">
                     MCP Servers
                   </Type>
@@ -126,7 +126,7 @@ export default function SlackRegister() {
                       >
                         <Icon
                           name="network"
-                          className="h-3.5 w-3.5 text-muted-foreground"
+                          className="text-muted-foreground h-3.5 w-3.5"
                         />
                         <Type small>{ts.name}</Type>
                       </div>
@@ -143,8 +143,8 @@ export default function SlackRegister() {
 
           {state === "complete" && (
             <Stack gap={3} align="center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                <Icon name="check" className="h-5 w-5 text-primary" />
+              <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-full">
+                <Icon name="check" className="text-primary h-5 w-5" />
               </div>
               <Stack gap={1} align="center">
                 <Type variant="subheading">You're connected!</Type>
@@ -157,8 +157,8 @@ export default function SlackRegister() {
 
           {state === "error" && (
             <Stack gap={3} align="center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
-                <Icon name="circle-x" className="h-5 w-5 text-destructive" />
+              <div className="bg-destructive/10 flex h-10 w-10 items-center justify-center rounded-full">
+                <Icon name="circle-x" className="text-destructive h-5 w-5" />
               </div>
               <Stack gap={1} align="center">
                 <Type variant="subheading">Link expired</Type>

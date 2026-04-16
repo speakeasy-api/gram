@@ -69,6 +69,20 @@ func Default[T comparable](val T, def T) T {
 	return val
 }
 
+// PtrToNullUUID parses an optional string pointer into a uuid.NullUUID.
+// If the pointer is nil, it returns an invalid NullUUID. Otherwise it parses
+// the string as a UUID.
+func PtrToNullUUID(s *string) (uuid.NullUUID, error) {
+	if s == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+	id, err := uuid.Parse(*s)
+	if err != nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, err //nolint:wrapcheck // callers provide their own context
+	}
+	return uuid.NullUUID{UUID: id, Valid: true}, nil
+}
+
 // FromNullableUUID converts a uuid.NullUUID to a *string. If the NullUUID is
 // not valid, it returns nil.
 func FromNullableUUID(u uuid.NullUUID) *string {
@@ -89,6 +103,15 @@ func FromPGText[T ~string](t pgtype.Text) *T {
 
 	val := T(t.String)
 	return &val
+}
+
+// FromPGTextOrEmpty converts a pgtype.Text to a string value. If the Text is
+// not valid, it returns the zero value for T (empty string).
+func FromPGTextOrEmpty[T ~string](t pgtype.Text) T {
+	if !t.Valid {
+		return T("")
+	}
+	return T(t.String)
 }
 
 // ToPGText converts a string to a pgtype.Text with Valid set to true regardless

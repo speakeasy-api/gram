@@ -11,12 +11,12 @@ export default function BookDemo() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
+    <div className="bg-background flex min-h-screen items-center justify-center">
       <Button
         variant="ghost"
         size="sm"
         onClick={handleLogout}
-        className="absolute right-4 top-4"
+        className="absolute top-4 right-4"
       >
         <LogOutIcon className="mr-2 h-4 w-4" />
         Log out

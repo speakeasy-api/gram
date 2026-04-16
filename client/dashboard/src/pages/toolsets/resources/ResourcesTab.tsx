@@ -146,16 +146,16 @@ function ResourceCard({
     <Card>
       <Card.Header>
         <Stack direction="horizontal" gap={2} align="center">
-          <div className="p-2 rounded-md bg-muted shrink-0">
+          <div className="bg-muted shrink-0 rounded-md p-2">
             <Newspaper
-              className="size-5 text-muted-foreground"
+              className="text-muted-foreground size-5"
               strokeWidth={1.5}
             />
           </div>
           <Card.Title className="normal-case">
             {resource.name}
             {functionName && (
-              <span className="text-xs text-muted-foreground font-normal ml-1">
+              <span className="text-muted-foreground ml-1 text-xs font-normal">
                 ({functionName})
               </span>
             )}
@@ -196,12 +196,12 @@ function ResourceSelectPopover({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <div>
-          <Card className="cursor-pointer hover:bg-muted/50 transition-colors">
+          <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
             <Card.Header>
               <Stack direction="horizontal" gap={2} align="center">
-                <div className="p-2 rounded-md bg-muted shrink-0">
+                <div className="bg-muted shrink-0 rounded-md p-2">
                   <Newspaper
-                    className="size-5 text-muted-foreground"
+                    className="text-muted-foreground size-5"
                     strokeWidth={1.5}
                   />
                 </div>
@@ -239,12 +239,12 @@ function ResourceSelectPopover({
                       setOpen(false);
                     }}
                   >
-                    <div className="flex items-start gap-3 w-full">
+                    <div className="flex w-full items-start gap-3">
                       <Newspaper
-                        className="size-4 text-muted-foreground shrink-0 mt-0.5"
+                        className="text-muted-foreground mt-0.5 size-4 shrink-0"
                         strokeWidth={1.5}
                       />
-                      <Stack gap={0.5} className="flex-1 min-w-0">
+                      <Stack gap={0.5} className="min-w-0 flex-1">
                         <Type small className="font-medium">
                           {resource.name}
                         </Type>
@@ -254,7 +254,7 @@ function ResourceSelectPopover({
                         <Type
                           small
                           muted
-                          className="font-mono truncate text-xs"
+                          className="truncate font-mono text-xs"
                         >
                           {resource.uri}
                         </Type>

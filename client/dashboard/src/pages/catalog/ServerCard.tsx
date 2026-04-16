@@ -1,4 +1,7 @@
-import { ToolCollectionBadge } from "@/components/tool-collection-badge";
+import {
+  PoweredBySpeakeasyBadge,
+  ToolCollectionBadge,
+} from "@/components/tool-collection-badge";
 import { Badge } from "@/components/ui/badge";
 import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
@@ -9,7 +12,6 @@ import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import type { Server } from "./hooks";
-import { parseServerMetadata } from "./hooks/serverMetadata";
 
 interface ServerCardProps {
   server: Server;
@@ -35,8 +37,11 @@ export function ServerCard({
   isSelected,
   onToggleSelect,
 }: ServerCardProps) {
-  const metadata = useMemo(() => parseServerMetadata(server), [server]);
   const displayName = server.title ?? server.registrySpecifier;
+
+  const isSpeakeasyServer = server.registrySpecifier.startsWith(
+    "com.pulsemcp.mirror/gram",
+  );
 
   const existingMcp = externalMcps.find(
     (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
@@ -71,14 +76,14 @@ export function ServerCard({
       <DotCard
         className={cn(
           "cursor-pointer",
-          isAdded && "border-success/50 ring-1 ring-success/20",
+          isAdded && "border-success/50 ring-success/20 ring-1",
         )}
         icon={
           server.iconUrl ? (
             <img
               src={server.iconUrl}
               alt={displayName}
-              className="w-12 h-12 object-contain"
+              className="h-12 w-12 object-contain"
             />
           ) : undefined
         }
@@ -96,44 +101,42 @@ export function ServerCard({
         }
       >
         {/* Header row with name and tool badge */}
-        <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <Type
                 variant="subheading"
                 as="div"
-                className="truncate text-md group-hover:text-primary transition-colors"
+                className="text-md group-hover:text-primary truncate transition-colors"
                 title={displayName}
               >
                 {displayName}
               </Type>
-              {metadata.visitorsMonth === 0 && (
-                <Badge variant="outline" className="shrink-0">
-                  New
-                </Badge>
-              )}
             </div>
             <Type small muted className="truncate">
               v{server.version}
             </Type>
           </div>
-          <ToolCollectionBadge toolNames={toolNames} />
+          <div className="flex items-baseline gap-1">
+            {isSpeakeasyServer && <PoweredBySpeakeasyBadge />}
+            <ToolCollectionBadge toolNames={toolNames} />
+          </div>
         </div>
 
         {/* Description */}
-        <Type small muted className="line-clamp-2 mb-3">
+        <Type small muted className="mb-3 line-clamp-2">
           {server.description}
         </Type>
 
         {/* Footer row with stats and actions */}
-        <div className="flex items-center justify-between gap-2 mt-auto pt-2">
+        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           {/* Selection indicator */}
           {isSelected ? (
-            <div className="size-6 rounded-full bg-[#1DA1F2] flex items-center justify-center">
+            <div className="flex size-6 items-center justify-center rounded-full bg-[#1DA1F2]">
               <Check className="size-3.5 text-white" strokeWidth={5} />
             </div>
           ) : (
-            <div className="size-6 rounded-full border-2 border-muted-foreground/30" />
+            <div className="border-muted-foreground/30 size-6 rounded-full border-2" />
           )}
 
           {/* View Details button */}
@@ -145,7 +148,7 @@ export function ServerCard({
             <Button variant="secondary" size="sm">
               <Button.Text>View</Button.Text>
               <Button.RightIcon>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="h-4 w-4" />
               </Button.RightIcon>
             </Button>
           </Link>

@@ -165,9 +165,9 @@ export function FailedSourcesSection({
 
   return (
     <>
-      <section className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+      <section className="border-destructive/40 bg-destructive/5 space-y-3 rounded-lg border p-4">
         <div className="flex items-center gap-2">
-          <CircleAlert className="size-5 text-destructive shrink-0" />
+          <CircleAlert className="text-destructive size-5 shrink-0" />
           <h3 className="text-sm font-semibold">
             {failedSources.length > 0
               ? `${failedSources.length} source${failedSources.length !== 1 ? "s" : ""} failed`
@@ -176,12 +176,12 @@ export function FailedSourcesSection({
         </div>
 
         {failedSources.length > 0 && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             Select the sources to remove and redeploy without them.
           </p>
         )}
 
-        <div className="max-h-80 overflow-y-auto space-y-2">
+        <div className="max-h-80 space-y-2 overflow-y-auto">
           {failedSources.map((source) => {
             const IconComponent = SOURCE_ICONS[source.type];
             const isSelected = selected.has(source.id);
@@ -203,14 +203,14 @@ export function FailedSourcesSection({
                     onCheckedChange={() => toggleSelected(source.id)}
                     disabled={pending}
                   />
-                  <div className="w-8 h-8 rounded-md bg-destructive/10 flex items-center justify-center shrink-0">
-                    <IconComponent className="w-4 h-4 text-destructive" />
+                  <div className="bg-destructive/10 flex h-8 w-8 shrink-0 items-center justify-center rounded-md">
+                    <IconComponent className="text-destructive h-4 w-4" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-medium truncate block">
+                  <div className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">
                       {source.name}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-muted-foreground text-xs">
                       {source.type === "openapi"
                         ? "API Source"
                         : source.type === "function"
@@ -223,7 +223,7 @@ export function FailedSourcesSection({
                   {source.toolCount > 0 && (
                     <Badge
                       variant="neutral"
-                      className="shrink-0 flex items-center gap-1"
+                      className="flex shrink-0 items-center gap-1"
                     >
                       <Wrench className="size-3" />
                       {`${source.toolCount} ${source.toolCount === 1 ? "tool" : "tools"}`}
@@ -233,7 +233,7 @@ export function FailedSourcesSection({
                     <button
                       type="button"
                       onClick={() => toggleExpanded(source.id)}
-                      className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
+                      className="hover:bg-muted text-muted-foreground rounded p-1 transition-colors"
                     >
                       {isExpanded ? (
                         <ChevronDown className="size-4" />
@@ -248,7 +248,7 @@ export function FailedSourcesSection({
                     {source.errors.map((err) => (
                       <div
                         key={err.id}
-                        className="text-xs text-destructive bg-destructive/5 rounded px-2 py-1.5 font-mono break-all"
+                        className="text-destructive bg-destructive/5 rounded px-2 py-1.5 font-mono text-xs break-all"
                       >
                         {err.message}
                       </div>
@@ -260,13 +260,13 @@ export function FailedSourcesSection({
           })}
 
           {generalErrors.length > 0 && (
-            <div className="rounded-lg border border-border bg-card p-3">
+            <div className="border-border bg-card rounded-lg border p-3">
               <span className="text-sm font-medium">General errors</span>
               <div className="mt-2 space-y-1">
                 {generalErrors.map((err) => (
                   <div
                     key={err.id}
-                    className="text-xs text-destructive bg-destructive/5 rounded px-2 py-1.5 font-mono break-all"
+                    className="text-destructive bg-destructive/5 rounded px-2 py-1.5 font-mono text-xs break-all"
                   >
                     {err.message}
                   </div>
@@ -312,10 +312,10 @@ export function FailedSourcesSection({
             Removing these sources will break toolsets that depend on their
             tools. You may need to update affected toolsets afterward.
           </Alert>
-          <ul className="text-sm space-y-1">
+          <ul className="space-y-1 text-sm">
             {selectedWithTools.map((s) => (
               <li key={s.id} className="flex items-center gap-2">
-                <Wrench className="size-3 text-muted-foreground shrink-0" />
+                <Wrench className="text-muted-foreground size-3 shrink-0" />
                 <span className="font-medium">{s.name}</span>
                 <span className="text-muted-foreground">
                   {`${s.toolCount} ${s.toolCount === 1 ? "tool" : "tools"}`}

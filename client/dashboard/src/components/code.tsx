@@ -64,7 +64,7 @@ export function CodeBlock({
     "rounded-md font-mono text-sm text-wrap overflow-x-auto border break-all whitespace-pre-wrap truncate";
 
   return (
-    <div className={cn("relative group", className)}>
+    <div className={cn("group relative", className)}>
       {highlightedCode ? (
         <div
           className={cn(baseClasses, "p-4 pr-12", innerClassName)}
@@ -80,13 +80,13 @@ export function CodeBlock({
           variant="tertiary"
           size="sm"
           onClick={handleCopy}
-          className="absolute top-1/2 -translate-y-1/2 right-2 p-2"
+          className="absolute top-1/2 right-2 -translate-y-1/2 p-2"
         >
           <Button.LeftIcon>
             {copied ? (
-              <Check className="w-4 h-4" />
+              <Check className="h-4 w-4" />
             ) : (
-              <Copy className="w-4 h-4" />
+              <Copy className="h-4 w-4" />
             )}
           </Button.LeftIcon>
           <Button.Text className="sr-only">

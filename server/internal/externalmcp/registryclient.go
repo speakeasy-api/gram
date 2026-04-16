@@ -12,14 +12,13 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/hashicorp/go-retryablehttp"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -31,7 +30,7 @@ type RegistryBackend interface {
 
 // RegistryClient handles communication with external MCP registries.
 type RegistryClient struct {
-	httpClient   *http.Client
+	httpClient   *guardian.HTTPClient
 	logger       *slog.Logger
 	backend      RegistryBackend
 	listCache    *cache.TypedCacheObject[CachedListServersResponse]
@@ -40,14 +39,9 @@ type RegistryClient struct {
 
 // NewRegistryClient creates a new registry client. The cacheImpl parameter is
 // optional — pass nil to disable caching.
-func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, backend RegistryBackend, cacheImpl cache.Cache) *RegistryClient {
+func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, backend RegistryBackend, cacheImpl cache.Cache) *RegistryClient {
 	rc := &RegistryClient{
-		httpClient: &http.Client{
-			Transport: otelhttp.NewTransport(
-				retryablehttp.NewClient().StandardClient().Transport,
-				otelhttp.WithTracerProvider(tracerProvider),
-			),
-		},
+		httpClient:   guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
 		logger:       logger.With(attr.SlogComponent("mcp_registry_client")),
 		backend:      backend,
 		listCache:    nil,
@@ -262,15 +256,16 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 		}
 
 		server := &types.ExternalMCPServer{
-			RegistrySpecifier: s.Server.Name,
-			Version:           s.Server.Version,
-			Description:       s.Server.Description,
-			RegistryID:        registryID,
-			Title:             s.Server.Title,
-			IconURL:           iconURL,
-			Meta:              s.Meta,
-			Tools:             tools,
-			Remotes:           remotes,
+			RegistrySpecifier:                   s.Server.Name,
+			Version:                             s.Server.Version,
+			Description:                         s.Server.Description,
+			RegistryID:                          &registryID,
+			OrganizationMcpCollectionRegistryID: nil,
+			Title:                               s.Server.Title,
+			IconURL:                             iconURL,
+			Meta:                                s.Meta,
+			Tools:                               tools,
+			Remotes:                             remotes,
 		}
 
 		servers = append(servers, server)

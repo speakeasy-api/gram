@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Link } from "react-router";
+import { useRBAC } from "@/hooks/useRBAC";
 import { GramLogo } from "./gram-logo";
 import { InputDialog } from "./input-dialog";
 import { ProjectAvatar } from "./project-menu";
@@ -54,6 +55,8 @@ export function TopHeader() {
   const { projectSlug } = useSlugs();
   const [open, setOpen] = useState(false);
   const isAdmin = useIsAdmin();
+  const { hasAnyScope } = useRBAC();
+  const canAccessOrgRoutes = hasAnyScope(["org:read", "org:admin"]);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [pylonOpen, setPylonOpen] = useState(false);
   const togglePylon = useCallback(() => {
@@ -100,12 +103,12 @@ export function TopHeader() {
 
   return (
     <>
-      <header className="flex items-center h-14 pl-5 pr-4 border-b bg-white dark:bg-background shrink-0">
+      <header className="dark:bg-background flex h-14 shrink-0 items-center border-b bg-white pr-4 pl-5">
         <div className="flex items-center gap-3">
           {/* Logo */}
           <Link
             to={projectSlug ? routes.home.href() : `/${organization.slug}`}
-            className="hover:no-underline flex items-center"
+            className="flex items-center hover:no-underline"
           >
             <GramLogo className="w-28" />
           </Link>
@@ -116,12 +119,18 @@ export function TopHeader() {
           </span>
 
           {/* Org link */}
-          <Link
-            to={`/${organization.slug}`}
-            className="text-base font-medium text-foreground/80 hover:text-foreground hover:bg-accent hover:no-underline transition-colors rounded-md px-2 py-1 whitespace-nowrap"
-          >
-            {organization.slug}
-          </Link>
+          {canAccessOrgRoutes ? (
+            <Link
+              to={`/${organization.slug}`}
+              className="text-foreground/80 hover:text-foreground hover:bg-accent rounded-md px-2 py-1 text-base font-medium whitespace-nowrap transition-colors hover:no-underline"
+            >
+              {organization.slug}
+            </Link>
+          ) : (
+            <span className="text-foreground/80 cursor-default rounded-md px-2 py-1 text-base font-medium whitespace-nowrap">
+              {organization.slug}
+            </span>
+          )}
 
           {/* Project Switcher - hidden on org-level pages */}
           {projectSlug && (
@@ -133,16 +142,16 @@ export function TopHeader() {
                 <PopoverTrigger asChild>
                   <Button
                     variant="ghost"
-                    className="h-8 !px-2 gap-2 relative -left-1"
+                    className="relative -left-1 h-8 gap-2 !px-2"
                   >
                     <ProjectAvatar
                       project={project}
-                      className="h-5 w-5 rounded shrink-0"
+                      className="h-5 w-5 shrink-0 rounded"
                     />
                     <span className="text-base font-medium">
                       {project?.slug || projectSlug || "Select"}
                     </span>
-                    <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <ChevronsUpDown className="text-muted-foreground h-4 w-4 shrink-0" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[240px] p-0" align="start">
@@ -163,15 +172,15 @@ export function TopHeader() {
                               key={p.id}
                               value={p.slug}
                               onSelect={() => handleProjectSelect(p.slug)}
-                              className="flex items-center gap-2 cursor-pointer"
+                              className="flex cursor-pointer items-center gap-2"
                             >
                               <ProjectAvatar
                                 project={p}
-                                className="h-5 w-5 rounded shrink-0"
+                                className="h-5 w-5 shrink-0 rounded"
                               />
                               <span className="flex-1 truncate">{p.slug}</span>
                               {p.id === project.id && (
-                                <CheckIcon className="w-4 h-4 shrink-0" />
+                                <CheckIcon className="h-4 w-4 shrink-0" />
                               )}
                             </CommandItem>
                           ))}
@@ -180,9 +189,9 @@ export function TopHeader() {
                   </Command>
                   <button
                     onClick={() => handleProjectSelect("new-project")}
-                    className="flex items-center gap-2 w-full px-3 py-2 text-sm cursor-pointer hover:bg-accent border-t"
+                    className="hover:bg-accent flex w-full cursor-pointer items-center gap-2 border-t px-3 py-2 text-sm"
                   >
-                    <PlusIcon className="w-5 h-5 text-muted-foreground shrink-0" />
+                    <PlusIcon className="text-muted-foreground h-5 w-5 shrink-0" />
                     <span>Create Project</span>
                   </button>
                 </PopoverContent>
@@ -193,7 +202,7 @@ export function TopHeader() {
 
         {/* Right side - Nav links, Theme toggle & User menu */}
         <div className="ml-auto flex items-center gap-4">
-          <nav className="hidden lg:flex items-center gap-2">
+          <nav className="hidden items-center gap-2 lg:flex">
             {"Pylon" in window && (
               <Button
                 variant="default"
@@ -228,7 +237,7 @@ export function TopHeader() {
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
-                className="size-9 rounded-full p-0 border border-[#dbdbdb] dark:border-[#333]/30"
+                className="size-9 rounded-full border border-[#dbdbdb] p-0 dark:border-[#333]/30"
               >
                 <Avatar className="size-9">
                   <AvatarImage
@@ -244,10 +253,10 @@ export function TopHeader() {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">
+                  <p className="text-sm leading-none font-medium">
                     {user.displayName || "User"}
                   </p>
-                  <p className="text-xs leading-none text-muted-foreground">
+                  <p className="text-muted-foreground text-xs leading-none">
                     {user.email}
                   </p>
                 </div>
@@ -260,10 +269,12 @@ export function TopHeader() {
                     Project Settings
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => orgRoutes.billing.goTo()}>
-                  <CreditCardIcon className="mr-2 h-4 w-4" />
-                  Billing
-                </DropdownMenuItem>
+                {canAccessOrgRoutes && (
+                  <DropdownMenuItem onClick={() => orgRoutes.billing.goTo()}>
+                    <CreditCardIcon className="mr-2 h-4 w-4" />
+                    Billing
+                  </DropdownMenuItem>
+                )}
                 {isAdmin && (
                   <DropdownMenuItem
                     onClick={() => orgRoutes.adminSettings.goTo()}

@@ -41,26 +41,26 @@ export function EnableLoggingOverlay({ onEnabled }: EnableLoggingOverlayProps) {
   };
 
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/70 backdrop-blur-[2px] rounded-lg">
-      <div className="flex flex-col items-center gap-4 max-w-md text-center p-8">
-        <div className="size-14 rounded-full bg-muted flex items-center justify-center">
-          <Icon name="activity" className="size-7 text-muted-foreground" />
+    <div className="bg-background/70 absolute inset-0 z-10 flex items-center justify-center rounded-lg backdrop-blur-[2px]">
+      <div className="flex max-w-md flex-col items-center gap-4 p-8 text-center">
+        <div className="bg-muted flex size-14 items-center justify-center rounded-full">
+          <Icon name="activity" className="text-muted-foreground size-7" />
         </div>
         <div>
-          <h3 className="text-lg font-semibold mb-1">Enable Logging</h3>
-          <p className="text-sm text-muted-foreground">
+          <h3 className="mb-1 text-lg font-semibold">Enable Logging</h3>
+          <p className="text-muted-foreground text-sm">
             Turn on logging to start collecting telemetry data for your
             organization. This will record tool call traces, agent sessions, and
             system metrics to power the observability dashboard.
           </p>
         </div>
-        <div className="rounded-lg border border-border bg-muted/30 p-4 text-left w-full">
+        <div className="border-border bg-muted/30 w-full rounded-lg border p-4 text-left">
           <div className="flex items-start gap-2">
             <Icon
               name="info"
-              className="size-4 text-muted-foreground mt-0.5 shrink-0"
+              className="text-muted-foreground mt-0.5 size-4 shrink-0"
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               When enabled, Gram will collect tool call payloads, response data,
               and agent session logs for analysis. This data is stored securely
               and used to generate the metrics and insights. You can disable
@@ -77,7 +77,7 @@ export function EnableLoggingOverlay({ onEnabled }: EnableLoggingOverlayProps) {
           </Button.Text>
         </Button>
         {mutationError && (
-          <span className="text-sm text-destructive">{mutationError}</span>
+          <span className="text-destructive text-sm">{mutationError}</span>
         )}
       </div>
     </div>

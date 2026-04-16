@@ -268,3 +268,23 @@ SELECT
     sumMapIfState(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts
 FROM telemetry_logs
 GROUP BY gram_project_id, time_bucket;
+
+CREATE TABLE IF NOT EXISTS attribute_keys (
+    gram_project_id UUID,
+    attribute_key String,
+    first_seen_unix_nano SimpleAggregateFunction(min, Int64),
+    last_seen_unix_nano SimpleAggregateFunction(max, Int64)
+) ENGINE = AggregatingMergeTree
+ORDER BY (gram_project_id, attribute_key)
+TTL fromUnixTimestamp64Nano(last_seen_unix_nano) + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Pre-aggregated attribute keys per project for fast key listing without scanning telemetry_logs JSON';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_keys_mv TO attribute_keys AS
+SELECT
+    gram_project_id,
+    arrayJoin(JSONAllPaths(attributes)) AS attribute_key,
+    min(time_unix_nano) AS first_seen_unix_nano,
+    max(time_unix_nano) AS last_seen_unix_nano
+FROM telemetry_logs
+GROUP BY gram_project_id, attribute_key;

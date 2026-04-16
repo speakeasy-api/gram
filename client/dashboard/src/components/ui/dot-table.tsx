@@ -16,20 +16,20 @@ export function DotTable({
   return (
     <div
       className={cn(
-        "w-full rounded-xl border !border-foreground/10 overflow-hidden",
+        "!border-foreground/10 w-full overflow-hidden rounded-xl border",
         className,
       )}
     >
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b bg-muted/30">
+          <tr className="bg-muted/30 border-b">
             {/* Empty header for the dot-pattern column */}
             <th className="w-17" />
             {headers.map((header, index) => (
               <th
                 key={header.label || `header-${index}`}
                 className={cn(
-                  "px-3 py-2.5 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider",
+                  "text-muted-foreground px-3 py-2.5 text-left text-xs font-medium tracking-wider uppercase",
                   header.className,
                 )}
               >

@@ -28,11 +28,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -80,6 +82,8 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -90,7 +94,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
@@ -103,18 +107,19 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	f := &feature.InMemory{}
 
 	temporalEnv, _ := infra.NewTemporalEnv(t)
-	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
+	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
 
-	toolsSvc := tools.NewService(logger, tracerProvider, conn, sessionManager, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
-	assetsSvc := assets.NewService(logger, tracerProvider, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
-	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
-	toolsetsSvc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
-	templatesSvc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	toolsSvc := tools.NewService(logger, tracerProvider, conn, sessionManager, accessManager)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, accessManager)
+	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", accessManager)
+	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, accessManager)
+	toolsetsSvc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), accessManager)
+	templatesSvc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc, accessManager)
 
 	return ctx, &testInstance{
 		service:        toolsSvc,

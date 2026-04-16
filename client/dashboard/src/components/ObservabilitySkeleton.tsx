@@ -6,23 +6,23 @@ import { Skeleton } from "@/components/ui/skeleton";
  */
 export function ObservabilitySkeleton() {
   return (
-    <div className="flex flex-col gap-6 p-6 overflow-hidden">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+    <div className="flex flex-col gap-6 overflow-hidden p-6">
+      <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="rounded-lg border border-border bg-card p-5">
-            <Skeleton className="h-4 w-24 mb-3" />
+          <div key={i} className="border-border bg-card rounded-lg border p-5">
+            <Skeleton className="mb-3 h-4 w-24" />
             <Skeleton className="h-9 w-32" />
           </div>
         ))}
       </div>
-      <div className="rounded-lg border border-border bg-card p-6 flex-1 min-h-[120px]">
+      <div className="border-border bg-card min-h-[120px] flex-1 rounded-lg border p-6">
         <Skeleton className="h-full w-full" />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 shrink-0">
-        <div className="rounded-lg border border-border bg-card p-6">
+      <div className="grid shrink-0 grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="border-border bg-card rounded-lg border p-6">
           <Skeleton className="h-32 w-full" />
         </div>
-        <div className="rounded-lg border border-border bg-card p-6">
+        <div className="border-border bg-card rounded-lg border p-6">
           <Skeleton className="h-32 w-full" />
         </div>
       </div>

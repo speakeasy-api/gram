@@ -19,8 +19,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -61,6 +63,8 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := noop.NewTracerProvider()
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -70,14 +74,14 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 
-	// Pass nil for telemetry service, temporalEnv, productFeatures, and chatTitleGenerator in tests
-	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, nil, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}), nil, nil)
+	// Pass nil for telemetry logger, temporalEnv, productFeatures, and chatTitleGenerator in tests
+	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, nil, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache), nil, nil)
 
 	return ctx, &testInstance{
 		service:        svc,

@@ -5,7 +5,7 @@ import { Badge } from "@speakeasy-api/moonshine";
 import { Network, ScrollText } from "lucide-react";
 
 const BUILT_IN_ICONS: Record<string, React.ReactNode> = {
-  logs: <ScrollText className="w-8 h-8 text-muted-foreground" />,
+  logs: <ScrollText className="text-muted-foreground h-8 w-8" />,
 };
 
 interface BuiltInMCPCardProps {
@@ -27,16 +27,16 @@ export function BuiltInMCPCard({
       onClick={() => routes.mcp.builtIn.goTo(slug)}
       icon={
         BUILT_IN_ICONS[slug] ?? (
-          <Network className="w-8 h-8 text-muted-foreground" />
+          <Network className="text-muted-foreground h-8 w-8" />
         )
       }
     >
       {/* Header row with name and badge */}
-      <div className="flex items-start justify-between gap-2 mb-2">
+      <div className="mb-2 flex items-start justify-between gap-2">
         <Type
           variant="subheading"
           as="div"
-          className="truncate flex-1 text-md group-hover:text-primary transition-colors"
+          className="text-md group-hover:text-primary flex-1 truncate transition-colors"
           title={name}
         >
           {name}

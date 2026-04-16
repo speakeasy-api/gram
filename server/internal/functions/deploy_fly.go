@@ -18,14 +18,12 @@ import (
 
 	backoff "github.com/cenkalti/backoff/v5"
 	"github.com/google/uuid"
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	slogmulti "github.com/samber/slog-multi"
 	"github.com/superfly/fly-go"
 	"github.com/superfly/fly-go/flaps"
 	"github.com/superfly/fly-go/tokens"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -34,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments/events"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/functions/repo"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -68,7 +67,7 @@ type FlyRunner struct {
 	client          *fly.Client
 	tokens          *tokens.Tokens
 	machinesAPIBase string
-	machinesClient  *http.Client
+	machinesClient  *guardian.HTTPClient
 	defaultOrg      string
 	defaultRegion   string
 	imgSelector     ImageSelector
@@ -84,6 +83,7 @@ var _ interface {
 func NewFlyRunner(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	guardianPolicy *guardian.Policy,
 	serverURL *url.URL,
 	db *pgxpool.Pool,
 	assetStorage assets.BlobStore,
@@ -96,12 +96,7 @@ func NewFlyRunner(
 
 	flyAPIBase := conv.Default(o.FlyAPIURL, defaultFlyBaseURL)
 	machinesAPIBase := conv.Default(o.FlyMachinesBaseURL, defaultFlyMachinesURL)
-	machinesClient := &http.Client{
-		Transport: otelhttp.NewTransport(
-			retryablehttp.NewClient().StandardClient().Transport,
-			otelhttp.WithTracerProvider(tracerProvider),
-		),
-	}
+	machinesClient := guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
 
 	c := fly.NewClientFromOptions(fly.ClientOptions{
 		BaseURL: flyAPIBase,
@@ -109,12 +104,9 @@ func NewFlyRunner(
 		Name:    o.ServiceName,
 		Version: o.ServiceVersion,
 		Transport: &fly.Transport{
-			UnderlyingTransport: otelhttp.NewTransport(
-				retryablehttp.NewClient().StandardClient().Transport,
-				otelhttp.WithTracerProvider(tracerProvider),
-			),
-			UserAgent: ua,
-			Tokens:    o.FlyTokens,
+			UnderlyingTransport: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()).Transport,
+			UserAgent:           ua,
+			Tokens:              o.FlyTokens,
 		},
 		Logger: &flyLogger{
 			logger:      logger.With(attr.SlogComponent("flyio_client")),
@@ -636,7 +628,7 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 		Guest: &fly.MachineGuest{
 			CPUKind:       "shared",
 			CPUs:          2,
-			MemoryMB:      1024,
+			MemoryMB:      2048,
 			GPUs:          0,
 			PersistRootfs: fly.MachinePersistRootfsNever,
 		},

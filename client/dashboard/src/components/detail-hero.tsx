@@ -17,12 +17,12 @@ export function DetailHero({ children, actions, className }: DetailHeroProps) {
   return (
     <div
       className={cn(
-        "relative w-full h-48 shrink-0 overflow-hidden border-b",
+        "relative h-48 w-full shrink-0 overflow-hidden border-b",
         className,
       )}
     >
       <div
-        className="absolute inset-0 bg-muted/30 text-muted-foreground/20"
+        className="bg-muted/30 text-muted-foreground/20 absolute inset-0"
         style={{
           backgroundImage:
             "radial-gradient(circle, currentColor 1px, transparent 1px)",
@@ -30,12 +30,12 @@ export function DetailHero({ children, actions, className }: DetailHeroProps) {
         }}
       />
 
-      <div className="absolute bottom-0 left-0 right-0 px-8 py-6 max-w-[1270px] mx-auto w-full">
+      <div className="absolute right-0 bottom-0 left-0 mx-auto w-full max-w-[1270px] px-8 py-6">
         {children}
       </div>
 
       {actions && (
-        <div className="absolute top-6 left-0 right-0 px-8 max-w-[1270px] mx-auto w-full">
+        <div className="absolute top-6 right-0 left-0 mx-auto w-full max-w-[1270px] px-8">
           <div className="flex justify-end gap-2">{actions}</div>
         </div>
       )}

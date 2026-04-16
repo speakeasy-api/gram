@@ -349,10 +349,14 @@ var AddDeploymentPackageForm = Type("AddDeploymentPackageForm", func() {
 })
 
 var AddExternalMCPForm = Type("AddExternalMCPForm", func() {
-	Required("registry_id", "name", "slug", "registry_server_specifier")
+	Required("name", "slug", "registry_server_specifier")
 
 	Attribute("registry_id", String, func() {
-		Description("The ID of the MCP registry the server is from.")
+		Description("The ID of the external MCP registry the server is from.")
+		Format(FormatUUID)
+	})
+	Attribute("organization_mcp_collection_registry_id", String, func() {
+		Description("The ID of the internal collection registry the server is from.")
 		Format(FormatUUID)
 	})
 	Attribute("name", String, func() {

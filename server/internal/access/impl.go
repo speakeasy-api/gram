@@ -9,6 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"database/sql"
+
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -26,6 +30,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	pfRepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -47,30 +53,39 @@ type RoleProvider interface {
 	UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*workos.Member, error)
 	GetUser(ctx context.Context, userID string) (*workos.User, error)
 	ListOrgUsers(ctx context.Context, orgID string) (map[string]workos.User, error)
+	GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*workos.Member, error)
+}
+
+// FeatureCacheWriter updates the Redis cache entry for a feature flag after a
+// direct DB write, keeping the cache consistent with the authoritative state.
+type FeatureCacheWriter interface {
+	UpdateFeatureCache(ctx context.Context, organizationID string, feature productfeatures.Feature, enabled bool)
 }
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	access *Manager
-	roles  RoleProvider
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	auth         *auth.Auth
+	access       *Manager
+	roles        RoleProvider
+	featureCache FeatureCacheWriter
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, roles RoleProvider, accessManager *Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, roles RoleProvider, accessManager *Manager, featureCache FeatureCacheWriter) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, accessManager),
-		access: accessManager,
-		roles:  roles,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		logger:       logger,
+		db:           db,
+		auth:         auth.New(logger, db, sessions, accessManager),
+		access:       accessManager,
+		roles:        roles,
+		featureCache: featureCache,
 	}
 }
 
@@ -112,7 +127,10 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
 	}
-	memberCounts := countMembersByRoleSlug(members)
+	memberCounts, err := s.localMemberCounts(ctx, members)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count local members by role").Log(ctx, s.logger)
+	}
 
 	roles := make([]*gen.Role, 0, len(wRoles))
 	for _, wr := range wRoles {
@@ -157,7 +175,10 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
 	}
 
-	memberCounts := countMembersByRoleSlug(members)
+	memberCounts, err := s.localMemberCounts(ctx, members)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count local members by role").Log(ctx, s.logger)
+	}
 
 	return buildRole(ctx, s.logger, s.db, ac.ActiveOrganizationID, role, memberCounts[role.Slug])
 }
@@ -236,7 +257,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 		return nil, oops.E(oops.CodeUnexpected, err, "sync grants for created role").Log(ctx, logger)
 	}
 
-	assignedCount := 0
+	assignedWorkosIDs := make([]string, 0, len(payload.MemberIds))
 	if len(payload.MemberIds) > 0 {
 		members, err := s.roles.ListMembers(ctx, workosOrgID)
 		if err != nil {
@@ -255,8 +276,20 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 				return nil, oops.E(oops.CodeUnexpected, err, "assign members to created role").Log(ctx, logger)
 			}
 
-			assignedCount++
+			assignedWorkosIDs = append(assignedWorkosIDs, userID)
 		}
+		s.access.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
+	}
+
+	// Only count assigned members who have local Gram accounts, consistent with
+	// how ListRoles/GetRole/UpdateRole count members via localMemberCounts.
+	assignedCount := 0
+	if len(assignedWorkosIDs) > 0 {
+		localRows, err := usersrepo.New(s.db).GetUsersByWorkosIDs(ctx, assignedWorkosIDs)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get users by workos ids: %w", err), "resolve local assigned members").Log(ctx, logger)
+		}
+		assignedCount = len(localRows)
 	}
 
 	createdRole, err := buildRole(ctx, logger, s.db, ac.ActiveOrganizationID, *wr, assignedCount)
@@ -265,14 +298,13 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	}
 
 	if err := audit.LogAccessRoleCreate(ctx, s.db, audit.LogAccessRoleCreateEvent{
-		OrganizationID:    ac.ActiveOrganizationID,
-		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName:  ac.Email,
-		ActorSlug:         nil,
-		RoleID:            wr.ID,
-		RoleName:          createdRole.Name,
-		RoleSlug:          wr.Slug,
-		RoleSnapshotAfter: createdRole,
+		OrganizationID:   ac.ActiveOrganizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		RoleID:           wr.ID,
+		RoleName:         createdRole.Name,
+		RoleSlug:         wr.Slug,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log access role creation").Log(ctx, logger)
 	}
@@ -329,7 +361,10 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
 	}
-	memberCountsBefore := countMembersByRoleSlug(membersBefore)
+	memberCountsBefore, err := s.localMemberCounts(ctx, membersBefore)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count local members by role").Log(ctx, logger)
+	}
 	existingRole, err := buildRole(ctx, logger, s.db, ac.ActiveOrganizationID, currentRole, memberCountsBefore[currentRole.Slug])
 	if err != nil {
 		return nil, err
@@ -364,6 +399,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 				return nil, oops.E(oops.CodeUnexpected, err, "assign members to updated role").Log(ctx, logger)
 			}
 		}
+		s.access.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
 	}
 
 	members, err := s.roles.ListMembers(ctx, workosOrgID)
@@ -371,7 +407,10 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
 	}
 
-	memberCounts := countMembersByRoleSlug(members)
+	memberCounts, err := s.localMemberCounts(ctx, members)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count local members by role").Log(ctx, logger)
+	}
 	updatedRoleView, err := buildRole(ctx, logger, s.db, ac.ActiveOrganizationID, *updatedRole, memberCounts[updatedRole.Slug])
 	if err != nil {
 		return nil, err
@@ -521,6 +560,24 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "list org users from workos").Log(ctx, s.logger)
 	}
 
+	// Batch-resolve WorkOS user IDs to local Gram users so the member list
+	// returns Gram user IDs (the stable identity used by UpdateMemberRole
+	// and the organization_user_relationships table).
+	workosIDs := make([]string, 0, len(users))
+	for workosUID := range users {
+		workosIDs = append(workosIDs, workosUID)
+	}
+	localUserRows, err := usersrepo.New(s.db).GetUsersByWorkosIDs(ctx, workosIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve local users by workos ids").Log(ctx, s.logger)
+	}
+	localUsers := make(map[string]usersrepo.User, len(localUserRows))
+	for _, u := range localUserRows {
+		if u.WorkosID.Valid {
+			localUsers[u.WorkosID.String] = u
+		}
+	}
+
 	result := make([]*gen.AccessMember, 0, len(members))
 	for _, member := range members {
 		user, ok := users[member.UserID]
@@ -528,11 +585,16 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 			continue
 		}
 
+		local, ok := localUsers[member.UserID]
+		if !ok {
+			continue // user exists in WorkOS but hasn't logged into Gram yet
+		}
+
 		result = append(result, &gen.AccessMember{
-			ID:       user.ID,
+			ID:       local.ID,
 			Name:     formatUserName(user),
 			Email:    user.Email,
-			PhotoURL: nil,
+			PhotoURL: conv.FromPGText[string](local.PhotoUrl),
 			RoleID:   roleIDBySlug[member.RoleSlug],
 			JoinedAt: conv.Default(member.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 		})
@@ -544,6 +606,12 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 // ListGrants returns the effective grants for the current user by combining
 // direct user grants with grants inherited from their currently assigned role.
 func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*gen.ListUserGrantsResult, error) {
+	// Return override scopes when active so the frontend sees the same restricted
+	// set as the enforcement layer.
+	if overrides, ok := s.access.getScopeOverrides(ctx); ok {
+		return &gen.ListUserGrantsResult{Grants: grantsFromRows(grantsFromOverrides(overrides).rows)}, nil
+	}
+
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
@@ -562,7 +630,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, ac.UserID)
 	switch {
 	case errors.Is(err, errConnectedUserNotFound):
-		return nil, oops.E(oops.CodeNotFound, nil, "current user is not connected locally").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "current user has not joined this organization").Log(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load connected user").Log(ctx, logger)
 	}
@@ -636,7 +704,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
 	switch {
 	case errors.Is(err, errConnectedUserNotFound):
-		return nil, oops.E(oops.CodeNotFound, nil, "member is not connected locally").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").Log(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load connected user").Log(ctx, logger)
 	}
@@ -671,6 +739,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update member role in workos").Log(ctx, logger)
 	}
+	s.access.InvalidateRoleCache(ctx, payload.UserID, ac.ActiveOrganizationID)
 
 	users, err := s.roles.ListOrgUsers(ctx, workosOrgID)
 	if err != nil {
@@ -782,13 +851,31 @@ func formatUserName(user workos.User) string {
 	}
 }
 
-func countMembersByRoleSlug(members []workos.Member) map[string]int {
-	counts := make(map[string]int, len(members))
-	for _, member := range members {
-		counts[member.RoleSlug]++
+// localMemberCounts counts WorkOS members per role slug, but only for members
+// who have a local Gram account. This ensures counts match what ListMembers
+// returns — users in WorkOS who have never logged into Gram are excluded.
+func (s *Service) localMemberCounts(ctx context.Context, members []workos.Member) (map[string]int, error) {
+	workosIDs := make([]string, 0, len(members))
+	for _, m := range members {
+		workosIDs = append(workosIDs, m.UserID)
 	}
-
-	return counts
+	localRows, err := usersrepo.New(s.db).GetUsersByWorkosIDs(ctx, workosIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get users by workos ids: %w", err)
+	}
+	localSet := make(map[string]struct{}, len(localRows))
+	for _, u := range localRows {
+		if u.WorkosID.Valid {
+			localSet[u.WorkosID.String] = struct{}{}
+		}
+	}
+	counts := make(map[string]int)
+	for _, m := range members {
+		if _, ok := localSet[m.UserID]; ok {
+			counts[m.RoleSlug]++
+		}
+	}
+	return counts, nil
 }
 
 func membershipsByUserID(members []workos.Member) map[string]string {
@@ -850,11 +937,20 @@ func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organ
 		Name:        role.Name,
 		Description: role.Description,
 		IsSystem:    isSystemRole(role.Slug),
-		Grants:      grants,
+		Grants:      roleGrantsFromListRoleGrants(grants),
 		MemberCount: memberCount,
 		CreatedAt:   conv.Default(role.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 		UpdatedAt:   conv.Default(role.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 	}, nil
+}
+
+// roleGrantsFromListRoleGrants converts the ListRoleGrant type to the RoleGrant type.
+func roleGrantsFromListRoleGrants(grants []*gen.ListRoleGrant) []*gen.RoleGrant {
+	out := make([]*gen.RoleGrant, 0, len(grants))
+	for _, grant := range grants {
+		out = append(out, &gen.RoleGrant{Scope: grant.Scope, Resources: grant.Resources})
+	}
+	return out
 }
 
 func connectedUser(ctx context.Context, db *pgxpool.Pool, organizationID string, userID string) (usersrepo.User, error) {
@@ -875,6 +971,101 @@ func connectedUser(ctx context.Context, db *pgxpool.Pool, organizationID string,
 	}
 
 	return user, nil
+}
+
+func (s *Service) GetRBACStatus(ctx context.Context, _ *gen.GetRBACStatusPayload) (*gen.RBACStatus, error) {
+	ac, err := s.requireSuperAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	enabled, err := pfRepo.New(s.db).IsFeatureEnabled(ctx, pfRepo.IsFeatureEnabledParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureRBAC),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature flag").Log(ctx, s.logger)
+	}
+
+	return &gen.RBACStatus{RbacEnabled: enabled}, nil
+}
+
+func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) error {
+	ac, err := s.requireSuperAdmin(ctx)
+	if err != nil {
+		return err
+	}
+	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
+
+	if err := SeedSystemRoleGrants(ctx, s.logger, s.db, ac.ActiveOrganizationID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "seed system role grants").Log(ctx, logger)
+	}
+
+	if _, err := pfRepo.New(s.db).EnableFeature(ctx, pfRepo.EnableFeatureParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureRBAC),
+	}); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			// Already enabled — unique constraint on (org, feature) WHERE deleted IS FALSE.
+			s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, true)
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "enable RBAC feature flag").Log(ctx, logger)
+	}
+
+	s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, true)
+	return nil
+}
+
+func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) error {
+	ac, err := s.requireSuperAdmin(ctx)
+	if err != nil {
+		return err
+	}
+	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
+
+	if _, err := pfRepo.New(s.db).DeleteFeature(ctx, pfRepo.DeleteFeatureParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureRBAC),
+	}); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Already disabled — no active feature row to soft-delete.
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "disable RBAC feature flag").Log(ctx, logger)
+	}
+
+	s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, false)
+	return nil
+}
+
+// requireSuperAdmin returns the auth context and an error if the caller is not
+// a Speakeasy employee. Mirrors the exact condition used by the super-admin
+// impersonation feature in auth/impl.go: email domain OR admin DB flag.
+// Email is read from the auth context (session cache). Admin is read from the
+// DB because AuthContext does not carry it; the DB value is synced from the
+// Speakeasy provider on every login so it matches the session cache.
+func (s *Service) requireSuperAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+	email := ""
+	if ac.Email != nil {
+		email = *ac.Email
+	}
+	if strings.HasSuffix(email, "@speakeasy.com") || strings.HasSuffix(email, "@speakeasyapi.dev") {
+		return ac, nil
+	}
+	user, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get user for admin check").Log(ctx, s.logger)
+	}
+	if !user.Admin {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	return ac, nil
 }
 
 func slugify(name string) (string, error) {

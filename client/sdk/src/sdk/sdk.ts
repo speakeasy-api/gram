@@ -4,12 +4,12 @@
 
 import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
-import { Agentworkflows } from "./agentworkflows.js";
 import { Assets } from "./assets.js";
 import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
+import { Collections } from "./collections.js";
 import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
@@ -23,6 +23,7 @@ import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { Organizations } from "./organizations.js";
 import { Packages } from "./packages.js";
+import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
 import { Resources } from "./resources.js";
 import { Slack } from "./slack.js";
@@ -30,6 +31,7 @@ import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
 import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
+import { Triggers } from "./triggers.js";
 import { Usage } from "./usage.js";
 import { Variations } from "./variations.js";
 
@@ -62,6 +64,11 @@ export class Gram extends ClientSDK {
   private _chatSessions?: ChatSessions;
   get chatSessions(): ChatSessions {
     return (this._chatSessions ??= new ChatSessions(this._options));
+  }
+
+  private _collections?: Collections;
+  get collections(): Collections {
+    return (this._collections ??= new Collections(this._options));
   }
 
   private _deployments?: Deployments;
@@ -124,6 +131,11 @@ export class Gram extends ClientSDK {
     return (this._packages ??= new Packages(this._options));
   }
 
+  private _plugins?: Plugins;
+  get plugins(): Plugins {
+    return (this._plugins ??= new Plugins(this._options));
+  }
+
   private _features?: Features;
   get features(): Features {
     return (this._features ??= new Features(this._options));
@@ -164,6 +176,11 @@ export class Gram extends ClientSDK {
     return (this._toolsets ??= new Toolsets(this._options));
   }
 
+  private _triggers?: Triggers;
+  get triggers(): Triggers {
+    return (this._triggers ??= new Triggers(this._options));
+  }
+
   private _usage?: Usage;
   get usage(): Usage {
     return (this._usage ??= new Usage(this._options));
@@ -172,10 +189,5 @@ export class Gram extends ClientSDK {
   private _variations?: Variations;
   get variations(): Variations {
     return (this._variations ??= new Variations(this._options));
-  }
-
-  private _agentworkflows?: Agentworkflows;
-  get agentworkflows(): Agentworkflows {
-    return (this._agentworkflows ??= new Agentworkflows(this._options));
   }
 }

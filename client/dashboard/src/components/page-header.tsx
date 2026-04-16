@@ -1,3 +1,4 @@
+import { InsightsTrigger } from "@/components/insights-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useSlugs } from "@/contexts/Sdk.tsx";
@@ -20,13 +21,18 @@ function PageHeaderComponent({
         className,
       )}
     >
-      <div className="flex w-full items-center px-3 gap-3">
-        <SidebarTrigger className="-ml-1 mx-0 px-0" />
+      <div className="flex w-full items-center gap-3 px-3">
+        <SidebarTrigger className="mx-0 -ml-1 px-0" />
         <Separator
           orientation="vertical"
           className="data-[orientation=vertical]:h-4"
         />
         {children}
+        {/* Insights trigger is pinned to the far right of the bar,
+            outside the breadcrumb's max-width container so it lands at
+            the true right edge on wide viewports. Self-hides when no
+            InsightsSidebar ancestor exists. */}
+        <InsightsTrigger className="ml-auto shrink-0" />
       </div>
     </header>
   );
@@ -43,7 +49,7 @@ function PageHeaderTitle({
     // 1270 carefully chosen to make the header line up with the max width of the page content
     <Heading
       variant="h4"
-      className={cn("ml-1 max-w-[1270px] w-full mx-auto", className)}
+      className={cn("mx-auto ml-1 w-full max-w-[1270px]", className)}
     >
       {children}
     </Heading>

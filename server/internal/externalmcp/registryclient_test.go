@@ -9,11 +9,12 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	tracernoop "go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
 type PassthroughBackend struct{}
@@ -32,6 +33,9 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	logger := slog.New(slog.DiscardHandler)
+	tracerProvider := tracernoop.NewTracerProvider()
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := listResponse{
@@ -82,7 +86,7 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{}, nil)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, nil)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -101,6 +105,9 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	logger := slog.New(slog.DiscardHandler)
+	tracerProvider := tracernoop.NewTracerProvider()
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
@@ -124,7 +131,7 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{}, nil)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, nil)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -146,6 +153,9 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	logger := slog.New(slog.DiscardHandler)
+	tracerProvider := tracernoop.NewTracerProvider()
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
@@ -169,7 +179,7 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{}, nil)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, nil)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -191,6 +201,9 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	logger := slog.New(slog.DiscardHandler)
+	tracerProvider := tracernoop.NewTracerProvider()
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
@@ -215,7 +228,7 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{}, nil)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, nil)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -237,6 +250,9 @@ func TestGetServerDetails_SelectedRemotesFiltersToSSE(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	logger := slog.New(slog.DiscardHandler)
+	tracerProvider := tracernoop.NewTracerProvider()
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
@@ -262,7 +278,7 @@ func TestGetServerDetails_SelectedRemotesFiltersToSSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{}, nil)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, nil)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -285,6 +301,9 @@ func TestGetServerDetails_SelectedRemotesStillPrefersStreamableHTTP(t *testing.T
 	t.Parallel()
 	ctx := context.Background()
 	logger := slog.New(slog.DiscardHandler)
+	tracerProvider := tracernoop.NewTracerProvider()
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
@@ -310,7 +329,7 @@ func TestGetServerDetails_SelectedRemotesStillPrefersStreamableHTTP(t *testing.T
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracernoop.NewTracerProvider(), &PassthroughBackend{}, nil)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, nil)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),

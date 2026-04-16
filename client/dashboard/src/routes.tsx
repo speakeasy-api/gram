@@ -31,8 +31,13 @@ import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
+import Collections, { CollectionsRoot } from "./pages/collections/Collections";
+import CollectionDetail from "./pages/collections/CollectionDetail";
+import CreateCollection from "./pages/collections/CreateCollection";
 import OrgAdminSettings from "./pages/org/OrgAdminSettings";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
+import Plugins, { PluginsRoot } from "./pages/org/Plugins";
+import PluginDetail from "./pages/org/PluginDetail";
 import OrgAuditLogs from "./pages/org/OrgAuditLogs";
 import OrgDomains from "./pages/org/OrgDomains";
 import OrgHome from "./pages/org/OrgHome";
@@ -45,6 +50,7 @@ import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
 import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
+import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import Team from "./pages/team/Team";
 import AcceptInvite from "./pages/invite/AcceptInvite";
@@ -312,6 +318,13 @@ const ROUTE_STRUCTURE = {
     customIcon: McpIcon,
     component: Logs,
   },
+  triggers: {
+    title: "Triggers",
+    url: "triggers",
+    icon: "zap",
+    component: TriggersRoot,
+    indexComponent: TriggersIndex,
+  },
   hooks: {
     title: "Hooks",
     url: "hooks",
@@ -344,8 +357,22 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  plugins: {
+    title: "Plugins",
+    url: "plugins",
+    icon: "puzzle",
+    component: PluginsRoot,
+    indexComponent: Plugins,
+    subPages: {
+      detail: {
+        title: "Plugin",
+        url: ":pluginId",
+        component: PluginDetail,
+      },
+    },
+  },
   settings: {
-    title: "Settings",
+    title: "Project settings",
     url: "settings",
     icon: "settings",
     component: Settings,
@@ -590,6 +617,25 @@ const ORG_ROUTE_STRUCTURE = {
         title: "Roles & Permissions",
         url: "members",
         component: Access,
+      },
+    },
+  },
+  collections: {
+    title: "Collections",
+    url: "collections",
+    icon: "layout-grid",
+    component: CollectionsRoot,
+    indexComponent: Collections,
+    subPages: {
+      create: {
+        title: "Create Collection",
+        url: "create",
+        component: CreateCollection,
+      },
+      detail: {
+        title: "Collection",
+        url: ":collectionSlug",
+        component: CollectionDetail,
       },
     },
   },

@@ -26,6 +26,7 @@ import { useSessionInfo } from "@gram/client/react-query";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
+import { useIsAdminRef } from "@/contexts/Sdk";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
@@ -223,11 +224,15 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const { session, error, status } = useSessionData();
+  const isAdminRef = useIsAdminRef();
 
   const isLoading = status === "pending";
 
   useIdentifyUserForTelemetry(session?.user);
   usePylonInAppChat(session?.user);
+
+  // Sync isAdmin into the SDK fetcher so it can attach X-Gram-Scope-Override in production.
+  isAdminRef.current = session?.user.isAdmin ?? false;
 
   // you need something like this so you don't redirect with empty session too soon
   // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading
@@ -427,9 +432,9 @@ const AppLoadingShell = () => (
   <SidebarProvider
     style={{ "--sidebar-width": "14rem" } as React.CSSProperties}
   >
-    <div className="flex flex-col h-screen w-full">
+    <div className="flex h-screen w-full flex-col">
       {/* Header */}
-      <header className="flex items-center h-14 pl-5 pr-4 border-b bg-white dark:bg-background shrink-0">
+      <header className="dark:bg-background flex h-14 shrink-0 items-center border-b bg-white pr-4 pl-5">
         <div className="flex items-center gap-3">
           <GramLogo className="w-28" />
           <span className="text-muted-foreground/50 text-xl select-none">
@@ -446,7 +451,7 @@ const AppLoadingShell = () => (
         </div>
       </header>
       {/* Body */}
-      <div className="flex flex-1 w-full overflow-hidden pt-2">
+      <div className="flex w-full flex-1 overflow-hidden pt-2">
         <Sidebar collapsible="offcanvas" variant="inset">
           <SidebarContent className="pt-2">
             {Object.entries(LOADING_NAV).map(([group, items]) => (
@@ -476,7 +481,7 @@ const AppLoadingShell = () => (
         <SidebarInset>
           <PageHeader>
             <PageHeader.Breadcrumbs />
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
           </PageHeader>
         </SidebarInset>
       </div>

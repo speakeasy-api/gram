@@ -148,8 +148,34 @@ func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg Del
 	return err
 }
 
+const getActiveUserCountByMessages = `-- name: GetActiveUserCountByMessages :one
+SELECT
+  COUNT(DISTINCT COALESCE(NULLIF(c.external_user_id, ''), c.user_id))::bigint as active_user_count
+FROM chats c
+INNER JOIN chat_messages m ON m.chat_id = c.id
+WHERE c.project_id = $1
+  AND c.deleted IS FALSE
+  AND m.created_at >= $2
+  AND m.created_at <= $3
+  AND m.role IN ('user', 'assistant')
+  AND COALESCE(NULLIF(c.external_user_id, ''), c.user_id) IS NOT NULL
+`
+
+type GetActiveUserCountByMessagesParams struct {
+	ProjectID uuid.UUID
+	TimeStart pgtype.Timestamptz
+	TimeEnd   pgtype.Timestamptz
+}
+
+func (q *Queries) GetActiveUserCountByMessages(ctx context.Context, arg GetActiveUserCountByMessagesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, getActiveUserCountByMessages, arg.ProjectID, arg.TimeStart, arg.TimeEnd)
+	var active_user_count int64
+	err := row.Scan(&active_user_count)
+	return active_user_count, err
+}
+
 const getChat = `-- name: GetChat :one
-SELECT id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1
+SELECT id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1 AND deleted IS FALSE
 `
 
 func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
@@ -168,6 +194,84 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getChatMetricsSummary = `-- name: GetChatMetricsSummary :one
+WITH chat_stats AS (
+  SELECT
+    c.id as chat_id,
+    MIN(m.created_at) as first_message_at,
+    MAX(m.created_at) as last_message_at,
+    EXTRACT(EPOCH FROM (MAX(m.created_at) - MIN(m.created_at))) * 1000 as duration_ms,
+    COALESCE(
+      (SELECT resolution FROM chat_resolutions WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1),
+      ''
+    ) as resolution_status
+  FROM chats c
+  INNER JOIN chat_messages m ON m.chat_id = c.id
+  WHERE c.project_id = $1
+    AND c.deleted IS FALSE
+    AND m.created_at >= $2
+    AND m.created_at <= $3
+  GROUP BY c.id
+)
+SELECT
+  COUNT(*)::bigint as total_chats,
+  COALESCE(SUM(CASE WHEN resolution_status = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
+  COALESCE(SUM(CASE WHEN resolution_status = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
+  COALESCE(AVG(duration_ms), 0)::double precision as avg_session_duration_ms,
+  COALESCE(AVG(CASE WHEN resolution_status != '' THEN duration_ms END), 0)::double precision as avg_resolution_time_ms
+FROM chat_stats
+`
+
+type GetChatMetricsSummaryParams struct {
+	ProjectID uuid.UUID
+	TimeStart pgtype.Timestamptz
+	TimeEnd   pgtype.Timestamptz
+}
+
+type GetChatMetricsSummaryRow struct {
+	TotalChats           int64
+	ResolvedChats        int64
+	FailedChats          int64
+	AvgSessionDurationMs float64
+	AvgResolutionTimeMs  float64
+}
+
+func (q *Queries) GetChatMetricsSummary(ctx context.Context, arg GetChatMetricsSummaryParams) (GetChatMetricsSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getChatMetricsSummary, arg.ProjectID, arg.TimeStart, arg.TimeEnd)
+	var i GetChatMetricsSummaryRow
+	err := row.Scan(
+		&i.TotalChats,
+		&i.ResolvedChats,
+		&i.FailedChats,
+		&i.AvgSessionDurationMs,
+		&i.AvgResolutionTimeMs,
+	)
+	return i, err
+}
+
+const getChatSessionCount = `-- name: GetChatSessionCount :one
+SELECT COUNT(DISTINCT c.id)::bigint as session_count
+FROM chats c
+INNER JOIN chat_messages m ON m.chat_id = c.id
+WHERE c.project_id = $1
+  AND c.deleted IS FALSE
+  AND m.created_at >= $2
+  AND m.created_at <= $3
+`
+
+type GetChatSessionCountParams struct {
+	ProjectID uuid.UUID
+	TimeStart pgtype.Timestamptz
+	TimeEnd   pgtype.Timestamptz
+}
+
+func (q *Queries) GetChatSessionCount(ctx context.Context, arg GetChatSessionCountParams) (int64, error) {
+	row := q.db.QueryRow(ctx, getChatSessionCount, arg.ProjectID, arg.TimeStart, arg.TimeEnd)
+	var session_count int64
+	err := row.Scan(&session_count)
+	return session_count, err
 }
 
 const getChatWithResolutions = `-- name: GetChatWithResolutions :one
@@ -202,7 +306,7 @@ SELECT
         '[]'::json
     ) as resolutions
 FROM chats c
-WHERE c.id = $1
+WHERE c.id = $1 AND c.deleted IS FALSE
 `
 
 type GetChatWithResolutionsRow struct {
@@ -257,6 +361,52 @@ func (q *Queries) GetFirstUserChatMessage(ctx context.Context, chatID uuid.UUID)
 	return content, err
 }
 
+const getLLMClientBreakdownByMessages = `-- name: GetLLMClientBreakdownByMessages :many
+SELECT
+  COALESCE(m.source, 'unknown') as client_name,
+  COUNT(DISTINCT m.id) as message_count
+FROM chats c
+INNER JOIN chat_messages m ON m.chat_id = c.id
+WHERE c.project_id = $1
+  AND c.deleted IS FALSE
+  AND m.created_at >= $2
+  AND m.created_at <= $3
+  AND m.role IN ('user', 'assistant')
+GROUP BY client_name
+ORDER BY message_count DESC
+`
+
+type GetLLMClientBreakdownByMessagesParams struct {
+	ProjectID uuid.UUID
+	TimeStart pgtype.Timestamptz
+	TimeEnd   pgtype.Timestamptz
+}
+
+type GetLLMClientBreakdownByMessagesRow struct {
+	ClientName   string
+	MessageCount int64
+}
+
+func (q *Queries) GetLLMClientBreakdownByMessages(ctx context.Context, arg GetLLMClientBreakdownByMessagesParams) ([]GetLLMClientBreakdownByMessagesRow, error) {
+	rows, err := q.db.Query(ctx, getLLMClientBreakdownByMessages, arg.ProjectID, arg.TimeStart, arg.TimeEnd)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetLLMClientBreakdownByMessagesRow
+	for rows.Next() {
+		var i GetLLMClientBreakdownByMessagesRow
+		if err := rows.Scan(&i.ClientName, &i.MessageCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getToolCallMessages = `-- name: GetToolCallMessages :many
 SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, created_at FROM chat_messages
 WHERE chat_id = $1
@@ -302,6 +452,62 @@ func (q *Queries) GetToolCallMessages(ctx context.Context, chatID uuid.UUID) ([]
 			&i.ToolOutcomeNotes,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTopUsersByMessages = `-- name: GetTopUsersByMessages :many
+SELECT
+  COALESCE(NULLIF(c.external_user_id, ''), c.user_id) as user_id,
+  CASE WHEN c.external_user_id IS NOT NULL AND c.external_user_id != '' THEN 'external' ELSE 'internal' END as user_type,
+  COUNT(DISTINCT m.id) as message_count
+FROM chats c
+INNER JOIN chat_messages m ON m.chat_id = c.id
+WHERE c.project_id = $1
+  AND c.deleted IS FALSE
+  AND m.created_at >= $2
+  AND m.created_at <= $3
+  AND m.role IN ('user', 'assistant')
+  AND COALESCE(NULLIF(c.external_user_id, ''), c.user_id) IS NOT NULL
+GROUP BY COALESCE(NULLIF(c.external_user_id, ''), c.user_id), CASE WHEN c.external_user_id IS NOT NULL AND c.external_user_id != '' THEN 'external' ELSE 'internal' END
+ORDER BY message_count DESC
+LIMIT $4
+`
+
+type GetTopUsersByMessagesParams struct {
+	ProjectID   uuid.UUID
+	TimeStart   pgtype.Timestamptz
+	TimeEnd     pgtype.Timestamptz
+	ResultLimit int32
+}
+
+type GetTopUsersByMessagesRow struct {
+	UserID       pgtype.Text
+	UserType     string
+	MessageCount int64
+}
+
+func (q *Queries) GetTopUsersByMessages(ctx context.Context, arg GetTopUsersByMessagesParams) ([]GetTopUsersByMessagesRow, error) {
+	rows, err := q.db.Query(ctx, getTopUsersByMessages,
+		arg.ProjectID,
+		arg.TimeStart,
+		arg.TimeEnd,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTopUsersByMessagesRow
+	for rows.Next() {
+		var i GetTopUsersByMessagesRow
+		if err := rows.Scan(&i.UserID, &i.UserType, &i.MessageCount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -430,25 +636,28 @@ SELECT
         )
     )::integer as total_tokens
     , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
+    , (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_timestamp
 FROM chats c
 WHERE c.project_id = $1
+  AND c.deleted IS FALSE
 ORDER BY c.updated_at DESC
 `
 
 type ListAllChatsRow struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         pgtype.Text
-	ExternalUserID pgtype.Text
-	Title          pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
-	NumMessages    int32
-	TotalTokens    int32
-	Source         pgtype.Text
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	OrganizationID       string
+	UserID               pgtype.Text
+	ExternalUserID       pgtype.Text
+	Title                pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+	NumMessages          int32
+	TotalTokens          int32
+	Source               pgtype.Text
+	LastMessageTimestamp pgtype.Timestamptz
 }
 
 func (q *Queries) ListAllChats(ctx context.Context, projectID uuid.UUID) ([]ListAllChatsRow, error) {
@@ -474,6 +683,7 @@ func (q *Queries) ListAllChats(ctx context.Context, projectID uuid.UUID) ([]List
 			&i.NumMessages,
 			&i.TotalTokens,
 			&i.Source,
+			&i.LastMessageTimestamp,
 		); err != nil {
 			return nil, err
 		}
@@ -595,8 +805,10 @@ SELECT
         )
     )::integer as total_tokens
     , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
+    , (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_timestamp
 FROM chats c
 WHERE c.project_id = $1 AND c.external_user_id = $2
+  AND c.deleted IS FALSE
 ORDER BY c.updated_at DESC
 `
 
@@ -606,19 +818,20 @@ type ListChatsForExternalUserParams struct {
 }
 
 type ListChatsForExternalUserRow struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         pgtype.Text
-	ExternalUserID pgtype.Text
-	Title          pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
-	NumMessages    int32
-	TotalTokens    int32
-	Source         pgtype.Text
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	OrganizationID       string
+	UserID               pgtype.Text
+	ExternalUserID       pgtype.Text
+	Title                pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+	NumMessages          int32
+	TotalTokens          int32
+	Source               pgtype.Text
+	LastMessageTimestamp pgtype.Timestamptz
 }
 
 func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsForExternalUserParams) ([]ListChatsForExternalUserRow, error) {
@@ -644,6 +857,7 @@ func (q *Queries) ListChatsForExternalUser(ctx context.Context, arg ListChatsFor
 			&i.NumMessages,
 			&i.TotalTokens,
 			&i.Source,
+			&i.LastMessageTimestamp,
 		); err != nil {
 			return nil, err
 		}
@@ -671,8 +885,10 @@ SELECT
         )
     )::integer as total_tokens
     , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
+    , (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_timestamp
 FROM chats c
 WHERE c.project_id = $1 AND c.user_id = $2
+  AND c.deleted IS FALSE
 ORDER BY c.updated_at DESC
 `
 
@@ -682,19 +898,20 @@ type ListChatsForUserParams struct {
 }
 
 type ListChatsForUserRow struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         pgtype.Text
-	ExternalUserID pgtype.Text
-	Title          pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
-	NumMessages    int32
-	TotalTokens    int32
-	Source         pgtype.Text
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	OrganizationID       string
+	UserID               pgtype.Text
+	ExternalUserID       pgtype.Text
+	Title                pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+	NumMessages          int32
+	TotalTokens          int32
+	Source               pgtype.Text
+	LastMessageTimestamp pgtype.Timestamptz
 }
 
 func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserParams) ([]ListChatsForUserRow, error) {
@@ -720,6 +937,7 @@ func (q *Queries) ListChatsForUser(ctx context.Context, arg ListChatsForUserPara
 			&i.NumMessages,
 			&i.TotalTokens,
 			&i.Source,
+			&i.LastMessageTimestamp,
 		); err != nil {
 			return nil, err
 		}
@@ -742,6 +960,7 @@ WITH limited_chats AS (
     c.updated_at,
     (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id)::integer as num_messages,
     (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source,
+    (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_timestamp,
     COALESCE(
       (SELECT AVG(score)::integer FROM chat_resolutions WHERE chat_id = c.id),
       0
@@ -791,6 +1010,7 @@ SELECT
     lc.created_at,
     lc.updated_at,
     lc.num_messages,
+    lc.last_message_timestamp,
     lc.avg_score,
     cr.id as resolution_id,
     cr.user_goal,
@@ -833,22 +1053,23 @@ type ListChatsWithResolutionsParams struct {
 }
 
 type ListChatsWithResolutionsRow struct {
-	ChatID              uuid.UUID
-	Title               pgtype.Text
-	UserID              pgtype.Text
-	ExternalUserID      pgtype.Text
-	Source              pgtype.Text
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	NumMessages         int32
-	AvgScore            interface{}
-	ResolutionID        uuid.NullUUID
-	UserGoal            pgtype.Text
-	Resolution          pgtype.Text
-	ResolutionNotes     pgtype.Text
-	Score               pgtype.Int4
-	ResolutionCreatedAt pgtype.Timestamptz
-	MessageIds          interface{}
+	ChatID               uuid.UUID
+	Title                pgtype.Text
+	UserID               pgtype.Text
+	ExternalUserID       pgtype.Text
+	Source               pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	NumMessages          int32
+	LastMessageTimestamp pgtype.Timestamptz
+	AvgScore             interface{}
+	ResolutionID         uuid.NullUUID
+	UserGoal             pgtype.Text
+	Resolution           pgtype.Text
+	ResolutionNotes      pgtype.Text
+	Score                pgtype.Int4
+	ResolutionCreatedAt  pgtype.Timestamptz
+	MessageIds           interface{}
 }
 
 func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWithResolutionsParams) ([]ListChatsWithResolutionsRow, error) {
@@ -880,6 +1101,7 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.NumMessages,
+			&i.LastMessageTimestamp,
 			&i.AvgScore,
 			&i.ResolutionID,
 			&i.UserGoal,
@@ -933,6 +1155,24 @@ func (q *Queries) ListUserFeedbackForChat(ctx context.Context, chatID uuid.UUID)
 		return nil, err
 	}
 	return items, nil
+}
+
+const softDeleteChat = `-- name: SoftDeleteChat :exec
+UPDATE chats
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type SoftDeleteChatParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SoftDeleteChat(ctx context.Context, arg SoftDeleteChatParams) error {
+	_, err := q.db.Exec(ctx, softDeleteChat, arg.ID, arg.ProjectID)
+	return err
 }
 
 const updateChatTitle = `-- name: UpdateChatTitle :exec

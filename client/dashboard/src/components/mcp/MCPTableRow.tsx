@@ -58,10 +58,10 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
           <img
             src={externalMcpInfo.logoUrl}
             alt={toolset.name}
-            className="w-6 h-6 object-contain"
+            className="h-6 w-6 object-contain"
           />
         ) : (
-          <Network className="w-5 h-5 text-muted-foreground" />
+          <Network className="text-muted-foreground h-5 w-5" />
         )
       }
     >
@@ -70,7 +70,7 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
         <Type
           variant="subheading"
           as="div"
-          className="truncate text-sm group-hover:text-primary transition-colors"
+          className="group-hover:text-primary truncate text-sm transition-colors"
           title={toolset.name}
         >
           {toolset.name}
@@ -84,14 +84,14 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
             {toolset.mcpEnabled && (
               <span
                 className={cn(
-                  "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+                  "absolute inline-flex h-full w-full animate-ping rounded-full opacity-75",
                   status.pulseColor,
                 )}
               />
             )}
             <span
               className={cn(
-                "relative inline-flex rounded-full h-2 w-2",
+                "relative inline-flex h-2 w-2 rounded-full",
                 status.color,
               )}
             />
@@ -103,7 +103,7 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
       </td>
 
       {/* URL */}
-      <td className="px-3 py-3 max-w-xs">
+      <td className="max-w-xs px-3 py-3">
         {mcpUrl ? (
           <div className="flex items-center gap-1.5">
             <Type small muted className="truncate">
@@ -135,19 +135,19 @@ export function MCPTableRowSkeleton() {
   return (
     <DotRow>
       <td className="px-3 py-3">
-        <div className="h-4 w-2/3 bg-muted rounded animate-pulse" />
+        <div className="bg-muted h-4 w-2/3 animate-pulse rounded" />
       </td>
       <td className="px-3 py-3">
         <div className="flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-muted animate-pulse" />
-          <div className="h-3.5 w-12 bg-muted rounded animate-pulse" />
+          <div className="bg-muted h-2 w-2 animate-pulse rounded-full" />
+          <div className="bg-muted h-3.5 w-12 animate-pulse rounded" />
         </div>
       </td>
       <td className="px-3 py-3">
-        <div className="h-3.5 w-40 bg-muted rounded animate-pulse" />
+        <div className="bg-muted h-3.5 w-40 animate-pulse rounded" />
       </td>
       <td className="px-3 py-3">
-        <div className="h-5 w-10 bg-muted rounded-full animate-pulse" />
+        <div className="bg-muted h-5 w-10 animate-pulse rounded-full" />
       </td>
     </DotRow>
   );

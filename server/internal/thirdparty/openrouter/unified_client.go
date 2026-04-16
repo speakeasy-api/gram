@@ -12,13 +12,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hashicorp/go-cleanhttp"
 	"go.opentelemetry.io/otel/trace"
 
 	or_base "github.com/OpenRouterTeam/go-sdk"
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	or_operations "github.com/OpenRouterTeam/go-sdk/models/operations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -33,9 +33,9 @@ type ChatResolutionAnalyzer interface {
 	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
 }
 
-// TelemetryService emits telemetry events for observability.
-type TelemetryService interface {
-	CreateLog(params telemetry.LogParams)
+// TelemetryLogger emits telemetry events for observability.
+type TelemetryLogger interface {
+	Log(ctx context.Context, params telemetry.LogParams)
 }
 
 const (
@@ -46,34 +46,35 @@ const (
 // It applies pluggable strategies for message capture and usage tracking.
 type ChatClient struct {
 	logger                 *slog.Logger
-	httpClient             *http.Client
+	httpClient             *guardian.HTTPClient
 	provisioner            Provisioner
 	messageCaptureStrategy MessageCaptureStrategy
 	usageTrackingStrategy  UsageTrackingStrategy
 	chatTitleGenerator     ChatTitleGenerator
 	chatResolutionAnalyzer ChatResolutionAnalyzer
-	telemetryService       TelemetryService
+	telemetryLogger        TelemetryLogger
 }
 
 // NewUnifiedClient creates a new UnifiedClient with the given strategies.
 func NewUnifiedClient(
 	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
 	provisioner Provisioner,
 	captureStrategy MessageCaptureStrategy,
 	trackingStrategy UsageTrackingStrategy,
 	chatTitleGenerator ChatTitleGenerator,
 	chatResolutionAnalyzer ChatResolutionAnalyzer,
-	telemetryService TelemetryService,
+	telemetryLogger TelemetryLogger,
 ) *ChatClient {
 	return &ChatClient{
 		logger:                 logger.With(attr.SlogComponent("openrouter_completions")),
-		httpClient:             cleanhttp.DefaultPooledClient(),
+		httpClient:             guardianPolicy.PooledClient(),
 		provisioner:            provisioner,
 		messageCaptureStrategy: captureStrategy,
 		usageTrackingStrategy:  trackingStrategy,
 		chatTitleGenerator:     chatTitleGenerator,
 		chatResolutionAnalyzer: chatResolutionAnalyzer,
-		telemetryService:       telemetryService,
+		telemetryLogger:        telemetryLogger,
 	}
 }
 
@@ -369,7 +370,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		request:              req,
 		logger:               c.logger,
 		client:               c,
-		telemetryService:     c.telemetryService,
+		telemetryService:     c.telemetryLogger,
 		lineBuf:              &strings.Builder{},
 		messageContent:       &strings.Builder{},
 		accumulatedToolCalls: make(map[int]ToolCall),
@@ -431,7 +432,7 @@ type streamingResponseReader struct {
 	request          CompletionRequest
 	logger           *slog.Logger
 	client           *ChatClient
-	telemetryService TelemetryService
+	telemetryService TelemetryLogger
 
 	// SSE parsing state
 	lineBuf              *strings.Builder
@@ -598,7 +599,7 @@ func (c *ChatClient) emitGenAITelemetry(
 	result CompletionResponse,
 ) {
 	// Skip telemetry if no telemetry service configured
-	if c.telemetryService == nil {
+	if c.telemetryLogger == nil {
 		return
 	}
 
@@ -664,7 +665,7 @@ func (c *ChatClient) emitGenAITelemetry(
 		OrganizationID: orgID,
 	}
 
-	c.telemetryService.CreateLog(telemetry.LogParams{
+	c.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  time.Now(),
 		ToolInfo:   toolInfo,
 		Attributes: attrs,

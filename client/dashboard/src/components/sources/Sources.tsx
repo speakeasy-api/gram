@@ -268,25 +268,25 @@ export default function Sources() {
             <DropdownMenuTrigger asChild>
               <Button variant="secondary">
                 <Button.LeftIcon>
-                  <Plus className="w-4 h-4" />
+                  <Plus className="h-4 w-4" />
                 </Button.LeftIcon>
                 <Button.Text>Add Source</Button.Text>
                 <Button.RightIcon>
-                  <ChevronDown className="w-4 h-4" />
+                  <ChevronDown className="h-4 w-4" />
                 </Button.RightIcon>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[320px] p-1">
               <DropdownMenuItem
                 onSelect={() => routes.sources.addOpenAPI.goTo()}
-                className="cursor-pointer flex items-start gap-3 p-2 rounded-md"
+                className="flex cursor-pointer items-start gap-3 rounded-md p-2"
               >
-                <div className="w-10 h-10 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center shrink-0">
-                  <FileCode className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 dark:bg-blue-500/20">
+                  <FileCode className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="font-medium">From your API</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-muted-foreground text-xs">
                     Upload an OpenAPI spec to generate tools
                   </span>
                 </div>
@@ -294,14 +294,14 @@ export default function Sources() {
               {isFunctionsEnabled && (
                 <DropdownMenuItem
                   onSelect={() => routes.sources.addFunction.goTo()}
-                  className="cursor-pointer flex items-start gap-3 p-2 rounded-md"
+                  className="flex cursor-pointer items-start gap-3 rounded-md p-2"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
-                    <Code className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20">
+                    <Code className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span className="font-medium">Write custom code</span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-muted-foreground text-xs">
                       Create tools with TypeScript functions
                     </span>
                   </div>
@@ -309,14 +309,14 @@ export default function Sources() {
               )}
               <DropdownMenuItem
                 onSelect={() => routes.sources.addFromCatalog.goTo()}
-                className="cursor-pointer flex items-start gap-3 p-2 rounded-md"
+                className="flex cursor-pointer items-start gap-3 rounded-md p-2"
               >
-                <div className="w-10 h-10 rounded-lg bg-violet-500/10 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
-                  <Server className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
+                  <Server className="h-5 w-5 text-violet-600 dark:text-violet-400" />
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="font-medium">Third party server</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-muted-foreground text-xs">
                     Add pre-built servers from the catalog
                   </span>
                 </div>
@@ -326,13 +326,13 @@ export default function Sources() {
         </Page.Section.CTA>
         <Page.Section.Body>
           {isLoading ? (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               <SourceCardSkeleton />
               <SourceCardSkeleton />
               <SourceCardSkeleton />
             </div>
           ) : viewMode === "grid" ? (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {allSources?.map((asset: NamedAsset) => (
                 <SourceCard
                   key={asset.id}
@@ -384,7 +384,7 @@ export default function Sources() {
             <Dialog.Content
               className={
                 dialogState.type === "view-asset"
-                  ? "min-w-[80vw] h-[90vh]"
+                  ? "h-[90vh] min-w-[80vw]"
                   : "max-w-2xl!"
               }
             >
@@ -523,7 +523,7 @@ function DeploymentsButton({ deploymentId }: { deploymentId?: string }) {
       <a href={routes.deployments.deployment.href(deploymentId)}>
         <Button variant="secondary" className="text-destructive">
           <Button.LeftIcon>
-            <CircleAlert className="w-4 h-4" />
+            <CircleAlert className="h-4 w-4" />
           </Button.LeftIcon>
           <Button.Text>Deployment Errors</Button.Text>
         </Button>

@@ -6,13 +6,13 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-import { RoleGrant, RoleGrant$inboundSchema } from "./rolegrant.js";
+import { ListRoleGrant, ListRoleGrant$inboundSchema } from "./listrolegrant.js";
 
 export type ListUserGrantsResult = {
   /**
    * The user's effective grants in this organization.
    */
-  grants: Array<RoleGrant>;
+  grants: Array<ListRoleGrant>;
 };
 
 /** @internal */
@@ -20,7 +20,7 @@ export const ListUserGrantsResult$inboundSchema: z.ZodMiniType<
   ListUserGrantsResult,
   unknown
 > = z.object({
-  grants: z.array(RoleGrant$inboundSchema),
+  grants: z.array(ListRoleGrant$inboundSchema),
 });
 
 export function listUserGrantsResultFromJSON(

@@ -29,12 +29,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
+// AccessRequirer checks whether the caller has the required scope on a resource.
+// The scope is baked into the closure at construction time to avoid importing
+// the access package directly (which would create an import cycle through testenv).
+type AccessRequirer func(ctx context.Context, resourceID string) error
+
 type Service struct {
 	tracer         trace.Tracer
 	logger         *slog.Logger
 	db             *pgxpool.Pool
 	repo           *repo.Queries
 	auth           *auth.Auth
+	requireAccess  AccessRequirer
 	sessions       *sessions.Manager
 	registryClient *RegistryClient
 }
@@ -42,7 +48,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, accessLoader auth.AccessLoader) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, accessLoader auth.AccessLoader, requireAccess AccessRequirer) *Service {
 	logger = logger.With(attr.SlogComponent("external_mcp"))
 
 	return &Service{
@@ -51,6 +57,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		db:             db,
 		repo:           repo.New(db),
 		auth:           auth.New(logger, db, sessions, accessLoader),
+		requireAccess:  requireAccess,
 		sessions:       sessions,
 		registryClient: registryClient,
 	}
@@ -148,6 +155,10 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.requireAccess(ctx, authCtx.ProjectID.String()); err != nil {
+		return nil, err
+	}
+
 	// If a specific registry is requested, fetch just that one
 	if payload.RegistryID != nil {
 		registryID, err := uuid.Parse(*payload.RegistryID)
@@ -224,6 +235,10 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.requireAccess(ctx, authCtx.ProjectID.String()); err != nil {
+		return nil, err
+	}
+
 	registryID, err := uuid.Parse(payload.RegistryID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
@@ -243,16 +258,18 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch server details from registry").Log(ctx, s.logger)
 	}
 
+	registryIDStr := registryID.String()
 	return &types.ExternalMCPServer{
-		RegistrySpecifier: details.Name,
-		Version:           details.Version,
-		Description:       details.Description,
-		RegistryID:        registryID.String(),
-		Title:             nil, // Not available from details endpoint
-		IconURL:           nil, // Not available from details endpoint
-		Meta:              nil, // Not available from details endpoint
-		Tools:             details.Tools,
-		Remotes:           details.Remotes,
+		RegistrySpecifier:                   details.Name,
+		Version:                             details.Version,
+		Description:                         details.Description,
+		RegistryID:                          &registryIDStr,
+		OrganizationMcpCollectionRegistryID: nil,
+		Title:                               nil,
+		IconURL:                             nil,
+		Meta:                                nil,
+		Tools:                               details.Tools,
+		Remotes:                             details.Remotes,
 	}, nil
 }
 

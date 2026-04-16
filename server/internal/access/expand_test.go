@@ -27,11 +27,10 @@ func TestCheckExpand_mcpConnect(t *testing.T) {
 	require.Contains(t, checks, Check{Scope: ScopeRoot, ResourceID: WildcardResource})
 	require.Contains(t, checks, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"})
 	require.Contains(t, checks, Check{Scope: ScopeMCPConnect, ResourceID: WildcardResource})
-	// mcp:connect is not implied by mcp:write — it is a distinct capability
-	for _, c := range checks {
-		require.NotEqual(t, ScopeMCPWrite, c.Scope)
-		require.NotEqual(t, ScopeMCPRead, c.Scope)
-	}
+	require.Contains(t, checks, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"})
+	require.Contains(t, checks, Check{Scope: ScopeMCPRead, ResourceID: WildcardResource})
+	require.Contains(t, checks, Check{Scope: ScopeMCPWrite, ResourceID: "tool_a"})
+	require.Contains(t, checks, Check{Scope: ScopeMCPWrite, ResourceID: WildcardResource})
 }
 
 func TestGrantsHasAccess_orgAdminSatisfiesOrgRead(t *testing.T) {
@@ -74,6 +73,20 @@ func TestGrantsHasAccess_mcpConnectDoesNotSatisfyMCPRead(t *testing.T) {
 
 	g := &Grants{rows: []Grant{{Scope: ScopeMCPConnect, Resource: "tool_a"}}}
 	require.False(t, g.satisfies(Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.expand()))
+}
+
+func TestGrantsHasAccess_mcpReadSatisfiesMCPConnect(t *testing.T) {
+	t.Parallel()
+
+	g := &Grants{rows: []Grant{{Scope: ScopeMCPRead, Resource: "tool_a"}}}
+	require.True(t, g.satisfies(Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand()))
+}
+
+func TestGrantsHasAccess_mcpWriteSatisfiesMCPConnect(t *testing.T) {
+	t.Parallel()
+
+	g := &Grants{rows: []Grant{{Scope: ScopeMCPWrite, Resource: "tool_a"}}}
+	require.True(t, g.satisfies(Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand()))
 }
 
 func TestGrantsHasAccess_mcpWriteSatisfiesMCPRead(t *testing.T) {
@@ -123,5 +136,41 @@ func TestScopeExpansions_isDAG(t *testing.T) {
 			return false
 		}
 		require.False(t, hasCycle(start), "cycle detected in scopeExpansions from scope %q", start)
+	}
+}
+
+func TestCalculateSubScopes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		scope string
+		want  []string
+	}{
+		{scope: string(ScopeOrgAdmin), want: []string{string(ScopeOrgRead)}},
+		{scope: string(ScopeBuildWrite), want: []string{string(ScopeBuildRead)}},
+		{scope: string(ScopeMCPWrite), want: []string{string(ScopeMCPConnect), string(ScopeMCPRead)}},
+		{scope: string(ScopeMCPRead), want: []string{string(ScopeMCPConnect)}},
+		{scope: string(ScopeOrgRead), want: []string{}},
+		{scope: string(ScopeBuildRead), want: []string{}},
+		{scope: string(ScopeRoot), want: []string{}},
+		{scope: string(ScopeMCPConnect), want: []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.scope, func(t *testing.T) {
+			t.Parallel()
+			got := calculateSubScopes(Scope(tt.scope))
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestCalculateSubScopes_inverseOfScopeExpansions(t *testing.T) {
+	t.Parallel()
+
+	for lower, highers := range scopeExpansions {
+		for _, h := range highers {
+			require.Contains(t, calculateSubScopes(h), string(lower),
+				"higher scope %q should imply lower scope %q", h, lower)
+		}
 	}
 }

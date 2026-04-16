@@ -22,11 +22,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -71,6 +73,8 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -82,7 +86,7 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 	f := &feature.InMemory{}
 
 	temporalEnv, _ := infra.NewTemporalEnv(t)
-	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
+	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
 	})
@@ -93,7 +97,7 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
@@ -101,9 +105,10 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	svc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
-	assetsSvc := assets.NewService(logger, tracerProvider, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
-	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	svc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, accessManager)
+	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", accessManager)
+	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, accessManager)
 
 	return ctx, &testInstance{
 		service:        svc,

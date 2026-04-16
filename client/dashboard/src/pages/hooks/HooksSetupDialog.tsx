@@ -1,5 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { ExternalLink, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -9,11 +15,11 @@ function ClaudeInstallContent() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-sm font-semibold mb-2">Test Yourself</h3>
-        <p className="text-sm text-muted-foreground mb-4">
+        <h3 className="mb-2 text-sm font-semibold">Test Yourself</h3>
+        <p className="text-muted-foreground mb-4 text-sm">
           Try Gram Hooks in your Claude Code instance:
         </p>
-        <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm space-y-2">
+        <div className="bg-muted/50 space-y-2 rounded-lg p-4 font-mono text-sm">
           <div className="flex items-center justify-between">
             <code>claude plugin marketplace add speakeasy-api/gram</code>
           </div>
@@ -24,15 +30,15 @@ function ClaudeInstallContent() {
       </div>
 
       <div>
-        <h3 className="text-sm font-semibold mb-2">Distribute to Your Team</h3>
-        <p className="text-sm text-muted-foreground mb-4">
+        <h3 className="mb-2 text-sm font-semibold">Distribute to Your Team</h3>
+        <p className="text-muted-foreground mb-4 text-sm">
           Require your team to use Gram Hooks by configuring their Claude Code
           settings:
         </p>
 
         <div className="space-y-4">
           <div>
-            <h4 className="text-xs font-medium text-muted-foreground mb-2">
+            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
               1. Require the marketplace
             </h4>
             <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
@@ -47,7 +53,7 @@ function ClaudeInstallContent() {
           </div>
 
           <div>
-            <h4 className="text-xs font-medium text-muted-foreground mb-2">
+            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
               2. Require the plugin
             </h4>
             <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
@@ -82,8 +88,8 @@ function CursorInstallContent() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-sm font-semibold mb-2">1. Publish the Plugin</h3>
-        <p className="text-sm text-muted-foreground mb-4">
+        <h3 className="mb-2 text-sm font-semibold">1. Publish the Plugin</h3>
+        <p className="text-muted-foreground mb-4 text-sm">
           Add the Gram hooks plugin to your Cursor team marketplace and mark it
           as required so it auto-installs for all team members:
         </p>
@@ -92,7 +98,7 @@ function CursorInstallContent() {
             href="https://cursor.com/dashboard/team-content"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary underline underline-offset-4 hover:text-primary/80"
+            className="text-primary hover:text-primary/80 underline underline-offset-4"
           >
             cursor.com/dashboard/team-content
           </a>
@@ -100,42 +106,42 @@ function CursorInstallContent() {
       </div>
 
       <div>
-        <h3 className="text-sm font-semibold mb-2">2. Configure Credentials</h3>
-        <p className="text-sm text-muted-foreground mb-4">
+        <h3 className="mb-2 text-sm font-semibold">2. Configure Credentials</h3>
+        <p className="text-muted-foreground mb-4 text-sm">
           In the Cursor team dashboard, add a{" "}
-          <code className="text-xs bg-muted px-1 py-0.5 rounded">
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
             Session Start
           </code>{" "}
           hook that injects your Gram credentials. These are automatically
           passed to all subsequent hooks in the session.
         </p>
-        <p className="text-sm text-muted-foreground mb-4">
+        <p className="text-muted-foreground mb-4 text-sm">
           Go to{" "}
           <a
             href="https://cursor.com/dashboard/team-content?section=hooks"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary underline underline-offset-4 hover:text-primary/80"
+            className="text-primary hover:text-primary/80 underline underline-offset-4"
           >
             cursor.com/dashboard/team-content
           </a>{" "}
           and create a new hook with:
         </p>
-        <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-3">
+        <div className="bg-muted/50 space-y-3 rounded-lg p-4 text-sm">
           <div className="flex items-baseline gap-2">
-            <span className="text-muted-foreground font-medium shrink-0">
+            <span className="text-muted-foreground shrink-0 font-medium">
               Hook Name:
             </span>
             <code>Gram Hooks</code>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-muted-foreground font-medium shrink-0">
+            <span className="text-muted-foreground shrink-0 font-medium">
               Hook Type:
             </span>
             <code>Command</code>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-muted-foreground font-medium shrink-0">
+            <span className="text-muted-foreground shrink-0 font-medium">
               Hook Step:
             </span>
             <code>Session Start</code>
@@ -144,7 +150,7 @@ function CursorInstallContent() {
             <span className="text-muted-foreground font-medium">
               Script Content:
             </span>
-            <div className="bg-background/50 rounded mt-1 p-3 font-mono text-xs whitespace-pre-wrap break-all overflow-x-auto">
+            <div className="bg-background/50 mt-1 overflow-x-auto rounded p-3 font-mono text-xs break-all whitespace-pre-wrap">
               {`#!/bin/bash\necho '{"env":{"GRAM_API_KEY":"`}
               <span className="text-primary font-semibold">{`<YOUR_API_KEY>`}</span>
               {`","GRAM_PROJECT_SLUG":"`}
@@ -153,16 +159,16 @@ function CursorInstallContent() {
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-muted-foreground font-medium shrink-0">
+            <span className="text-muted-foreground shrink-0 font-medium">
               Platforms:
             </span>
             <code>Mac, Linux</code>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground mt-2">
+        <p className="text-muted-foreground mt-2 text-xs">
           Replace{" "}
-          <code className="text-xs text-primary">{`<YOUR_API_KEY>`}</code> and{" "}
-          <code className="text-xs text-primary">{`<YOUR_PROJECT_SLUG>`}</code>{" "}
+          <code className="text-primary text-xs">{`<YOUR_API_KEY>`}</code> and{" "}
+          <code className="text-primary text-xs">{`<YOUR_PROJECT_SLUG>`}</code>{" "}
           with your Gram credentials. Find your API key in your project's API
           Keys settings. This config syncs to all team members automatically.
         </p>
@@ -196,11 +202,43 @@ function CursorInstallContent() {
   );
 }
 
-type Provider = "claude" | "cursor";
+type Provider =
+  | "claude"
+  | "cursor"
+  | "codex"
+  | "copilot"
+  | "gemini"
+  | "glean"
+  | "bedrock";
 
-const providers: { id: Provider; label: string; source: string }[] = [
-  { id: "claude", label: "Claude Code", source: "claude-code" },
-  { id: "cursor", label: "Cursor", source: "cursor" },
+const providers: {
+  id: Provider;
+  label: string;
+  source: string;
+  available: boolean;
+}[] = [
+  {
+    id: "claude",
+    label: "Claude Code",
+    source: "claude-code",
+    available: true,
+  },
+  { id: "cursor", label: "Cursor", source: "cursor", available: true },
+  { id: "codex", label: "Codex", source: "codex", available: false },
+  {
+    id: "copilot",
+    label: "Copilot",
+    source: "copilot",
+    available: false,
+  },
+  { id: "gemini", label: "Gemini", source: "gemini", available: false },
+  { id: "glean", label: "Glean", source: "glean", available: false },
+  {
+    id: "bedrock",
+    label: "AWS Bedrock",
+    source: "aws-bedrock",
+    available: false,
+  },
 ];
 
 export function HooksSetupDialog({
@@ -225,22 +263,47 @@ export function HooksSetupDialog({
           <Dialog.Title>Setup Hooks</Dialog.Title>
         </Dialog.Header>
 
-        <div className="flex gap-3 mb-6">
-          {providers.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setSelected(p.id)}
-              className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded-md border text-sm font-medium transition-colors",
-                selected === p.id
-                  ? "border-primary bg-primary/5"
-                  : "border-border hover:border-primary/50 hover:bg-muted/50",
-              )}
-            >
-              <HookSourceIcon source={p.source} className="size-5" />
-              {p.label}
-            </button>
-          ))}
+        <div className="mb-6 flex flex-wrap gap-3">
+          <TooltipProvider>
+            {providers.map((p) => {
+              const button = (
+                <button
+                  key={p.id}
+                  onClick={() => p.available && setSelected(p.id)}
+                  disabled={!p.available}
+                  className={cn(
+                    "relative flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                    selected === p.id
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/50 hover:bg-muted/50",
+                    !p.available &&
+                      "hover:border-border cursor-not-allowed opacity-50 hover:bg-transparent",
+                  )}
+                >
+                  <HookSourceIcon source={p.source} className="size-5" />
+                  {p.label}
+                  {!p.available && (
+                    <span className="text-muted-foreground ml-1 text-[10px] tracking-wide uppercase">
+                      Soon
+                    </span>
+                  )}
+                </button>
+              );
+
+              if (!p.available) {
+                return (
+                  <Tooltip key={p.id}>
+                    <TooltipTrigger asChild>{button}</TooltipTrigger>
+                    <TooltipContent>
+                      <p>Coming soon</p>
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              }
+
+              return button;
+            })}
+          </TooltipProvider>
         </div>
 
         {selected === "claude" && <ClaudeInstallContent />}

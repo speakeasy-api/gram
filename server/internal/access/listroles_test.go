@@ -28,8 +28,13 @@ func TestService_ListRoles(t *testing.T) {
 		mockMember("org_workos_test", "membership_1", "user_1", "admin"),
 		mockMember("org_workos_test", "membership_2", "user_2", "custom-builder"),
 		mockMember("org_workos_test", "membership_3", "user_3", "custom-builder"),
+		// user_workos_only has never logged into Gram — should not be counted
+		mockMember("org_workos_test", "membership_workos_only", "user_workos_only", "custom-builder"),
 	}, nil).Once()
 
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_3", "user3@test.com", "User 3", "user_3", "membership_3")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "admin"), ScopeOrgAdmin, WildcardResource)
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeBuildRead, "project-1")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeBuildRead, "project-2")

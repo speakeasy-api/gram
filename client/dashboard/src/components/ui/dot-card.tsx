@@ -27,15 +27,15 @@ export function DotCard({
     <div
       onClick={onClick}
       className={cn(
-        "dot-card group bg-card text-card-foreground flex flex-row rounded-xl border !border-foreground/10 overflow-hidden",
-        "hover:!border-foreground/30 hover:shadow-md transition-all h-full min-h-[156px]",
+        "dot-card group bg-card text-card-foreground !border-foreground/10 flex flex-row overflow-hidden rounded-xl border",
+        "hover:!border-foreground/30 h-full min-h-[156px] transition-all hover:shadow-md",
         className,
       )}
     >
       {/* Dot pattern sidebar */}
-      <div className="w-40 shrink-0 overflow-hidden border-r relative bg-muted/30 text-muted-foreground/20">
+      <div className="bg-muted/30 text-muted-foreground/20 relative w-40 shrink-0 overflow-hidden border-r">
         <div
-          className="absolute inset-0 scroll-dots-target"
+          className="scroll-dots-target absolute inset-0"
           style={{
             backgroundImage:
               "radial-gradient(circle, currentColor 1px, transparent 1px)",
@@ -44,7 +44,7 @@ export function DotCard({
         />
         {icon && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="bg-background/90 backdrop-blur-sm dark:bg-neutral-800 dark:backdrop-blur-none rounded-lg p-3 shadow-lg">
+            <div className="bg-background/90 rounded-lg p-3 shadow-lg backdrop-blur-sm dark:bg-neutral-800 dark:backdrop-blur-none">
               {icon}
             </div>
           </div>
@@ -53,7 +53,7 @@ export function DotCard({
       </div>
 
       {/* Content area */}
-      <div className="p-4 flex flex-col flex-1 min-w-0">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-col p-4">{children}</div>
     </div>
   );
 }

@@ -31,10 +31,10 @@ function Indicator() {
   return (
     <div
       className={cn(
-        "flex items-center justify-center w-7 h-7 rounded-full bg-accent mt-1 [grid-area:indicator]",
+        "bg-accent mt-1 flex h-7 w-7 items-center justify-center rounded-full [grid-area:indicator]",
         step.isCurrentStep && "bg-primary text-primary-foreground",
         step.state === "completed" &&
-          "dark:bg-emerald-900 dark:text-emerald-300 bg-emerald-300 text-emerald-900",
+          "bg-emerald-300 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-300",
         step.state === "failed" && "bg-destructive text-destructive-foreground",
       )}
     >
@@ -67,9 +67,9 @@ function Header({
 }) {
   return (
     <div className="[grid-area=header]">
-      <h2 className="text-2xl font-light capitalize">{title}</h2>
+      <h2 className="text-2xl font-normal capitalize">{title}</h2>
       {description && (
-        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        <p className="text-muted-foreground mt-1 text-sm">{description}</p>
       )}
     </div>
   );

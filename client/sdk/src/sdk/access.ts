@@ -4,6 +4,9 @@
 
 import { accessCreateRole } from "../funcs/accessCreateRole.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
+import { accessDisableRBAC } from "../funcs/accessDisableRBAC.js";
+import { accessEnableRBAC } from "../funcs/accessEnableRBAC.js";
+import { accessGetRBACStatus } from "../funcs/accessGetRBACStatus.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
 import { accessListMembers } from "../funcs/accessListMembers.js";
@@ -48,6 +51,63 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessDeleteRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * disableRBAC access
+   *
+   * @remarks
+   * Disable RBAC enforcement for the current organization.
+   */
+  async disableRBAC(
+    request?: operations.DisableRBACRequest | undefined,
+    security?: operations.DisableRBACSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(accessDisableRBAC(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * enableRBAC access
+   *
+   * @remarks
+   * Enable RBAC for the current organization. Seeds default grants for system roles.
+   */
+  async enableRBAC(
+    request?: operations.EnableRBACRequest | undefined,
+    security?: operations.EnableRBACSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(accessEnableRBAC(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getRBACStatus access
+   *
+   * @remarks
+   * Returns whether RBAC is currently enabled for the current organization.
+   */
+  async getRBACStatus(
+    request?: operations.GetRBACStatusRequest | undefined,
+    security?: operations.GetRBACStatusSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.RBACStatus> {
+    return unwrapAsync(accessGetRBACStatus(
       this,
       request,
       security,

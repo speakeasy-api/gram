@@ -17,6 +17,8 @@ import (
 	"github.com/workos/workos-go/v6/pkg/roles"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -208,7 +210,7 @@ func (f *fakeWorkOS) handleListMembers(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	var filtered []usermanagement.OrganizationMembership
 	for _, m := range f.memberships {
-		if m.OrganizationID == orgID && (userID == "" || m.UserID == userID) {
+		if (orgID == "" || m.OrganizationID == orgID) && (userID == "" || m.UserID == userID) {
 			filtered = append(filtered, m)
 		}
 	}
@@ -455,7 +457,11 @@ func newTestClient(t *testing.T, fake *fakeWorkOS) (*workos.Client, *fakeWorkOS)
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 
-	client := workos.NewClient("test-api-key", workos.ClientOpts{
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	client := workos.NewClient(guardianPolicy, "test-api-key", workos.ClientOpts{
 		Endpoint:   srv.URL,
 		HTTPClient: &http.Client{Timeout: 10 * time.Second},
 	})
@@ -670,6 +676,26 @@ func TestRoleClient_GetUserByEmail(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "user_1", user.ID)
 	require.Equal(t, "Jane", user.FirstName)
+}
+
+func TestRoleClient_ListUserMemberships(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.memberships = []usermanagement.OrganizationMembership{
+		{ID: "mem_1", UserID: "user_1", OrganizationID: "org_1", Role: common.RoleResponse{Slug: "admin"}, Status: usermanagement.Active},
+		{ID: "mem_2", UserID: "user_1", OrganizationID: "org_2", Role: common.RoleResponse{Slug: "member"}, Status: usermanagement.Active},
+		{ID: "mem_3", UserID: "user_2", OrganizationID: "org_1", Role: common.RoleResponse{Slug: "member"}, Status: usermanagement.Active},
+	}
+	client, _ := newTestClient(t, fake)
+
+	// Should return only memberships for user_1 across all orgs in one call.
+	memberships, err := client.ListUserMemberships(context.Background(), "user_1")
+	require.NoError(t, err)
+	require.Len(t, memberships, 2)
+	require.Equal(t, "mem_1", memberships[0].ID)
+	require.Equal(t, "org_1", memberships[0].OrganizationID)
+	require.Equal(t, "mem_2", memberships[1].ID)
+	require.Equal(t, "org_2", memberships[1].OrganizationID)
 }
 
 func TestRoleClient_GetOrgMembership(t *testing.T) {

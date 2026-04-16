@@ -33,8 +33,8 @@ const columns: Column<ToolWithDisplayName>[] = [
     header: "Name",
     key: "name",
     render: (row) => (
-      <Stack gap={2} className="break-all min-w-[175px] mr-[-24px]">
-        <Type className="text-wrap break-all font-medium ">
+      <Stack gap={2} className="mr-[-24px] min-w-[175px] break-all">
+        <Type className="font-medium text-wrap break-all ">
           {row.displayName || row.name}
         </Type>
         {row.type === "http" && (
@@ -48,7 +48,7 @@ const columns: Column<ToolWithDisplayName>[] = [
     header: "Description",
     key: "description",
     render: (row) => (
-      <Type muted className="line-clamp-2 overflow-auto self-start">
+      <Type muted className="line-clamp-2 self-start overflow-auto">
         {row.description}
         {!row.description && (
           <span className="text-muted-foreground italic">No description.</span>
@@ -146,7 +146,7 @@ export function ToolsList(props: { deploymentId?: string }) {
               hideHeader
               renderExpandedContent={(group) => (
                 // This div is necessary to apply the bottom border to the table
-                <div className="bg-stone-50 border-b-1 dark:bg-card max-h-[500px] overflow-y-auto">
+                <div className="dark:bg-card max-h-[500px] overflow-y-auto border-b-1 bg-stone-50">
                   <Table
                     columns={columns}
                     data={group.tools}

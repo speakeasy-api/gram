@@ -1,0 +1,29 @@
+{
+  "include": ["ui"],
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "noEmit": true,
+
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "types": [],
+    "jsx": "react-jsx",
+
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true
+  }
+}

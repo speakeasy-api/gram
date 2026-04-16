@@ -264,17 +264,18 @@ type EnvironmentEntry struct {
 }
 
 type ExternalMcpAttachment struct {
-	ID                      uuid.UUID
-	DeploymentID            uuid.UUID
-	RegistryID              uuid.UUID
-	Name                    string
-	Slug                    string
-	RegistryServerSpecifier string
-	SelectedRemotes         []string
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
-	DeletedAt               pgtype.Timestamptz
-	Deleted                 bool
+	ID                                  uuid.UUID
+	DeploymentID                        uuid.UUID
+	RegistryID                          uuid.NullUUID
+	OrganizationMcpCollectionRegistryID uuid.NullUUID
+	Name                                string
+	Slug                                string
+	RegistryServerSpecifier             string
+	SelectedRemotes                     []string
+	CreatedAt                           pgtype.Timestamptz
+	UpdatedAt                           pgtype.Timestamptz
+	DeletedAt                           pgtype.Timestamptz
+	Deleted                             bool
 }
 
 type ExternalMcpToolDefinition struct {
@@ -680,6 +681,41 @@ type PackageVersion struct {
 	Deleted      bool
 }
 
+type Plugin struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+	Description    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type PluginAssignment struct {
+	ID             uuid.UUID
+	PluginID       uuid.UUID
+	OrganizationID string
+	PrincipalUrn   string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type PluginServer struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	ToolsetID   uuid.UUID
+	DisplayName string
+	Policy      string
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	Deleted     bool
+}
+
 // RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource='*' means unrestricted.
 type PrincipalGrant struct {
 	ID uuid.UUID
@@ -745,6 +781,32 @@ type PromptTemplate struct {
 	UpdatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	Deleted       bool
+}
+
+type RemoteMcpServer struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	TransportType string
+	Url           string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
+}
+
+type RemoteMcpServerHeader struct {
+	ID                     uuid.UUID
+	RemoteMcpServerID      uuid.UUID
+	Name                   string
+	Description            pgtype.Text
+	IsRequired             bool
+	IsSecret               bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
 type SlackApp struct {

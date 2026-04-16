@@ -30,16 +30,16 @@ function ChangedFieldRow({
   newValue: unknown;
 }) {
   return (
-    <div className="flex items-start gap-3 border-b border-border/50 px-3 py-2 last:border-b-0">
-      <span className="w-[140px] shrink-0 pt-0.5 font-mono text-xs font-medium text-muted-foreground">
+    <div className="border-border/50 flex items-start gap-3 border-b px-3 py-2 last:border-b-0">
+      <span className="text-muted-foreground w-[140px] shrink-0 pt-0.5 font-mono text-xs font-medium">
         {field}
       </span>
       <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2">
-        <span className="max-w-full break-all rounded bg-red-50 px-2 py-0.5 font-mono text-xs text-red-700 line-through dark:bg-red-950 dark:text-red-400">
+        <span className="max-w-full rounded bg-red-50 px-2 py-0.5 font-mono text-xs break-all text-red-700 line-through dark:bg-red-950 dark:text-red-400">
           {formatValue(oldValue)}
         </span>
-        <span className="pt-0.5 text-xs text-muted-foreground">→</span>
-        <span className="max-w-full break-all rounded bg-emerald-50 px-2 py-0.5 font-mono text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+        <span className="text-muted-foreground pt-0.5 text-xs">→</span>
+        <span className="max-w-full rounded bg-emerald-50 px-2 py-0.5 font-mono text-xs break-all text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
           {formatValue(newValue)}
         </span>
       </div>
@@ -68,7 +68,7 @@ export function StructuredDiff({ log }: { log: AuditLog }) {
         <HighlightProvider>
           <Suspense
             fallback={
-              <div className="flex items-center gap-2 text-muted-foreground">
+              <div className="text-muted-foreground flex items-center gap-2">
                 <Icon name="loader-circle" className="size-4 animate-spin" />
                 <span>Loading diff...</span>
               </div>
@@ -84,15 +84,15 @@ export function StructuredDiff({ log }: { log: AuditLog }) {
   return (
     <div className="mt-2">
       <div className="flex items-center gap-2 py-1">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
           Changed fields
         </span>
-        <div className="h-px flex-1 bg-border" />
-        <span className="text-[11px] text-muted-foreground">
+        <div className="bg-border h-px flex-1" />
+        <span className="text-muted-foreground text-[11px]">
           {changes.length} field{changes.length === 1 ? "" : "s"} changed
         </span>
       </div>
-      <div className="rounded-md border bg-background">
+      <div className="bg-background rounded-md border">
         {changes.map((change) => (
           <ChangedFieldRow
             key={change.field}

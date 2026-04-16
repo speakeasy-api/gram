@@ -16,8 +16,8 @@ export default function FunctionsOnboarding() {
           {/* Header */}
           <Stack gap={3} className="mb-8">
             <Stack direction="horizontal" gap={3} align="center">
-              <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                <CodeIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+                <CodeIcon className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               </div>
               <Heading variant="h3">Add Custom Functions</Heading>
             </Stack>

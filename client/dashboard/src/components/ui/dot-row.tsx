@@ -19,17 +19,17 @@ export function DotRow({ children, icon, className, onClick }: DotRowProps) {
     <tr
       onClick={onClick}
       className={cn(
-        "dot-card group border-b border-foreground/10 transition-all",
+        "dot-card group border-foreground/10 border-b transition-all",
         "hover:bg-muted/30",
         onClick && "cursor-pointer",
         className,
       )}
     >
       {/* Dot pattern cell */}
-      <td className="size-17 p-0 relative overflow-hidden">
-        <div className="absolute inset-0 bg-muted/30 text-muted-foreground/20">
+      <td className="relative size-17 overflow-hidden p-0">
+        <div className="bg-muted/30 text-muted-foreground/20 absolute inset-0">
           <div
-            className="absolute inset-0 scroll-dots-target"
+            className="scroll-dots-target absolute inset-0"
             style={{
               backgroundImage:
                 "radial-gradient(circle, currentColor 1px, transparent 1px)",
@@ -38,7 +38,7 @@ export function DotRow({ children, icon, className, onClick }: DotRowProps) {
           />
           {icon && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="bg-background/90 backdrop-blur-sm dark:bg-neutral-800 dark:backdrop-blur-none rounded-md p-1.5 shadow-sm">
+              <div className="bg-background/90 rounded-md p-1.5 shadow-sm backdrop-blur-sm dark:bg-neutral-800 dark:backdrop-blur-none">
                 {icon}
               </div>
             </div>

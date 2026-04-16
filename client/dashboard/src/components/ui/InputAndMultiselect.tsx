@@ -109,12 +109,12 @@ export function InputAndMultiselect({
           onChange={(e) => onChange(e.target.value)}
           onFocus={handleFocus}
           placeholder={placeholder}
-          className="w-full h-9 px-3 pr-9 rounded-md border border-input bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-9 w-full rounded-md border px-3 pr-9 font-mono text-sm focus:ring-2 focus:outline-none"
         />
         {type === "password" && (
           <button
             onClick={() => setShowValue(!showValue)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2 transition-colors"
             type="button"
           >
             {showValue ? (
@@ -131,7 +131,7 @@ export function InputAndMultiselect({
         createPortal(
           <div
             ref={dropdownRef}
-            className="bg-popover border border-border rounded-md shadow-md z-100 p-1 max-h-[300px] overflow-y-auto"
+            className="bg-popover border-border z-100 max-h-[300px] overflow-y-auto rounded-md border p-1 shadow-md"
             style={{
               position: "absolute",
               top: `${dropdownPosition.top}px`,
@@ -147,12 +147,12 @@ export function InputAndMultiselect({
               return (
                 <div
                   key={option.value}
-                  className="px-3 py-2 text-sm rounded-sm cursor-pointer hover:bg-accent flex items-center gap-2"
+                  className="hover:bg-accent flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm"
                   onClick={() => toggleOption(option.value)}
                 >
                   <div
                     className={cn(
-                      "w-4 h-4 rounded-sm border flex items-center justify-center",
+                      "flex h-4 w-4 items-center justify-center rounded-sm border",
                       isSelected
                         ? "bg-primary border-primary text-primary-foreground"
                         : isIndeterminate

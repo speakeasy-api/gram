@@ -253,6 +253,65 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateMemberRole"}`)
 	})
 
+	Method("getRBACStatus", func() {
+		Description("Returns whether RBAC is currently enabled for the current organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(RBACStatus)
+
+		HTTP(func() {
+			GET("/rpc/access.getRBACStatus")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRBACStatus")
+		Meta("openapi:extension:x-speakeasy-name-override", "getRBACStatus")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RBACStatus"}`)
+	})
+
+	Method("enableRBAC", func() {
+		Description("Enable RBAC for the current organization. Seeds default grants for system roles.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/access.enableRBAC")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "enableRBAC")
+		Meta("openapi:extension:x-speakeasy-name-override", "enableRBAC")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnableRBAC"}`)
+	})
+
+	Method("disableRBAC", func() {
+		Description("Disable RBAC enforcement for the current organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/access.disableRBAC")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "disableRBAC")
+		Meta("openapi:extension:x-speakeasy-name-override", "disableRBAC")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DisableRBAC"}`)
+	})
+
 })
 
 var RoleGrantModel = Type("RoleGrant", func() {
@@ -262,9 +321,28 @@ var RoleGrantModel = Type("RoleGrant", func() {
 		Description("The scope slug this grant applies to.")
 		Enum("org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect")
 	})
+
 	Attribute("resources", ArrayOf(String), func() {
 		Description("Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.")
 	})
+})
+
+// The response for the ListUserGrants endpoint. This endpoint is special in that it returns the inherited scopes the primary scope grants.
+var ListRoleGrantModel = Type("ListRoleGrant", func() {
+	Required("scope")
+
+	Attribute("scope", String, func() {
+		Description("The scope slug this grant applies to.")
+		Enum("org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect")
+	})
+	Attribute("sub_scopes", ArrayOf(String), func() {
+		Description("The inherited scopes the primary scope grants.")
+		Elem(func() {
+			Enum("org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect")
+		})
+	})
+
+	Attribute("resources", ArrayOf(String), "Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.")
 })
 
 var RoleModel = Type("Role", func() {
@@ -348,7 +426,7 @@ var ListMembersResult = Type("ListMembersResult", func() {
 
 var ListUserGrantsResult = Type("ListUserGrantsResult", func() {
 	Required("grants")
-	Attribute("grants", ArrayOf(RoleGrantModel), "The user's effective grants in this organization.")
+	Attribute("grants", ArrayOf(ListRoleGrantModel), "The user's effective grants in this organization.")
 })
 
 var UpdateMemberRoleForm = Type("UpdateMemberRoleForm", func() {
@@ -356,4 +434,9 @@ var UpdateMemberRoleForm = Type("UpdateMemberRoleForm", func() {
 
 	Attribute("user_id", String, "The user ID to update.")
 	Attribute("role_id", String, "The new role ID to assign.")
+})
+
+var RBACStatus = Type("RBACStatus", func() {
+	Required("rbac_enabled")
+	Attribute("rbac_enabled", Boolean, "Whether RBAC enforcement is currently enabled for this organization.")
 })

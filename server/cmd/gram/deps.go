@@ -38,13 +38,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -68,6 +71,26 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 		cfgLoader = altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc("config-file"))
 	}
 	return cfgLoader(c)
+}
+
+func newGuardianPolicy(c *cli.Context, tracerProvider trace.TracerProvider) (policy *guardian.Policy, err error) {
+	// In local development, allow loopback addresses for internal tool-to-tool communication
+	if c.String("environment") == "local" {
+		policy, err = guardian.NewUnsafePolicy(tracerProvider, []string{}) // Allow all traffic for local development
+		if err != nil {
+			return nil, fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
+		}
+	} else {
+		policy = guardian.NewDefaultPolicy(tracerProvider)
+	}
+	if s := c.StringSlice("disallowed-cidr-blocks"); s != nil {
+		policy, err = guardian.NewUnsafePolicy(tracerProvider, s)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
+		}
+	}
+
+	return policy, nil
 }
 
 func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
@@ -377,6 +400,7 @@ func newBillingProvider(
 	ctx context.Context,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	guardianPolicy *guardian.Policy,
 	redisClient *redis.Client,
 	posthogClient *posthog.Posthog,
 	c *cli.Context,
@@ -395,7 +419,7 @@ func newBillingProvider(
 		}
 		polarAPIKey := c.String("polar-api-key")
 		polarsdk := polargo.New(polargo.WithSecurity(polarAPIKey), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
-		pclient := polar.NewClient(polarsdk, polarAPIKey, logger, tracerProvider, redisClient, catalog, c.String("polar-webhook-secret"))
+		pclient := polar.NewClient(guardianPolicy, polarsdk, polarAPIKey, logger, tracerProvider, redisClient, catalog, c.String("polar-webhook-secret"))
 		tracker := tracking.New(pclient, posthogClient, logger)
 		return pclient, tracker, nil
 	case c.String("environment") == "local":
@@ -407,12 +431,12 @@ func newBillingProvider(
 	}
 }
 
-func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, c *cli.Context) (access.RoleProvider, error) {
+func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) (access.RoleProvider, error) {
 	apiKey := c.String("workos-api-key")
 
 	switch {
 	case apiKey != "" && apiKey != "unset":
-		return workos.NewClient(apiKey), nil
+		return workos.NewClient(guardianPolicy, apiKey), nil
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
 		return workos.NewStubClient(), nil
@@ -421,7 +445,7 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, c *cli.Cont
 	}
 }
 
-func newWorkOSClient(c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
+func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
 	env := c.String("environment")
 	apiKey := c.String("workos-api-key")
 
@@ -430,7 +454,7 @@ func newWorkOSClient(c *cli.Context) (client *workos.Client, workosAvailable boo
 		return nil, false, errors.New("WorkOS API key not provided")
 	}
 
-	return workos.NewClient(apiKey), haveAPIKey, nil
+	return workos.NewClient(guardianPolicy, apiKey), haveAPIKey, nil
 }
 
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {
@@ -496,6 +520,7 @@ func newFunctionOrchestrator(
 	c *cli.Context,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	assetStore assets.BlobStore,
 	tigrisStore *assets.TigrisStore,
@@ -520,7 +545,7 @@ func newFunctionOrchestrator(
 			return nil, nilShutdown, fmt.Errorf("parse server url for local functions provider: %w", err)
 		}
 
-		return functions.NewLocalRunner(logger, codeRootDir, serverURL, assetStore), nilShutdown, nil
+		return functions.NewLocalRunner(logger, tracerProvider, codeRootDir, serverURL, assetStore), nilShutdown, nil
 	case "flyio":
 		surl := c.String("server-url")
 		tokenstr := c.String("functions-flyio-api-token")
@@ -553,6 +578,7 @@ func newFunctionOrchestrator(
 		return functions.NewFlyRunner(
 			logger,
 			tracerProvider,
+			guardianPolicy,
 			serverURL,
 			db,
 			assetStore,
@@ -580,7 +606,7 @@ type mcpRegistryClientOptions struct {
 	cacheImpl     cache.Cache
 }
 
-func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, opts mcpRegistryClientOptions) (*externalmcp.RegistryClient, error) {
+func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, opts mcpRegistryClientOptions) (*externalmcp.RegistryClient, error) {
 	pulseURL, err := url.Parse("https://api.pulsemcp.com")
 	if err != nil {
 		return nil, fmt.Errorf("parse pulse registry url: %w", err)
@@ -588,7 +614,7 @@ func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvid
 
 	backend := externalmcp.NewPulseBackend(pulseURL, opts.pulseTenantID, opts.pulseAPIKey)
 
-	return externalmcp.NewRegistryClient(logger, tracerProvider, backend, opts.cacheImpl), nil
+	return externalmcp.NewRegistryClient(logger, tracerProvider, guardianPolicy, backend, opts.cacheImpl), nil
 }
 
 func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat productfeatures.Feature) telemetry.FeatureChecker {
@@ -604,4 +630,61 @@ func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat pro
 		}
 		return isEnabled, nil
 	}
+}
+
+func newTelemetryLogger(
+	ctx context.Context,
+	logger *slog.Logger,
+	chDB clickhouse.Conn,
+	logsEnabled telemetry.FeatureChecker,
+	toolIOLogsEnabled telemetry.FeatureChecker,
+) (*telemetry.Logger, func(context.Context) error) {
+	// #nosec G118 -- this context must be tied to the lifetime of the
+	// application and not cancelled coming out of this function.
+	shutdownCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	shutdown := func(context.Context) error {
+		cancel()
+		return nil
+	}
+
+	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled), shutdown
+}
+
+func newTriggersApp(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	enc *encryption.Client,
+	temporalEnv *temporal.Environment,
+	telemetryLogger *telemetry.Logger,
+	serverURL *url.URL,
+) *bgtriggers.App {
+	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
+	return bgtriggers.NewApp(
+		logger,
+		db,
+		temporalEnv,
+		envEntries,
+		bgtriggers.NewTriggerDeliveryLogger(func(ctx context.Context, entry bgtriggers.TriggerDeliveryLog) {
+			if telemetryLogger == nil {
+				return
+			}
+
+			entry.Attributes[attr.EventSourceKey] = string(telemetry.EventSourceTrigger)
+			telemetryLogger.Log(ctx, telemetry.LogParams{
+				Timestamp: entry.Timestamp,
+				ToolInfo: telemetry.ToolInfo{
+					ID:             entry.Instance.ID.String(),
+					URN:            "urn:uuid:" + entry.Instance.ID.String(),
+					Name:           "trigger:" + entry.Instance.DefinitionSlug,
+					ProjectID:      entry.Instance.ProjectID.String(),
+					DeploymentID:   "",
+					FunctionID:     nil,
+					OrganizationID: entry.Instance.OrganizationID,
+				},
+				Attributes: entry.Attributes,
+			})
+		}),
+		serverURL,
+		bgtriggers.NewNoopDispatcher(logger),
+	)
 }

@@ -1,6 +1,6 @@
 import { Page } from "@/components/page-layout";
 import {
-  InsightsSidebar,
+  InsightsConfig,
   useInsightsState,
 } from "@/components/insights-sidebar";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
@@ -22,7 +22,9 @@ import type { GetObservabilityOverviewResult } from "@gram/client/models/compone
 import { FilterType } from "@gram/client/models/components/listfilteroptionspayload";
 import React, { useState, useRef, useCallback, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router";
-import { Icon, IconName } from "@speakeasy-api/moonshine";
+import { Icon } from "@speakeasy-api/moonshine";
+import { MetricCard } from "@/components/chart/MetricCard";
+import { smoothData, formatChartLabel } from "@/components/chart/chartUtils";
 import {
   Popover,
   PopoverContent,
@@ -124,12 +126,12 @@ function hasTimeSeriesChatData(
  */
 function NoDataOverlay() {
   return (
-    <div className="absolute inset-0 bg-background/80 backdrop-blur-[1px] flex flex-col items-center justify-center rounded">
+    <div className="bg-background/80 absolute inset-0 flex flex-col items-center justify-center rounded backdrop-blur-[1px]">
       <Icon
         name="chart-line"
-        className="size-8 text-muted-foreground/50 mb-2"
+        className="text-muted-foreground/50 mb-2 size-8"
       />
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         No data for selected time range
       </p>
     </div>
@@ -155,10 +157,10 @@ function SetupRequiredModal({
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <Dialog.Content className="sm:max-w-md">
         <Dialog.Header className="text-center">
-          <div className="mx-auto size-14 rounded-full bg-muted flex items-center justify-center mb-2">
+          <div className="bg-muted mx-auto mb-2 flex size-14 items-center justify-center rounded-full">
             <Icon
               name="message-circle"
-              className="size-7 text-muted-foreground"
+              className="text-muted-foreground size-7"
             />
           </div>
           <Dialog.Title className="text-center">
@@ -170,9 +172,9 @@ function SetupRequiredModal({
           </Dialog.Description>
         </Dialog.Header>
         <div className="space-y-4 pt-2">
-          <div className="rounded-lg border border-border bg-muted/30 p-4">
-            <h4 className="text-sm font-medium mb-2">What you'll get:</h4>
-            <ul className="text-sm text-muted-foreground space-y-1.5">
+          <div className="border-border bg-muted/30 rounded-lg border p-4">
+            <h4 className="mb-2 text-sm font-medium">What you'll get:</h4>
+            <ul className="text-muted-foreground space-y-1.5 text-sm">
               <li className="flex items-center gap-2">
                 <Icon name="check" className="size-4 text-emerald-500" />
                 Chat resolution tracking and analytics
@@ -209,7 +211,7 @@ function ViewChatsLink({ from, to }: { from: Date; to: Date }) {
   return (
     <routes.chatSessions.Link
       queryParams={{ from: from.toISOString(), to: to.toISOString() }}
-      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors no-underline hover:no-underline"
+      className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm no-underline transition-colors hover:no-underline"
     >
       View chats
       <ChevronRight className="size-4" />
@@ -225,7 +227,7 @@ function ViewLogsLink({ from, to }: { from: Date; to: Date }) {
         from: toLocalISOString(from),
         to: toLocalISOString(to),
       }}
-      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors no-underline hover:no-underline"
+      className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm no-underline transition-colors hover:no-underline"
     >
       View logs
       <ChevronRight className="size-4" />
@@ -271,13 +273,13 @@ function FilterBar({
 
   return (
     <div
-      className={`flex items-center gap-2 ${disabled ? "opacity-50 pointer-events-none" : ""}`}
+      className={`flex items-center gap-2 ${disabled ? "pointer-events-none opacity-50" : ""}`}
     >
-      <span className="text-sm text-muted-foreground font-medium hidden 2xl:inline">
+      <span className="text-muted-foreground hidden text-sm font-medium 2xl:inline">
         Filter by
       </span>
       {/* Integrated segmented control with dropdown */}
-      <div className="flex items-center h-[42px] rounded-md p-1 border border-border">
+      <div className="border-border flex h-[42px] items-center rounded-md border p-1">
         {(["all", "api_key", "user"] as const).map((value) => {
           const isSelected = dimension === value;
           const label =
@@ -288,10 +290,10 @@ function FilterBar({
               onClick={() => onDimensionChange(value)}
               disabled={disabled}
               className={`
-                h-8 px-3 text-sm font-medium transition-all duration-150 rounded
+                h-8 rounded px-3 text-sm font-medium transition-all duration-150
                 ${
                   isSelected
-                    ? "bg-white dark:bg-gray-900 text-foreground shadow-sm"
+                    ? "text-foreground bg-white shadow-sm dark:bg-gray-900"
                     : "text-muted-foreground hover:text-foreground"
                 }
                 disabled:cursor-not-allowed
@@ -303,7 +305,7 @@ function FilterBar({
         })}
 
         {/* Integrated searchable dropdown - always visible */}
-        <div className="w-px h-6 bg-border/50 mx-1" />
+        <div className="bg-border/50 mx-1 h-6 w-px" />
         <Popover
           open={dimension !== "all" && !disabled && open}
           onOpenChange={setOpen}
@@ -311,14 +313,14 @@ function FilterBar({
           <PopoverTrigger asChild>
             <button
               disabled={dimension === "all" || disabled}
-              className={`h-8 min-w-[140px] flex items-center justify-between gap-2 text-sm px-2 rounded transition-colors ${
+              className={`flex h-8 min-w-[140px] items-center justify-between gap-2 rounded px-2 text-sm transition-colors ${
                 dimension === "all" || disabled
-                  ? "opacity-40 cursor-not-allowed"
+                  ? "cursor-not-allowed opacity-40"
                   : "hover:bg-muted/50"
               }`}
             >
-              <span className="truncate max-w-[120px]">{displayLabel}</span>
-              <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+              <span className="max-w-[120px] truncate">{displayLabel}</span>
+              <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-[220px] p-0" align="end">
@@ -358,11 +360,11 @@ function FilterBar({
                       <Check
                         className={`mr-2 size-4 ${selectedValue === option.id ? "opacity-100" : "opacity-0"}`}
                       />
-                      <div className="flex items-center justify-between w-full gap-2">
+                      <div className="flex w-full items-center justify-between gap-2">
                         <span className="truncate">
                           {option.label || option.id}
                         </span>
-                        <span className="text-muted-foreground text-xs tabular-nums shrink-0">
+                        <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                           {option.count.toLocaleString()}
                         </span>
                       </div>
@@ -401,31 +403,31 @@ function MCPServerFilter({
 
   return (
     <div
-      className={`flex items-center gap-2 ${disabled ? "opacity-50 pointer-events-none" : ""}`}
+      className={`flex items-center gap-2 ${disabled ? "pointer-events-none opacity-50" : ""}`}
     >
-      <span className="text-sm text-muted-foreground font-medium hidden 2xl:inline">
+      <span className="text-muted-foreground hidden text-sm font-medium 2xl:inline">
         Filter by
       </span>
-      <div className="flex items-center h-[42px] rounded-md p-1 border border-border">
-        <div className="flex items-center gap-1.5 h-8 px-3">
-          <McpIcon className="size-3.5 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">Server</span>
+      <div className="border-border flex h-[42px] items-center rounded-md border p-1">
+        <div className="flex h-8 items-center gap-1.5 px-3">
+          <McpIcon className="text-muted-foreground size-3.5" />
+          <span className="text-foreground text-sm font-medium">Server</span>
         </div>
-        <div className="w-px h-6 bg-border/50 mx-1" />
+        <div className="bg-border/50 mx-1 h-6 w-px" />
         <Popover open={!disabled && open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <button
               disabled={disabled || isLoading}
-              className={`h-8 min-w-[140px] flex items-center justify-between gap-2 text-sm px-2 rounded transition-colors ${
+              className={`flex h-8 min-w-[140px] items-center justify-between gap-2 rounded px-2 text-sm transition-colors ${
                 disabled || isLoading
-                  ? "opacity-40 cursor-not-allowed"
+                  ? "cursor-not-allowed opacity-40"
                   : "hover:bg-muted/50"
               }`}
             >
-              <span className="truncate max-w-[120px]">
+              <span className="max-w-[120px] truncate">
                 {isLoading ? "Loading..." : displayLabel}
               </span>
-              <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+              <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-[220px] p-0" align="end">
@@ -471,39 +473,6 @@ function MCPServerFilter({
       </div>
     </div>
   );
-}
-
-/**
- * Apply a centered moving average to smooth data (like Datadog).
- * Adapts window size based on data length for consistent visual smoothing.
- */
-function smoothData(data: number[], windowSize?: number): number[] {
-  if (data.length < 3) return data;
-
-  // Scale window size with data length for consistent visual smoothing
-  // Fewer points = larger window percentage to maintain smoothness
-  let window: number;
-  if (windowSize !== undefined) {
-    window = windowSize;
-  } else if (data.length < 20) {
-    // Very zoomed in: use 25-30% of data points
-    window = Math.max(3, Math.floor(data.length * 0.3));
-  } else if (data.length < 50) {
-    // Moderate zoom: use ~15% of data points
-    window = Math.max(5, Math.floor(data.length * 0.15));
-  } else {
-    // Full view: use ~8% of data points, max 21
-    window = Math.max(5, Math.min(21, Math.floor(data.length * 0.08)));
-  }
-
-  const halfWindow = Math.floor(window / 2);
-
-  return data.map((_, i) => {
-    const start = Math.max(0, i - halfWindow);
-    const end = Math.min(data.length, i + halfWindow + 1);
-    const slice = data.slice(start, end);
-    return slice.reduce((a, b) => a + b, 0) / slice.length;
-  });
 }
 
 // Valid date range presets
@@ -831,33 +800,34 @@ export default function ObservabilityOverview() {
   }, [from, to]);
 
   return (
-    <InsightsSidebar
-      mcpConfig={mcpConfig}
-      title="What would you like to know?"
-      subtitle="Ask about metrics, trends, or performance insights"
-      contextInfo={dateRangeContext}
-      hideTrigger={isLogsDisabled}
-      suggestions={[
-        {
-          title: "Resolution Summary",
-          label: "Summarize chat resolutions",
-          prompt:
-            "Summarize the chat resolution metrics for the current period. What's the success rate?",
-        },
-        {
-          title: "Tool Failures",
-          label: "Analyze failing tools",
-          prompt:
-            "Which tools have the highest failure rates? What might be causing the failures?",
-        },
-        {
-          title: "Performance Trends",
-          label: "Analyze trends",
-          prompt:
-            "What trends do you see in the metrics? Are things improving or declining?",
-        },
-      ]}
-    >
+    <>
+      <InsightsConfig
+        mcpConfig={mcpConfig}
+        title="What would you like to know?"
+        subtitle="Ask about metrics, trends, or performance insights"
+        contextInfo={dateRangeContext}
+        hideTrigger={isLogsDisabled}
+        suggestions={[
+          {
+            title: "Resolution Summary",
+            label: "Summarize chat resolutions",
+            prompt:
+              "Summarize the chat resolution metrics for the current period. What's the success rate?",
+          },
+          {
+            title: "Tool Failures",
+            label: "Analyze failing tools",
+            prompt:
+              "Which tools have the highest failure rates? What might be causing the failures?",
+          },
+          {
+            title: "Performance Trends",
+            label: "Analyze trends",
+            prompt:
+              "What trends do you see in the metrics? Are things improving or declining?",
+          },
+        ]}
+      />
       <Page>
         <Page.Header>
           <Page.Header.Breadcrumbs fullWidth />
@@ -902,7 +872,7 @@ export default function ObservabilityOverview() {
           />
         </Page.Body>
       </Page>
-    </InsightsSidebar>
+    </>
   );
 }
 
@@ -955,9 +925,9 @@ function InsightsPageHeader({
           : "flex-row items-center justify-between",
       )}
     >
-      <div className="flex flex-col gap-1 min-w-0">
+      <div className="flex min-w-0 flex-col gap-1">
         <h1 className="text-xl font-semibold">Insights</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Monitor agent sessions, tool performance, and system health
         </p>
       </div>
@@ -1204,16 +1174,16 @@ function ObservabilityContent({
         value={activeTab}
         onValueChange={(v) => onTabChange(v as InsightsTab)}
       >
-        <TabsList className="h-auto bg-transparent p-0 gap-8 rounded-none border-b border-border w-full justify-start">
+        <TabsList className="border-border h-auto w-full justify-start gap-8 rounded-none border-b bg-transparent p-0">
           <TabsTrigger
             value="tools"
-            className="relative h-auto pl-0 pr-8 pb-3 pt-2 flex-none bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+            className="text-muted-foreground data-[state=active]:text-foreground data-[state=active]:after:bg-primary relative h-auto flex-none rounded-none border-none bg-transparent! pt-2 pr-8 pb-3 pl-0 shadow-none! after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent data-[state=active]:bg-transparent!"
           >
             <div className="flex items-center gap-3">
               <McpIcon className="size-5" />
               <div className="flex flex-col items-start text-left">
                 <span className="font-medium">MCP</span>
-                <span className="text-xs text-muted-foreground font-normal">
+                <span className="text-muted-foreground text-xs font-normal">
                   Claude Code, Desktop, etc.
                 </span>
               </div>
@@ -1221,13 +1191,13 @@ function ObservabilityContent({
           </TabsTrigger>
           <TabsTrigger
             value="chats"
-            className="relative h-auto pl-0 pr-8 pb-3 pt-2 flex-none bg-transparent! rounded-none border-none shadow-none! text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent! after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent data-[state=active]:after:bg-primary"
+            className="text-muted-foreground data-[state=active]:text-foreground data-[state=active]:after:bg-primary relative h-auto flex-none rounded-none border-none bg-transparent! pt-2 pr-8 pb-3 pl-0 shadow-none! after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent data-[state=active]:bg-transparent!"
           >
             <div className="flex items-center gap-3">
               <MessageCircle className="size-5" />
               <div className="flex flex-col items-start text-left">
                 <span className="font-medium">Chats</span>
-                <span className="text-xs text-muted-foreground font-normal">
+                <span className="text-muted-foreground text-xs font-normal">
                   Gram Elements SDK
                 </span>
               </div>
@@ -1236,10 +1206,10 @@ function ObservabilityContent({
         </TabsList>
 
         {/* ===== TOOLS TAB ===== */}
-        <TabsContent value="tools" className="space-y-8 mt-6">
+        <TabsContent value="tools" className="mt-6 space-y-8">
           {/* Tool Metrics Section */}
           <section>
-            <h2 className="text-lg font-semibold mb-4">Tool Metrics</h2>
+            <h2 className="mb-4 text-lg font-semibold">Tool Metrics</h2>
             <div className="space-y-4">
               <ToolCallsChart
                 data={timeSeries ?? []}
@@ -1257,8 +1227,8 @@ function ObservabilityContent({
                   isInsightsOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
                 )}
               >
-                <div className="rounded-lg border border-border bg-card p-6">
-                  <h3 className="text-sm font-semibold mb-4">
+                <div className="border-border bg-card rounded-lg border p-6">
+                  <h3 className="mb-4 text-sm font-semibold">
                     Top Tools by Usage
                   </h3>
                   <ToolBarList
@@ -1268,8 +1238,8 @@ function ObservabilityContent({
                     onToolClick={(toolUrn) => navigateToLogs(toolUrn)}
                   />
                 </div>
-                <div className="rounded-lg border border-border bg-card p-6">
-                  <h3 className="text-sm font-semibold mb-4">
+                <div className="border-border bg-card rounded-lg border p-6">
+                  <h3 className="mb-4 text-sm font-semibold">
                     Failure Distribution by Tool
                   </h3>
                   <ToolBarList
@@ -1287,7 +1257,7 @@ function ObservabilityContent({
 
           {/* System Metrics Section */}
           <section>
-            <h2 className="text-lg font-semibold mb-4">System Metrics</h2>
+            <h2 className="mb-4 text-lg font-semibold">System Metrics</h2>
             <div
               className={cn(
                 "grid gap-4",
@@ -1329,9 +1299,9 @@ function ObservabilityContent({
         </TabsContent>
 
         {/* ===== CHATS TAB ===== */}
-        <TabsContent value="chats" className="space-y-8 mt-6">
+        <TabsContent value="chats" className="mt-6 space-y-8">
           <section>
-            <h2 className="text-lg font-semibold mb-4">Chat Resolution</h2>
+            <h2 className="mb-4 text-lg font-semibold">Chat Resolution</h2>
             <div className="space-y-4">
               <div
                 className={cn(
@@ -1449,135 +1419,6 @@ function ObservabilityContent({
       />
     </div>
   );
-}
-
-type ThresholdConfig = {
-  red: number;
-  amber: number;
-  inverted?: boolean; // true if lower is better (like latency)
-};
-
-function getValueColor(value: number, thresholds?: ThresholdConfig): string {
-  if (!thresholds) return "";
-
-  if (thresholds.inverted) {
-    // Lower is better (e.g., latency)
-    if (value > thresholds.red) return "text-red-500";
-    if (value > thresholds.amber) return "text-amber-500";
-    return "text-emerald-600";
-  } else {
-    // Higher is better (e.g., chats, resolution rate)
-    if (value < thresholds.red) return "text-red-500";
-    if (value < thresholds.amber) return "text-amber-500";
-    return "text-emerald-600";
-  }
-}
-
-function MetricCard({
-  title,
-  value,
-  previousValue,
-  format = "number",
-  icon,
-  invertDelta = false,
-  thresholds,
-  comparisonLabel,
-}: {
-  title: string;
-  value: number;
-  previousValue: number;
-  format?: "number" | "percent" | "ms" | "seconds";
-  icon: IconName;
-  invertDelta?: boolean;
-  thresholds?: ThresholdConfig;
-  comparisonLabel?: string;
-}) {
-  const formatValue = (v: number) => {
-    switch (format) {
-      case "percent":
-        return `${v.toFixed(1)}%`;
-      case "ms":
-        return `${v.toFixed(0)}ms`;
-      case "seconds":
-        if (v >= 60) {
-          const mins = Math.floor(v / 60);
-          const secs = Math.round(v % 60);
-          return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
-        }
-        return `${v.toFixed(1)}s`;
-      default:
-        return v.toLocaleString();
-    }
-  };
-
-  const rawDelta =
-    previousValue > 0 ? ((value - previousValue) / previousValue) * 100 : 0;
-  // Cap delta display at 999% to avoid absurd numbers
-  const delta = Math.min(Math.abs(rawDelta), 999);
-  const isPositive = rawDelta > 0;
-  const isGood = invertDelta ? !isPositive : isPositive;
-
-  const valueColor = getValueColor(value, thresholds);
-
-  return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold">{title}</span>
-        <div className="p-2 rounded-lg bg-muted/50">
-          <Icon name={icon} className="size-4 text-muted-foreground" />
-        </div>
-      </div>
-      <div className="flex items-end justify-between">
-        <span className={`text-3xl font-semibold tracking-tight ${valueColor}`}>
-          {formatValue(value)}
-        </span>
-        {previousValue > 0 && delta !== 0 && (
-          <div className="flex flex-col items-end gap-0.5">
-            <div
-              className={`flex items-center gap-1 text-xs font-medium ${
-                isGood ? "text-emerald-600" : "text-red-500"
-              }`}
-            >
-              <Icon
-                name={isPositive ? "trending-up" : "trending-down"}
-                className="size-3"
-              />
-              <span>{delta.toFixed(1)}%</span>
-            </div>
-            {comparisonLabel && (
-              <span className="text-[10px] text-muted-foreground">
-                {comparisonLabel}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function formatChartLabel(date: Date, timeRangeMs: number): string {
-  const hours = timeRangeMs / (1000 * 60 * 60);
-  const days = hours / 24;
-
-  if (hours <= 24) {
-    // ≤24 hours: Show time only "14:00"
-    return date.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } else if (days <= 2) {
-    // ≤2 days: Show date + time "Jan 5, 14:00"
-    return date.toLocaleDateString([], {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } else {
-    // >2 days: Show date only "Jan 5"
-    return date.toLocaleDateString([], { month: "short", day: "numeric" });
-  }
 }
 
 // Chart selection wrapper for drag-to-zoom functionality
@@ -1762,7 +1603,7 @@ function ChartWithSelection({
       {childrenWithRef}
       {selection && selectionWidth > 5 && (
         <div
-          className="absolute top-0 bottom-0 bg-blue-500/20 border-l border-r border-blue-500/50 pointer-events-none"
+          className="pointer-events-none absolute top-0 bottom-0 border-r border-l border-blue-500/50 bg-blue-500/20"
           style={{
             left: selectionLeft,
             width: selectionWidth,
@@ -1770,7 +1611,7 @@ function ChartWithSelection({
         >
           {/* Range label */}
           {selectedRange && selectionWidth > 40 && (
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-background/95 border border-border rounded px-2 py-1 text-xs whitespace-nowrap shadow-sm">
+            <div className="bg-background/95 border-border absolute top-2 left-1/2 -translate-x-1/2 rounded border px-2 py-1 text-xs whitespace-nowrap shadow-sm">
               <span className="text-muted-foreground">
                 {formatRangeDate(selectedRange.from)}
               </span>
@@ -1916,15 +1757,15 @@ function ToolCallsChart({
   };
 
   return (
-    <div className="rounded-lg border border-border bg-card p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="border-border bg-card rounded-lg border p-6">
+      <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
         <ViewLogsLink from={from} to={to} />
       </div>
       <div className="relative">
         {isLoading && (
-          <div className="absolute inset-0 bg-background/60 flex items-center justify-center rounded">
-            <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
+          <div className="bg-background/60 absolute inset-0 flex items-center justify-center rounded">
+            <div className="border-muted-foreground/50 size-5 animate-spin rounded-full border-2 border-t-transparent" />
           </div>
         )}
         {showNoData && <NoDataOverlay />}
@@ -2048,15 +1889,15 @@ function ResolvedChatsChart({
   };
 
   return (
-    <div className="rounded-lg border border-border bg-card p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="border-border bg-card rounded-lg border p-6">
+      <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
         <ViewChatsLink from={from} to={to} />
       </div>
       <div className="relative">
         {isLoading && (
-          <div className="absolute inset-0 bg-background/60 flex items-center justify-center rounded">
-            <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
+          <div className="bg-background/60 absolute inset-0 flex items-center justify-center rounded">
+            <div className="border-muted-foreground/50 size-5 animate-spin rounded-full border-2 border-t-transparent" />
           </div>
         )}
         {showNoData && <NoDataOverlay />}
@@ -2064,7 +1905,7 @@ function ResolvedChatsChart({
           <Line data={chartData} options={options} />
         </ChartWithSelection>
       </div>
-      <p className="text-xs text-muted-foreground mt-3">
+      <p className="text-muted-foreground mt-3 text-xs">
         Percentage of chats successfully resolved per interval
       </p>
     </div>
@@ -2281,15 +2122,15 @@ function ResolutionStatusChart({
   };
 
   return (
-    <div className="rounded-lg border border-border bg-card p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="border-border bg-card rounded-lg border p-6">
+      <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
         <ViewChatsLink from={from} to={to} />
       </div>
       <div className="relative">
         {isLoading && (
-          <div className="absolute inset-0 bg-background/60 flex items-center justify-center rounded">
-            <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
+          <div className="bg-background/60 absolute inset-0 flex items-center justify-center rounded">
+            <div className="border-muted-foreground/50 size-5 animate-spin rounded-full border-2 border-t-transparent" />
           </div>
         )}
         {showNoData && <NoDataOverlay />}
@@ -2297,7 +2138,7 @@ function ResolutionStatusChart({
           <Line data={chartData} options={options} />
         </ChartWithSelection>
       </div>
-      <p className="text-xs text-muted-foreground mt-3">
+      <p className="text-muted-foreground mt-3 text-xs">
         Chat counts by resolution status over time
       </p>
     </div>
@@ -2418,15 +2259,15 @@ function SessionDurationChart({
   };
 
   return (
-    <div className="rounded-lg border border-border bg-card p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="border-border bg-card rounded-lg border p-6">
+      <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
         <ViewChatsLink from={from} to={to} />
       </div>
       <div className="relative">
         {isLoading && (
-          <div className="absolute inset-0 bg-background/60 flex items-center justify-center rounded">
-            <div className="size-5 border-2 border-muted-foreground/50 border-t-transparent rounded-full animate-spin" />
+          <div className="bg-background/60 absolute inset-0 flex items-center justify-center rounded">
+            <div className="border-muted-foreground/50 size-5 animate-spin rounded-full border-2 border-t-transparent" />
           </div>
         )}
         {showNoData && <NoDataOverlay />}
@@ -2434,7 +2275,7 @@ function SessionDurationChart({
           <Line data={chartData} options={options} />
         </ChartWithSelection>
       </div>
-      <p className="text-xs text-muted-foreground mt-3">
+      <p className="text-muted-foreground mt-3 text-xs">
         Values are rolled up and averaged across the time window interval
       </p>
     </div>
@@ -2513,7 +2354,7 @@ function ToolBarList({
 
   if (barListData.length === 0) {
     return (
-      <div className="text-center text-muted-foreground py-8">
+      <div className="text-muted-foreground py-8 text-center">
         No tool data available
       </div>
     );
@@ -2540,17 +2381,17 @@ function ToolBarList({
             <div
               key={item.name}
               className={cn(
-                "flex items-center gap-2 group",
+                "group flex items-center gap-2",
                 onToolClick && "cursor-pointer",
               )}
               onClick={() => onToolClick?.(item.gramUrn)}
             >
-              <span className="text-sm font-medium text-right shrink-0 min-w-[3rem]">
+              <span className="min-w-[3rem] shrink-0 text-right text-sm font-medium">
                 {displayValue}
               </span>
-              <div className="flex-1 relative h-7">
+              <div className="relative h-7 flex-1">
                 {/* Background text (for overflow outside bar) */}
-                <span className="absolute inset-y-0 left-2 flex items-center text-sm font-medium text-foreground truncate pr-8 z-0">
+                <span className="text-foreground absolute inset-y-0 left-2 z-0 flex items-center truncate pr-8 text-sm font-medium">
                   {item.name}
                 </span>
                 {/* Colored bar */}
@@ -2560,17 +2401,17 @@ function ToolBarList({
                 />
                 {/* White text clipped to bar */}
                 <div
-                  className="absolute inset-y-0 left-0 overflow-hidden z-10"
+                  className="absolute inset-y-0 left-0 z-10 overflow-hidden"
                   style={{ width: `${Math.max(widthPercent, 5)}%` }}
                 >
-                  <span className="absolute inset-y-0 left-2 flex items-center text-sm font-medium text-white truncate pr-8 whitespace-nowrap">
+                  <span className="absolute inset-y-0 left-2 flex items-center truncate pr-8 text-sm font-medium whitespace-nowrap text-white">
                     {item.name}
                   </span>
                 </div>
                 {/* Hover arrow */}
                 {onToolClick && (
-                  <div className="absolute inset-y-0 right-2 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <ChevronRight className="size-4 text-foreground" />
+                  <div className="absolute inset-y-0 right-2 flex items-center opacity-0 transition-opacity group-hover:opacity-100">
+                    <ChevronRight className="text-foreground size-4" />
                   </div>
                 )}
               </div>
@@ -2583,7 +2424,7 @@ function ToolBarList({
       {hasMore && (
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+          className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors"
         >
           {isExpanded ? (
             <>
@@ -2601,7 +2442,7 @@ function ToolBarList({
 
       {/* Legend for failure rate */}
       {showLegend && (
-        <p className="text-xs text-muted-foreground mt-2">
+        <p className="text-muted-foreground mt-2 text-xs">
           Percentage shows each tool's share of total failures (
           {totalFailures.toLocaleString()} total)
         </p>
@@ -2613,9 +2454,9 @@ function ToolBarList({
 function ErrorState({ error }: { error: Error }) {
   return (
     <div className="flex flex-col items-center justify-center py-16">
-      <Icon name="triangle-alert" className="size-12 text-destructive mb-4" />
-      <h3 className="text-lg font-medium mb-2">Error Loading Data</h3>
-      <p className="text-muted-foreground text-center max-w-md">
+      <Icon name="triangle-alert" className="text-destructive mb-4 size-12" />
+      <h3 className="mb-2 text-lg font-medium">Error Loading Data</h3>
+      <p className="text-muted-foreground max-w-md text-center">
         {error.message}
       </p>
     </div>

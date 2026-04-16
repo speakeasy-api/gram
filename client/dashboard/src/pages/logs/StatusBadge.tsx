@@ -23,20 +23,20 @@ export function StatusBadge({
 
     if (is5xx) {
       return (
-        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-destructive-softest text-destructive-default">
+        <span className="bg-destructive-softest text-destructive-default rounded px-1.5 py-0.5 text-[10px] font-medium">
           {httpStatusCode}
         </span>
       );
     }
     if (is4xx) {
       return (
-        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-warning-softest text-warning-default">
+        <span className="bg-warning-softest text-warning-default rounded px-1.5 py-0.5 text-[10px] font-medium">
           {httpStatusCode}
         </span>
       );
     }
     return (
-      <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-success-softest text-success-default">
+      <span className="bg-success-softest text-success-default rounded px-1.5 py-0.5 text-[10px] font-medium">
         {httpStatusCode}
       </span>
     );
@@ -45,14 +45,14 @@ export function StatusBadge({
   // Default OK/ERROR badge
   if (isSuccess) {
     return (
-      <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-success-softest text-success-default">
+      <span className="bg-success-softest text-success-default rounded px-1.5 py-0.5 text-[10px] font-medium">
         OK
       </span>
     );
   }
 
   return (
-    <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-destructive-softest text-destructive-default">
+    <span className="bg-destructive-softest text-destructive-default rounded px-1.5 py-0.5 text-[10px] font-medium">
       ERROR
     </span>
   );
@@ -65,27 +65,27 @@ function SeverityBadge({ severity }: { severity: string }) {
     case "ERROR":
     case "FATAL":
       return (
-        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-destructive-softest text-destructive-default">
+        <span className="bg-destructive-softest text-destructive-default rounded px-1.5 py-0.5 text-[10px] font-medium">
           {upper}
         </span>
       );
     case "WARN":
     case "WARNING":
       return (
-        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-warning-softest text-warning-default">
+        <span className="bg-warning-softest text-warning-default rounded px-1.5 py-0.5 text-[10px] font-medium">
           WARN
         </span>
       );
     case "DEBUG":
       return (
-        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-surface-secondary-default text-muted-foreground">
+        <span className="bg-surface-secondary-default text-muted-foreground rounded px-1.5 py-0.5 text-[10px] font-medium">
           DEBUG
         </span>
       );
     case "INFO":
     default:
       return (
-        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-primary-softest text-primary-default">
+        <span className="bg-primary-softest text-primary-default rounded px-1.5 py-0.5 text-[10px] font-medium">
           INFO
         </span>
       );
@@ -102,25 +102,25 @@ export function SpanTypeBadge({ urn }: SpanTypeBadgeProps) {
   switch (kind) {
     case "http":
       return (
-        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-cyan-500/20 text-cyan-400 uppercase">
+        <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-medium text-cyan-400 uppercase">
           HTTP
         </span>
       );
     case "function":
       return (
-        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-500/20 text-purple-400 uppercase">
+        <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-medium text-purple-400 uppercase">
           FN
         </span>
       );
     case "prompt":
       return (
-        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-500/20 text-amber-400 uppercase">
+        <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-400 uppercase">
           PROMPT
         </span>
       );
     default:
       return (
-        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-surface-secondary-default text-muted-foreground uppercase">
+        <span className="bg-surface-secondary-default text-muted-foreground rounded px-1.5 py-0.5 text-[10px] font-medium uppercase">
           {kind || "SPAN"}
         </span>
       );

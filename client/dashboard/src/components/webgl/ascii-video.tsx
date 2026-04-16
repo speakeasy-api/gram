@@ -37,7 +37,7 @@ export function AsciiVideo({
       priority={priority}
       flipX={flipX}
       flipY={flipY}
-      className={cn("w-full h-full", className)}
+      className={cn("h-full w-full", className)}
     />
   );
 }

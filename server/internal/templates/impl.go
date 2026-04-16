@@ -22,6 +22,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/templates/server"
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
 	variationsTypes "github.com/speakeasy-api/gram/server/gen/variations"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -50,22 +51,24 @@ type Service struct {
 	repo       *repo.Queries
 	variations *variations.Service
 	toolsets   ToolsetsService
+	access     *access.Manager
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, toolsets ToolsetsService, accessLoader auth.AccessLoader) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, toolsets ToolsetsService, accessManager *access.Manager) *Service {
 	logger = logger.With(attr.SlogComponent("templates"))
 
 	return &Service{
 		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/templates"),
 		logger:     logger,
 		db:         db,
-		auth:       auth.New(logger, db, sessions, accessLoader),
+		auth:       auth.New(logger, db, sessions, accessManager),
 		repo:       repo.New(db),
-		variations: variations.NewService(logger, tracerProvider, db, sessions, accessLoader),
+		variations: variations.NewService(logger, tracerProvider, db, sessions, accessManager),
 		toolsets:   toolsets,
+		access:     accessManager,
 	}
 }
 
@@ -90,6 +93,10 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 	}
 
 	projectID := *authCtx.ProjectID
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: projectID.String()}); err != nil {
+		return nil, err
+	}
 
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 
@@ -176,6 +183,11 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 	}
 
 	projectID := *authCtx.ProjectID
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: projectID.String()}); err != nil {
+		return nil, err
+	}
+
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
@@ -318,8 +330,13 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	logger := s.logger
 	projectID := *authCtx.ProjectID
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: projectID.String()}); err != nil {
+		return err
+	}
+
+	logger := s.logger
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -422,6 +439,11 @@ func (s *Service) GetTemplate(ctx context.Context, payload *gen.GetTemplatePaylo
 	}
 
 	projectID := *authCtx.ProjectID
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: projectID.String()}); err != nil {
+		return nil, err
+	}
+
 	var id uuid.NullUUID
 	if payload.ID != nil && *payload.ID != "" {
 		parsed, err := uuid.Parse(*payload.ID)
@@ -453,6 +475,10 @@ func (s *Service) ListTemplates(ctx context.Context, payload *gen.ListTemplatesP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	pt, err := mv.DescribePromptTemplates(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID))
 	if err != nil {
 		return nil, err
@@ -468,6 +494,11 @@ func (s *Service) RenderTemplateByID(ctx context.Context, payload *gen.RenderTem
 	}
 
 	projectID := *authCtx.ProjectID
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: projectID.String()}); err != nil {
+		return nil, err
+	}
+
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 
 	id, err := uuid.Parse(payload.ID)
@@ -501,6 +532,11 @@ func (s *Service) RenderTemplate(ctx context.Context, payload *gen.RenderTemplat
 	}
 
 	projectID := *authCtx.ProjectID
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: projectID.String()}); err != nil {
+		return nil, err
+	}
+
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 
 	data, err := RenderTemplate(ctx, logger, payload.Prompt, payload.Kind, payload.Engine, payload.Arguments)

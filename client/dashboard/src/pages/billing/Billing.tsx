@@ -23,22 +23,34 @@ import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
 import { Button, cn, Stack } from "@speakeasy-api/moonshine";
 import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { RequireScope } from "@/components/require-scope";
 
 export default function Billing() {
-  const productTier = useProductTier();
-
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Title>Billing</Page.Header.Title>
       </Page.Header>
       <Page.Body>
-        <UsageSection />
-        {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
-        {(productTier === "base_PAID" ||
-          productTier === "__deprecated__pro") && <UsageTiers />}
+        <RequireScope scope={["org:read", "org:admin"]} level="page">
+          <BillingInner />
+        </RequireScope>
       </Page.Body>
     </Page>
+  );
+}
+
+export function BillingInner() {
+  const productTier = useProductTier();
+
+  return (
+    <>
+      <UsageSection />
+      {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
+      {(productTier === "base_PAID" || productTier === "__deprecated__pro") && (
+        <UsageTiers />
+      )}
+    </>
   );
 }
 
@@ -74,7 +86,7 @@ const UsageSection = () => {
             {label}
           </Type>
           <SimpleTooltip tooltip={tooltip}>
-            <Info className="w-4 h-4 text-muted-foreground" />
+            <Info className="text-muted-foreground h-4 w-4" />
           </SimpleTooltip>
         </Stack>
         <UsageProgress
@@ -383,7 +395,9 @@ const UsageTiers = () => {
       <Page.Section.Description>
         A breakdown of our pricing tiers.
       </Page.Section.Description>
-      {productTier === "base" ? UpgradeCTA : polarPortalCTA}
+      <RequireScope scope="org:admin" level="section">
+        {productTier === "base" ? UpgradeCTA : polarPortalCTA}
+      </RequireScope>
       <Page.Section.Body>
         <Stack direction={"horizontal"} gap={4}>
           {isLoading ? (
@@ -452,13 +466,13 @@ const UsageProgress = ({
   const includedProgress = (
     <div
       className={cn(
-        "h-4 bg-muted dark:bg-neutral-800 rounded-md overflow-hidden relative",
+        "bg-muted relative h-4 overflow-hidden rounded-md dark:bg-neutral-800",
         anyOverage && "rounded-r-none",
       )}
       style={{ width: `${includedWidth}%` }}
     >
       <div
-        className="h-full bg-success-default transition-all duration-300"
+        className="bg-success-default h-full transition-all duration-300"
         style={{
           width: `${Math.min((value / included) * 100, 100)}%`,
         }}
@@ -468,11 +482,11 @@ const UsageProgress = ({
 
   const overageProgress = anyOverage ? (
     <div
-      className="h-4 bg-muted dark:bg-neutral-800 rounded-r-md overflow-hidden relative"
+      className="bg-muted relative h-4 overflow-hidden rounded-r-md dark:bg-neutral-800"
       style={{ width: `${overageWidth}%` }}
     >
       <div
-        className="h-full bg-warning-default transition-all duration-300"
+        className="bg-warning-default h-full transition-all duration-300"
         style={{
           width: `${Math.min(((value - included) / overageMax) * 100, 100)}%`,
         }}
@@ -489,7 +503,7 @@ const UsageProgress = ({
       </div>
       {/* Included label underneath, always show */}
       <div
-        className="absolute top-6 text-xs text-muted-foreground whitespace-nowrap"
+        className="text-muted-foreground absolute top-6 text-xs whitespace-nowrap"
         style={{ right: `${101 - includedWidth}%` }}
       >
         {anyOverage
@@ -503,12 +517,12 @@ const UsageProgress = ({
       {anyOverage && (
         <>
           <div
-            className="absolute top-0 w-[2px] h-8 bg-neutral-600"
+            className="absolute top-0 h-8 w-[2px] bg-neutral-600"
             style={{ left: `${includedWidth}%` }}
           />
           {/* Overage label underneath */}
           <div
-            className="absolute top-6 text-xs text-muted-foreground whitespace-nowrap"
+            className="text-muted-foreground absolute top-6 text-xs whitespace-nowrap"
             style={{ left: `${includedWidth + 1}%` }}
           >
             Extra: {(value - included).toLocaleString()}
@@ -524,7 +538,7 @@ const UsageProgress = ({
               return (
                 <div
                   key={index}
-                  className="absolute top-0 w-[2px] h-5 bg-neutral-600"
+                  className="absolute top-0 h-5 w-[2px] bg-neutral-600"
                   style={{ left: `${incrementPosition}%` }}
                 />
               );

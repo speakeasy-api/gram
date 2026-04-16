@@ -97,7 +97,7 @@ export function MCPOverview() {
         onSubmit: handleCreateMcpServerSubmit,
         validate: (value) => value.length > 0 && value.length <= 40,
         hint: (value) => (
-          <div className="flex justify-between w-full">
+          <div className="flex w-full justify-between">
             <p className="text-destructive">
               {value.length > 40 && "Must be 40 characters or less"}
             </p>
@@ -116,7 +116,7 @@ export function MCPOverview() {
         from Claude Desktop, Cursor, or any MCP client.
       </Page.Section.Description>
       <Page.Section.Body>
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           {BUILT_IN_SERVERS.map((server) => (
             <BuiltInMCPCard key={server.slug} {...server} />
           ))}
@@ -157,7 +157,7 @@ export function MCPOverview() {
         </Page.Section.Description>
         <Page.Section.Body>
           {viewMode === "grid" ? (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {isLoading ? (
                 <>
                   <MCPCardSkeleton />

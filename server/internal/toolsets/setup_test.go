@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -30,12 +32,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var (
@@ -81,6 +86,8 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -95,7 +102,7 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	f := &feature.InMemory{}
 
 	temporalEnv, _ := infra.NewTemporalEnv(t)
-	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs, mcpRegistryClient))
+	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient))
 	t.Cleanup(func() {
 		worker.Stop()
 	})
@@ -108,16 +115,17 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	sessionManager := testenv.NewTestManager(t, logger, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
-	assetsSvc := assets.NewService(logger, tracerProvider, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
-	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}))
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	svc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, accessManager)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, accessManager)
+	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", accessManager)
+	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, accessManager)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -370,4 +378,30 @@ func createMinimalPublicToolset(t *testing.T, ctx context.Context, ti *testInsta
 	require.True(t, *updated.McpIsPublic)
 
 	return updated
+}
+
+func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...access.Grant) context.Context {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	authCtx.AccountType = "enterprise"
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "toolsets-rbac-grants-"+uuid.NewString())
+	for _, grant := range grants {
+		_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			PrincipalUrn:   principal,
+			Scope:          string(grant.Scope),
+			Resource:       grant.Resource,
+		})
+		require.NoError(t, err)
+	}
+
+	loadedGrants, err := access.LoadGrants(ctx, conn, authCtx.ActiveOrganizationID, []urn.Principal{principal})
+	require.NoError(t, err)
+
+	return access.GrantsToContext(ctx, loadedGrants)
 }

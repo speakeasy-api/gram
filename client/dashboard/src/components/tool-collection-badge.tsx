@@ -77,7 +77,8 @@ export const ResourcesBadge = ({
       <TooltipTrigger>
         <Badge variant={variant} className={cn("bg-card", className)}>
           <Badge.Text>
-            {resourceUris.length} Resource{resourceUris.length === 1 ? "" : "s"}
+            {resourceUris.length} Resource
+            {resourceUris.length === 1 ? "" : "s"}
           </Badge.Text>
         </Badge>
       </TooltipTrigger>
@@ -142,7 +143,8 @@ export const ToolCollectionBadge = ({
             </Badge.LeftIcon>
           )}
           <Badge.Text>
-            {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
+            {toolNames.length} Tool
+            {toolNames.length === 1 ? "" : "s"}
           </Badge.Text>
         </Badge>
       </TooltipTrigger>
@@ -150,5 +152,13 @@ export const ToolCollectionBadge = ({
         <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
       </TooltipPortal>
     </Tooltip>
+  );
+};
+
+export const PoweredBySpeakeasyBadge = () => {
+  return (
+    <Badge variant="neutral" className="bg-card">
+      <Badge.Text>Powered by Speakeasy</Badge.Text>
+    </Badge>
   );
 };

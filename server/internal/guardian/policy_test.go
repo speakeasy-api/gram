@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func TestNewUnsafePolicy(t *testing.T) {
@@ -50,7 +52,7 @@ func TestNewUnsafePolicy(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			policy, err := guardian.NewUnsafePolicy(tt.cidrBlocks)
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), tt.cidrBlocks)
 			if tt.expectError {
 				require.Error(t, err)
 				require.Nil(t, policy)
@@ -64,7 +66,7 @@ func TestNewUnsafePolicy(t *testing.T) {
 
 func TestPolicy_Dialer(t *testing.T) {
 	t.Parallel()
-	policy := guardian.NewDefaultPolicy()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	dialer := policy.Dialer()
 
 	require.NotNil(t, dialer)
@@ -75,7 +77,7 @@ func TestPolicy_Dialer(t *testing.T) {
 
 func TestPolicy_DialerControlContext(t *testing.T) {
 	t.Parallel()
-	policy := guardian.NewDefaultPolicy()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	dialer := policy.Dialer()
 
 	ctx := t.Context()
@@ -128,7 +130,7 @@ func TestPolicy_DialerControlContext(t *testing.T) {
 
 func TestPolicy_DialerControlContext_CustomPolicy(t *testing.T) {
 	t.Parallel()
-	policy, err := guardian.NewUnsafePolicy([]string{"8.8.8.0/24"})
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{"8.8.8.0/24"})
 	require.NoError(t, err)
 
 	dialer := policy.Dialer()
@@ -142,35 +144,33 @@ func TestPolicy_DialerControlContext_CustomPolicy(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestPolicy_Client(t *testing.T) {
+func TestPolicy_ClientWrapsTransportWithOtel(t *testing.T) {
 	t.Parallel()
-	policy := guardian.NewDefaultPolicy()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	client := policy.Client()
 
 	require.NotNil(t, client)
 	require.NotNil(t, client.Transport)
 
-	transport, ok := client.Transport.(*http.Transport)
+	_, ok := client.Transport.(*otelhttp.Transport)
 	require.True(t, ok)
-	require.NotNil(t, transport.DialContext)
 }
 
-func TestPolicy_PooledClient(t *testing.T) {
+func TestPolicy_PooledClientWrapsTransportWithOtel(t *testing.T) {
 	t.Parallel()
-	policy := guardian.NewDefaultPolicy()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	client := policy.PooledClient()
 
 	require.NotNil(t, client)
 	require.NotNil(t, client.Transport)
 
-	transport, ok := client.Transport.(*http.Transport)
+	_, ok := client.Transport.(*otelhttp.Transport)
 	require.True(t, ok)
-	require.NotNil(t, transport.DialContext)
 }
 
 func TestDefaultPolicyBlocksPrivateIPs(t *testing.T) {
 	t.Parallel()
-	policy := guardian.NewDefaultPolicy()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	dialer := policy.Dialer()
 	ctx := t.Context()
 
@@ -192,7 +192,7 @@ func TestDefaultPolicyBlocksPrivateIPs(t *testing.T) {
 
 func TestPolicy_DialerIPBlocking(t *testing.T) {
 	t.Parallel()
-	policy := guardian.NewDefaultPolicy()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	dialer := policy.Dialer()
 	ctx := t.Context()
 
@@ -216,7 +216,7 @@ func TestPolicy_DialerIPBlocking(t *testing.T) {
 
 func TestPolicy_DialerEdgeCases(t *testing.T) {
 	t.Parallel()
-	policy := guardian.NewDefaultPolicy()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	dialer := policy.Dialer()
 	ctx := t.Context()
 
@@ -262,7 +262,7 @@ func TestPolicy_DialerEdgeCases(t *testing.T) {
 
 func TestPolicy_DialerContext(t *testing.T) {
 	t.Parallel()
-	policy := guardian.NewDefaultPolicy()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	dialer := policy.Dialer()
 
 	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Millisecond)
@@ -290,7 +290,7 @@ func TestPolicy_HTTPClientWithCustomPolicy(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a custom policy that blocks the test server's IP
-	customPolicy, err := guardian.NewUnsafePolicy([]string{host + "/32"})
+	customPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{host + "/32"})
 	require.NoError(t, err)
 
 	// Test that the custom policy blocks the server
@@ -322,7 +322,7 @@ func TestPolicy_PooledHTTPClientWithFakeNetwork(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a custom policy that allows the test server but blocks private IPs
-	policy, err := guardian.NewUnsafePolicy([]string{
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{
 		"192.168.0.0/16", // Block private IPs
 		"10.0.0.0/8",     // Block private IPs
 		"172.16.0.0/12",  // Block private IPs
@@ -358,7 +358,7 @@ func TestPolicy_PooledHTTPClientWithFakeNetwork(t *testing.T) {
 
 func TestPolicy_IPv4MappedIPv6Addresses(t *testing.T) {
 	t.Parallel()
-	policy := guardian.NewDefaultPolicy()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	dialer := policy.Dialer()
 	ctx := t.Context()
 
@@ -440,7 +440,7 @@ func TestPolicy_IPv4MappedIPv6Addresses(t *testing.T) {
 
 func TestPolicy_IPv6VariationsBlocking(t *testing.T) {
 	t.Parallel()
-	policy := guardian.NewDefaultPolicy()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	dialer := policy.Dialer()
 	ctx := t.Context()
 

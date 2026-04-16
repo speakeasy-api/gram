@@ -32,12 +32,12 @@ function ToolsetItem({
     <routes.mcp.details.Link
       key={toolset.slug}
       params={[toolset.slug]}
-      className="flex items-center justify-between p-3 rounded-md border bg-surface-secondary hover:bg-surface-tertiary transition-colors"
+      className="bg-surface-secondary hover:bg-surface-tertiary flex items-center justify-between rounded-md border p-3 transition-colors"
     >
       <div className="flex-1">
         <Type className="font-medium">{toolset.name}</Type>
         {toolset.description && (
-          <Type className="text-sm text-muted-foreground mt-1">
+          <Type className="text-muted-foreground mt-1 text-sm">
             {toolset.description}
           </Type>
         )}
@@ -54,13 +54,13 @@ export function SourceToolsetsCard({
   sourceToolUrns,
 }: SourceToolsetsCardProps) {
   return (
-    <div className="rounded-lg border bg-card p-6">
-      <Type as="h2" className="text-lg font-semibold mb-4">
+    <div className="bg-card rounded-lg border p-6">
+      <Type as="h2" className="mb-4 text-lg font-semibold">
         Used in Toolsets ({toolsetsUsingSource.length})
       </Type>
       {toolsetsUsingSource.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
+        <div className="text-muted-foreground py-8 text-center">
+          <Package className="mx-auto mb-3 h-12 w-12 opacity-50" />
           <Type>This source is not currently used in any toolsets</Type>
         </div>
       ) : (

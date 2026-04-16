@@ -28,7 +28,7 @@ export const DeleteRoleDialog = ({
         </Dialog.Header>
         <div className="space-y-4 py-4">
           <Type variant="body">
-            <code className="font-mono font-bold px-1 py-0.5 bg-muted rounded">
+            <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
               {role?.name}
             </code>{" "}
             will be permanently deleted. This action cannot be undone.

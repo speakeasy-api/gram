@@ -26,7 +26,7 @@ export default function AcceptInvite() {
   if (error === "already_member") {
     return (
       <InvitePage>
-        <p className="text-sm text-muted-foreground text-center">
+        <p className="text-muted-foreground text-center text-sm">
           You&apos;re already a member of another organization. Please leave
           your current organization before accepting this invite.
         </p>
@@ -43,7 +43,7 @@ export default function AcceptInvite() {
   if (!token) {
     return (
       <InvitePage>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Invalid invite link. No token provided.
         </p>
       </InvitePage>
@@ -64,7 +64,7 @@ function InviteDetails({ token }: { token: string }) {
   if (infoLoading) {
     return (
       <InvitePage>
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
       </InvitePage>
     );
   }
@@ -72,7 +72,7 @@ function InviteDetails({ token }: { token: string }) {
   if (infoError || !inviteInfo) {
     return (
       <InvitePage>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           This invite link is invalid or has already been used.
         </p>
         <Button
@@ -94,7 +94,7 @@ function InviteDetails({ token }: { token: string }) {
           : "This invite has been revoked.";
     return (
       <InvitePage>
-        <p className="text-sm text-muted-foreground">{message}</p>
+        <p className="text-muted-foreground text-sm">{message}</p>
         <Button
           variant="secondary"
           onClick={() => navigate("/", { replace: true })}
@@ -112,7 +112,7 @@ function InviteDetails({ token }: { token: string }) {
 
   return (
     <InvitePage>
-      <p className="text-body-lg text-center text-foreground">
+      <p className="text-body-lg text-foreground text-center">
         You&apos;ve been invited to join{" "}
         {inviteInfo.organizationName ? (
           <span className="font-semibold">{inviteInfo.organizationName}</span>
@@ -131,12 +131,12 @@ function InviteDetails({ token }: { token: string }) {
 
 function InvitePage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col justify-center items-center w-full min-h-screen p-8 bg-background relative">
-      <div className="w-full flex flex-col items-center gap-8 max-w-xs">
-        <GramLogo className="w-25 mb-2" variant="vertical" />
+    <div className="bg-background relative flex min-h-screen w-full flex-col items-center justify-center p-8">
+      <div className="flex w-full max-w-xs flex-col items-center gap-8">
+        <GramLogo className="mb-2 w-25" variant="vertical" />
         {children}
       </div>
-      <div className="bottom-16 left-0 right-0 absolute flex justify-center items-center text-foreground">
+      <div className="text-foreground absolute right-0 bottom-16 left-0 flex items-center justify-center">
         <SpeakeasyLogo />
       </div>
     </div>
