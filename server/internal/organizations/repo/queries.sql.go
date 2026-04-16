@@ -60,7 +60,7 @@ func (q *Queries) DeleteOrganizationUserRelationship(ctx context.Context, arg De
 }
 
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
-SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 `
@@ -73,7 +73,6 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 		&i.Name,
 		&i.Slug,
 		&i.GramAccountType,
-		&i.SsoConnectionID,
 		&i.WorkosID,
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
@@ -231,7 +230,7 @@ SET workos_id = $1,
     updated_at = clock_timestamp()
 WHERE id = $2 AND
     workos_id IS NULL
-RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 `
 
 type SetOrgWorkosIDParams struct {
@@ -247,7 +246,6 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 		&i.Name,
 		&i.Slug,
 		&i.GramAccountType,
-		&i.SsoConnectionID,
 		&i.WorkosID,
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
@@ -331,7 +329,7 @@ ON CONFLICT (id) DO UPDATE SET
         ELSE organization_metadata.whitelisted
     END,
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 `
 
 type UpsertOrganizationMetadataParams struct {
@@ -356,7 +354,6 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		&i.Name,
 		&i.Slug,
 		&i.GramAccountType,
-		&i.SsoConnectionID,
 		&i.WorkosID,
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
