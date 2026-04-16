@@ -422,6 +422,7 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   const queryClient = useQueryClient();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<ServerStatus | null>(null);
+  const [isMaxServersModalOpen, setIsMaxServersModalOpen] = useState(false);
   const updateToolsetMutation = useUpdateToolsetMutation();
   const telemetry = useTelemetry();
 
@@ -464,6 +465,20 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
                 ? "MCP server set to public"
                 : "MCP server set to private";
           toast.success(label);
+        },
+        onError: (error) => {
+          if (
+            error instanceof Error &&
+            error.message.includes("maximum number")
+          ) {
+            setIsMaxServersModalOpen(true);
+          } else {
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : "Failed to update server status",
+            );
+          }
         },
       },
     );
@@ -535,6 +550,16 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
         }}
         isLoading={updateToolsetMutation.isPending}
         currentlyEnabled={currentStatus !== "disabled"}
+      />
+      <FeatureRequestModal
+        isOpen={isMaxServersModalOpen}
+        onClose={() => setIsMaxServersModalOpen(false)}
+        title="MCP Server Limit Reached"
+        description="You have reached the maximum number of MCP servers for the Base plan. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade."
+        actionType="max_public_mcp_servers"
+        icon={Globe}
+        telemetryData={{ slug: toolset.slug }}
+        accountUpgrade
       />
     </>
   );
@@ -1052,7 +1077,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   // Delete mcp server state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingMcpServer, setIsDeletingMcpServer] = useState(false);
-  const [isMaxServersModalOpen, setIsMaxServersModalOpen] = useState(false);
 
   // Export mutation
   const exportMutation = useExportMcpMetadataMutation();
@@ -1432,16 +1456,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         title="Host your MCP at a custom domain"
         description="Custom domains require upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
         actionType="mcp_custom_domain"
-        icon={Globe}
-        telemetryData={{ slug: toolset.slug }}
-        accountUpgrade
-      />
-      <FeatureRequestModal
-        isOpen={isMaxServersModalOpen}
-        onClose={() => setIsMaxServersModalOpen(false)}
-        title="MCP Server Limit Reached"
-        description={`You have reached the maximum number of MCP servers for the Base plan. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
-        actionType="max_public_mcp_servers"
         icon={Globe}
         telemetryData={{ slug: toolset.slug }}
         accountUpgrade
