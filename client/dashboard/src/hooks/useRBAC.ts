@@ -39,12 +39,11 @@ export function useRBAC() {
     return () => window.removeEventListener("rbac-override-change", handler);
   }, [isAdmin]);
 
-  // Fetch grants from the server. When dev override is active the SDK fetcher
-  // attaches X-Gram-Scope-Override so the server returns the filtered grant set.
-  // throwOnError is disabled so a missing org membership doesn't crash the app —
-  // the error state is surfaced via the returned `error` field instead.
+  // Always fetch grants — even when RBAC is disabled — so we can detect a
+  // broken org membership (404/403) and show a recovery prompt via
+  // MembershipSyncGuard. throwOnError is disabled so the error doesn't crash
+  // the app; it's surfaced via the returned `error` field instead.
   const { data, isLoading, error } = useGrants(undefined, undefined, {
-    enabled: isRbacEnabled,
     staleTime: 30_000,
     throwOnError: false,
   });
@@ -113,7 +112,7 @@ export function useRBAC() {
       isLoading: isRbacEnabled && isLoading,
       grants: grants ?? [],
       /** Non-null when the grants query failed (e.g. missing org membership). */
-      error: isRbacEnabled ? error : null,
+      error: error ?? null,
     }),
     [
       hasScope,
