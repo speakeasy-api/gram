@@ -20,11 +20,15 @@ const (
 	// arrive for a project that has enabled risk policies.
 	SignalNewMessages = "new-messages"
 
-	// drainBatchSize is the number of unanalyzed messages to fetch per activity call.
-	drainBatchSize int32 = 100
+	// drainFetchLimit is how many unanalyzed message IDs to fetch per round.
+	drainFetchLimit int32 = 20_000
 
-	// drainSleepBetweenBatches prevents tight-looping while still draining quickly.
-	drainSleepBetweenBatches = 2 * time.Second
+	// drainBatchSize is how many messages each AnalyzeBatch activity processes.
+	drainBatchSize = 1_000
+
+	// drainMaxConcurrency is the maximum number of AnalyzeBatch activities
+	// running in parallel.
+	drainMaxConcurrency = 20
 
 	// drainIdleTimeout is how long the workflow waits for new signals before
 	// completing (to be restarted on the next signal).
@@ -154,18 +158,20 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 	}
 }
 
-// drainAllBatches fetches and analyzes batches until no more unanalyzed
-// messages remain for the policy version. Returns the total number of messages
-// processed.
+// drainAllBatches fetches up to 20,000 unanalyzed message IDs, chunks them
+// into batches of 1,000, and fans out up to 20 concurrent AnalyzeBatch
+// activities. Repeats until no unanalyzed messages remain.
 func drainAllBatches(ctx workflow.Context, a *Activities, params DrainRiskAnalysisParams) (int, error) {
+	logger := workflow.GetLogger(ctx)
 	total := 0
+
 	for {
 		var fetchResult risk_analysis.FetchUnanalyzedResult
 		err := workflow.ExecuteActivity(ctx, a.FetchUnanalyzedMessages, risk_analysis.FetchUnanalyzedArgs{
 			ProjectID:     params.ProjectID,
 			RiskPolicyID:  params.RiskPolicyID,
 			PolicyVersion: params.PolicyVersion,
-			BatchLimit:    drainBatchSize,
+			BatchLimit:    drainFetchLimit,
 		}).Get(ctx, &fetchResult)
 		if err != nil {
 			return total, fmt.Errorf("fetch unanalyzed: %w", err)
@@ -175,31 +181,55 @@ func drainAllBatches(ctx workflow.Context, a *Activities, params DrainRiskAnalys
 			break
 		}
 
-		var analyzeResult risk_analysis.AnalyzeBatchResult
-		err = workflow.ExecuteActivity(ctx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
-			ProjectID:     params.ProjectID,
-			RiskPolicyID:  params.RiskPolicyID,
-			PolicyVersion: params.PolicyVersion,
-			MessageIDs:    fetchResult.MessageIDs,
-			Sources:       params.Sources,
-		}).Get(ctx, &analyzeResult)
-		if err != nil {
-			return total, fmt.Errorf("analyze batch: %w", err)
+		// Chunk into batches and fan out with bounded concurrency.
+		batches := chunkUUIDs(fetchResult.MessageIDs, drainBatchSize)
+		pending := make([]workflow.Future, 0, len(batches))
+
+		for _, batch := range batches {
+			// If at concurrency limit, wait for one to complete before launching another.
+			if len(pending) >= drainMaxConcurrency {
+				if err := pending[0].Get(ctx, nil); err != nil {
+					logger.Error("analyze batch failed", "error", err.Error())
+				}
+				pending = pending[1:]
+			}
+
+			f := workflow.ExecuteActivity(ctx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
+				ProjectID:     params.ProjectID,
+				RiskPolicyID:  params.RiskPolicyID,
+				PolicyVersion: params.PolicyVersion,
+				MessageIDs:    batch,
+				Sources:       params.Sources,
+			})
+			pending = append(pending, f)
 		}
 
-		total += analyzeResult.Processed
+		// Wait for all remaining futures.
+		for _, f := range pending {
+			if err := f.Get(ctx, nil); err != nil {
+				logger.Error("analyze batch failed", "error", err.Error())
+			}
+		}
 
-		// If we got fewer than the batch size, we're done.
-		if len(fetchResult.MessageIDs) < int(drainBatchSize) {
+		total += len(fetchResult.MessageIDs)
+
+		// If we got fewer than the fetch limit, all messages are now analyzed.
+		if len(fetchResult.MessageIDs) < int(drainFetchLimit) {
 			break
 		}
-
-		// Small sleep between batches to avoid overwhelming the DB.
-		_ = workflow.Sleep(ctx, drainSleepBetweenBatches)
 	}
 	return total, nil
 }
 
 func drainWorkflowID(policyID uuid.UUID) string {
 	return fmt.Sprintf("v1:drain-risk-analysis:%s", policyID.String())
+}
+
+func chunkUUIDs(ids []uuid.UUID, size int) [][]uuid.UUID {
+	var chunks [][]uuid.UUID
+	for i := 0; i < len(ids); i += size {
+		end := min(i+size, len(ids))
+		chunks = append(chunks, ids[i:end])
+	}
+	return chunks
 }
