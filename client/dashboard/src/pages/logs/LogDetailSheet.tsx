@@ -2,6 +2,14 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { TelemetryLogRecord } from "@gram/client/models/components";
+import { Operator } from "@gram/client/models/components/logfilter";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@speakeasy-api/moonshine";
 import { ChevronDown, Copy } from "lucide-react";
 import { useState } from "react";
 import { formatNanoTimestamp, getSeverityColorClass } from "./utils";
@@ -34,6 +42,10 @@ const TOOL_IO_ATTR_KEYS = {
   input: "gen_ai.tool.call.arguments",
   output: "gen_ai.tool.call.result",
 } as const;
+
+function truncateValue(value: string, maxLen = 24): string {
+  return value.length > maxLen ? `${value.slice(0, maxLen)}\u2026` : value;
+}
 
 /**
  * Extract a deeply nested value from an object using a dot-separated path.
@@ -388,9 +400,11 @@ function flattenObject(
 function AttributesSection({
   title,
   data,
+  onAddFilter,
 }: {
   title: string;
   data: Record<string, unknown>;
+  onAddFilter?: (path: string, op: Operator, value: string) => void;
 }) {
   const flatEntries = flattenObject(data);
 
@@ -410,17 +424,95 @@ function AttributesSection({
         </button>
       </div>
       <div className="bg-muted border-border divide-border divide-y rounded-lg border">
-        {flatEntries.map((entry) => (
-          <div
-            key={entry.key}
-            className="hover:bg-muted/50 flex flex-col gap-1 px-4 py-2.5 transition-colors"
-          >
-            <span className="text-muted-foreground text-xs">{entry.key}</span>
-            <span className="font-mono text-sm break-all">
-              {entry.displayValue}
-            </span>
-          </div>
-        ))}
+        {flatEntries.map((entry) => {
+          const isFilterable = entry.filterValue !== null && !!onAddFilter;
+
+          const rowContent = (
+            <>
+              <span className="text-muted-foreground text-xs">{entry.key}</span>
+              <span className="font-mono text-sm break-all">
+                {entry.displayValue}
+              </span>
+            </>
+          );
+
+          if (!onAddFilter) {
+            return (
+              <div
+                key={entry.key}
+                className="hover:bg-muted/50 flex flex-col gap-1 px-4 py-2.5 transition-colors"
+              >
+                {rowContent}
+              </div>
+            );
+          }
+
+          return (
+            <DropdownMenu key={entry.key}>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="hover:bg-muted/50 flex w-full cursor-pointer flex-col gap-1 px-4 py-2.5 text-left transition-colors"
+                  aria-label={`Filter by ${entry.key}`}
+                >
+                  {rowContent}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem
+                  disabled={!isFilterable}
+                  onClick={() =>
+                    onAddFilter(entry.key, Operator.Eq, entry.filterValue!)
+                  }
+                >
+                  <span>
+                    Filter by{" "}
+                    <span className="font-mono text-xs">
+                      {entry.key} = {truncateValue(entry.filterValue ?? "")}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!isFilterable}
+                  onClick={() =>
+                    onAddFilter(entry.key, Operator.NotEq, entry.filterValue!)
+                  }
+                >
+                  <span>
+                    Exclude{" "}
+                    <span className="font-mono text-xs">
+                      {entry.key} != {truncateValue(entry.filterValue ?? "")}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!isFilterable}
+                  onClick={() =>
+                    onAddFilter(
+                      entry.key,
+                      Operator.Contains,
+                      entry.filterValue!,
+                    )
+                  }
+                >
+                  <span>
+                    Contains{" "}
+                    <span className="font-mono text-xs">
+                      {truncateValue(entry.filterValue ?? "")}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    void navigator.clipboard.writeText(entry.displayValue);
+                  }}
+                >
+                  Copy value
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        })}
       </div>
     </div>
   );
