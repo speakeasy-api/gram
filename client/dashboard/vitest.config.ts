@@ -8,6 +8,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    conditions: ["source"],
   },
   define: {
     __GRAM_SERVER_URL__: JSON.stringify(""),
