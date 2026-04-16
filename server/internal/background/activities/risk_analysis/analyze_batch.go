@@ -112,6 +112,15 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 	}
 
 	if len(rows) > 0 {
+		// Delete existing results for these messages to avoid duplicates on re-scan.
+		if err := a.repo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
+			RiskPolicyID:  args.RiskPolicyID,
+			PolicyVersion: args.PolicyVersion,
+			MessageIds:    args.MessageIDs,
+		}); err != nil {
+			return nil, fmt.Errorf("delete old results: %w", err)
+		}
+
 		_, err := a.repo.InsertRiskResults(ctx, rows)
 		if err != nil {
 			return nil, fmt.Errorf("insert risk results: %w", err)

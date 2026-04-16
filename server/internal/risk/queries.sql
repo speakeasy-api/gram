@@ -150,6 +150,12 @@ WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND policy_version < @policy_version;
 
+-- name: DeleteRiskResultsForMessages :exec
+DELETE FROM risk_results
+WHERE risk_policy_id = @risk_policy_id
+  AND policy_version = @policy_version
+  AND chat_message_id = ANY(@message_ids::uuid[]);
+
 -- name: ListRiskResultsByProject :many
 SELECT *
 FROM risk_results

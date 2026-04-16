@@ -11,6 +11,7 @@ import {
 import { useRoutes } from "@/routes";
 import { Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router";
 import {
   useRiskListResults,
   useRiskListPolicies,
@@ -18,6 +19,7 @@ import {
 
 export default function DlpOverview() {
   const routes = useRoutes();
+  const navigate = useNavigate();
   const { data: policiesData, isLoading: policiesLoading } =
     useRiskListPolicies();
   const { data: resultsData, isLoading: resultsLoading } = useRiskListResults({
@@ -126,12 +128,14 @@ export default function DlpOverview() {
                     className="cursor-pointer"
                     onClick={() => {
                       if (result.chatId) {
-                        routes.chatSessions.goTo({
-                          queryParams: {
-                            chatId: result.chatId,
-                            range: "90d",
-                          },
+                        const params = new URLSearchParams({
+                          chatId: result.chatId,
+                          search: result.chatId,
+                          range: "90d",
                         });
+                        navigate(
+                          `${routes.chatSessions.href()}?${params.toString()}`,
+                        );
                       }
                     }}
                   >
