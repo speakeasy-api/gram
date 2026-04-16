@@ -114,20 +114,8 @@ type _BarLegend = Exclude<
 >;
 type _BarTooltip = NonNullable<ChartOptions<"bar">["plugins"]>["tooltip"];
 
-const SHARED_LEGEND_LABELS = {
-  boxWidth: 12,
-  boxHeight: 12,
-  useBorderRadius: true,
-  borderRadius: 2,
-  padding: 16,
-  color: CHART_COLORS.label,
-  font: { size: 12 },
-} satisfies NonNullable<_BarLegend>["labels"];
-
 const SHARED_LEGEND = {
-  position: "top",
-  align: "end",
-  labels: SHARED_LEGEND_LABELS,
+  display: false,
 } satisfies NonNullable<_BarLegend>;
 
 const SHARED_TOOLTIP = {
@@ -1522,158 +1510,6 @@ function ServerActivityChart({
   );
 }
 
-function SourceVolumeChart({
-  title,
-  breakdown,
-  serverNameMappings,
-  handleFilter,
-}: {
-  title: string;
-  breakdown: HooksBreakdownRow[];
-  serverNameMappings: ReturnType<typeof useServerNameMappings>;
-  handleFilter?: (serverName: string, source: string) => void;
-}) {
-  const { labels, datasets } = useMemo(() => {
-    // Build serverDisplayName → hookSource → count
-    const serverMap = new Map<string, Map<string, number>>();
-    const sourceSet = new Set<string>();
-    for (const row of breakdown) {
-      const displayName =
-        row.serverName === "local"
-          ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-          : (serverNameMappings.rawToDisplay.get(row.serverName) ??
-            row.serverName);
-      const source = row.hookSource || "unknown";
-      sourceSet.add(source);
-      const inner = serverMap.get(displayName) ?? new Map<string, number>();
-      inner.set(source, (inner.get(source) ?? 0) + row.eventCount);
-      serverMap.set(displayName, inner);
-    }
-
-    // Sort servers by total count desc
-    const sortedServers = Array.from(serverMap.entries())
-      .map(([displayName, sourceCounts]) => ({
-        displayName,
-        total: Array.from(sourceCounts.values()).reduce((a, b) => a + b, 0),
-        sourceCounts,
-      }))
-      .sort((a, b) => b.total - a.total);
-
-    // Sort sources by total usage desc, unknown last, for consistent legend ordering
-    const sortedSources = Array.from(sourceSet).sort((a, b) => {
-      if (a === "unknown") return 1;
-      if (b === "unknown") return -1;
-      const aTotal = sortedServers.reduce(
-        (s, srv) => s + (srv.sourceCounts.get(a) ?? 0),
-        0,
-      );
-      const bTotal = sortedServers.reduce(
-        (s, srv) => s + (srv.sourceCounts.get(b) ?? 0),
-        0,
-      );
-      return bTotal - aTotal;
-    });
-
-    const chartLabels = sortedServers.map((s) => s.displayName);
-    const chartDatasets = sortedSources.map((source, i) => ({
-      label: source,
-      barThickness: 24,
-      data: sortedServers.map((s) => s.sourceCounts.get(source) ?? 0),
-      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "44",
-      borderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
-      borderWidth: 1.5,
-      hoverBackgroundColor:
-        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "99",
-      hoverBorderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
-    }));
-
-    return { labels: chartLabels, datasets: chartDatasets };
-  }, [breakdown, serverNameMappings.rawToDisplay]);
-
-  return (
-    <StackedBarChart
-      title={title}
-      labels={labels}
-      datasets={datasets}
-      handleFilter={handleFilter}
-    />
-  );
-}
-
-// Shared ranked bar list used by volume/error breakdown charts
-
-function UserVolumeList({
-  title,
-  breakdown,
-  handleFilter,
-}: {
-  title: string;
-  breakdown: HooksBreakdownRow[];
-  handleFilter?: (source: string, userEmail: string) => void;
-}) {
-  const { labels, datasets } = useMemo(() => {
-    // Build userEmail → hookSource → count
-    const userMap = new Map<string, Map<string, number>>();
-    const sourceSet = new Set<string>();
-    for (const row of breakdown) {
-      const user = row.userEmail;
-      if (!user || user === "Unknown") continue;
-      const source = row.hookSource || "unknown";
-      sourceSet.add(source);
-      const inner = userMap.get(user) ?? new Map<string, number>();
-      inner.set(source, (inner.get(source) ?? 0) + row.eventCount);
-      userMap.set(user, inner);
-    }
-
-    // Sort users by total count desc
-    const sortedUsers = Array.from(userMap.entries())
-      .map(([email, sourceCounts]) => ({
-        email,
-        total: Array.from(sourceCounts.values()).reduce((a, b) => a + b, 0),
-        sourceCounts,
-      }))
-      .sort((a, b) => b.total - a.total);
-
-    // Sort sources by total usage desc for consistent legend ordering
-    const sortedSources = Array.from(sourceSet).sort((a, b) => {
-      const aTotal = sortedUsers.reduce(
-        (s, u) => s + (u.sourceCounts.get(a) ?? 0),
-        0,
-      );
-      const bTotal = sortedUsers.reduce(
-        (s, u) => s + (u.sourceCounts.get(b) ?? 0),
-        0,
-      );
-      return bTotal - aTotal;
-    });
-
-    const chartLabels = sortedUsers.map((u) => u.email);
-
-    const chartDatasets = sortedSources.map((source, i) => ({
-      label: source,
-      barThickness: 24,
-      data: sortedUsers.map((u) => u.sourceCounts.get(source) ?? 0),
-      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "44",
-      borderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
-      borderWidth: 1.5,
-      hoverBackgroundColor:
-        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "99",
-      hoverBorderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
-    }));
-
-    return { labels: chartLabels, datasets: chartDatasets };
-  }, [breakdown]);
-
-  return (
-    <StackedBarChart
-      title={title}
-      labels={labels}
-      datasets={datasets}
-      handleFilter={handleFilter}
-    />
-  );
-}
-
 function ServerErrorRateChart({
   title,
   breakdown,
@@ -1787,82 +1623,6 @@ function ServerErrorRateChart({
       )}
     </div>
   );
-}
-
-function UserErrorChart({
-  title,
-  breakdown,
-  serverNameMappings,
-}: {
-  title: string;
-  breakdown: HooksBreakdownRow[];
-  serverNameMappings: ReturnType<typeof useServerNameMappings>;
-}) {
-  const { labels, datasets } = useMemo(() => {
-    const userMap = new Map<string, Map<string, number>>();
-    const serverSet = new Set<string>();
-    for (const row of breakdown) {
-      if (row.failureCount === 0) continue;
-      const user = row.userEmail || "unknown";
-      const displayName =
-        row.serverName === "local"
-          ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
-          : (serverNameMappings.rawToDisplay.get(row.serverName) ??
-            row.serverName);
-      serverSet.add(displayName);
-      const inner = userMap.get(user) ?? new Map<string, number>();
-      inner.set(displayName, (inner.get(displayName) ?? 0) + row.failureCount);
-      userMap.set(user, inner);
-    }
-
-    const sortedUsers = Array.from(userMap.entries())
-      .map(([user, serverCounts]) => ({
-        user,
-        total: Array.from(serverCounts.values()).reduce((a, b) => a + b, 0),
-        serverCounts,
-      }))
-      .sort((a, b) => b.total - a.total);
-
-    const sortedServers = Array.from(serverSet).sort((a, b) => {
-      const aTotal = sortedUsers.reduce(
-        (s, u) => s + (u.serverCounts.get(a) ?? 0),
-        0,
-      );
-      const bTotal = sortedUsers.reduce(
-        (s, u) => s + (u.serverCounts.get(b) ?? 0),
-        0,
-      );
-      return bTotal - aTotal;
-    });
-
-    const chartLabels = sortedUsers.map((u) => u.user);
-    const chartDatasets = sortedServers.map((server, i) => ({
-      label: server,
-      barThickness: 24,
-      data: sortedUsers.map((u) => u.serverCounts.get(server) ?? 0),
-      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "1a",
-      borderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
-      borderWidth: 1.5,
-      hoverBackgroundColor:
-        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "33",
-      hoverBorderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
-    }));
-
-    return { labels: chartLabels, datasets: chartDatasets };
-  }, [breakdown, serverNameMappings.rawToDisplay]);
-
-  if (labels.length === 0) {
-    return (
-      <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-        <h3 className="text font-semibold">{title}</h3>
-        <div className="text-muted-foreground flex h-16 items-center justify-center text-sm">
-          No errors in this period
-        </div>
-      </div>
-    );
-  }
-
-  return <StackedBarChart title={title} labels={labels} datasets={datasets} />;
 }
 
 function buildTimeSeriesFromSummary(
@@ -2197,22 +1957,11 @@ function HooksAnalytics({
             compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-3",
           )}
         >
-          <UserVolumeList
-            title="Source Usage per User"
-            breakdown={breakdown}
-            handleFilter={makeFilterHandler({ user: "row" })}
-          />
           <ServerActivityChart
             title="Server Usage per User"
             breakdown={breakdown}
             serverNameMappings={serverNameMappings}
             handleFilter={makeFilterHandler({ server: "dataset", user: "row" })}
-          />
-          <SourceVolumeChart
-            title="Source Usage per MCP Server"
-            breakdown={breakdown}
-            serverNameMappings={serverNameMappings}
-            handleFilter={makeFilterHandler({ server: "row" })}
           />
         </div>
       )}
@@ -2251,11 +2000,6 @@ function HooksAnalytics({
         >
           <ServerErrorRateChart
             title="Errors per Server and Tool"
-            breakdown={breakdown}
-            serverNameMappings={serverNameMappings}
-          />
-          <UserErrorChart
-            title="Errors per User"
             breakdown={breakdown}
             serverNameMappings={serverNameMappings}
           />
