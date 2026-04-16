@@ -117,30 +117,30 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 		}
 	}
 
+	// Atomically delete old results (any version) and insert new ones.
+	tx, err := a.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback is a no-op after commit
+
+	txRepo := a.repo.WithTx(tx)
+
+	if err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
+		RiskPolicyID: args.RiskPolicyID,
+		MessageIds:   args.MessageIDs,
+	}); err != nil {
+		return nil, fmt.Errorf("delete old results: %w", err)
+	}
+
 	if len(rows) > 0 {
-		// Atomically delete old results (any version) and insert new ones.
-		tx, err := a.db.Begin(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("begin transaction: %w", err)
-		}
-		defer tx.Rollback(ctx) //nolint:errcheck // rollback is a no-op after commit
-
-		txRepo := a.repo.WithTx(tx)
-
-		if err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
-			RiskPolicyID: args.RiskPolicyID,
-			MessageIds:   args.MessageIDs,
-		}); err != nil {
-			return nil, fmt.Errorf("delete old results: %w", err)
-		}
-
 		if _, err := txRepo.InsertRiskResults(ctx, rows); err != nil {
 			return nil, fmt.Errorf("insert risk results: %w", err)
 		}
+	}
 
-		if err := tx.Commit(ctx); err != nil {
-			return nil, fmt.Errorf("commit results: %w", err)
-		}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit results: %w", err)
 	}
 
 	return &AnalyzeBatchResult{
