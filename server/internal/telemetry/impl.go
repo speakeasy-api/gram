@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math"
 	"sort"
@@ -491,30 +492,33 @@ func buildMetricsSummaryResult(metrics repo.MetricsSummaryRow) *telem_gen.GetMet
 	//nolint:gosec // Values are bounded counts that won't overflow int64
 	return &telem_gen.GetMetricsSummaryResult{
 		Metrics: &telem_gen.ProjectSummary{
-			FirstSeenUnixNano:       strconv.FormatInt(metrics.FirstSeenUnixNano, 10),
-			LastSeenUnixNano:        strconv.FormatInt(metrics.LastSeenUnixNano, 10),
-			TotalInputTokens:        metrics.TotalInputTokens,
-			TotalOutputTokens:       metrics.TotalOutputTokens,
-			TotalTokens:             metrics.TotalTokens,
-			AvgTokensPerRequest:     sanitizeFloat64(metrics.AvgTokensPerReq),
-			TotalChatRequests:       int64(metrics.TotalChatRequests),
-			AvgChatDurationMs:       sanitizeFloat64(metrics.AvgChatDurationMs),
-			FinishReasonStop:        int64(metrics.FinishReasonStop),
-			FinishReasonToolCalls:   int64(metrics.FinishReasonToolCalls),
-			TotalToolCalls:          int64(metrics.TotalToolCalls),
-			ToolCallSuccess:         int64(metrics.ToolCallSuccess),
-			ToolCallFailure:         int64(metrics.ToolCallFailure),
-			AvgToolDurationMs:       sanitizeFloat64(metrics.AvgToolDurationMs),
-			TotalChats:              int64(metrics.TotalChats),
-			DistinctModels:          int64(metrics.DistinctModels),
-			DistinctProviders:       int64(metrics.DistinctProviders),
-			Models:                  models,
-			Tools:                   tools,
-			ChatResolutionSuccess:   int64(metrics.ChatResolutionSuccess),
-			ChatResolutionFailure:   int64(metrics.ChatResolutionFailure),
-			ChatResolutionPartial:   int64(metrics.ChatResolutionPartial),
-			ChatResolutionAbandoned: int64(metrics.ChatResolutionAbandoned),
-			AvgChatResolutionScore:  sanitizeFloat64(metrics.AvgChatResolutionScore),
+			FirstSeenUnixNano:        strconv.FormatInt(metrics.FirstSeenUnixNano, 10),
+			LastSeenUnixNano:         strconv.FormatInt(metrics.LastSeenUnixNano, 10),
+			TotalInputTokens:         metrics.TotalInputTokens,
+			TotalOutputTokens:        metrics.TotalOutputTokens,
+			TotalTokens:              metrics.TotalTokens,
+			CacheReadInputTokens:     metrics.CacheReadInputTokens,
+			CacheCreationInputTokens: metrics.CacheCreationInputTokens,
+			AvgTokensPerRequest:      sanitizeFloat64(metrics.AvgTokensPerReq),
+			TotalCost:                sanitizeFloat64(metrics.TotalCost),
+			TotalChatRequests:        int64(metrics.TotalChatRequests),
+			AvgChatDurationMs:        sanitizeFloat64(metrics.AvgChatDurationMs),
+			FinishReasonStop:         int64(metrics.FinishReasonStop),
+			FinishReasonToolCalls:    int64(metrics.FinishReasonToolCalls),
+			TotalToolCalls:           int64(metrics.TotalToolCalls),
+			ToolCallSuccess:          int64(metrics.ToolCallSuccess),
+			ToolCallFailure:          int64(metrics.ToolCallFailure),
+			AvgToolDurationMs:        sanitizeFloat64(metrics.AvgToolDurationMs),
+			TotalChats:               int64(metrics.TotalChats),
+			DistinctModels:           int64(metrics.DistinctModels),
+			DistinctProviders:        int64(metrics.DistinctProviders),
+			Models:                   models,
+			Tools:                    tools,
+			ChatResolutionSuccess:    int64(metrics.ChatResolutionSuccess),
+			ChatResolutionFailure:    int64(metrics.ChatResolutionFailure),
+			ChatResolutionPartial:    int64(metrics.ChatResolutionPartial),
+			ChatResolutionAbandoned:  int64(metrics.ChatResolutionAbandoned),
+			AvgChatResolutionScore:   sanitizeFloat64(metrics.AvgChatResolutionScore),
 		},
 	}
 }
@@ -1662,10 +1666,14 @@ func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, cha
 		return make(map[string]repo.ChatMetricsRow), nil
 	}
 
-	return s.chRepo.GetChatMetricsByIDs(ctx, repo.GetChatMetricsByIDsParams{
+	result, err := s.chRepo.GetChatMetricsByIDs(ctx, repo.GetChatMetricsByIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       chatIDs,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("get chat metrics by ids: %w", err)
+	}
+	return result, nil
 }
 
 // toTopUsersFromPG converts PostgreSQL top users to API type.

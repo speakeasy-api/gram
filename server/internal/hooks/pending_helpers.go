@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -241,9 +241,8 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		})
 	}
 
-	s.logger.DebugContext(ctx, "Wrote Claude Code metrics to ClickHouse",
+	s.logger.DebugContext(ctx, fmt.Sprintf("Wrote %d Claude Code metrics to ClickHouse", len(metrics)),
 		attr.SlogEvent("metrics_written"),
-		slog.Int("metric_count", len(metrics)),
 	)
 }
 
@@ -302,9 +301,15 @@ func extractMetricsForClickHouse(payload *gen.MetricsPayload) ([]MetricDataPoint
 					// Get or create aggregated entry
 					if aggregated[key] == nil {
 						aggregated[key] = &MetricDataPoint{
-							SessionID: sessionID,
-							Model:     model,
-							UserEmail: userEmail,
+							SessionID:           sessionID,
+							Model:               model,
+							UserEmail:           userEmail,
+							InputTokens:         0,
+							OutputTokens:        0,
+							CacheReadTokens:     0,
+							CacheCreationTokens: 0,
+							Cost:                0,
+							TimestampNano:       0,
 						}
 					}
 
@@ -320,11 +325,7 @@ func extractMetricsForClickHouse(payload *gen.MetricsPayload) ([]MetricDataPoint
 
 					// Update timestamp to latest
 					if dataPoint.TimeUnixNano != nil {
-						nanoStr := *dataPoint.TimeUnixNano
-						// Parse the string to int64
-						var nano int64
-						fmt.Sscanf(nanoStr, "%d", &nano)
-						if nano > entry.TimestampNano {
+						if nano, err := strconv.ParseInt(*dataPoint.TimeUnixNano, 10, 64); err == nil && nano > entry.TimestampNano {
 							entry.TimestampNano = nano
 						}
 					}

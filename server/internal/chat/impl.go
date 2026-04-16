@@ -215,6 +215,10 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 				CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 				LastMessageTimestamp: lastMessageTimestamp,
+				TotalInputTokens:     nil,
+				TotalOutputTokens:    nil,
+				TotalTokens:          nil,
+				TotalCost:            nil,
 			})
 		}
 
@@ -248,6 +252,10 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 				CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 				LastMessageTimestamp: lastMessageTimestamp,
+				TotalInputTokens:     nil,
+				TotalOutputTokens:    nil,
+				TotalTokens:          nil,
+				TotalCost:            nil,
 			})
 		}
 
@@ -287,6 +295,10 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 			LastMessageTimestamp: lastMessageTimestamp,
+			TotalInputTokens:     nil,
+			TotalOutputTokens:    nil,
+			TotalTokens:          nil,
+			TotalCost:            nil,
 		})
 	}
 
@@ -402,6 +414,10 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 				UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 				LastMessageTimestamp: lastMessageTimestamp,
 				Resolutions:          make([]*gen.ChatResolution, 0),
+				TotalInputTokens:     nil,
+				TotalOutputTokens:    nil,
+				TotalTokens:          nil,
+				TotalCost:            nil,
 			}
 			chatOrder = append(chatOrder, chatID)
 		}
@@ -536,6 +552,10 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 		LastMessageTimestamp: lastMessageTimestamp,
 		Messages:             resultMessages,
+		TotalInputTokens:     nil,
+		TotalOutputTokens:    nil,
+		TotalTokens:          nil,
+		TotalCost:            nil,
 	}
 
 	// Enrich with metrics from ClickHouse
