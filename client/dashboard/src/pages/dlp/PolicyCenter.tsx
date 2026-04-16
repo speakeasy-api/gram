@@ -28,14 +28,14 @@ import {
   useRiskUpdatePolicyMutation,
   useRiskDeletePolicyMutation,
   useRiskTriggerAnalysisMutation,
-  queryKeyRiskListPolicies,
+  invalidateAllRiskListPolicies,
 } from "@gram/client/react-query/index.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 
 export default function PolicyCenter() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useRiskListPolicies();
-  const policies = data?.listRiskPoliciesResult?.policies ?? [];
+  const policies = data?.policies ?? [];
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
@@ -43,7 +43,7 @@ export default function PolicyCenter() {
   const [formEnabled, setFormEnabled] = useState(true);
 
   const invalidate = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: queryKeyRiskListPolicies() });
+    invalidateAllRiskListPolicies(queryClient);
   }, [queryClient]);
 
   const createMutation = useRiskCreatePolicyMutation({

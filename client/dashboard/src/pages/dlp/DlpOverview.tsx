@@ -24,8 +24,8 @@ export default function DlpOverview() {
     limit: 50,
   });
 
-  const policies = policiesData?.listRiskPoliciesResult?.policies ?? [];
-  const results = resultsData?.listRiskResultsResult?.results ?? [];
+  const policies = policiesData?.policies ?? [];
+  const results = resultsData?.results ?? [];
 
   const isLoading = policiesLoading || resultsLoading;
 
