@@ -23,6 +23,7 @@ type ChatMessageCaptureStrategy struct {
 	db           *pgxpool.Pool
 	repo         *repo.Queries
 	assetStorage assets.BlobStore
+	observers    []MessageObserver
 }
 
 var _ openrouter.MessageCaptureStrategy = (*ChatMessageCaptureStrategy)(nil)
@@ -38,6 +39,18 @@ func NewChatMessageCaptureStrategy(
 		db:           db,
 		repo:         repo.New(db),
 		assetStorage: assetStorage,
+		observers:    nil,
+	}
+}
+
+// AddObserver registers a MessageObserver to be notified when messages are stored.
+func (s *ChatMessageCaptureStrategy) AddObserver(obs MessageObserver) {
+	s.observers = append(s.observers, obs)
+}
+
+func (s *ChatMessageCaptureStrategy) notifyObservers(ctx context.Context, projectID uuid.UUID) {
+	for _, obs := range s.observers {
+		obs.OnMessagesStored(ctx, projectID)
 	}
 }
 
@@ -125,6 +138,8 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		}
 		if err := storeMessages(ctx, s.logger, s.db, s.assetStorage, rows); err != nil {
 			s.logger.ErrorContext(ctx, "failed to store chat messages", attr.SlogError(err))
+		} else {
+			s.notifyObservers(ctx, projectID)
 		}
 	}
 
@@ -196,6 +211,8 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 		s.logger.ErrorContext(ctx, "failed to store chat message", attr.SlogError(err))
 		return fmt.Errorf("store chat message: %w", err)
 	}
+
+	s.notifyObservers(ctx, projectID)
 
 	return nil
 }

@@ -1764,3 +1764,63 @@ CREATE TABLE IF NOT EXISTS plugin_assignments (
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_assignments_plugin_id_principal_urn_key
   ON plugin_assignments (plugin_id, principal_urn);
+
+-- Risk analysis policies for scanning chat messages against configurable rules.
+-- One workflow per policy drains unanalyzed messages and produces risk_results.
+CREATE TABLE IF NOT EXISTS risk_policies (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  sources TEXT[] NOT NULL DEFAULT '{gitleaks}',
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  version BIGINT NOT NULL DEFAULT 1,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT risk_policies_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_policies_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS risk_policies_project_id_idx
+ON risk_policies (project_id)
+WHERE deleted IS FALSE;
+
+-- Individual findings produced by scanning a chat message against a risk policy.
+-- No soft delete: results are regenerated when the policy version changes.
+CREATE TABLE IF NOT EXISTS risk_results (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  risk_policy_id uuid NOT NULL,
+  policy_version BIGINT NOT NULL,
+  chat_message_id uuid NOT NULL,
+  source TEXT NOT NULL,
+
+  found BOOLEAN NOT NULL DEFAULT FALSE,
+  rule_id TEXT,
+  description TEXT,
+  match TEXT,
+  start_line INT,
+  start_column INT,
+  end_line INT,
+  end_column INT,
+  confidence DOUBLE PRECISION,
+  tags TEXT[],
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT risk_results_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_results_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+  CONSTRAINT risk_results_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE SET NULL,
+  CONSTRAINT risk_results_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS risk_results_project_id_risk_policy_id_idx
+ON risk_results (project_id, risk_policy_id);
+
+CREATE INDEX IF NOT EXISTS risk_results_chat_message_id_idx
+ON risk_results (chat_message_id);

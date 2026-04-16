@@ -1,0 +1,182 @@
+-- name: CreateRiskPolicy :one
+INSERT INTO risk_policies (
+    project_id
+  , organization_id
+  , name
+  , sources
+  , enabled
+)
+VALUES (
+    @project_id
+  , @organization_id
+  , @name
+  , @sources
+  , @enabled
+)
+RETURNING *;
+
+-- name: GetRiskPolicy :one
+SELECT *
+FROM risk_policies
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: ListRiskPolicies :many
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
+
+-- name: ListEnabledRiskPoliciesByProject :many
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND enabled IS TRUE
+  AND deleted IS FALSE;
+
+-- name: UpdateRiskPolicy :one
+UPDATE risk_policies
+SET name = @name
+  , sources = @sources
+  , enabled = @enabled
+  , version = version + 1
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteRiskPolicy :exec
+UPDATE risk_policies
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: CountUnanalyzedMessages :one
+SELECT COUNT(*)::BIGINT
+FROM chat_messages cm
+WHERE cm.project_id = @project_id
+  AND NOT EXISTS (
+    SELECT 1
+    FROM risk_results rr
+    WHERE rr.chat_message_id = cm.id
+      AND rr.risk_policy_id = @risk_policy_id
+      AND rr.policy_version = @policy_version
+  );
+
+-- name: CountTotalMessages :one
+SELECT COUNT(*)::BIGINT
+FROM chat_messages cm
+WHERE cm.project_id = @project_id;
+
+-- name: CountAnalyzedMessages :one
+SELECT COUNT(DISTINCT rr.chat_message_id)::BIGINT
+FROM risk_results rr
+WHERE rr.project_id = @project_id
+  AND rr.risk_policy_id = @risk_policy_id
+  AND rr.policy_version = @policy_version;
+
+-- name: CountFindingsByPolicy :one
+SELECT COUNT(*)::BIGINT
+FROM risk_results
+WHERE project_id = @project_id
+  AND risk_policy_id = @risk_policy_id
+  AND policy_version = @policy_version
+  AND found IS TRUE;
+
+-- name: FetchUnanalyzedMessageIDs :many
+SELECT cm.id
+FROM chat_messages cm
+WHERE cm.project_id = @project_id
+  AND NOT EXISTS (
+    SELECT 1
+    FROM risk_results rr
+    WHERE rr.chat_message_id = cm.id
+      AND rr.risk_policy_id = @risk_policy_id
+      AND rr.policy_version = @policy_version
+  )
+ORDER BY cm.seq ASC
+LIMIT @batch_limit;
+
+-- name: GetMessageContentBatch :many
+SELECT id, content
+FROM chat_messages
+WHERE id = ANY(@ids::uuid[])
+  AND project_id = @project_id;
+
+-- name: InsertRiskResults :copyfrom
+INSERT INTO risk_results (
+    project_id
+  , risk_policy_id
+  , policy_version
+  , chat_message_id
+  , source
+  , found
+  , rule_id
+  , description
+  , match
+  , start_line
+  , start_column
+  , end_line
+  , end_column
+  , confidence
+  , tags
+)
+VALUES (
+    @project_id
+  , @risk_policy_id
+  , @policy_version
+  , @chat_message_id
+  , @source
+  , @found
+  , @rule_id
+  , @description
+  , @match
+  , @start_line
+  , @start_column
+  , @end_line
+  , @end_column
+  , @confidence
+  , @tags
+);
+
+-- name: DeleteStaleRiskResults :exec
+DELETE FROM risk_results
+WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id
+  AND policy_version < @policy_version;
+
+-- name: ListRiskResultsByProject :many
+SELECT *
+FROM risk_results
+WHERE project_id = @project_id
+ORDER BY created_at DESC
+LIMIT @result_limit;
+
+-- name: ListRiskResultsByProjectFound :many
+SELECT *
+FROM risk_results
+WHERE project_id = @project_id
+  AND found IS TRUE
+ORDER BY created_at DESC
+LIMIT @result_limit;
+
+-- name: ListRiskResultsByProjectAndPolicy :many
+SELECT *
+FROM risk_results
+WHERE project_id = @project_id
+  AND risk_policy_id = @risk_policy_id
+  AND found IS TRUE
+ORDER BY created_at DESC
+LIMIT @result_limit;
+
+-- name: ListRiskResultsByMessage :many
+SELECT *
+FROM risk_results
+WHERE chat_message_id = @chat_message_id
+  AND project_id = @project_id
+ORDER BY created_at DESC;

@@ -38,6 +38,7 @@ import (
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	resourcesc "github.com/speakeasy-api/gram/server/gen/http/resources/client"
+	riskc "github.com/speakeasy-api/gram/server/gen/http/risk/client"
 	slackc "github.com/speakeasy-api/gram/server/gen/http/slack/client"
 	telemetryc "github.com/speakeasy-api/gram/server/gen/http/telemetry/client"
 	templatesc "github.com/speakeasy-api/gram/server/gen/http/templates/client"
@@ -80,6 +81,7 @@ func UsageCommands() []string {
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"resources list-resources",
+		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|get-risk-policy-status|trigger-risk-analysis)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -798,6 +800,48 @@ func ParseEndpoint(
 		resourcesListResourcesSessionTokenFlag     = resourcesListResourcesFlags.String("session-token", "", "")
 		resourcesListResourcesProjectSlugInputFlag = resourcesListResourcesFlags.String("project-slug-input", "", "")
 
+		riskFlags = flag.NewFlagSet("risk", flag.ContinueOnError)
+
+		riskCreateRiskPolicyFlags                = flag.NewFlagSet("create-risk-policy", flag.ExitOnError)
+		riskCreateRiskPolicyBodyFlag             = riskCreateRiskPolicyFlags.String("body", "REQUIRED", "")
+		riskCreateRiskPolicySessionTokenFlag     = riskCreateRiskPolicyFlags.String("session-token", "", "")
+		riskCreateRiskPolicyProjectSlugInputFlag = riskCreateRiskPolicyFlags.String("project-slug-input", "", "")
+
+		riskListRiskPoliciesFlags                = flag.NewFlagSet("list-risk-policies", flag.ExitOnError)
+		riskListRiskPoliciesSessionTokenFlag     = riskListRiskPoliciesFlags.String("session-token", "", "")
+		riskListRiskPoliciesProjectSlugInputFlag = riskListRiskPoliciesFlags.String("project-slug-input", "", "")
+
+		riskGetRiskPolicyFlags                = flag.NewFlagSet("get-risk-policy", flag.ExitOnError)
+		riskGetRiskPolicyIDFlag               = riskGetRiskPolicyFlags.String("id", "REQUIRED", "")
+		riskGetRiskPolicySessionTokenFlag     = riskGetRiskPolicyFlags.String("session-token", "", "")
+		riskGetRiskPolicyProjectSlugInputFlag = riskGetRiskPolicyFlags.String("project-slug-input", "", "")
+
+		riskUpdateRiskPolicyFlags                = flag.NewFlagSet("update-risk-policy", flag.ExitOnError)
+		riskUpdateRiskPolicyBodyFlag             = riskUpdateRiskPolicyFlags.String("body", "REQUIRED", "")
+		riskUpdateRiskPolicySessionTokenFlag     = riskUpdateRiskPolicyFlags.String("session-token", "", "")
+		riskUpdateRiskPolicyProjectSlugInputFlag = riskUpdateRiskPolicyFlags.String("project-slug-input", "", "")
+
+		riskDeleteRiskPolicyFlags                = flag.NewFlagSet("delete-risk-policy", flag.ExitOnError)
+		riskDeleteRiskPolicyIDFlag               = riskDeleteRiskPolicyFlags.String("id", "REQUIRED", "")
+		riskDeleteRiskPolicySessionTokenFlag     = riskDeleteRiskPolicyFlags.String("session-token", "", "")
+		riskDeleteRiskPolicyProjectSlugInputFlag = riskDeleteRiskPolicyFlags.String("project-slug-input", "", "")
+
+		riskListRiskResultsFlags                = flag.NewFlagSet("list-risk-results", flag.ExitOnError)
+		riskListRiskResultsPolicyIDFlag         = riskListRiskResultsFlags.String("policy-id", "", "")
+		riskListRiskResultsLimitFlag            = riskListRiskResultsFlags.String("limit", "100", "")
+		riskListRiskResultsSessionTokenFlag     = riskListRiskResultsFlags.String("session-token", "", "")
+		riskListRiskResultsProjectSlugInputFlag = riskListRiskResultsFlags.String("project-slug-input", "", "")
+
+		riskGetRiskPolicyStatusFlags                = flag.NewFlagSet("get-risk-policy-status", flag.ExitOnError)
+		riskGetRiskPolicyStatusIDFlag               = riskGetRiskPolicyStatusFlags.String("id", "REQUIRED", "")
+		riskGetRiskPolicyStatusSessionTokenFlag     = riskGetRiskPolicyStatusFlags.String("session-token", "", "")
+		riskGetRiskPolicyStatusProjectSlugInputFlag = riskGetRiskPolicyStatusFlags.String("project-slug-input", "", "")
+
+		riskTriggerRiskAnalysisFlags                = flag.NewFlagSet("trigger-risk-analysis", flag.ExitOnError)
+		riskTriggerRiskAnalysisBodyFlag             = riskTriggerRiskAnalysisFlags.String("body", "REQUIRED", "")
+		riskTriggerRiskAnalysisSessionTokenFlag     = riskTriggerRiskAnalysisFlags.String("session-token", "", "")
+		riskTriggerRiskAnalysisProjectSlugInputFlag = riskTriggerRiskAnalysisFlags.String("project-slug-input", "", "")
+
 		slackFlags = flag.NewFlagSet("slack", flag.ContinueOnError)
 
 		slackCreateSlackAppFlags                = flag.NewFlagSet("create-slack-app", flag.ExitOnError)
@@ -1286,6 +1330,16 @@ func ParseEndpoint(
 	resourcesFlags.Usage = resourcesUsage
 	resourcesListResourcesFlags.Usage = resourcesListResourcesUsage
 
+	riskFlags.Usage = riskUsage
+	riskCreateRiskPolicyFlags.Usage = riskCreateRiskPolicyUsage
+	riskListRiskPoliciesFlags.Usage = riskListRiskPoliciesUsage
+	riskGetRiskPolicyFlags.Usage = riskGetRiskPolicyUsage
+	riskUpdateRiskPolicyFlags.Usage = riskUpdateRiskPolicyUsage
+	riskDeleteRiskPolicyFlags.Usage = riskDeleteRiskPolicyUsage
+	riskListRiskResultsFlags.Usage = riskListRiskResultsUsage
+	riskGetRiskPolicyStatusFlags.Usage = riskGetRiskPolicyStatusUsage
+	riskTriggerRiskAnalysisFlags.Usage = riskTriggerRiskAnalysisUsage
+
 	slackFlags.Usage = slackUsage
 	slackCreateSlackAppFlags.Usage = slackCreateSlackAppUsage
 	slackListSlackAppsFlags.Usage = slackListSlackAppsUsage
@@ -1421,6 +1475,8 @@ func ParseEndpoint(
 			svcf = projectsFlags
 		case "resources":
 			svcf = resourcesFlags
+		case "risk":
+			svcf = riskFlags
 		case "slack":
 			svcf = slackFlags
 		case "telemetry":
@@ -1918,6 +1974,34 @@ func ParseEndpoint(
 			switch epn {
 			case "list-resources":
 				epf = resourcesListResourcesFlags
+
+			}
+
+		case "risk":
+			switch epn {
+			case "create-risk-policy":
+				epf = riskCreateRiskPolicyFlags
+
+			case "list-risk-policies":
+				epf = riskListRiskPoliciesFlags
+
+			case "get-risk-policy":
+				epf = riskGetRiskPolicyFlags
+
+			case "update-risk-policy":
+				epf = riskUpdateRiskPolicyFlags
+
+			case "delete-risk-policy":
+				epf = riskDeleteRiskPolicyFlags
+
+			case "list-risk-results":
+				epf = riskListRiskResultsFlags
+
+			case "get-risk-policy-status":
+				epf = riskGetRiskPolicyStatusFlags
+
+			case "trigger-risk-analysis":
+				epf = riskTriggerRiskAnalysisFlags
 
 			}
 
@@ -2614,6 +2698,34 @@ func ParseEndpoint(
 			case "list-resources":
 				endpoint = c.ListResources()
 				data, err = resourcesc.BuildListResourcesPayload(*resourcesListResourcesCursorFlag, *resourcesListResourcesLimitFlag, *resourcesListResourcesDeploymentIDFlag, *resourcesListResourcesSessionTokenFlag, *resourcesListResourcesProjectSlugInputFlag)
+			}
+		case "risk":
+			c := riskc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-risk-policy":
+				endpoint = c.CreateRiskPolicy()
+				data, err = riskc.BuildCreateRiskPolicyPayload(*riskCreateRiskPolicyBodyFlag, *riskCreateRiskPolicySessionTokenFlag, *riskCreateRiskPolicyProjectSlugInputFlag)
+			case "list-risk-policies":
+				endpoint = c.ListRiskPolicies()
+				data, err = riskc.BuildListRiskPoliciesPayload(*riskListRiskPoliciesSessionTokenFlag, *riskListRiskPoliciesProjectSlugInputFlag)
+			case "get-risk-policy":
+				endpoint = c.GetRiskPolicy()
+				data, err = riskc.BuildGetRiskPolicyPayload(*riskGetRiskPolicyIDFlag, *riskGetRiskPolicySessionTokenFlag, *riskGetRiskPolicyProjectSlugInputFlag)
+			case "update-risk-policy":
+				endpoint = c.UpdateRiskPolicy()
+				data, err = riskc.BuildUpdateRiskPolicyPayload(*riskUpdateRiskPolicyBodyFlag, *riskUpdateRiskPolicySessionTokenFlag, *riskUpdateRiskPolicyProjectSlugInputFlag)
+			case "delete-risk-policy":
+				endpoint = c.DeleteRiskPolicy()
+				data, err = riskc.BuildDeleteRiskPolicyPayload(*riskDeleteRiskPolicyIDFlag, *riskDeleteRiskPolicySessionTokenFlag, *riskDeleteRiskPolicyProjectSlugInputFlag)
+			case "list-risk-results":
+				endpoint = c.ListRiskResults()
+				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsLimitFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
+			case "get-risk-policy-status":
+				endpoint = c.GetRiskPolicyStatus()
+				data, err = riskc.BuildGetRiskPolicyStatusPayload(*riskGetRiskPolicyStatusIDFlag, *riskGetRiskPolicyStatusSessionTokenFlag, *riskGetRiskPolicyStatusProjectSlugInputFlag)
+			case "trigger-risk-analysis":
+				endpoint = c.TriggerRiskAnalysis()
+				data, err = riskc.BuildTriggerRiskAnalysisPayload(*riskTriggerRiskAnalysisBodyFlag, *riskTriggerRiskAnalysisSessionTokenFlag, *riskTriggerRiskAnalysisProjectSlugInputFlag)
 			}
 		case "slack":
 			c := slackc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -5926,6 +6038,199 @@ func resourcesListResourcesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "resources list-resources --cursor \"abc123\" --limit 1 --deployment-id \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// riskUsage displays the usage of the risk command and its subcommands.
+func riskUsage() {
+	fmt.Fprintln(os.Stderr, `Manage risk analysis policies and view scan results.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] risk COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-risk-policy: Create a new risk analysis policy for the current project.`)
+	fmt.Fprintln(os.Stderr, `    list-risk-policies: List all risk analysis policies for the current project.`)
+	fmt.Fprintln(os.Stderr, `    get-risk-policy: Get a risk analysis policy by ID.`)
+	fmt.Fprintln(os.Stderr, `    update-risk-policy: Update a risk analysis policy.`)
+	fmt.Fprintln(os.Stderr, `    delete-risk-policy: Delete a risk analysis policy.`)
+	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
+	fmt.Fprintln(os.Stderr, `    get-risk-policy-status: Get the analysis status of a risk policy including progress and workflow state.`)
+	fmt.Fprintln(os.Stderr, `    trigger-risk-analysis: Manually trigger risk analysis for a policy, starting or signaling the drain workflow.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s risk COMMAND --help\n", os.Args[0])
+}
+func riskCreateRiskPolicyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk create-risk-policy", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new risk analysis policy for the current project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskListRiskPoliciesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-policies", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all risk analysis policies for the current project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-policies --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskGetRiskPolicyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk get-risk-policy", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a risk analysis policy by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-policy --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskUpdateRiskPolicyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk update-risk-policy", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update a risk analysis policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskDeleteRiskPolicyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk delete-risk-policy", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a risk analysis policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk delete-risk-policy --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskListRiskResultsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-results", os.Args[0])
+	fmt.Fprint(os.Stderr, " -policy-id STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List risk analysis results for the current project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskGetRiskPolicyStatusUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk get-risk-policy-status", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the analysis status of a risk policy including progress and workflow state.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-policy-status --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskTriggerRiskAnalysisUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk trigger-risk-analysis", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Manually trigger risk analysis for a policy, starting or signaling the drain workflow.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk trigger-risk-analysis --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // slackUsage displays the usage of the slack command and its subcommands.

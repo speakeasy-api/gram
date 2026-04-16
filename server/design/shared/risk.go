@@ -1,0 +1,78 @@
+package shared
+
+import (
+	. "goa.design/goa/v3/dsl"
+)
+
+var RiskPolicy = Type("RiskPolicy", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("id", String, "The risk policy ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("project_id", String, "The project ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The policy name.")
+	Attribute("sources", ArrayOf(String), "Detection sources enabled for this policy.")
+	Attribute("enabled", Boolean, "Whether the policy is active.")
+	Attribute("version", Int64, "Policy version, incremented on each update.")
+	Attribute("created_at", String, "When the policy was created.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, "When the policy was last updated.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version.")
+	Attribute("total_messages", Int64, "Total number of messages in the project.")
+
+	Required("id", "project_id", "name", "sources", "enabled", "version", "created_at", "updated_at", "pending_messages", "total_messages")
+})
+
+var RiskResult = Type("RiskResult", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("id", String, "The result ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_id", String, "The risk policy ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_version", Int64, "Policy version when this result was produced.")
+	Attribute("chat_message_id", String, "The chat message that was scanned.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("source", String, "Detection source (e.g. gitleaks).")
+	Attribute("rule_id", String, "The matched rule identifier.")
+	Attribute("description", String, "Human-readable description of the finding.")
+	Attribute("match", String, "The matched secret or sensitive data.")
+	Attribute("start_line", Int, "Start line within the message content.")
+	Attribute("start_column", Int, "Start column within the message content.")
+	Attribute("end_line", Int, "End line within the message content.")
+	Attribute("end_column", Int, "End column within the message content.")
+	Attribute("confidence", Float64, "Confidence score for this finding.")
+	Attribute("tags", ArrayOf(String), "Tags from the detection rule.")
+	Attribute("created_at", String, "When this result was created.", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at")
+})
+
+var RiskPolicyStatus = Type("RiskPolicyStatus", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("policy_id", String, "The risk policy ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_version", Int64, "Current policy version.")
+	Attribute("total_messages", Int64, "Total messages in the project.")
+	Attribute("analyzed_messages", Int64, "Messages analyzed at the current policy version.")
+	Attribute("pending_messages", Int64, "Messages not yet analyzed.")
+	Attribute("findings_count", Int64, "Number of findings at the current policy version.")
+	Attribute("workflow_status", String, "Workflow state: running, sleeping, or not_started.", func() {
+		Enum("running", "sleeping", "not_started")
+	})
+
+	Required("policy_id", "policy_version", "total_messages", "analyzed_messages", "pending_messages", "findings_count", "workflow_status")
+})

@@ -43,6 +43,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       routes.chatSessions,
       routes.hooks,
     ],
+    security: [routes.dlp, routes.policyCenter],
   };
 
   return (

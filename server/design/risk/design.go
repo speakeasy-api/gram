@@ -1,0 +1,228 @@
+package risk
+
+import (
+	"github.com/speakeasy-api/gram/server/design/security"
+	"github.com/speakeasy-api/gram/server/design/shared"
+	. "goa.design/goa/v3/dsl"
+)
+
+var _ = Service("risk", func() {
+	Description("Manage risk analysis policies and view scan results.")
+
+	Security(security.Session, security.ProjectSlug)
+	shared.DeclareErrorResponses()
+
+	Method("createRiskPolicy", func() {
+		Description("Create a new risk analysis policy for the current project.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("name", String, "The policy name.")
+			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
+			Attribute("enabled", Boolean, "Whether the policy is active.")
+			Required("name")
+		})
+
+		Result(shared.RiskPolicy)
+
+		HTTP(func() {
+			POST("/rpc/risk.policies.create")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createRiskPolicy")
+		Meta("openapi:extension:x-speakeasy-name-override", "createPolicy")
+	})
+
+	Method("listRiskPolicies", func() {
+		Description("List all risk analysis policies for the current project.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListRiskPoliciesResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.policies.list")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskPolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "listPolicies")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicies"}`)
+	})
+
+	Method("getRiskPolicy", func() {
+		Description("Get a risk analysis policy by ID.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(shared.RiskPolicy)
+
+		HTTP(func() {
+			GET("/rpc/risk.policies.get")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskPolicy")
+		Meta("openapi:extension:x-speakeasy-name-override", "getPolicy")
+	})
+
+	Method("updateRiskPolicy", func() {
+		Description("Update a risk analysis policy.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("name", String, "The policy name.")
+			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
+			Attribute("enabled", Boolean, "Whether the policy is active.")
+			Required("id", "name")
+		})
+
+		Result(shared.RiskPolicy)
+
+		HTTP(func() {
+			PUT("/rpc/risk.policies.update")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateRiskPolicy")
+		Meta("openapi:extension:x-speakeasy-name-override", "updatePolicy")
+	})
+
+	Method("deleteRiskPolicy", func() {
+		Description("Delete a risk analysis policy.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/risk.policies.delete")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deleteRiskPolicy")
+		Meta("openapi:extension:x-speakeasy-name-override", "deletePolicy")
+	})
+
+	Method("listRiskResults", func() {
+		Description("List risk analysis results for the current project.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "Optional policy ID to filter by.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("limit", Int, "Maximum number of results to return.", func() {
+				Default(100)
+			})
+		})
+
+		Result(ListRiskResultsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.results.list")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("policy_id")
+			Param("limit")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskResults")
+		Meta("openapi:extension:x-speakeasy-name-override", "listResults")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResults"}`)
+	})
+
+	Method("getRiskPolicyStatus", func() {
+		Description("Get the analysis status of a risk policy including progress and workflow state.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(shared.RiskPolicyStatus)
+
+		HTTP(func() {
+			GET("/rpc/risk.policies.status")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskPolicyStatus")
+		Meta("openapi:extension:x-speakeasy-name-override", "getPolicyStatus")
+	})
+
+	Method("triggerRiskAnalysis", func() {
+		Description("Manually trigger risk analysis for a policy, starting or signaling the drain workflow.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		HTTP(func() {
+			POST("/rpc/risk.policies.trigger")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "triggerRiskAnalysis")
+		Meta("openapi:extension:x-speakeasy-name-override", "triggerAnalysis")
+	})
+})
+
+var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {
+	Attribute("policies", ArrayOf(shared.RiskPolicy), "The list of risk policies.")
+	Required("policies")
+})
+
+var ListRiskResultsResult = Type("ListRiskResultsResult", func() {
+	Attribute("results", ArrayOf(shared.RiskResult), "The list of risk results.")
+	Required("results")
+})
