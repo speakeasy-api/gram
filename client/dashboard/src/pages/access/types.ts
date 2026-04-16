@@ -1,4 +1,4 @@
-/** The 7 system-defined scopes. Flat — no implied hierarchy. */
+/** The system-defined scopes. Flat — no implied hierarchy. */
 export type Scope =
   | "org:read"
   | "org:admin"
@@ -6,10 +6,12 @@ export type Scope =
   | "build:write"
   | "mcp:read"
   | "mcp:write"
-  | "mcp:connect";
+  | "mcp:connect"
+  | "remote-mcp:read"
+  | "remote-mcp:write";
 
 /** What kind of resource a scope protects. */
-export type ResourceType = "org" | "project" | "mcp";
+export type ResourceType = "org" | "project" | "mcp" | "remote-mcp";
 
 /** A single grant within a role: a scope + optional resource allowlist. */
 export interface RoleGrant {
