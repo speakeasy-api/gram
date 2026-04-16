@@ -26,6 +26,10 @@ export type ListRiskResultsRequest = {
    */
   policyId?: string | undefined;
   /**
+   * Optional chat ID to filter by.
+   */
+  chatId?: string | undefined;
+  /**
    * Maximum number of results to return.
    */
   limit?: number | undefined;
@@ -147,6 +151,7 @@ export function listRiskResultsSecurityToJSON(
 /** @internal */
 export type ListRiskResultsRequest$Outbound = {
   policy_id?: string | undefined;
+  chat_id?: string | undefined;
   limit: number;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
@@ -160,6 +165,7 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     policyId: z.optional(z.string()),
+    chatId: z.optional(z.string()),
     limit: z._default(z.int(), 100),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
@@ -168,6 +174,7 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       policyId: "policy_id",
+      chatId: "chat_id",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",

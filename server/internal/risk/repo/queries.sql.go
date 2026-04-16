@@ -414,6 +414,81 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 	return items, nil
 }
 
+const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
+SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_line, rr.start_column, rr.end_line, rr.end_column, rr.confidence, rr.tags, rr.created_at, cm.chat_id
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE cm.chat_id = $1
+  AND rr.project_id = $2
+  AND rr.found IS TRUE
+ORDER BY rr.created_at DESC
+`
+
+type ListRiskResultsByChatFoundParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type ListRiskResultsByChatFoundRow struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	RiskPolicyID  uuid.UUID
+	PolicyVersion int64
+	ChatMessageID uuid.UUID
+	Source        string
+	Found         bool
+	RuleID        pgtype.Text
+	Description   pgtype.Text
+	Match         pgtype.Text
+	StartLine     pgtype.Int4
+	StartColumn   pgtype.Int4
+	EndLine       pgtype.Int4
+	EndColumn     pgtype.Int4
+	Confidence    pgtype.Float8
+	Tags          []string
+	CreatedAt     pgtype.Timestamptz
+	ChatID        uuid.UUID
+}
+
+func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskResultsByChatFoundParams) ([]ListRiskResultsByChatFoundRow, error) {
+	rows, err := q.db.Query(ctx, listRiskResultsByChatFound, arg.ChatID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRiskResultsByChatFoundRow
+	for rows.Next() {
+		var i ListRiskResultsByChatFoundRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.RiskPolicyID,
+			&i.PolicyVersion,
+			&i.ChatMessageID,
+			&i.Source,
+			&i.Found,
+			&i.RuleID,
+			&i.Description,
+			&i.Match,
+			&i.StartLine,
+			&i.StartColumn,
+			&i.EndLine,
+			&i.EndColumn,
+			&i.Confidence,
+			&i.Tags,
+			&i.CreatedAt,
+			&i.ChatID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskResultsByMessage = `-- name: ListRiskResultsByMessage :many
 SELECT id, project_id, risk_policy_id, policy_version, chat_message_id, source, found, rule_id, description, match, start_line, start_column, end_line, end_column, confidence, tags, created_at
 FROM risk_results

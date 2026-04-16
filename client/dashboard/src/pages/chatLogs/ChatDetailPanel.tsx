@@ -6,6 +6,7 @@ import type {
   TelemetryLogRecord,
 } from "@gram/client/models/components";
 import { useLoadChat, useSearchLogsMutation } from "@gram/client/react-query";
+import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
@@ -308,6 +309,16 @@ export function ChatDetailPanel({
 
   const logs = logsData?.logs || [];
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
+
+  // Fetch risk findings for this chat
+  const { data: riskData } = useRiskListResults({ chatId });
+  const flaggedMessageIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of riskData?.results ?? []) {
+      set.add(r.chatMessageId);
+    }
+    return set;
+  }, [riskData]);
 
   if (chatLoading) {
     return <div className="p-8">Loading chat details...</div>;
@@ -667,6 +678,15 @@ export function ChatDetailPanel({
                               {message.createdAt &&
                                 format(new Date(message.createdAt), "HH:mm:ss")}
                             </span>
+                            {flaggedMessageIds.has(message.id) && (
+                              <Badge variant="destructive" className="text-xs">
+                                <Icon
+                                  name="shield-alert"
+                                  className="mr-1 size-3"
+                                />
+                                Risk
+                              </Badge>
+                            )}
                           </div>
                           <div
                             className={cn(

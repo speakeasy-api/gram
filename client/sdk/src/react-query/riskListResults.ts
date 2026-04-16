@@ -109,6 +109,7 @@ export function setRiskListResultsData(
   queryKeyBase: [
     parameters: {
       policyId?: string | undefined;
+      chatId?: string | undefined;
       limit?: number | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
@@ -127,6 +128,7 @@ export function invalidateRiskListResults(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       policyId?: string | undefined;
+      chatId?: string | undefined;
       limit?: number | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;

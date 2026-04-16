@@ -12721,6 +12721,14 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
+          description: Optional chat ID to filter by.
+          in: query
+          name: chat_id
+          schema:
+            description: Optional chat ID to filter by.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
           description: Maximum number of results to return.
           in: query
           name: limit

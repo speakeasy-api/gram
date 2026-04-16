@@ -100,6 +100,7 @@ async function $do(
   const path = pathToFunc("/rpc/risk.results.list")();
 
   const query = encodeFormQuery({
+    "chat_id": payload?.chat_id,
     "limit": payload?.limit,
     "policy_id": payload?.policy_id,
   });

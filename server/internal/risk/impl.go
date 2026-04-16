@@ -266,7 +266,24 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 
 	var results []*types.RiskResult
 
-	if payload.PolicyID != nil && *payload.PolicyID != "" {
+	if payload.ChatID != nil && *payload.ChatID != "" {
+		chatID, parseErr := uuid.Parse(*payload.ChatID)
+		if parseErr != nil {
+			return nil, oops.C(oops.CodeInvalid)
+		}
+		rows, err := s.repo.ListRiskResultsByChatFound(ctx, repo.ListRiskResultsByChatFoundParams{
+			ChatID:    chatID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").Log(ctx, s.logger)
+		}
+		results = make([]*types.RiskResult, 0, len(rows))
+		for _, row := range rows {
+			cid := row.ChatID.String()
+			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.PolicyVersion, row.ChatMessageID, &cid, row.Source, row.RuleID, row.Description, row.Match, row.StartLine, row.StartColumn, row.EndLine, row.EndColumn, row.Confidence, row.Tags, row.CreatedAt))
+		}
+	} else if payload.PolicyID != nil && *payload.PolicyID != "" {
 		policyID, parseErr := uuid.Parse(*payload.PolicyID)
 		if parseErr != nil {
 			return nil, oops.C(oops.CodeInvalid)

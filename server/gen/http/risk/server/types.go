@@ -3011,9 +3011,10 @@ func NewDeleteRiskPolicyPayload(id string, apikeyToken *string, sessionToken *st
 
 // NewListRiskResultsPayload builds a risk service listRiskResults endpoint
 // payload.
-func NewListRiskResultsPayload(policyID *string, limit int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
+func NewListRiskResultsPayload(policyID *string, chatID *string, limit int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
 	v := &risk.ListRiskResultsPayload{}
 	v.PolicyID = policyID
+	v.ChatID = chatID
 	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

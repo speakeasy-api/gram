@@ -126,6 +126,8 @@ type ListRiskResultsPayload struct {
 	ProjectSlugInput *string
 	// Optional policy ID to filter by.
 	PolicyID *string
+	// Optional chat ID to filter by.
+	ChatID *string
 	// Maximum number of results to return.
 	Limit int
 }

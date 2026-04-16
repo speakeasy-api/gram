@@ -158,6 +158,9 @@ var _ = Service("risk", func() {
 			Attribute("policy_id", String, "Optional policy ID to filter by.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("chat_id", String, "Optional chat ID to filter by.", func() {
+				Format(FormatUUID)
+			})
 			Attribute("limit", Int, "Maximum number of results to return.", func() {
 				Default(100)
 			})
@@ -171,6 +174,7 @@ var _ = Service("risk", func() {
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("policy_id")
+			Param("chat_id")
 			Param("limit")
 			Response(StatusOK)
 		})

@@ -1182,6 +1182,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		var payload *risk.ListRiskResultsPayload
 		var (
 			policyID         *string
+			chatID           *string
 			limit            int
 			apikeyToken      *string
 			sessionToken     *string
@@ -1195,6 +1196,13 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		}
 		if policyID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", *policyID, goa.FormatUUID))
+		}
+		chatIDRaw := qp.Get("chat_id")
+		if chatIDRaw != "" {
+			chatID = &chatIDRaw
+		}
+		if chatID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", *chatID, goa.FormatUUID))
 		}
 		{
 			limitRaw := qp.Get("limit")
@@ -1223,7 +1231,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRiskResultsPayload(policyID, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsPayload(policyID, chatID, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

@@ -222,13 +222,23 @@ func BuildDeleteRiskPolicyPayload(riskDeleteRiskPolicyID string, riskDeleteRiskP
 
 // BuildListRiskResultsPayload builds the payload for the risk listRiskResults
 // endpoint from CLI flags.
-func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
+func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
 	var err error
 	var policyID *string
 	{
 		if riskListRiskResultsPolicyID != "" {
 			policyID = &riskListRiskResultsPolicyID
 			err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", *policyID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var chatID *string
+	{
+		if riskListRiskResultsChatID != "" {
+			chatID = &riskListRiskResultsChatID
+			err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", *chatID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -265,6 +275,7 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	}
 	v := &risk.ListRiskResultsPayload{}
 	v.PolicyID = policyID
+	v.ChatID = chatID
 	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

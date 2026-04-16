@@ -1250,6 +1250,9 @@ func EncodeListRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.PolicyID != nil {
 			values.Add("policy_id", *p.PolicyID)
 		}
+		if p.ChatID != nil {
+			values.Add("chat_id", *p.ChatID)
+		}
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		req.URL.RawQuery = values.Encode()
 		return nil

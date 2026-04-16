@@ -182,6 +182,15 @@ WHERE rr.project_id = @project_id
 ORDER BY rr.created_at DESC
 LIMIT @result_limit;
 
+-- name: ListRiskResultsByChatFound :many
+SELECT rr.*, cm.chat_id
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE cm.chat_id = @chat_id
+  AND rr.project_id = @project_id
+  AND rr.found IS TRUE
+ORDER BY rr.created_at DESC;
+
 -- name: ListRiskResultsByMessage :many
 SELECT *
 FROM risk_results
