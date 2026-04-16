@@ -31,6 +31,9 @@ import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
+import Collections, { CollectionsRoot } from "./pages/collections/Collections";
+import CollectionDetail from "./pages/collections/CollectionDetail";
+import CreateCollection from "./pages/collections/CreateCollection";
 import OrgAdminSettings from "./pages/org/OrgAdminSettings";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
 import Plugins, { PluginsRoot } from "./pages/org/Plugins";
@@ -614,6 +617,25 @@ const ORG_ROUTE_STRUCTURE = {
         title: "Roles & Permissions",
         url: "members",
         component: Access,
+      },
+    },
+  },
+  collections: {
+    title: "Collections",
+    url: "collections",
+    icon: "layout-grid",
+    component: CollectionsRoot,
+    indexComponent: Collections,
+    subPages: {
+      create: {
+        title: "Create Collection",
+        url: "create",
+        component: CreateCollection,
+      },
+      detail: {
+        title: "Collection",
+        url: ":collectionSlug",
+        component: CollectionDetail,
       },
     },
   },

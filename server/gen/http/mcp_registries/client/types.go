@@ -39,8 +39,10 @@ type GetServerDetailsResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// Description of what the server does
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// ID of the registry this server came from
+	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
+	// ID of the internal collection registry this server came from
+	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -820,8 +822,10 @@ type ExternalMCPServerResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// Description of what the server does
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// ID of the registry this server came from
+	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
+	// ID of the internal collection registry this server came from
+	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -1343,13 +1347,14 @@ func NewListCatalogGatewayError(body *ListCatalogGatewayErrorResponseBody) *goa.
 // "getServerDetails" endpoint result from a HTTP "OK" response.
 func NewGetServerDetailsExternalMCPServerOK(body *GetServerDetailsResponseBody) *types.ExternalMCPServer {
 	v := &types.ExternalMCPServer{
-		RegistrySpecifier: *body.RegistrySpecifier,
-		Version:           *body.Version,
-		Description:       *body.Description,
-		RegistryID:        *body.RegistryID,
-		Title:             body.Title,
-		IconURL:           body.IconURL,
-		Meta:              body.Meta,
+		RegistrySpecifier:                   *body.RegistrySpecifier,
+		Version:                             *body.Version,
+		Description:                         *body.Description,
+		RegistryID:                          body.RegistryID,
+		OrganizationMcpCollectionRegistryID: body.OrganizationMcpCollectionRegistryID,
+		Title:                               body.Title,
+		IconURL:                             body.IconURL,
+		Meta:                                body.Meta,
 	}
 	if body.Tools != nil {
 		v.Tools = make([]*types.ExternalMCPTool, len(body.Tools))
@@ -1569,11 +1574,11 @@ func ValidateGetServerDetailsResponseBody(body *GetServerDetailsResponseBody) (e
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
-	if body.RegistryID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("registry_id", "body"))
-	}
 	if body.RegistryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
+	}
+	if body.OrganizationMcpCollectionRegistryID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_mcp_collection_registry_id", *body.OrganizationMcpCollectionRegistryID, goa.FormatUUID))
 	}
 	if body.IconURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))
@@ -2578,11 +2583,11 @@ func ValidateExternalMCPServerResponseBody(body *ExternalMCPServerResponseBody) 
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
-	if body.RegistryID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("registry_id", "body"))
-	}
 	if body.RegistryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
+	}
+	if body.OrganizationMcpCollectionRegistryID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_mcp_collection_registry_id", *body.OrganizationMcpCollectionRegistryID, goa.FormatUUID))
 	}
 	if body.IconURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))

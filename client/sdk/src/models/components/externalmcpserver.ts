@@ -33,9 +33,13 @@ export type ExternalMCPServer = {
    */
   meta?: any | undefined;
   /**
-   * ID of the registry this server came from
+   * ID of the internal collection registry this server came from
    */
-  registryId: string;
+  organizationMcpCollectionRegistryId?: string | undefined;
+  /**
+   * ID of the external MCP registry this server came from
+   */
+  registryId?: string | undefined;
   /**
    * Server specifier used to look up in the registry (e.g., 'io.github.user/server')
    */
@@ -67,7 +71,8 @@ export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
     description: z.string(),
     icon_url: z.optional(z.string()),
     meta: z.optional(z.any()),
-    registry_id: z.string(),
+    organization_mcp_collection_registry_id: z.optional(z.string()),
+    registry_id: z.optional(z.string()),
     registry_specifier: z.string(),
     remotes: z.optional(z.array(ExternalMCPRemote$inboundSchema)),
     title: z.optional(z.string()),
@@ -77,6 +82,8 @@ export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "icon_url": "iconUrl",
+      "organization_mcp_collection_registry_id":
+        "organizationMcpCollectionRegistryId",
       "registry_id": "registryId",
       "registry_specifier": "registrySpecifier",
     });

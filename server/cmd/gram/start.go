@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatsessionssvc "github.com/speakeasy-api/gram/server/internal/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/collections"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -753,6 +754,7 @@ func newStartCommand() *cli.Command {
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, accessManager, func(ctx context.Context, resourceID string) error {
 				return accessManager.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: resourceID})
 			}))
+			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, accessManager, serverURL))
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, posthogClient, telemSvc, assetStorage, accessManager))
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, accessManager))

@@ -39,11 +39,12 @@ type upsertPackage struct {
 }
 
 type upsertExternalMCP struct {
-	registryID              uuid.UUID
-	name                    string
-	slug                    string
-	registryServerSpecifier string
-	selectedRemotes         []string
+	registryID                          uuid.NullUUID
+	organizationMcpCollectionRegistryID uuid.NullUUID
+	name                                string
+	slug                                string
+	registryServerSpecifier             string
+	selectedRemotes                     []string
 }
 
 type deploymentFields struct {
@@ -77,7 +78,7 @@ func createDeployment(
 		key = uuid.New().String()
 	}
 
-	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert); err != nil {
+	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert, externalMCPsToUpsert); err != nil {
 		return uuid.Nil, oops.E(oops.CodeInvalid, err, "one or more deployment assets are invalid:\n%s", err.Error()).Log(ctx, logger)
 	}
 
@@ -163,7 +164,7 @@ func cloneDeployment(
 	defer span.End()
 	defer span.SetStatus(codes.Ok, "deployment cloned")
 
-	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert); err != nil {
+	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert, externalMCPsToUpsert); err != nil {
 		return uuid.Nil, oops.E(oops.CodeInvalid, err, "one or more deployment assets are invalid:\n%s", err.Error()).Log(ctx, logger)
 	}
 
@@ -286,12 +287,13 @@ func amendDeployment(
 
 	for _, e := range externalMCPsToUpsert {
 		_, err := depRepo.UpsertDeploymentExternalMCP(ctx, repo.UpsertDeploymentExternalMCPParams{
-			DeploymentID:            id,
-			RegistryID:              uuid.NullUUID{UUID: e.registryID, Valid: true},
-			Name:                    e.name,
-			Slug:                    e.slug,
-			RegistryServerSpecifier: e.registryServerSpecifier,
-			SelectedRemotes:         e.selectedRemotes,
+			DeploymentID:                        id,
+			RegistryID:                          e.registryID,
+			OrganizationMcpCollectionRegistryID: e.organizationMcpCollectionRegistryID,
+			Name:                                e.name,
+			Slug:                                e.slug,
+			RegistryServerSpecifier:             e.registryServerSpecifier,
+			SelectedRemotes:                     e.selectedRemotes,
 		})
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, err, "error adding deployment external mcp").Log(ctx, logger)

@@ -1755,6 +1755,7 @@ CREATE TABLE IF NOT EXISTS plugin_assignments (
   principal_urn TEXT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT plugin_assignments_pkey PRIMARY KEY (id),
   CONSTRAINT plugin_assignments_plugin_id_fkey FOREIGN KEY (plugin_id) REFERENCES plugins (id) ON DELETE CASCADE,

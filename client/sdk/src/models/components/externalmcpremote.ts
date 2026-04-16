@@ -12,16 +12,14 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Transport type (sse or streamable-http)
  */
-export const ExternalMCPRemoteTransportType = {
+export const TransportType = {
   Sse: "sse",
   StreamableHttp: "streamable-http",
 } as const;
 /**
  * Transport type (sse or streamable-http)
  */
-export type ExternalMCPRemoteTransportType = ClosedEnum<
-  typeof ExternalMCPRemoteTransportType
->;
+export type TransportType = ClosedEnum<typeof TransportType>;
 
 /**
  * A remote endpoint for an MCP server
@@ -30,7 +28,7 @@ export type ExternalMCPRemote = {
   /**
    * Transport type (sse or streamable-http)
    */
-  transportType: ExternalMCPRemoteTransportType;
+  transportType: TransportType;
   /**
    * URL of the remote endpoint
    */
@@ -38,9 +36,8 @@ export type ExternalMCPRemote = {
 };
 
 /** @internal */
-export const ExternalMCPRemoteTransportType$inboundSchema: z.ZodMiniEnum<
-  typeof ExternalMCPRemoteTransportType
-> = z.enum(ExternalMCPRemoteTransportType);
+export const TransportType$inboundSchema: z.ZodMiniEnum<typeof TransportType> =
+  z.enum(TransportType);
 
 /** @internal */
 export const ExternalMCPRemote$inboundSchema: z.ZodMiniType<
@@ -48,7 +45,7 @@ export const ExternalMCPRemote$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    transport_type: ExternalMCPRemoteTransportType$inboundSchema,
+    transport_type: TransportType$inboundSchema,
     url: z.string(),
   }),
   z.transform((v) => {

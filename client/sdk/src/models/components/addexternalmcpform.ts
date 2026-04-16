@@ -11,9 +11,13 @@ export type AddExternalMCPForm = {
    */
   name: string;
   /**
-   * The ID of the MCP registry the server is from.
+   * The ID of the internal collection registry the server is from.
    */
-  registryId: string;
+  organizationMcpCollectionRegistryId?: string | undefined;
+  /**
+   * The ID of the external MCP registry the server is from.
+   */
+  registryId?: string | undefined;
   /**
    * The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').
    */
@@ -31,7 +35,8 @@ export type AddExternalMCPForm = {
 /** @internal */
 export type AddExternalMCPForm$Outbound = {
   name: string;
-  registry_id: string;
+  organization_mcp_collection_registry_id?: string | undefined;
+  registry_id?: string | undefined;
   registry_server_specifier: string;
   selected_remotes?: Array<string> | undefined;
   slug: string;
@@ -44,13 +49,16 @@ export const AddExternalMCPForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     name: z.string(),
-    registryId: z.string(),
+    organizationMcpCollectionRegistryId: z.optional(z.string()),
+    registryId: z.optional(z.string()),
     registryServerSpecifier: z.string(),
     selectedRemotes: z.optional(z.array(z.string())),
     slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      organizationMcpCollectionRegistryId:
+        "organization_mcp_collection_registry_id",
       registryId: "registry_id",
       registryServerSpecifier: "registry_server_specifier",
       selectedRemotes: "selected_remotes",

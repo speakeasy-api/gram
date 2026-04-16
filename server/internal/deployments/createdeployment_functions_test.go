@@ -760,7 +760,7 @@ func TestCreateDeployment_WithFunctions_EmptySlug(t *testing.T) {
 	})
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "error adding deployment functions asset", "should contain functions asset error")
+	require.Contains(t, err.Error(), "functions/0/slug", "should contain functions slug validation error")
 }
 
 func TestCreateDeployment_WithFunctions_BadToolsManifest(t *testing.T) {

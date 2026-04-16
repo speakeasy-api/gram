@@ -28,6 +28,7 @@ type PluginAssignment struct {
 	OrganizationID string
 	PrincipalUrn   string
 	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type PluginServer struct {

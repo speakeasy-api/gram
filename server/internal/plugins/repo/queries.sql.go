@@ -17,7 +17,7 @@ INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
 VALUES ($1, $2, $3)
 ON CONFLICT (plugin_id, principal_urn) DO UPDATE
   SET principal_urn = EXCLUDED.principal_urn
-RETURNING id, plugin_id, organization_id, principal_urn, created_at
+RETURNING id, plugin_id, organization_id, principal_urn, created_at, updated_at
 `
 
 type AddPluginAssignmentParams struct {
@@ -35,6 +35,7 @@ func (q *Queries) AddPluginAssignment(ctx context.Context, arg AddPluginAssignme
 		&i.OrganizationID,
 		&i.PrincipalUrn,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -190,7 +191,7 @@ func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, e
 }
 
 const listPluginAssignments = `-- name: ListPluginAssignments :many
-SELECT id, plugin_id, organization_id, principal_urn, created_at
+SELECT id, plugin_id, organization_id, principal_urn, created_at, updated_at
 FROM plugin_assignments
 WHERE plugin_id = $1
 `
@@ -210,6 +211,7 @@ func (q *Queries) ListPluginAssignments(ctx context.Context, pluginID uuid.UUID)
 			&i.OrganizationID,
 			&i.PrincipalUrn,
 			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
