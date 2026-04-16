@@ -2612,8 +2612,14 @@ type UserSummaryResponseBody struct {
 	TotalOutputTokens int64 `form:"total_output_tokens" json:"total_output_tokens" xml:"total_output_tokens"`
 	// Sum of all tokens used
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+	// Sum of cache read input tokens
+	CacheReadInputTokens int64 `form:"cache_read_input_tokens" json:"cache_read_input_tokens" xml:"cache_read_input_tokens"`
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens int64 `form:"cache_creation_input_tokens" json:"cache_creation_input_tokens" xml:"cache_creation_input_tokens"`
 	// Average tokens per chat request
 	AvgTokensPerRequest float64 `form:"avg_tokens_per_request" json:"avg_tokens_per_request" xml:"avg_tokens_per_request"`
+	// Total cost of all requests
+	TotalCost float64 `form:"total_cost" json:"total_cost" xml:"total_cost"`
 	// Total number of tool calls
 	TotalToolCalls int64 `form:"total_tool_calls" json:"total_tool_calls" xml:"total_tool_calls"`
 	// Successful tool calls (2xx status)
@@ -2648,8 +2654,14 @@ type ProjectSummaryResponseBody struct {
 	TotalOutputTokens int64 `form:"total_output_tokens" json:"total_output_tokens" xml:"total_output_tokens"`
 	// Sum of all tokens used
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+	// Sum of cache read input tokens
+	CacheReadInputTokens int64 `form:"cache_read_input_tokens" json:"cache_read_input_tokens" xml:"cache_read_input_tokens"`
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens int64 `form:"cache_creation_input_tokens" json:"cache_creation_input_tokens" xml:"cache_creation_input_tokens"`
 	// Average tokens per chat request
 	AvgTokensPerRequest float64 `form:"avg_tokens_per_request" json:"avg_tokens_per_request" xml:"avg_tokens_per_request"`
+	// Total cost of all requests
+	TotalCost float64 `form:"total_cost" json:"total_cost" xml:"total_cost"`
 	// Total number of chat requests
 	TotalChatRequests int64 `form:"total_chat_requests" json:"total_chat_requests" xml:"total_chat_requests"`
 	// Average chat request duration in milliseconds
@@ -2709,6 +2721,18 @@ type ObservabilitySummaryResponseBody struct {
 	AvgSessionDurationMs float64 `form:"avg_session_duration_ms" json:"avg_session_duration_ms" xml:"avg_session_duration_ms"`
 	// Average time to resolution in milliseconds
 	AvgResolutionTimeMs float64 `form:"avg_resolution_time_ms" json:"avg_resolution_time_ms" xml:"avg_resolution_time_ms"`
+	// Sum of input tokens used
+	TotalInputTokens int64 `form:"total_input_tokens" json:"total_input_tokens" xml:"total_input_tokens"`
+	// Sum of output tokens used
+	TotalOutputTokens int64 `form:"total_output_tokens" json:"total_output_tokens" xml:"total_output_tokens"`
+	// Sum of all tokens used
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+	// Sum of cache read input tokens
+	CacheReadInputTokens int64 `form:"cache_read_input_tokens" json:"cache_read_input_tokens" xml:"cache_read_input_tokens"`
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens int64 `form:"cache_creation_input_tokens" json:"cache_creation_input_tokens" xml:"cache_creation_input_tokens"`
+	// Total cost of all requests
+	TotalCost float64 `form:"total_cost" json:"total_cost" xml:"total_cost"`
 	// Total number of tool calls
 	TotalToolCalls int64 `form:"total_tool_calls" json:"total_tool_calls" xml:"total_tool_calls"`
 	// Number of failed tool calls
@@ -2731,6 +2755,18 @@ type TimeSeriesBucketResponseBody struct {
 	PartialChats int64 `form:"partial_chats" json:"partial_chats" xml:"partial_chats"`
 	// Abandoned chat sessions in this bucket
 	AbandonedChats int64 `form:"abandoned_chats" json:"abandoned_chats" xml:"abandoned_chats"`
+	// Sum of input tokens in this bucket
+	TotalInputTokens int64 `form:"total_input_tokens" json:"total_input_tokens" xml:"total_input_tokens"`
+	// Sum of output tokens in this bucket
+	TotalOutputTokens int64 `form:"total_output_tokens" json:"total_output_tokens" xml:"total_output_tokens"`
+	// Sum of all tokens in this bucket
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+	// Sum of cache read input tokens in this bucket
+	CacheReadInputTokens int64 `form:"cache_read_input_tokens" json:"cache_read_input_tokens" xml:"cache_read_input_tokens"`
+	// Sum of cache creation input tokens in this bucket
+	CacheCreationInputTokens int64 `form:"cache_creation_input_tokens" json:"cache_creation_input_tokens" xml:"cache_creation_input_tokens"`
+	// Total cost in this bucket
+	TotalCost float64 `form:"total_cost" json:"total_cost" xml:"total_cost"`
 	// Total tool calls in this bucket
 	TotalToolCalls int64 `form:"total_tool_calls" json:"total_tool_calls" xml:"total_tool_calls"`
 	// Failed tool calls in this bucket

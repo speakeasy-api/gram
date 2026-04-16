@@ -6369,6 +6369,95 @@ paths:
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
+  /rpc/hooks.otel/v1/metrics:
+    post:
+      tags:
+        - hooks
+      summary: metrics hooks
+      description: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.
+      operationId: hooks#metrics
+      parameters:
+        - name: Gram-Key
+          in: header
+          description: API Key header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: API Key header
+        - name: Gram-Project
+          in: header
+          description: project header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: project header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTELMetricsPayload'
+      responses:
+        "202":
+          description: Accepted response.
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
   /rpc/hooks.upsertServerNameOverride:
     post:
       tags:
@@ -18942,6 +19031,55 @@ components:
       description: OTEL logs export payload
       required:
         - resourceLogs
+    OTELMetric:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Metric description
+        name:
+          type: string
+          description: Metric name
+        sum:
+          $ref: '#/components/schemas/OTELSum'
+        unit:
+          type: string
+          description: Metric unit
+      description: OTEL metric
+    OTELMetricsPayload:
+      type: object
+      properties:
+        resourceMetrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELResourceMetrics'
+          description: Array of resource metrics
+      description: OTEL metrics export payload
+      required:
+        - resourceMetrics
+    OTELNumberDataPoint:
+      type: object
+      properties:
+        asDouble:
+          type: number
+          description: Value as double
+          format: double
+        asInt:
+          type: integer
+          description: Value as integer
+          format: int64
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELAttribute'
+          description: Data point attributes
+        startTimeUnixNano:
+          type: string
+          description: Start timestamp in nanoseconds
+        timeUnixNano:
+          type: string
+          description: Timestamp in nanoseconds
+      description: OTEL number data point
     OTELResource:
       type: object
       properties:
@@ -18980,6 +19118,17 @@ components:
       description: OTEL resource logs container
       required:
         - scopeLogs
+    OTELResourceMetrics:
+      type: object
+      properties:
+        resource:
+          $ref: '#/components/schemas/OTELResource'
+        scopeMetrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELScopeMetrics'
+          description: Array of scope metrics
+      description: OTEL resource metrics container
     OTELScope:
       type: object
       properties:
@@ -19003,6 +19152,33 @@ components:
       description: OTEL scope logs container
       required:
         - logRecords
+    OTELScopeMetrics:
+      type: object
+      properties:
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELMetric'
+          description: Array of metrics
+        scope:
+          $ref: '#/components/schemas/OTELScope'
+      description: OTEL scope metrics container
+    OTELSum:
+      type: object
+      properties:
+        aggregationTemporality:
+          type: integer
+          description: Aggregation temporality
+          format: int64
+        dataPoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELNumberDataPoint'
+          description: Data points
+        isMonotonic:
+          type: boolean
+          description: Whether the sum is monotonic
+      description: OTEL sum metric
     ObservabilitySummary:
       type: object
       properties:

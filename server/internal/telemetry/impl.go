@@ -908,26 +908,38 @@ func calculateInterval(timeStart, timeEnd int64) int64 {
 func toObservabilitySummary(summary *repo.OverviewSummary) *telem_gen.ObservabilitySummary {
 	if summary == nil {
 		return &telem_gen.ObservabilitySummary{
-			TotalChats:           0,
-			ResolvedChats:        0,
-			FailedChats:          0,
-			AvgSessionDurationMs: 0,
-			AvgResolutionTimeMs:  0,
-			TotalToolCalls:       0,
-			FailedToolCalls:      0,
-			AvgLatencyMs:         0,
+			TotalChats:               0,
+			ResolvedChats:            0,
+			FailedChats:              0,
+			AvgSessionDurationMs:     0,
+			AvgResolutionTimeMs:      0,
+			TotalInputTokens:         0,
+			TotalOutputTokens:        0,
+			TotalTokens:              0,
+			CacheReadInputTokens:     0,
+			CacheCreationInputTokens: 0,
+			TotalCost:                0,
+			TotalToolCalls:           0,
+			FailedToolCalls:          0,
+			AvgLatencyMs:             0,
 		}
 	}
 	//nolint:gosec // Values are bounded counts that won't overflow int64
 	return &telem_gen.ObservabilitySummary{
-		TotalChats:           int64(summary.TotalChats),
-		ResolvedChats:        int64(summary.ResolvedChats),
-		FailedChats:          int64(summary.FailedChats),
-		AvgSessionDurationMs: sanitizeFloat64(summary.AvgSessionDurationMs),
-		AvgResolutionTimeMs:  sanitizeFloat64(summary.AvgResolutionTimeMs),
-		TotalToolCalls:       int64(summary.TotalToolCalls),
-		FailedToolCalls:      int64(summary.FailedToolCalls),
-		AvgLatencyMs:         sanitizeFloat64(summary.AvgLatencyMs),
+		TotalChats:               int64(summary.TotalChats),
+		ResolvedChats:            int64(summary.ResolvedChats),
+		FailedChats:              int64(summary.FailedChats),
+		AvgSessionDurationMs:     sanitizeFloat64(summary.AvgSessionDurationMs),
+		AvgResolutionTimeMs:      sanitizeFloat64(summary.AvgResolutionTimeMs),
+		TotalInputTokens:         summary.TotalInputTokens,
+		TotalOutputTokens:        summary.TotalOutputTokens,
+		TotalTokens:              summary.TotalTokens,
+		CacheReadInputTokens:     summary.CacheReadInputTokens,
+		CacheCreationInputTokens: summary.CacheCreationInputTokens,
+		TotalCost:                sanitizeFloat64(summary.TotalCost),
+		TotalToolCalls:           int64(summary.TotalToolCalls),
+		FailedToolCalls:          int64(summary.FailedToolCalls),
+		AvgLatencyMs:             sanitizeFloat64(summary.AvgLatencyMs),
 	}
 }
 
@@ -940,16 +952,22 @@ func toTimeSeriesBuckets(buckets []repo.TimeSeriesBucket) []*telem_gen.TimeSerie
 	for i, b := range buckets {
 		//nolint:gosec // Values are bounded counts that won't overflow int64
 		result[i] = &telem_gen.TimeSeriesBucket{
-			BucketTimeUnixNano:   strconv.FormatInt(b.BucketTimeUnixNano, 10),
-			TotalChats:           int64(b.TotalChats),
-			ResolvedChats:        int64(b.ResolvedChats),
-			FailedChats:          int64(b.FailedChats),
-			PartialChats:         int64(b.PartialChats),
-			AbandonedChats:       int64(b.AbandonedChats),
-			TotalToolCalls:       int64(b.TotalToolCalls),
-			FailedToolCalls:      int64(b.FailedToolCalls),
-			AvgToolLatencyMs:     sanitizeFloat64(b.AvgToolLatencyMs),
-			AvgSessionDurationMs: sanitizeFloat64(b.AvgSessionDurationMs),
+			BucketTimeUnixNano:       strconv.FormatInt(b.BucketTimeUnixNano, 10),
+			TotalChats:               int64(b.TotalChats),
+			ResolvedChats:            int64(b.ResolvedChats),
+			FailedChats:              int64(b.FailedChats),
+			PartialChats:             int64(b.PartialChats),
+			AbandonedChats:           int64(b.AbandonedChats),
+			TotalInputTokens:         b.TotalInputTokens,
+			TotalOutputTokens:        b.TotalOutputTokens,
+			TotalTokens:              b.TotalTokens,
+			CacheReadInputTokens:     b.CacheReadInputTokens,
+			CacheCreationInputTokens: b.CacheCreationInputTokens,
+			TotalCost:                sanitizeFloat64(b.TotalCost),
+			TotalToolCalls:           int64(b.TotalToolCalls),
+			FailedToolCalls:          int64(b.FailedToolCalls),
+			AvgToolLatencyMs:         sanitizeFloat64(b.AvgToolLatencyMs),
+			AvgSessionDurationMs:     sanitizeFloat64(b.AvgSessionDurationMs),
 		}
 	}
 	return result

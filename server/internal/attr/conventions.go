@@ -255,9 +255,12 @@ const (
 	GenAISystemInstructionsKey = semconv.GenAISystemInstructionsKey
 
 	// Custom GenAI keys not in official semconv (yet)
-	GenAIToolCallsKey         = attribute.Key("gen_ai.tool.calls")
-	GenAIUsageTotalTokensKey  = attribute.Key("gen_ai.usage.total_tokens")
-	GenAIConversationDuration = attribute.Key("gen_ai.conversation.duration")
+	GenAIToolCallsKey                      = attribute.Key("gen_ai.tool.calls")
+	GenAIUsageTotalTokensKey               = attribute.Key("gen_ai.usage.total_tokens")
+	GenAIConversationDuration              = attribute.Key("gen_ai.conversation.duration")
+	GenAIUsageCacheReadInputTokensKey      = attribute.Key("gen_ai.usage.cache_read.input_tokens")
+	GenAIUsageCacheCreationInputTokensKey  = attribute.Key("gen_ai.usage.cache_creation.input_tokens")
+	GenAIUsageCostKey                      = attribute.Key("gen_ai.usage.cost")
 
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
@@ -1097,6 +1100,25 @@ func GenAIEvaluationExplanation(v string) attribute.KeyValue {
 }
 func SlogGenAIEvaluationExplanation(v string) slog.Attr {
 	return slog.String(string(GenAIEvaluationExplanationKey), v)
+}
+
+func GenAIUsageCacheReadInputTokens(v int) attribute.KeyValue {
+	return GenAIUsageCacheReadInputTokensKey.Int(v)
+}
+func SlogGenAIUsageCacheReadInputTokens(v int) slog.Attr {
+	return slog.Int(string(GenAIUsageCacheReadInputTokensKey), v)
+}
+
+func GenAIUsageCacheCreationInputTokens(v int) attribute.KeyValue {
+	return GenAIUsageCacheCreationInputTokensKey.Int(v)
+}
+func SlogGenAIUsageCacheCreationInputTokens(v int) slog.Attr {
+	return slog.Int(string(GenAIUsageCacheCreationInputTokensKey), v)
+}
+
+func GenAIUsageCost(v float64) attribute.KeyValue { return GenAIUsageCostKey.Float64(v) }
+func SlogGenAIUsageCost(v float64) slog.Attr {
+	return slog.Float64(string(GenAIUsageCostKey), v)
 }
 
 func TimeUnixNano(v int64) attribute.KeyValue { return TimeUnixNanoKey.Int64(v) }

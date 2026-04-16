@@ -699,7 +699,12 @@ var UserSummaryType = Type("UserSummary", func() {
 	Attribute("total_input_tokens", Int64, "Sum of input tokens used")
 	Attribute("total_output_tokens", Int64, "Sum of output tokens used")
 	Attribute("total_tokens", Int64, "Sum of all tokens used")
+	Attribute("cache_read_input_tokens", Int64, "Sum of cache read input tokens")
+	Attribute("cache_creation_input_tokens", Int64, "Sum of cache creation input tokens")
 	Attribute("avg_tokens_per_request", Float64, "Average tokens per chat request")
+
+	// Cost
+	Attribute("total_cost", Float64, "Total cost of all requests")
 
 	// Tool calls
 	Attribute("total_tool_calls", Int64, "Total number of tool calls")
@@ -718,6 +723,9 @@ var UserSummaryType = Type("UserSummary", func() {
 		"total_input_tokens",
 		"total_output_tokens",
 		"total_tokens",
+		"cache_read_input_tokens",
+		"cache_creation_input_tokens",
+		"total_cost",
 		"avg_tokens_per_request",
 		"total_tool_calls",
 		"tool_call_success",
@@ -787,7 +795,12 @@ var ProjectSummaryType = Type("ProjectSummary", func() {
 	Attribute("total_input_tokens", Int64, "Sum of input tokens used")
 	Attribute("total_output_tokens", Int64, "Sum of output tokens used")
 	Attribute("total_tokens", Int64, "Sum of all tokens used")
+	Attribute("cache_read_input_tokens", Int64, "Sum of cache read input tokens")
+	Attribute("cache_creation_input_tokens", Int64, "Sum of cache creation input tokens")
 	Attribute("avg_tokens_per_request", Float64, "Average tokens per chat request")
+
+	// Cost
+	Attribute("total_cost", Float64, "Total cost of all requests")
 
 	// Chat requests
 	Attribute("total_chat_requests", Int64, "Total number of chat requests")
@@ -825,6 +838,9 @@ var ProjectSummaryType = Type("ProjectSummary", func() {
 		"total_input_tokens",
 		"total_output_tokens",
 		"total_tokens",
+		"cache_read_input_tokens",
+		"cache_creation_input_tokens",
+		"total_cost",
 		"avg_tokens_per_request",
 		"total_chat_requests",
 		"avg_chat_duration_ms",
@@ -943,6 +959,16 @@ var ObservabilitySummaryType = Type("ObservabilitySummary", func() {
 	Attribute("avg_session_duration_ms", Float64, "Average session duration in milliseconds")
 	Attribute("avg_resolution_time_ms", Float64, "Average time to resolution in milliseconds")
 
+	// Token usage
+	Attribute("total_input_tokens", Int64, "Sum of input tokens used")
+	Attribute("total_output_tokens", Int64, "Sum of output tokens used")
+	Attribute("total_tokens", Int64, "Sum of all tokens used")
+	Attribute("cache_read_input_tokens", Int64, "Sum of cache read input tokens")
+	Attribute("cache_creation_input_tokens", Int64, "Sum of cache creation input tokens")
+
+	// Cost
+	Attribute("total_cost", Float64, "Total cost of all requests")
+
 	// Tool metrics
 	Attribute("total_tool_calls", Int64, "Total number of tool calls")
 	Attribute("failed_tool_calls", Int64, "Number of failed tool calls")
@@ -954,6 +980,12 @@ var ObservabilitySummaryType = Type("ObservabilitySummary", func() {
 		"failed_chats",
 		"avg_session_duration_ms",
 		"avg_resolution_time_ms",
+		"total_input_tokens",
+		"total_output_tokens",
+		"total_tokens",
+		"cache_read_input_tokens",
+		"cache_creation_input_tokens",
+		"total_cost",
 		"total_tool_calls",
 		"failed_tool_calls",
 		"avg_latency_ms",
@@ -969,6 +1001,17 @@ var TimeSeriesBucketType = Type("TimeSeriesBucket", func() {
 	Attribute("failed_chats", Int64, "Failed chat sessions in this bucket")
 	Attribute("partial_chats", Int64, "Partially resolved chat sessions in this bucket")
 	Attribute("abandoned_chats", Int64, "Abandoned chat sessions in this bucket")
+
+	// Token usage
+	Attribute("total_input_tokens", Int64, "Sum of input tokens in this bucket")
+	Attribute("total_output_tokens", Int64, "Sum of output tokens in this bucket")
+	Attribute("total_tokens", Int64, "Sum of all tokens in this bucket")
+	Attribute("cache_read_input_tokens", Int64, "Sum of cache read input tokens in this bucket")
+	Attribute("cache_creation_input_tokens", Int64, "Sum of cache creation input tokens in this bucket")
+
+	// Cost
+	Attribute("total_cost", Float64, "Total cost in this bucket")
+
 	Attribute("total_tool_calls", Int64, "Total tool calls in this bucket")
 	Attribute("failed_tool_calls", Int64, "Failed tool calls in this bucket")
 	Attribute("avg_tool_latency_ms", Float64, "Average tool latency in milliseconds")
@@ -981,6 +1024,12 @@ var TimeSeriesBucketType = Type("TimeSeriesBucket", func() {
 		"failed_chats",
 		"partial_chats",
 		"abandoned_chats",
+		"total_input_tokens",
+		"total_output_tokens",
+		"total_tokens",
+		"cache_read_input_tokens",
+		"cache_creation_input_tokens",
+		"total_cost",
 		"total_tool_calls",
 		"failed_tool_calls",
 		"avg_tool_latency_ms",

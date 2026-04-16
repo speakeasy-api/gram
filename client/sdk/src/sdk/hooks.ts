@@ -5,6 +5,7 @@
 import { hooksHooksNumberClaude } from "../funcs/hooksHooksNumberClaude.js";
 import { hooksHooksNumberCursor } from "../funcs/hooksHooksNumberCursor.js";
 import { hooksHooksNumberLogs } from "../funcs/hooksHooksNumberLogs.js";
+import { hooksHooksNumberMetrics } from "../funcs/hooksHooksNumberMetrics.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -59,6 +60,25 @@ export class Hooks extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(hooksHooksNumberLogs(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * metrics hooks
+   *
+   * @remarks
+   * Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.
+   */
+  async hooksNumberMetrics(
+    request: operations.HooksNumberMetricsRequest,
+    security?: operations.HooksNumberMetricsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(hooksHooksNumberMetrics(
       this,
       request,
       security,

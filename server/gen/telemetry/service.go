@@ -400,6 +400,18 @@ type ObservabilitySummary struct {
 	AvgSessionDurationMs float64
 	// Average time to resolution in milliseconds
 	AvgResolutionTimeMs float64
+	// Sum of input tokens used
+	TotalInputTokens int64
+	// Sum of output tokens used
+	TotalOutputTokens int64
+	// Sum of all tokens used
+	TotalTokens int64
+	// Sum of cache read input tokens
+	CacheReadInputTokens int64
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens int64
+	// Total cost of all requests
+	TotalCost float64
 	// Total number of tool calls
 	TotalToolCalls int64
 	// Number of failed tool calls
@@ -420,8 +432,14 @@ type ProjectSummary struct {
 	TotalOutputTokens int64
 	// Sum of all tokens used
 	TotalTokens int64
+	// Sum of cache read input tokens
+	CacheReadInputTokens int64
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens int64
 	// Average tokens per chat request
 	AvgTokensPerRequest float64
+	// Total cost of all requests
+	TotalCost float64
 	// Total number of chat requests
 	TotalChatRequests int64
 	// Average chat request duration in milliseconds
@@ -703,6 +721,18 @@ type TimeSeriesBucket struct {
 	PartialChats int64
 	// Abandoned chat sessions in this bucket
 	AbandonedChats int64
+	// Sum of input tokens in this bucket
+	TotalInputTokens int64
+	// Sum of output tokens in this bucket
+	TotalOutputTokens int64
+	// Sum of all tokens in this bucket
+	TotalTokens int64
+	// Sum of cache read input tokens in this bucket
+	CacheReadInputTokens int64
+	// Sum of cache creation input tokens in this bucket
+	CacheCreationInputTokens int64
+	// Total cost in this bucket
+	TotalCost float64
 	// Total tool calls in this bucket
 	TotalToolCalls int64
 	// Failed tool calls in this bucket
@@ -779,8 +809,14 @@ type UserSummary struct {
 	TotalOutputTokens int64
 	// Sum of all tokens used
 	TotalTokens int64
+	// Sum of cache read input tokens
+	CacheReadInputTokens int64
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens int64
 	// Average tokens per chat request
 	AvgTokensPerRequest float64
+	// Total cost of all requests
+	TotalCost float64
 	// Total number of tool calls
 	TotalToolCalls int64
 	// Successful tool calls (2xx status)

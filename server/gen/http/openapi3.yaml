@@ -19031,6 +19031,14 @@ components:
                     type: number
                     description: Average session duration in milliseconds
                     format: double
+                cache_creation_input_tokens:
+                    type: integer
+                    description: Sum of cache creation input tokens
+                    format: int64
+                cache_read_input_tokens:
+                    type: integer
+                    description: Sum of cache read input tokens
+                    format: int64
                 failed_chats:
                     type: integer
                     description: Number of failed chat sessions
@@ -19047,6 +19055,22 @@ components:
                     type: integer
                     description: Total number of chat sessions
                     format: int64
+                total_cost:
+                    type: number
+                    description: Total cost of all requests
+                    format: double
+                total_input_tokens:
+                    type: integer
+                    description: Sum of input tokens used
+                    format: int64
+                total_output_tokens:
+                    type: integer
+                    description: Sum of output tokens used
+                    format: int64
+                total_tokens:
+                    type: integer
+                    description: Sum of all tokens used
+                    format: int64
                 total_tool_calls:
                     type: integer
                     description: Total number of tool calls
@@ -19058,6 +19082,12 @@ components:
                 - failed_chats
                 - avg_session_duration_ms
                 - avg_resolution_time_ms
+                - total_input_tokens
+                - total_output_tokens
+                - total_tokens
+                - cache_read_input_tokens
+                - cache_creation_input_tokens
+                - total_cost
                 - total_tool_calls
                 - failed_tool_calls
                 - avg_latency_ms
@@ -19407,6 +19437,14 @@ components:
                     type: number
                     description: Average tool call duration in milliseconds
                     format: double
+                cache_creation_input_tokens:
+                    type: integer
+                    description: Sum of cache creation input tokens
+                    format: int64
+                cache_read_input_tokens:
+                    type: integer
+                    description: Sum of cache read input tokens
+                    format: int64
                 chat_resolution_abandoned:
                     type: integer
                     description: Chats abandoned by user
@@ -19471,6 +19509,10 @@ components:
                     type: integer
                     description: Number of unique chat sessions (project scope only)
                     format: int64
+                total_cost:
+                    type: number
+                    description: Total cost of all requests
+                    format: double
                 total_input_tokens:
                     type: integer
                     description: Sum of input tokens used
@@ -19494,6 +19536,9 @@ components:
                 - total_input_tokens
                 - total_output_tokens
                 - total_tokens
+                - cache_read_input_tokens
+                - cache_creation_input_tokens
+                - total_cost
                 - avg_tokens_per_request
                 - total_chat_requests
                 - avg_chat_duration_ms
@@ -20786,6 +20831,14 @@ components:
                 bucket_time_unix_nano:
                     type: string
                     description: Bucket start time in Unix nanoseconds (string for JS precision)
+                cache_creation_input_tokens:
+                    type: integer
+                    description: Sum of cache creation input tokens in this bucket
+                    format: int64
+                cache_read_input_tokens:
+                    type: integer
+                    description: Sum of cache read input tokens in this bucket
+                    format: int64
                 failed_chats:
                     type: integer
                     description: Failed chat sessions in this bucket
@@ -20806,6 +20859,22 @@ components:
                     type: integer
                     description: Total chat sessions in this bucket
                     format: int64
+                total_cost:
+                    type: number
+                    description: Total cost in this bucket
+                    format: double
+                total_input_tokens:
+                    type: integer
+                    description: Sum of input tokens in this bucket
+                    format: int64
+                total_output_tokens:
+                    type: integer
+                    description: Sum of output tokens in this bucket
+                    format: int64
+                total_tokens:
+                    type: integer
+                    description: Sum of all tokens in this bucket
+                    format: int64
                 total_tool_calls:
                     type: integer
                     description: Total tool calls in this bucket
@@ -20818,6 +20887,12 @@ components:
                 - failed_chats
                 - partial_chats
                 - abandoned_chats
+                - total_input_tokens
+                - total_output_tokens
+                - total_tokens
+                - cache_read_input_tokens
+                - cache_creation_input_tokens
+                - total_cost
                 - total_tool_calls
                 - failed_tool_calls
                 - avg_tool_latency_ms
@@ -21832,6 +21907,14 @@ components:
                     type: number
                     description: Average tokens per chat request
                     format: double
+                cache_creation_input_tokens:
+                    type: integer
+                    description: Sum of cache creation input tokens
+                    format: int64
+                cache_read_input_tokens:
+                    type: integer
+                    description: Sum of cache read input tokens
+                    format: int64
                 first_seen_unix_nano:
                     type: string
                     description: Earliest activity timestamp in Unix nanoseconds
@@ -21859,6 +21942,10 @@ components:
                     type: integer
                     description: Number of unique chat sessions
                     format: int64
+                total_cost:
+                    type: number
+                    description: Total cost of all requests
+                    format: double
                 total_input_tokens:
                     type: integer
                     description: Sum of input tokens used
@@ -21888,6 +21975,9 @@ components:
                 - total_input_tokens
                 - total_output_tokens
                 - total_tokens
+                - cache_read_input_tokens
+                - cache_creation_input_tokens
+                - total_cost
                 - avg_tokens_per_request
                 - total_tool_calls
                 - tool_call_success

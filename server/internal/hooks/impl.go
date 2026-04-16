@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -47,6 +48,17 @@ type Service struct {
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
+	sessionTotals      map[string]*SessionTotals
+	sessionTotalsMu    sync.RWMutex
+}
+
+// SessionTotals tracks cumulative metrics for a session
+type SessionTotals struct {
+	TotalCost         float64
+	TotalInputTokens  float64
+	TotalOutputTokens float64
+	TotalCacheRead    float64
+	TotalCacheCreate  float64
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -104,6 +116,7 @@ func NewService(
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
+		sessionTotals:      make(map[string]*SessionTotals),
 	}
 }
 
@@ -230,11 +243,70 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 		}),
 	)
 
+	// Update running totals
+	s.updateSessionTotals(tokenMetrics)
+
+	// Write metrics to ClickHouse
+	s.writeMetricsToClickHouse(ctx, payload, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	// Get the current totals for this session
+	s.sessionTotalsMu.RLock()
+	totals := s.sessionTotals[tokenMetrics.SessionID]
+	s.sessionTotalsMu.RUnlock()
+
 	println("--------------------------------")
+	println("EXTRACTED METRICS:")
 	println(string(j))
+	println("")
+	println("SESSION TOTALS:")
+	if totals != nil {
+		totalsJSON, _ := json.MarshalIndent(map[string]any{
+			"session_id":          tokenMetrics.SessionID,
+			"total_cost_usd":      totals.TotalCost,
+			"total_input_tokens":  totals.TotalInputTokens,
+			"total_output_tokens": totals.TotalOutputTokens,
+			"total_cache_read":    totals.TotalCacheRead,
+			"total_cache_create":  totals.TotalCacheCreate,
+		}, "", "  ")
+		println(string(totalsJSON))
+	}
 	println("--------------------------------")
 
 	return nil
+}
+
+// updateSessionTotals accumulates metrics for a session
+func (s *Service) updateSessionTotals(metrics TokenMetrics) {
+	if metrics.SessionID == "" {
+		return
+	}
+
+	s.sessionTotalsMu.Lock()
+	defer s.sessionTotalsMu.Unlock()
+
+	if s.sessionTotals[metrics.SessionID] == nil {
+		s.sessionTotals[metrics.SessionID] = &SessionTotals{}
+	}
+
+	totals := s.sessionTotals[metrics.SessionID]
+
+	for _, dp := range metrics.DataPoints {
+		switch dp.MetricName {
+		case "claude_code.cost.usage":
+			totals.TotalCost += dp.Value
+		case "claude_code.token.usage":
+			switch dp.Type {
+			case "input":
+				totals.TotalInputTokens += dp.Value
+			case "output":
+				totals.TotalOutputTokens += dp.Value
+			case "cacheRead":
+				totals.TotalCacheRead += dp.Value
+			case "cacheCreation":
+				totals.TotalCacheCreate += dp.Value
+			}
+		}
+	}
 }
 
 type claudeLogMetadata struct {
