@@ -411,7 +411,11 @@ function HooksContent() {
   }, [tracesData]);
 
   // Fetch complete aggregated summary for accurate analytics (not limited by pagination)
-  const { data: summaryData, isPending: summaryPending } = useQuery({
+  const {
+    data: summaryData,
+    isPending: summaryPending,
+    isError: summaryIsError,
+  } = useQuery({
     queryKey: [
       "hooks-summary",
       from.toISOString(),
@@ -670,6 +674,7 @@ function HooksContent() {
                   serverNameMappings={serverNameMappings}
                   summaryData={summaryData}
                   summaryPending={summaryPending}
+                  summaryIsError={summaryIsError}
                 />
               </EnterpriseGate>
             </Page.Body>
@@ -713,6 +718,7 @@ function HooksInnerContent({
   serverNameMappings,
   summaryData,
   summaryPending,
+  summaryIsError,
 }: {
   isLogsDisabled: boolean;
   isLoading: boolean;
@@ -748,6 +754,7 @@ function HooksInnerContent({
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   summaryData: GetHooksSummaryResult | undefined;
   summaryPending: boolean;
+  summaryIsError: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
   const { from, to } = useMemo(
@@ -873,6 +880,7 @@ function HooksInnerContent({
                   onHookTypesChange={onHookTypesChange}
                   summaryData={summaryData}
                   summaryPending={summaryPending}
+                  summaryIsError={summaryIsError}
                 />
               )}
             </div>
@@ -2038,6 +2046,7 @@ function HooksAnalytics({
   onHookTypesChange,
   summaryData,
   summaryPending,
+  summaryIsError,
 }: {
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
@@ -2047,6 +2056,7 @@ function HooksAnalytics({
   onHookTypesChange: (types: TypesToInclude[]) => void;
   summaryData: GetHooksSummaryResult | undefined;
   summaryPending: boolean;
+  summaryIsError: boolean;
 }) {
   const breakdown = summaryData?.breakdown ?? [];
   const timeSeries = summaryData?.timeSeries ?? [];
@@ -2129,7 +2139,14 @@ function HooksAnalytics({
             : "grid-cols-2 md:grid-cols-3 lg:grid-cols-5",
         )}
       >
-        {summaryPending || !summaryData ? (
+        {summaryIsError && !summaryData ? (
+          <div className="col-span-full">
+            <ErrorAlert
+              error={new Error("Failed to load analytics summary")}
+              title="Error loading analytics"
+            />
+          </div>
+        ) : summaryPending || !summaryData ? (
           <>
             {Array.from({ length: compact ? 3 : 5 }).map((_, i) => (
               <Skeleton key={i} className="h-[104px] rounded-lg" />
