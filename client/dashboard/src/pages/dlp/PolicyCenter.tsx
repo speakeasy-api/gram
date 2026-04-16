@@ -19,7 +19,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Shield, Play } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@speakeasy-api/moonshine";
+import { Plus, Shield, Ellipsis, Loader2 } from "lucide-react";
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -30,6 +36,10 @@ import {
   useRiskTriggerAnalysisMutation,
   invalidateAllRiskListPolicies,
 } from "@gram/client/react-query/index.js";
+import {
+  useRiskGetPolicyStatus,
+  invalidateAllRiskGetPolicyStatus,
+} from "@gram/client/react-query/riskGetPolicyStatus.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 
 export default function PolicyCenter() {
@@ -42,8 +52,11 @@ export default function PolicyCenter() {
   const [formName, setFormName] = useState("");
   const [formEnabled, setFormEnabled] = useState(true);
 
+  const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
+
   const invalidate = useCallback(() => {
     invalidateAllRiskListPolicies(queryClient);
+    invalidateAllRiskGetPolicyStatus(queryClient);
   }, [queryClient]);
 
   const createMutation = useRiskCreatePolicyMutation({
@@ -106,15 +119,11 @@ export default function PolicyCenter() {
   };
 
   const handleDelete = (id: string) => {
-    deleteMutation.mutate({
-      request: { id },
-    });
+    deleteMutation.mutate({ request: { id } });
   };
 
   const handleTrigger = (id: string) => {
-    triggerMutation.mutate({
-      request: { id },
-    });
+    triggerMutation.mutate({ request: { id } });
   };
 
   const handleToggle = (policy: RiskPolicy, enabled: boolean) => {
@@ -207,7 +216,7 @@ export default function PolicyCenter() {
               <TableHead>Status</TableHead>
               <TableHead>Progress</TableHead>
               <TableHead>Version</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="w-[60px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -245,36 +254,47 @@ export default function PolicyCenter() {
                   )}
                 </TableCell>
                 <TableCell>v{policy.version}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTrigger(policy.id);
-                      }}
-                      title="Trigger analysis"
-                    >
-                      <Play className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(policy.id);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                <TableCell>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Ellipsis className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        onSelect={() =>
+                          setTimeout(() => setRunPanelPolicy(policy), 0)
+                        }
+                      >
+                        View Run
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        onSelect={() => handleTrigger(policy.id)}
+                      >
+                        Trigger Analysis
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive cursor-pointer"
+                        onSelect={() => handleDelete(policy.id)}
+                      >
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
 
+        {/* Edit/Create Sheet */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetContent>
             <SheetHeader>
@@ -318,7 +338,150 @@ export default function PolicyCenter() {
             </SheetFooter>
           </SheetContent>
         </Sheet>
+
+        {/* View Run Panel */}
+        <Sheet
+          open={!!runPanelPolicy}
+          onOpenChange={(open) => {
+            if (!open) setRunPanelPolicy(null);
+          }}
+        >
+          <SheetContent side="right" className="sm:max-w-md">
+            {runPanelPolicy && (
+              <RunPanel
+                policy={runPanelPolicy}
+                onTrigger={() => handleTrigger(runPanelPolicy.id)}
+                isTriggerPending={triggerMutation.isPending}
+              />
+            )}
+          </SheetContent>
+        </Sheet>
       </Page.Body>
     </Page>
+  );
+}
+
+function RunPanel({
+  policy,
+  onTrigger,
+  isTriggerPending,
+}: {
+  policy: RiskPolicy;
+  onTrigger: () => void;
+  isTriggerPending: boolean;
+}) {
+  const { data: status, isLoading } = useRiskGetPolicyStatus(
+    { id: policy.id },
+    undefined,
+    { refetchInterval: 5000 },
+  );
+
+  return (
+    <>
+      <SheetHeader>
+        <SheetTitle>{policy.name}</SheetTitle>
+        <SheetDescription>
+          Analysis run details for version {policy.version}
+        </SheetDescription>
+      </SheetHeader>
+
+      <div className="space-y-6 py-6">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+          </div>
+        ) : status ? (
+          <>
+            {/* Workflow Status */}
+            <div className="space-y-2">
+              <label className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+                Workflow
+              </label>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${
+                    status.workflowStatus === "running"
+                      ? "bg-green-500"
+                      : status.workflowStatus === "sleeping"
+                        ? "bg-yellow-500"
+                        : "bg-muted-foreground"
+                  }`}
+                />
+                <span className="text-sm capitalize">
+                  {status.workflowStatus.replace("_", " ")}
+                </span>
+              </div>
+            </div>
+
+            {/* Progress */}
+            <div className="space-y-2">
+              <label className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+                Analysis Progress
+              </label>
+              <div className="space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span>
+                    {status.analyzedMessages.toLocaleString()} /{" "}
+                    {status.totalMessages.toLocaleString()} messages
+                  </span>
+                  <span className="text-muted-foreground">
+                    {status.totalMessages > 0
+                      ? Math.round(
+                          (status.analyzedMessages / status.totalMessages) *
+                            100,
+                        )
+                      : 0}
+                    %
+                  </span>
+                </div>
+                <div className="bg-muted h-2 overflow-hidden rounded-full">
+                  <div
+                    className="bg-primary h-full rounded-full transition-all"
+                    style={{
+                      width: `${status.totalMessages > 0 ? (status.analyzedMessages / status.totalMessages) * 100 : 0}%`,
+                    }}
+                  />
+                </div>
+              </div>
+              {status.pendingMessages > 0 && (
+                <p className="text-muted-foreground text-xs">
+                  {status.pendingMessages.toLocaleString()} messages pending
+                </p>
+              )}
+            </div>
+
+            {/* Findings */}
+            <div className="space-y-2">
+              <label className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+                Findings
+              </label>
+              <p className="text-2xl font-bold">
+                {status.findingsCount.toLocaleString()}
+              </p>
+              <p className="text-muted-foreground text-xs">
+                secrets and sensitive data detected
+              </p>
+            </div>
+
+            {/* Policy Version */}
+            <div className="space-y-2">
+              <label className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+                Policy Version
+              </label>
+              <p className="text-sm">v{status.policyVersion}</p>
+            </div>
+          </>
+        ) : null}
+      </div>
+
+      <SheetFooter className="border-border border-t pt-4">
+        <Button onClick={onTrigger} disabled={isTriggerPending}>
+          {isTriggerPending && (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          )}
+          Trigger Analysis
+        </Button>
+      </SheetFooter>
+    </>
   );
 }
