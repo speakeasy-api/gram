@@ -39,7 +39,6 @@ type speakeasyProviderOrganization struct {
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
 	AccountType        string    `json:"account_type"`
-	SSOConnectionID    *string   `json:"sso_connection_id,omitempty"`
 	WorkOSID           *string   `json:"workos_id,omitempty"`   //nolint:tagliatelle // workos_id is correct snake_case
 	UserWorkspaceSlugs []string  `json:"user_workspaces_slugs"` // speakeasy-registry side is user_workspaces_slugs
 }
@@ -215,10 +214,11 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 	var nonFreeOrganizations []auth.OrganizationEntry
 	for i, org := range validateResp.Organizations {
 		authOrg := auth.OrganizationEntry{
-			ID:                 org.ID,
-			Name:               org.Name,
-			Slug:               org.Slug,
-			SsoConnectionID:    org.SSOConnectionID,
+			ID:   org.ID,
+			Name: org.Name,
+			Slug: org.Slug,
+			// will be removed
+			SsoConnectionID:    nil,
 			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
 			Projects:           []*auth.ProjectEntry{}, // filled in from gram server
 		}
@@ -315,10 +315,11 @@ func (s *Manager) CreateOrgFromSpeakeasy(ctx context.Context, idToken string, or
 	organizations := make([]auth.OrganizationEntry, len(validateResp.Organizations))
 	for i, org := range validateResp.Organizations {
 		authOrg := auth.OrganizationEntry{
-			ID:                 org.ID,
-			Name:               org.Name,
-			Slug:               org.Slug,
-			SsoConnectionID:    org.SSOConnectionID,
+			ID:   org.ID,
+			Name: org.Name,
+			Slug: org.Slug,
+			// will be removed
+			SsoConnectionID:    nil,
 			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
 			Projects:           []*auth.ProjectEntry{},
 		}
