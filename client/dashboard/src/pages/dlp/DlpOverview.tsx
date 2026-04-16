@@ -68,9 +68,10 @@ export default function DlpOverview() {
   }
 
   const totalFindings = results.length;
-  const uniqueSources = [
-    ...new Set(results.map((r) => r.source).filter(Boolean)),
-  ];
+  const totalScanned = policies.reduce(
+    (max, p) => Math.max(max, p.totalMessages - p.pendingMessages),
+    0,
+  );
 
   return (
     <Page>
@@ -90,20 +91,18 @@ export default function DlpOverview() {
           </Button>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-4">
+        <div className="mt-4 grid grid-cols-2 gap-4">
           <div className="rounded-lg border p-4">
-            <p className="text-muted-foreground text-sm">Active Policies</p>
+            <p className="text-muted-foreground text-sm">Events Scanned</p>
             <p className="text-2xl font-bold">
-              {policies.filter((p) => p.enabled).length}
+              {totalScanned.toLocaleString()}
             </p>
           </div>
           <div className="rounded-lg border p-4">
             <p className="text-muted-foreground text-sm">Total Findings</p>
-            <p className="text-2xl font-bold">{totalFindings}</p>
-          </div>
-          <div className="rounded-lg border p-4">
-            <p className="text-muted-foreground text-sm">Detection Sources</p>
-            <p className="text-2xl font-bold">{uniqueSources.length}</p>
+            <p className="text-2xl font-bold">
+              {totalFindings.toLocaleString()}
+            </p>
           </div>
         </div>
 
@@ -128,7 +127,10 @@ export default function DlpOverview() {
                     onClick={() => {
                       if (result.chatId) {
                         routes.chatSessions.goTo({
-                          queryParams: { search: result.chatId },
+                          queryParams: {
+                            chatId: result.chatId,
+                            range: "90d",
+                          },
                         });
                       }
                     }}

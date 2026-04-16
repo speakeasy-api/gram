@@ -18,7 +18,7 @@ import {
 } from "@gram/client/react-query";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { ChatDetailPanel } from "./ChatDetailPanel";
 import { ChatLogsFilters } from "./ChatLogsFilters";
@@ -168,6 +168,7 @@ export default function ChatLogs() {
   const urlFrom = searchParams.get("from");
   const urlTo = searchParams.get("to");
   const urlSearch = searchParams.get("search");
+  const urlChatId = searchParams.get("chatId");
   const urlStatus = searchParams.get("status");
   const urlSort = searchParams.get("sort") as SortField | null;
   const urlOrder = searchParams.get("order") as SortOrder | null;
@@ -312,6 +313,17 @@ export default function ChatLogs() {
   const total = lastTotalRef.current;
   const hasMore =
     total > 0 ? offset + chats.length < total : chats.length === limit;
+
+  // Auto-select a chat if chatId is in the URL (e.g. from risk findings deep-link)
+  const autoSelectedRef = useRef(false);
+  useEffect(() => {
+    if (!urlChatId || autoSelectedRef.current || chats.length === 0) return;
+    const match = chats.find((c) => c.id === urlChatId);
+    if (match) {
+      setSelectedChat(match);
+      autoSelectedRef.current = true;
+    }
+  }, [urlChatId, chats, setSelectedChat]);
 
   // Format date range for copilot context
   const dateRangeContext = useMemo(() => {
