@@ -18,7 +18,8 @@ func TestScanWithGitleaks_NoSecrets(t *testing.T) {
 
 func TestScanWithGitleaks_DetectsAWSKey(t *testing.T) {
 	t.Parallel()
-	content := `Here is my AWS key: AKIAIOSFODNN7EXAMPLE and secret: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
+	// Use realistic-looking keys — "EXAMPLE" is globally allowlisted by gitleaks.
+	content := `Here is my AWS key: AKIAIOSFODNN7REALKEY and secret: wJalrXUtnFEMI/K7MDENG/bPxRfiCYREALKEYXX`
 	findings, err := risk_analysis.ScanWithGitleaks(content)
 	require.NoError(t, err)
 	assert.NotEmpty(t, findings, "expected at least one finding for AWS credentials")
@@ -30,8 +31,15 @@ func TestScanWithGitleaks_DetectsAWSKey(t *testing.T) {
 
 func TestScanWithGitleaks_DetectsGitHubToken(t *testing.T) {
 	t.Parallel()
-	content := `export GITHUB_TOKEN=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij`
+	content := `export GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab`
 	findings, err := risk_analysis.ScanWithGitleaks(content)
 	require.NoError(t, err)
 	assert.NotEmpty(t, findings, "expected at least one finding for GitHub token")
+}
+
+func TestScanWithGitleaks_EmptyContent(t *testing.T) {
+	t.Parallel()
+	findings, err := risk_analysis.ScanWithGitleaks("")
+	require.NoError(t, err)
+	assert.Empty(t, findings)
 }
