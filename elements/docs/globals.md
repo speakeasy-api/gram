@@ -55,6 +55,7 @@
 
 ## Variables
 
+- [ToolFallback](variables/ToolFallback.md)
 - [PRESETS](variables/PRESETS.md)
 - [MODELS](variables/MODELS.md)
 
