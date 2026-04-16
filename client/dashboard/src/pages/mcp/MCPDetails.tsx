@@ -550,6 +550,7 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
         }}
         isLoading={updateToolsetMutation.isPending}
         currentlyEnabled={currentStatus !== "disabled"}
+        targetIsPublic={pendingStatus === "public"}
       />
       <FeatureRequestModal
         isOpen={isMaxServersModalOpen}
