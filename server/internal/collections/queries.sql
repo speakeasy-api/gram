@@ -4,6 +4,14 @@ VALUES
   (@organization_id, @name, @description, @slug, @visibility)
 RETURNING id, organization_id, name, description, slug, visibility, created_at, updated_at;
 
+-- name: EnsureOrganizationMcpCollection :one
+INSERT INTO organization_mcp_collections (organization_id, name, description, slug, visibility)
+VALUES
+  (@organization_id, @name, @description, @slug, @visibility)
+ON CONFLICT (slug, organization_id) WHERE deleted IS FALSE
+DO UPDATE SET updated_at = organization_mcp_collections.updated_at
+RETURNING id, organization_id, name, description, slug, visibility, created_at, updated_at;
+
 -- name: GetOrganizationMcpCollectionByID :one
 SELECT id, organization_id, name, description, slug, visibility, created_at, updated_at
 FROM organization_mcp_collections
@@ -71,6 +79,18 @@ WITH org_collection AS (
 INSERT INTO organization_mcp_collection_registries (collection_id, namespace)
 SELECT id, @namespace
 FROM org_collection
+RETURNING *;
+
+-- name: EnsureOrganizationMcpCollectionRegistry :one
+WITH org_collection AS (
+  SELECT omc.id FROM organization_mcp_collections omc
+  WHERE omc.id = @collection_id AND omc.organization_id = @organization_id AND omc.deleted IS FALSE
+)
+INSERT INTO organization_mcp_collection_registries (collection_id, namespace)
+SELECT id, @namespace
+FROM org_collection
+ON CONFLICT (collection_id) WHERE deleted IS FALSE
+DO UPDATE SET updated_at = organization_mcp_collection_registries.updated_at
 RETURNING *;
 
 -- name: GetOrganizationMcpCollectionRegistryByID :one
