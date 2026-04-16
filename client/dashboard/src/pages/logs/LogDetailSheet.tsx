@@ -356,6 +356,9 @@ function flattenObject(
         }
         break;
       case "string":
+        // Empty strings are treated as non-filterable (same as null/undefined):
+        // a `key = ""` filter matches empty and missing values equivalently
+        // server-side, so surfacing it as a filter option would be misleading.
         result.push({
           key: fullKey,
           displayValue: value || "\u2014",
