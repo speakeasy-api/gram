@@ -425,7 +425,7 @@ function AttributesSection({
       </div>
       <div className="bg-muted border-border divide-border divide-y rounded-lg border">
         {flatEntries.map((entry) => {
-          const isFilterable = entry.filterValue !== null && !!onAddFilter;
+          const isFilterable = entry.filterValue !== null;
 
           const rowContent = (
             <>
@@ -452,7 +452,7 @@ function AttributesSection({
               <DropdownMenuTrigger asChild>
                 <button
                   className="hover:bg-muted/50 flex w-full cursor-pointer flex-col gap-1 px-4 py-2.5 text-left transition-colors"
-                  aria-label={`Filter by ${entry.key}`}
+                  aria-label={`Attribute actions for ${entry.key}`}
                 >
                   {rowContent}
                 </button>
@@ -460,9 +460,13 @@ function AttributesSection({
               <DropdownMenuContent align="start">
                 <DropdownMenuItem
                   disabled={!isFilterable}
-                  onClick={() =>
-                    onAddFilter(entry.key, Operator.Eq, entry.filterValue!)
-                  }
+                  onClick={() => {
+                    // Runtime guard: Radix `disabled` sets aria-disabled but
+                    // does not suppress onClick, so re-check filterValue here.
+                    if (entry.filterValue !== null) {
+                      onAddFilter(entry.key, Operator.Eq, entry.filterValue);
+                    }
+                  }}
                 >
                   <span>
                     Filter by{" "}
@@ -473,9 +477,11 @@ function AttributesSection({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!isFilterable}
-                  onClick={() =>
-                    onAddFilter(entry.key, Operator.NotEq, entry.filterValue!)
-                  }
+                  onClick={() => {
+                    if (entry.filterValue !== null) {
+                      onAddFilter(entry.key, Operator.NotEq, entry.filterValue);
+                    }
+                  }}
                 >
                   <span>
                     Exclude{" "}
@@ -486,13 +492,15 @@ function AttributesSection({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!isFilterable}
-                  onClick={() =>
-                    onAddFilter(
-                      entry.key,
-                      Operator.Contains,
-                      entry.filterValue!,
-                    )
-                  }
+                  onClick={() => {
+                    if (entry.filterValue !== null) {
+                      onAddFilter(
+                        entry.key,
+                        Operator.Contains,
+                        entry.filterValue,
+                      );
+                    }
+                  }}
                 >
                   <span>
                     Contains{" "}
