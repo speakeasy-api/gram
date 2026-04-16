@@ -34,16 +34,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
-	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 var validPrincipalURN = regexp.MustCompile(`^(\*|role:[a-zA-Z0-9_-]+|user:[a-zA-Z0-9_-]+)$`)
 
+// GitHubPublisher is the interface for creating repos and pushing files to GitHub.
+type GitHubPublisher interface {
+	CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error
+	PushFiles(ctx context.Context, installationID int64, owner, repo, branch, commitMsg string, files map[string][]byte) (string, error)
+}
+
 // GitHubConfig holds the configured GitHub client and the Gram-owned org
 // where plugin repos are created. Nil means GitHub publishing is disabled.
 type GitHubConfig struct {
-	Client         *ghclient.Client
+	Client         GitHubPublisher
 	Org            string
 	InstallationID int64
 }
@@ -771,14 +776,14 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug string) Gen
 		ServerURL: s.serverURL,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	switch {
+	case err == nil:
+		cfg.OrgName = orgName
+	case !errors.Is(err, pgx.ErrNoRows):
 		s.logger.WarnContext(ctx, "failed to fetch organization name, falling back to slug",
 			attr.SlogOrganizationID(orgID),
 			attr.SlogError(err),
 		)
-	}
-	if err == nil {
-		cfg.OrgName = orgName
 	}
 	return cfg
 }

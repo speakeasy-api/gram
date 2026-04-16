@@ -31,6 +31,18 @@ func truncatedBody(resp *http.Response) string {
 // CreateRepo creates a new repository under the given organization.
 // If the repo already exists, this is a no-op.
 func (c *Client) CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error {
+	// Check if the repo already exists before attempting creation.
+	// This avoids relying on parsing GitHub's 422 error prose.
+	checkURL, _ := url.JoinPath(apiBase, "repos", org, name)
+	checkResp, err := c.doAPI(ctx, installationID, http.MethodGet, checkURL, nil)
+	if err != nil {
+		return fmt.Errorf("check repo existence: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return checkResp.Body.Close() })
+	if checkResp.StatusCode == http.StatusOK {
+		return nil // repo already exists
+	}
+
 	payload := map[string]any{
 		"name":          name,
 		"private":       private,
@@ -45,27 +57,18 @@ func (c *Client) CreateRepo(ctx context.Context, installationID int64, org, name
 		return fmt.Errorf("marshal create repo: %w", err)
 	}
 
-	url, _ := url.JoinPath(apiBase, "orgs", org, "repos")
-	resp, err := c.doAPI(ctx, installationID, http.MethodPost, url, bytes.NewReader(body))
+	createURL, _ := url.JoinPath(apiBase, "orgs", org, "repos")
+	resp, err := c.doAPI(ctx, installationID, http.MethodPost, createURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create repo: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
-	switch resp.StatusCode {
-	case http.StatusCreated:
-		return nil
-	case http.StatusUnprocessableEntity:
-		// 422 is returned both for "already exists" and for validation errors
-		// (invalid name, permissions). Check the body for the "already exists" case.
-		body := truncatedBody(resp)
-		if strings.Contains(body, "name already exists") {
-			return nil
-		}
-		return fmt.Errorf("create repo: status %d: %s", resp.StatusCode, body)
-	default:
+	if resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("create repo: status %d: %s", resp.StatusCode, truncatedBody(resp))
 	}
+
+	return nil
 }
 
 // PushFiles atomically commits a set of files to the given repository branch

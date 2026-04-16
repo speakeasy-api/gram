@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/sync/singleflight"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -20,11 +21,12 @@ import (
 // Client authenticates as a GitHub App and performs API operations
 // on behalf of installations.
 type Client struct {
-	appID      int64
-	privateKey *rsa.PrivateKey
-	httpClient *guardian.HTTPClient
-	mu         sync.Mutex
-	tokens     map[int64]cachedToken
+	appID       int64
+	privateKey  *rsa.PrivateKey
+	httpClient  *guardian.HTTPClient
+	mu          sync.Mutex
+	tokens      map[int64]cachedToken
+	tokenFlight singleflight.Group
 }
 
 type cachedToken struct {
@@ -53,11 +55,12 @@ func NewClient(appID int64, privateKeyPEM []byte, httpClient *guardian.HTTPClien
 	}
 
 	return &Client{
-		appID:      appID,
-		privateKey: key,
-		httpClient: httpClient,
-		mu:         sync.Mutex{},
-		tokens:     make(map[int64]cachedToken),
+		appID:       appID,
+		privateKey:  key,
+		httpClient:  httpClient,
+		mu:          sync.Mutex{},
+		tokens:      make(map[int64]cachedToken),
+		tokenFlight: singleflight.Group{},
 	}, nil
 }
 
@@ -81,6 +84,7 @@ func (c *Client) appJWT() (string, error) {
 }
 
 func (c *Client) installationToken(ctx context.Context, installationID int64) (string, error) {
+	// Fast path: return cached token if still valid.
 	c.mu.Lock()
 	if ct, ok := c.tokens[installationID]; ok && time.Now().Before(ct.expiresAt) {
 		c.mu.Unlock()
@@ -88,6 +92,30 @@ func (c *Client) installationToken(ctx context.Context, installationID int64) (s
 	}
 	c.mu.Unlock()
 
+	// Deduplicate concurrent token refreshes for the same installation.
+	key := fmt.Sprintf("%d", installationID)
+	val, err, _ := c.tokenFlight.Do(key, func() (any, error) {
+		// Re-check cache inside singleflight — another goroutine may have just refreshed.
+		c.mu.Lock()
+		if ct, ok := c.tokens[installationID]; ok && time.Now().Before(ct.expiresAt) {
+			c.mu.Unlock()
+			return ct.token, nil
+		}
+		c.mu.Unlock()
+
+		return c.mintInstallationToken(ctx, installationID)
+	})
+	if err != nil {
+		return "", fmt.Errorf("installation token: %w", err)
+	}
+	token, ok := val.(string)
+	if !ok {
+		return "", fmt.Errorf("installation token: unexpected type %T", val)
+	}
+	return token, nil
+}
+
+func (c *Client) mintInstallationToken(ctx context.Context, installationID int64) (string, error) {
 	appJWT, err := c.appJWT()
 	if err != nil {
 		return "", fmt.Errorf("create app JWT: %w", err)
