@@ -104,6 +104,36 @@ ON CONFLICT (organization_id, user_id) DO UPDATE SET
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.deleted_at IS NULL;
 
+-- name: SetUserWorkOSMemberships :exec
+-- Declaratively set all WorkOS memberships for a user. Upserts the provided
+-- (org_id, workos_membership_id) pairs and soft-deletes any other org
+-- relationships where the org has a non-NULL workos_id in organization_metadata.
+-- Orgs without a workos_id are unaffected. Other users' memberships are never
+-- modified.
+WITH input_memberships AS (
+    SELECT unnest(@organization_ids::text[]) AS organization_id,
+           unnest(@workos_membership_ids::text[]) AS workos_membership_id
+),
+upserted AS (
+    INSERT INTO organization_user_relationships (organization_id, user_id, workos_membership_id)
+    SELECT im.organization_id, @user_id, im.workos_membership_id
+    FROM input_memberships im
+    ON CONFLICT (organization_id, user_id) DO UPDATE SET
+        workos_membership_id = EXCLUDED.workos_membership_id,
+        deleted_at = NULL,
+        updated_at = clock_timestamp()
+    RETURNING organization_id
+)
+UPDATE organization_user_relationships AS our
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE our.user_id = @user_id
+  AND our.deleted_at IS NULL
+  AND our.organization_id NOT IN (SELECT organization_id FROM input_memberships)
+  AND our.organization_id IN (
+      SELECT id FROM organization_metadata WHERE workos_id IS NOT NULL
+  );
+
 -- name: SetOrgWorkosID :one
 UPDATE organization_metadata
 SET workos_id = @workos_id,

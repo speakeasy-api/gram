@@ -431,19 +431,27 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 		}
 	}
 
-	for _, org := range validateResp.Organizations {
-		if org.SSOConnectionID == nil {
-			continue
-		}
+	// Fetch all org memberships for this user in one API call instead of one per org.
+	memberships, err := s.workos.ListUserMemberships(ctx, workosUserID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to list workos user memberships", attr.SlogError(err))
+		return
+	}
 
-		orgMembership, err := s.workos.GetOrgMembership(ctx, workosUserID, org.ID)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "failed to get workos org membership", attr.SlogError(err))
+	membershipByOrgID := make(map[string]int, len(memberships))
+	for i, m := range memberships {
+		membershipByOrgID[m.OrganizationID] = i
+	}
+
+	var orgIDs []string
+	var membershipIDs []string
+
+	for _, org := range validateResp.Organizations {
+		idx, ok := membershipByOrgID[org.ID]
+		if !ok {
 			continue
 		}
-		if orgMembership == nil {
-			continue
-		}
+		orgMembership := memberships[idx]
 
 		// Link the organization to its WorkOS org ID if not already linked.
 		if _, err := s.orgRepo.SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
@@ -457,16 +465,15 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 			}
 		}
 
-		if err := s.orgRepo.AttachWorkOSUserToOrg(
-			ctx,
-			orgRepo.AttachWorkOSUserToOrgParams{
-				OrganizationID:     org.ID,
-				UserID:             validateResp.User.ID,
-				WorkosMembershipID: conv.ToPGText(orgMembership.ID),
-			},
-		); err != nil {
-			s.logger.ErrorContext(ctx, "failed to attach workos user to org", attr.SlogError(err))
-			continue
-		}
+		orgIDs = append(orgIDs, org.ID)
+		membershipIDs = append(membershipIDs, orgMembership.ID)
+	}
+
+	if err := s.orgRepo.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
+		UserID:              validateResp.User.ID,
+		OrganizationIds:     orgIDs,
+		WorkosMembershipIds: membershipIDs,
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to set user workos memberships", attr.SlogError(err))
 	}
 }
