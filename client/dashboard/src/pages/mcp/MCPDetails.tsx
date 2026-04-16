@@ -203,27 +203,27 @@ export function MCPDetailPage() {
   let statusBadge = null;
   if (!toolset.mcpEnabled) {
     statusBadge = (
-      <Badge variant="neutral">
+      <Badge variant="warning">
         <Badge.LeftIcon>
-          <XCircleIcon className="h-3 w-3" />
+          <XCircleIcon />
         </Badge.LeftIcon>
         <Badge.Text>Disabled</Badge.Text>
       </Badge>
     );
   } else if (toolset.mcpIsPublic) {
     statusBadge = (
-      <Badge variant="neutral">
+      <Badge variant="success">
         <Badge.LeftIcon>
-          <CheckCircleIcon className="h-3 w-3 text-green-600" />
+          <CheckCircleIcon />
         </Badge.LeftIcon>
         <Badge.Text>Public</Badge.Text>
       </Badge>
     );
   } else {
     statusBadge = (
-      <Badge variant="neutral">
+      <Badge variant="information">
         <Badge.LeftIcon>
-          <LockIcon className="h-3 w-3" />
+          <LockIcon />
         </Badge.LeftIcon>
         <Badge.Text>Private</Badge.Text>
       </Badge>
@@ -257,9 +257,9 @@ export function MCPDetailPage() {
         >
           <div className="flex items-end justify-between">
             <Stack gap={2}>
-              <div className="ml-1 flex items-center gap-3">
+              <div className="ml-1 flex gap-3">
                 <Heading variant="h1">{toolset.name}</Heading>
-                {statusBadge}
+                <div className="mt-auto mb-1">{statusBadge}</div>
               </div>
               <div className="ml-1 flex items-center gap-2">
                 <Type className="text-muted-foreground max-w-2xl truncate">{mcpUrl}</Type>
