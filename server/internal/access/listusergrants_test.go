@@ -148,6 +148,34 @@ func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
 	}
 }
 
+func TestService_ListGrants_EnterpriseWithoutSessionReturnsFullAccess(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	authCtx.AccountType = "enterprise"
+	authCtx.SessionID = nil
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Grants, len(expectedFullAccessScopes))
+
+	byScope := make(map[string]*gen.ListRoleGrant, len(result.Grants))
+	for _, grant := range result.Grants {
+		byScope[grant.Scope] = grant
+	}
+
+	for _, scope := range expectedFullAccessScopes {
+		grant, ok := byScope[scope]
+		require.True(t, ok)
+		require.Nil(t, grant.Resources)
+	}
+}
+
 func TestService_ListGrants_WorkOSMembersFailure(t *testing.T) {
 	t.Parallel()
 

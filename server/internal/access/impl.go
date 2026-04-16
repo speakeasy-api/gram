@@ -612,18 +612,11 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return &gen.ListUserGrantsResult{Grants: grantsFromRows(grantsFromOverrides(overrides).rows)}, nil
 	}
 
-	ac, err := s.authContext(ctx)
+	enforce, err := s.access.shouldEnforce(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return nil, err
 	}
-	if ac.AccountType != "enterprise" {
-		return &gen.ListUserGrantsResult{Grants: fullAccessGrantPayloads()}, nil
-	}
-	enabled, err := s.access.features.IsFeatureEnabled(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, s.logger)
-	}
-	if !enabled {
+	if !enforce {
 		return &gen.ListUserGrantsResult{Grants: fullAccessGrantPayloads()}, nil
 	}
 
