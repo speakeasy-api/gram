@@ -81,30 +81,53 @@ function extractSkillForCache(payload: JsonObject): {
   return first;
 }
 
+function buildHooksPostHeaders(agent: string | null): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (agent !== "cursor") {
+    return headers;
+  }
+
+  const gramKey = process.env.GRAM_API_KEY ?? process.env.GRAM_KEY;
+  const gramProject = process.env.GRAM_PROJECT_SLUG;
+
+  if (gramKey) {
+    headers["Gram-Key"] = gramKey;
+  }
+  if (gramProject) {
+    headers["Gram-Project"] = gramProject;
+  }
+
+  return headers;
+}
+
 async function postToHooksEndpoint(
   payloadBody: string,
   agent: string | null,
 ): Promise<void> {
   const serverURL =
-    process.env.GRAM_HOOKS_SERVER_URL ?? "https://localhost:8080";
+    process.env.GRAM_HOOKS_SERVER_URL ?? "https://app.getgram.ai";
   const endpoint =
     process.env.GRAM_HOOKS_ENDPOINT ??
     (agent === "cursor" ? "/rpc/hooks.cursor" : "/rpc/hooks.claude");
   const url = `${serverURL}${endpoint}`;
+  const headers = buildHooksPostHeaders(agent);
 
   await logHookDebug("send-hook", "hooks_post_start", {
     agent,
     endpoint,
     url,
     payloadBytes: Buffer.byteLength(payloadBody, "utf8"),
+    hasGramKeyHeader: Boolean(headers["Gram-Key"]),
+    hasGramProjectHeader: Boolean(headers["Gram-Project"]),
   });
 
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
       body: payloadBody,
     });
 
