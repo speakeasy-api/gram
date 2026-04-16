@@ -500,6 +500,7 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
             <DropdownMenuItem
               key={option.value}
               onSelect={() => handleSelect(option.value)}
+              disabled={option.value === currentStatus}
               className="flex cursor-pointer items-start gap-2.5 rounded-md p-2"
             >
               <span
