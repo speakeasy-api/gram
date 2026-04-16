@@ -612,6 +612,21 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return &gen.ListUserGrantsResult{Grants: grantsFromRows(grantsFromOverrides(overrides).rows)}, nil
 	}
 
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+	if ac.AccountType != "enterprise" {
+		return &gen.ListUserGrantsResult{Grants: fullAccessGrantPayloads()}, nil
+	}
+	enabled, err := s.access.features.IsFeatureEnabled(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, s.logger)
+	}
+	if !enabled {
+		return &gen.ListUserGrantsResult{Grants: fullAccessGrantPayloads()}, nil
+	}
+
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
@@ -951,6 +966,18 @@ func roleGrantsFromListRoleGrants(grants []*gen.ListRoleGrant) []*gen.RoleGrant 
 		out = append(out, &gen.RoleGrant{Scope: grant.Scope, Resources: grant.Resources})
 	}
 	return out
+}
+
+func fullAccessGrantPayloads() []*gen.ListRoleGrant {
+	return []*gen.ListRoleGrant{
+		{Scope: string(ScopeOrgRead), Resources: nil},
+		{Scope: string(ScopeOrgAdmin), Resources: nil},
+		{Scope: string(ScopeBuildRead), Resources: nil},
+		{Scope: string(ScopeBuildWrite), Resources: nil},
+		{Scope: string(ScopeMCPRead), Resources: nil},
+		{Scope: string(ScopeMCPWrite), Resources: nil},
+		{Scope: string(ScopeMCPConnect), Resources: nil},
+	}
 }
 
 func connectedUser(ctx context.Context, db *pgxpool.Pool, organizationID string, userID string) (usersrepo.User, error) {
