@@ -43,6 +43,10 @@ func EncodeCreateRiskPolicyRequest(encoder func(*http.Request) goahttp.Encoder) 
 		if !ok {
 			return goahttp.ErrInvalidType("risk", "createRiskPolicy", "*risk.CreateRiskPolicyPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -281,6 +285,10 @@ func EncodeListRiskPoliciesRequest(encoder func(*http.Request) goahttp.Encoder) 
 		if !ok {
 			return goahttp.ErrInvalidType("risk", "listRiskPolicies", "*risk.ListRiskPoliciesPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -514,6 +522,10 @@ func EncodeGetRiskPolicyRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		p, ok := v.(*risk.GetRiskPolicyPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("risk", "getRiskPolicy", "*risk.GetRiskPolicyPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -751,6 +763,10 @@ func EncodeUpdateRiskPolicyRequest(encoder func(*http.Request) goahttp.Encoder) 
 		p, ok := v.(*risk.UpdateRiskPolicyPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("risk", "updateRiskPolicy", "*risk.UpdateRiskPolicyPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -990,6 +1006,10 @@ func EncodeDeleteRiskPolicyRequest(encoder func(*http.Request) goahttp.Encoder) 
 		if !ok {
 			return goahttp.ErrInvalidType("risk", "deleteRiskPolicy", "*risk.DeleteRiskPolicyPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -1213,6 +1233,10 @@ func EncodeListRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		p, ok := v.(*risk.ListRiskResultsPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("risk", "listRiskResults", "*risk.ListRiskResultsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -1454,6 +1478,10 @@ func EncodeGetRiskPolicyStatusRequest(encoder func(*http.Request) goahttp.Encode
 		if !ok {
 			return goahttp.ErrInvalidType("risk", "getRiskPolicyStatus", "*risk.GetRiskPolicyStatusPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -1690,6 +1718,10 @@ func EncodeTriggerRiskAnalysisRequest(encoder func(*http.Request) goahttp.Encode
 		p, ok := v.(*risk.TriggerRiskAnalysisPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("risk", "triggerRiskAnalysis", "*risk.TriggerRiskAnalysisPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken

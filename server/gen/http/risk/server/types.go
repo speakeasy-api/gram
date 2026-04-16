@@ -2934,7 +2934,7 @@ func NewTriggerRiskAnalysisGatewayErrorResponseBody(res *goa.ServiceError) *Trig
 
 // NewCreateRiskPolicyPayload builds a risk service createRiskPolicy endpoint
 // payload.
-func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, sessionToken *string, projectSlugInput *string) *risk.CreateRiskPolicyPayload {
+func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreateRiskPolicyPayload {
 	v := &risk.CreateRiskPolicyPayload{
 		Name:    *body.Name,
 		Enabled: body.Enabled,
@@ -2945,6 +2945,7 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, sessionToken 
 			v.Sources[i] = val
 		}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -2953,8 +2954,9 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, sessionToken 
 
 // NewListRiskPoliciesPayload builds a risk service listRiskPolicies endpoint
 // payload.
-func NewListRiskPoliciesPayload(sessionToken *string, projectSlugInput *string) *risk.ListRiskPoliciesPayload {
+func NewListRiskPoliciesPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskPoliciesPayload {
 	v := &risk.ListRiskPoliciesPayload{}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -2962,9 +2964,10 @@ func NewListRiskPoliciesPayload(sessionToken *string, projectSlugInput *string) 
 }
 
 // NewGetRiskPolicyPayload builds a risk service getRiskPolicy endpoint payload.
-func NewGetRiskPolicyPayload(id string, sessionToken *string, projectSlugInput *string) *risk.GetRiskPolicyPayload {
+func NewGetRiskPolicyPayload(id string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetRiskPolicyPayload {
 	v := &risk.GetRiskPolicyPayload{}
 	v.ID = id
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -2973,7 +2976,7 @@ func NewGetRiskPolicyPayload(id string, sessionToken *string, projectSlugInput *
 
 // NewUpdateRiskPolicyPayload builds a risk service updateRiskPolicy endpoint
 // payload.
-func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, sessionToken *string, projectSlugInput *string) *risk.UpdateRiskPolicyPayload {
+func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.UpdateRiskPolicyPayload {
 	v := &risk.UpdateRiskPolicyPayload{
 		ID:      *body.ID,
 		Name:    *body.Name,
@@ -2985,6 +2988,7 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, sessionToken 
 			v.Sources[i] = val
 		}
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -2993,9 +2997,10 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, sessionToken 
 
 // NewDeleteRiskPolicyPayload builds a risk service deleteRiskPolicy endpoint
 // payload.
-func NewDeleteRiskPolicyPayload(id string, sessionToken *string, projectSlugInput *string) *risk.DeleteRiskPolicyPayload {
+func NewDeleteRiskPolicyPayload(id string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.DeleteRiskPolicyPayload {
 	v := &risk.DeleteRiskPolicyPayload{}
 	v.ID = id
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -3004,10 +3009,11 @@ func NewDeleteRiskPolicyPayload(id string, sessionToken *string, projectSlugInpu
 
 // NewListRiskResultsPayload builds a risk service listRiskResults endpoint
 // payload.
-func NewListRiskResultsPayload(policyID *string, limit int, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
+func NewListRiskResultsPayload(policyID *string, limit int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
 	v := &risk.ListRiskResultsPayload{}
 	v.PolicyID = policyID
 	v.Limit = limit
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -3016,9 +3022,10 @@ func NewListRiskResultsPayload(policyID *string, limit int, sessionToken *string
 
 // NewGetRiskPolicyStatusPayload builds a risk service getRiskPolicyStatus
 // endpoint payload.
-func NewGetRiskPolicyStatusPayload(id string, sessionToken *string, projectSlugInput *string) *risk.GetRiskPolicyStatusPayload {
+func NewGetRiskPolicyStatusPayload(id string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetRiskPolicyStatusPayload {
 	v := &risk.GetRiskPolicyStatusPayload{}
 	v.ID = id
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -3027,10 +3034,11 @@ func NewGetRiskPolicyStatusPayload(id string, sessionToken *string, projectSlugI
 
 // NewTriggerRiskAnalysisPayload builds a risk service triggerRiskAnalysis
 // endpoint payload.
-func NewTriggerRiskAnalysisPayload(body *TriggerRiskAnalysisRequestBody, sessionToken *string, projectSlugInput *string) *risk.TriggerRiskAnalysisPayload {
+func NewTriggerRiskAnalysisPayload(body *TriggerRiskAnalysisRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.TriggerRiskAnalysisPayload {
 	v := &risk.TriggerRiskAnalysisPayload{
 		ID: *body.ID,
 	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

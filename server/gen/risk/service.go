@@ -62,6 +62,7 @@ var MethodNames = [8]string{"createRiskPolicy", "listRiskPolicies", "getRiskPoli
 // CreateRiskPolicyPayload is the payload type of the risk service
 // createRiskPolicy method.
 type CreateRiskPolicyPayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The policy name.
@@ -75,6 +76,7 @@ type CreateRiskPolicyPayload struct {
 // DeleteRiskPolicyPayload is the payload type of the risk service
 // deleteRiskPolicy method.
 type DeleteRiskPolicyPayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The policy ID.
@@ -84,6 +86,7 @@ type DeleteRiskPolicyPayload struct {
 // GetRiskPolicyPayload is the payload type of the risk service getRiskPolicy
 // method.
 type GetRiskPolicyPayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The policy ID.
@@ -93,6 +96,7 @@ type GetRiskPolicyPayload struct {
 // GetRiskPolicyStatusPayload is the payload type of the risk service
 // getRiskPolicyStatus method.
 type GetRiskPolicyStatusPayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The policy ID.
@@ -102,6 +106,7 @@ type GetRiskPolicyStatusPayload struct {
 // ListRiskPoliciesPayload is the payload type of the risk service
 // listRiskPolicies method.
 type ListRiskPoliciesPayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -116,6 +121,7 @@ type ListRiskPoliciesResult struct {
 // ListRiskResultsPayload is the payload type of the risk service
 // listRiskResults method.
 type ListRiskResultsPayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// Optional policy ID to filter by.
@@ -134,6 +140,7 @@ type ListRiskResultsResult struct {
 // TriggerRiskAnalysisPayload is the payload type of the risk service
 // triggerRiskAnalysis method.
 type TriggerRiskAnalysisPayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The policy ID.
@@ -143,6 +150,7 @@ type TriggerRiskAnalysisPayload struct {
 // UpdateRiskPolicyPayload is the payload type of the risk service
 // updateRiskPolicy method.
 type UpdateRiskPolicyPayload struct {
+	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The policy ID.

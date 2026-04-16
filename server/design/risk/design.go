@@ -9,6 +9,7 @@ import (
 var _ = Service("risk", func() {
 	Description("Manage risk analysis policies and view scan results.")
 
+	Security(security.ByKey, security.ProjectSlug, func() { Scope("producer") })
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 
@@ -16,6 +17,7 @@ var _ = Service("risk", func() {
 		Description("Create a new risk analysis policy for the current project.")
 
 		Payload(func() {
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 			Attribute("name", String, "The policy name.")
@@ -28,6 +30,7 @@ var _ = Service("risk", func() {
 
 		HTTP(func() {
 			POST("/rpc/risk.policies.create")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
@@ -41,6 +44,7 @@ var _ = Service("risk", func() {
 		Description("List all risk analysis policies for the current project.")
 
 		Payload(func() {
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -49,6 +53,7 @@ var _ = Service("risk", func() {
 
 		HTTP(func() {
 			GET("/rpc/risk.policies.list")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
@@ -63,6 +68,7 @@ var _ = Service("risk", func() {
 		Description("Get a risk analysis policy by ID.")
 
 		Payload(func() {
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 			Attribute("id", String, "The policy ID.", func() {
@@ -75,6 +81,7 @@ var _ = Service("risk", func() {
 
 		HTTP(func() {
 			GET("/rpc/risk.policies.get")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("id")
@@ -89,6 +96,7 @@ var _ = Service("risk", func() {
 		Description("Update a risk analysis policy.")
 
 		Payload(func() {
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 			Attribute("id", String, "The policy ID.", func() {
@@ -104,6 +112,7 @@ var _ = Service("risk", func() {
 
 		HTTP(func() {
 			PUT("/rpc/risk.policies.update")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
@@ -117,6 +126,7 @@ var _ = Service("risk", func() {
 		Description("Delete a risk analysis policy.")
 
 		Payload(func() {
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 			Attribute("id", String, "The policy ID.", func() {
@@ -127,6 +137,7 @@ var _ = Service("risk", func() {
 
 		HTTP(func() {
 			DELETE("/rpc/risk.policies.delete")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("id")
@@ -141,6 +152,7 @@ var _ = Service("risk", func() {
 		Description("List risk analysis results for the current project.")
 
 		Payload(func() {
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 			Attribute("policy_id", String, "Optional policy ID to filter by.", func() {
@@ -155,6 +167,7 @@ var _ = Service("risk", func() {
 
 		HTTP(func() {
 			GET("/rpc/risk.results.list")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("policy_id")
@@ -171,6 +184,7 @@ var _ = Service("risk", func() {
 		Description("Get the analysis status of a risk policy including progress and workflow state.")
 
 		Payload(func() {
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 			Attribute("id", String, "The policy ID.", func() {
@@ -183,6 +197,7 @@ var _ = Service("risk", func() {
 
 		HTTP(func() {
 			GET("/rpc/risk.policies.status")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("id")
@@ -197,6 +212,7 @@ var _ = Service("risk", func() {
 		Description("Manually trigger risk analysis for a policy, starting or signaling the drain workflow.")
 
 		Payload(func() {
+			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
 			Attribute("id", String, "The policy ID.", func() {
@@ -207,6 +223,7 @@ var _ = Service("risk", func() {
 
 		HTTP(func() {
 			POST("/rpc/risk.policies.trigger")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
