@@ -29,7 +29,14 @@ import {
   Icon,
 } from "@speakeasy-api/moonshine";
 import type { IconName } from "@speakeasy-api/moonshine";
-import { Plus, Shield, Ellipsis, Loader2, ChevronRight } from "lucide-react";
+import {
+  Plus,
+  Shield,
+  Ellipsis,
+  Loader2,
+  ChevronRight,
+  RefreshCw,
+} from "lucide-react";
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -568,11 +575,14 @@ function RunPanel({
   onTrigger: () => void;
   isTriggerPending: boolean;
 }) {
-  const { data: status, isLoading } = useRiskGetPolicyStatus(
-    { id: policy.id },
-    undefined,
-    { refetchInterval: 5000 },
-  );
+  const {
+    data: status,
+    isLoading,
+    refetch,
+    isFetching,
+  } = useRiskGetPolicyStatus({ id: policy.id }, undefined, {
+    refetchInterval: 5000,
+  });
 
   const pct =
     status && status.totalMessages > 0
@@ -582,7 +592,20 @@ function RunPanel({
   return (
     <>
       <SheetHeader className="px-6 pt-6">
-        <SheetTitle>{policy.name}</SheetTitle>
+        <div className="flex items-center justify-between">
+          <SheetTitle>{policy.name}</SheetTitle>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            tooltip="Refresh"
+          >
+            <RefreshCw
+              className={cn("h-4 w-4", isFetching && "animate-spin")}
+            />
+          </Button>
+        </div>
         <SheetDescription>
           Analysis progress and workflow status
         </SheetDescription>
