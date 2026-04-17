@@ -431,6 +431,7 @@ WHERE cm.chat_id = $1
   AND rr.project_id = $2
   AND rr.found IS TRUE
 ORDER BY rr.created_at DESC
+LIMIT 500
 `
 
 type ListRiskResultsByChatFoundParams struct {

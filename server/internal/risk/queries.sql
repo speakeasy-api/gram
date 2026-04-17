@@ -195,7 +195,8 @@ LEFT JOIN chats c ON c.id = cm.chat_id
 WHERE cm.chat_id = @chat_id
   AND rr.project_id = @project_id
   AND rr.found IS TRUE
-ORDER BY rr.created_at DESC;
+ORDER BY rr.created_at DESC
+LIMIT 500;
 
 -- name: ListRiskResultsByMessage :many
 SELECT *

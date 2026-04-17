@@ -1814,8 +1814,8 @@ CREATE TABLE IF NOT EXISTS risk_results (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT risk_results_pkey PRIMARY KEY (id),
-  CONSTRAINT risk_results_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
-  CONSTRAINT risk_results_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE SET NULL,
+  CONSTRAINT risk_results_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT risk_results_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
 );
 

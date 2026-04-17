@@ -315,13 +315,15 @@ export default function ChatLogs() {
     total > 0 ? offset + chats.length < total : chats.length === limit;
 
   // Auto-select a chat if chatId is in the URL (e.g. from risk findings deep-link)
-  const autoSelectedRef = useRef(false);
+  const autoSelectedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!urlChatId || autoSelectedRef.current || chats.length === 0) return;
+    if (!urlChatId || chats.length === 0) return;
+    // Skip if we already auto-selected this exact chatId
+    if (autoSelectedRef.current === urlChatId) return;
     const match = chats.find((c) => c.id === urlChatId);
     if (match) {
       setSelectedChat(match);
-      autoSelectedRef.current = true;
+      autoSelectedRef.current = urlChatId;
     }
   }, [urlChatId, chats, setSelectedChat]);
 
