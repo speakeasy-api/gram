@@ -58,7 +58,7 @@ func (s *ChatMessageCaptureStrategy) notifyObservers(ctx context.Context, projec
 		go func() {
 			// Use a detached context with timeout to prevent indefinite hanging
 			// This ensures observers can complete even if the request context is canceled
-			bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second) //nolint:contextcheck
 			defer cancel()
 
 			// Copy trace information for observability

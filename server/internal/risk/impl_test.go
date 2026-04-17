@@ -4,27 +4,16 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
-	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// mockSignaler for testing
-type mockSignaler struct {
-	mock.Mock
-}
-
-func (m *mockSignaler) SignalNewMessages(ctx context.Context, params background.DrainRiskAnalysisParams) error {
-	args := m.Called(ctx, params)
-	return args.Error(0)
-}
-
 // Test that OnMessagesStored calls the signaler for enabled policies
 func TestService_OnMessagesStored(t *testing.T) {
+	t.Parallel()
 	// This test ensures that when messages are stored, the risk service
 	// properly signals the workflow to analyze them for enabled policies.
 	// The actual implementation is tested via integration tests.
@@ -42,6 +31,7 @@ func TestService_OnMessagesStored(t *testing.T) {
 
 // Test basic validation in CreateRiskPolicy
 func TestService_CreateRiskPolicy_Validation(t *testing.T) {
+	t.Parallel()
 	// Test that creating a policy requires authentication
 	ctx := context.Background()
 
@@ -62,6 +52,7 @@ func TestService_CreateRiskPolicy_Validation(t *testing.T) {
 
 // Test that the service properly validates project context
 func TestService_RequiresProjectContext(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Create auth context without project
@@ -94,6 +85,7 @@ func TestService_RequiresProjectContext(t *testing.T) {
 
 // Test OnMessagesStored behavior with mock signaler
 func TestService_OnMessagesStored_CallsSignaler(t *testing.T) {
+	t.Parallel()
 	// This test validates that the OnMessagesStored observer
 	// properly queries for enabled policies and signals the workflow.
 	// Full testing requires database setup which is done in integration tests.
@@ -106,6 +98,7 @@ func TestService_OnMessagesStored_CallsSignaler(t *testing.T) {
 
 // Test that the service implements the required interfaces
 func TestService_Interfaces(t *testing.T) {
+	t.Parallel()
 	s := &Service{}
 
 	// Ensure Service implements gen.Service

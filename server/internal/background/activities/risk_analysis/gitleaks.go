@@ -32,7 +32,11 @@ type Finding struct {
 func newDetector() (*detect.Detector, error) {
 	detectorInitMu.Lock()
 	defer detectorInitMu.Unlock()
-	return detect.NewDetectorDefaultConfig()
+	detector, err := detect.NewDetectorDefaultConfig()
+	if err != nil {
+		return nil, fmt.Errorf("create gitleaks detector: %w", err)
+	}
+	return detector, nil
 }
 
 // ScanBatchParallel scans multiple messages concurrently. Creates NumCPU
