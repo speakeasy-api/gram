@@ -26,6 +26,9 @@ type Service interface {
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
 	Logs(context.Context, *LogsPayload) (err error)
+	// Endpoint to receive OTEL metrics data from Claude Code. Requires API key
+	// authentication.
+	Metrics(context.Context, *MetricsPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -48,7 +51,7 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"claude", "cursor", "logs"}
+var MethodNames = [4]string{"claude", "cursor", "logs", "metrics"}
 
 // ClaudeHookPayload is the payload type of the hooks service claude method.
 type ClaudeHookPayload struct {
@@ -183,6 +186,14 @@ type LogsPayload struct {
 	ResourceLogs []*OTELResourceLog
 }
 
+// MetricsPayload is the payload type of the hooks service metrics method.
+type MetricsPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// Array of resource metrics
+	ResourceMetrics []*OTELResourceMetrics
+}
+
 // OTEL log attribute with key and typed value
 type OTELAttribute struct {
 	// Attribute key
@@ -219,6 +230,32 @@ type OTELLogRecord struct {
 	DroppedAttributesCount *int
 }
 
+// OTEL metric
+type OTELMetric struct {
+	// Metric name
+	Name *string
+	// Metric description
+	Description *string
+	// Metric unit
+	Unit *string
+	// Sum metric data
+	Sum *OTELSum
+}
+
+// OTEL number data point
+type OTELNumberDataPoint struct {
+	// Data point attributes
+	Attributes []*OTELAttribute
+	// Start timestamp in nanoseconds
+	StartTimeUnixNano *string
+	// Timestamp in nanoseconds
+	TimeUnixNano *string
+	// Value as double
+	AsDouble *float64
+	// Value as integer
+	AsInt *int64
+}
+
 // OTEL resource information
 type OTELResource struct {
 	// Resource attributes
@@ -243,6 +280,14 @@ type OTELResourceLog struct {
 	ScopeLogs []*OTELScopeLog
 }
 
+// OTEL resource metrics container
+type OTELResourceMetrics struct {
+	// Resource information
+	Resource *OTELResource
+	// Array of scope metrics
+	ScopeMetrics []*OTELScopeMetrics
+}
+
 // OTEL instrumentation scope
 type OTELScope struct {
 	// Scope name
@@ -257,6 +302,24 @@ type OTELScopeLog struct {
 	Scope *OTELScope
 	// Array of log records
 	LogRecords []*OTELLogRecord
+}
+
+// OTEL scope metrics container
+type OTELScopeMetrics struct {
+	// Instrumentation scope information
+	Scope *OTELScope
+	// Array of metrics
+	Metrics []*OTELMetric
+}
+
+// OTEL sum metric
+type OTELSum struct {
+	// Aggregation temporality
+	AggregationTemporality *int
+	// Whether the sum is monotonic
+	IsMonotonic *bool
+	// Data points
+	DataPoints []*OTELNumberDataPoint
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

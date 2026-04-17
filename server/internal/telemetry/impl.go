@@ -406,19 +406,22 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 
 		//nolint:gosec // Values are bounded counts that won't overflow int64
 		users[i] = &telem_gen.UserSummary{
-			UserID:              item.UserID,
-			FirstSeenUnixNano:   strconv.FormatInt(item.FirstSeenUnixNano, 10),
-			LastSeenUnixNano:    strconv.FormatInt(item.LastSeenUnixNano, 10),
-			TotalChats:          int64(item.TotalChats),
-			TotalChatRequests:   int64(item.TotalChatRequests),
-			TotalInputTokens:    item.TotalInputTokens,
-			TotalOutputTokens:   item.TotalOutputTokens,
-			TotalTokens:         item.TotalTokens,
-			AvgTokensPerRequest: sanitizeFloat64(item.AvgTokensPerReq),
-			TotalToolCalls:      int64(item.TotalToolCalls),
-			ToolCallSuccess:     int64(item.ToolCallSuccess),
-			ToolCallFailure:     int64(item.ToolCallFailure),
-			Tools:               tools,
+			UserID:                   item.UserID,
+			FirstSeenUnixNano:        strconv.FormatInt(item.FirstSeenUnixNano, 10),
+			LastSeenUnixNano:         strconv.FormatInt(item.LastSeenUnixNano, 10),
+			TotalChats:               int64(item.TotalChats),
+			TotalChatRequests:        int64(item.TotalChatRequests),
+			TotalInputTokens:         item.TotalInputTokens,
+			TotalOutputTokens:        item.TotalOutputTokens,
+			TotalTokens:              item.TotalTokens,
+			CacheReadInputTokens:     item.CacheReadInputTokens,
+			CacheCreationInputTokens: item.CacheCreationInputTokens,
+			AvgTokensPerRequest:      sanitizeFloat64(item.AvgTokensPerReq),
+			TotalCost:                sanitizeFloat64(item.TotalCost),
+			TotalToolCalls:           int64(item.TotalToolCalls),
+			ToolCallSuccess:          int64(item.ToolCallSuccess),
+			ToolCallFailure:          int64(item.ToolCallFailure),
+			Tools:                    tools,
 		}
 	}
 
@@ -490,30 +493,33 @@ func buildMetricsSummaryResult(metrics repo.MetricsSummaryRow) *telem_gen.GetMet
 	//nolint:gosec // Values are bounded counts that won't overflow int64
 	return &telem_gen.GetMetricsSummaryResult{
 		Metrics: &telem_gen.ProjectSummary{
-			FirstSeenUnixNano:       strconv.FormatInt(metrics.FirstSeenUnixNano, 10),
-			LastSeenUnixNano:        strconv.FormatInt(metrics.LastSeenUnixNano, 10),
-			TotalInputTokens:        metrics.TotalInputTokens,
-			TotalOutputTokens:       metrics.TotalOutputTokens,
-			TotalTokens:             metrics.TotalTokens,
-			AvgTokensPerRequest:     sanitizeFloat64(metrics.AvgTokensPerReq),
-			TotalChatRequests:       int64(metrics.TotalChatRequests),
-			AvgChatDurationMs:       sanitizeFloat64(metrics.AvgChatDurationMs),
-			FinishReasonStop:        int64(metrics.FinishReasonStop),
-			FinishReasonToolCalls:   int64(metrics.FinishReasonToolCalls),
-			TotalToolCalls:          int64(metrics.TotalToolCalls),
-			ToolCallSuccess:         int64(metrics.ToolCallSuccess),
-			ToolCallFailure:         int64(metrics.ToolCallFailure),
-			AvgToolDurationMs:       sanitizeFloat64(metrics.AvgToolDurationMs),
-			TotalChats:              int64(metrics.TotalChats),
-			DistinctModels:          int64(metrics.DistinctModels),
-			DistinctProviders:       int64(metrics.DistinctProviders),
-			Models:                  models,
-			Tools:                   tools,
-			ChatResolutionSuccess:   int64(metrics.ChatResolutionSuccess),
-			ChatResolutionFailure:   int64(metrics.ChatResolutionFailure),
-			ChatResolutionPartial:   int64(metrics.ChatResolutionPartial),
-			ChatResolutionAbandoned: int64(metrics.ChatResolutionAbandoned),
-			AvgChatResolutionScore:  sanitizeFloat64(metrics.AvgChatResolutionScore),
+			FirstSeenUnixNano:        strconv.FormatInt(metrics.FirstSeenUnixNano, 10),
+			LastSeenUnixNano:         strconv.FormatInt(metrics.LastSeenUnixNano, 10),
+			TotalInputTokens:         metrics.TotalInputTokens,
+			TotalOutputTokens:        metrics.TotalOutputTokens,
+			TotalTokens:              metrics.TotalTokens,
+			CacheReadInputTokens:     metrics.CacheReadInputTokens,
+			CacheCreationInputTokens: metrics.CacheCreationInputTokens,
+			AvgTokensPerRequest:      sanitizeFloat64(metrics.AvgTokensPerReq),
+			TotalCost:                sanitizeFloat64(metrics.TotalCost),
+			TotalChatRequests:        int64(metrics.TotalChatRequests),
+			AvgChatDurationMs:        sanitizeFloat64(metrics.AvgChatDurationMs),
+			FinishReasonStop:         int64(metrics.FinishReasonStop),
+			FinishReasonToolCalls:    int64(metrics.FinishReasonToolCalls),
+			TotalToolCalls:           int64(metrics.TotalToolCalls),
+			ToolCallSuccess:          int64(metrics.ToolCallSuccess),
+			ToolCallFailure:          int64(metrics.ToolCallFailure),
+			AvgToolDurationMs:        sanitizeFloat64(metrics.AvgToolDurationMs),
+			TotalChats:               int64(metrics.TotalChats),
+			DistinctModels:           int64(metrics.DistinctModels),
+			DistinctProviders:        int64(metrics.DistinctProviders),
+			Models:                   models,
+			Tools:                    tools,
+			ChatResolutionSuccess:    int64(metrics.ChatResolutionSuccess),
+			ChatResolutionFailure:    int64(metrics.ChatResolutionFailure),
+			ChatResolutionPartial:    int64(metrics.ChatResolutionPartial),
+			ChatResolutionAbandoned:  int64(metrics.ChatResolutionAbandoned),
+			AvgChatResolutionScore:   sanitizeFloat64(metrics.AvgChatResolutionScore),
 		},
 	}
 }
@@ -1165,26 +1171,38 @@ func calculateInterval(timeStart, timeEnd int64) int64 {
 func toObservabilitySummary(summary *repo.OverviewSummary) *telem_gen.ObservabilitySummary {
 	if summary == nil {
 		return &telem_gen.ObservabilitySummary{
-			TotalChats:           0,
-			ResolvedChats:        0,
-			FailedChats:          0,
-			AvgSessionDurationMs: 0,
-			AvgResolutionTimeMs:  0,
-			TotalToolCalls:       0,
-			FailedToolCalls:      0,
-			AvgLatencyMs:         0,
+			TotalChats:               0,
+			ResolvedChats:            0,
+			FailedChats:              0,
+			AvgSessionDurationMs:     0,
+			AvgResolutionTimeMs:      0,
+			TotalInputTokens:         0,
+			TotalOutputTokens:        0,
+			TotalTokens:              0,
+			CacheReadInputTokens:     0,
+			CacheCreationInputTokens: 0,
+			TotalCost:                0,
+			TotalToolCalls:           0,
+			FailedToolCalls:          0,
+			AvgLatencyMs:             0,
 		}
 	}
 	//nolint:gosec // Values are bounded counts that won't overflow int64
 	return &telem_gen.ObservabilitySummary{
-		TotalChats:           int64(summary.TotalChats),
-		ResolvedChats:        int64(summary.ResolvedChats),
-		FailedChats:          int64(summary.FailedChats),
-		AvgSessionDurationMs: sanitizeFloat64(summary.AvgSessionDurationMs),
-		AvgResolutionTimeMs:  sanitizeFloat64(summary.AvgResolutionTimeMs),
-		TotalToolCalls:       int64(summary.TotalToolCalls),
-		FailedToolCalls:      int64(summary.FailedToolCalls),
-		AvgLatencyMs:         sanitizeFloat64(summary.AvgLatencyMs),
+		TotalChats:               int64(summary.TotalChats),
+		ResolvedChats:            int64(summary.ResolvedChats),
+		FailedChats:              int64(summary.FailedChats),
+		AvgSessionDurationMs:     sanitizeFloat64(summary.AvgSessionDurationMs),
+		AvgResolutionTimeMs:      sanitizeFloat64(summary.AvgResolutionTimeMs),
+		TotalInputTokens:         summary.TotalInputTokens,
+		TotalOutputTokens:        summary.TotalOutputTokens,
+		TotalTokens:              summary.TotalTokens,
+		CacheReadInputTokens:     summary.CacheReadInputTokens,
+		CacheCreationInputTokens: summary.CacheCreationInputTokens,
+		TotalCost:                sanitizeFloat64(summary.TotalCost),
+		TotalToolCalls:           int64(summary.TotalToolCalls),
+		FailedToolCalls:          int64(summary.FailedToolCalls),
+		AvgLatencyMs:             sanitizeFloat64(summary.AvgLatencyMs),
 	}
 }
 
@@ -1243,16 +1261,22 @@ func toTimeSeriesBuckets(buckets []repo.TimeSeriesBucket) []*telem_gen.TimeSerie
 	for i, b := range buckets {
 		//nolint:gosec // Values are bounded counts that won't overflow int64
 		result[i] = &telem_gen.TimeSeriesBucket{
-			BucketTimeUnixNano:   strconv.FormatInt(b.BucketTimeUnixNano, 10),
-			TotalChats:           int64(b.TotalChats),
-			ResolvedChats:        int64(b.ResolvedChats),
-			FailedChats:          int64(b.FailedChats),
-			PartialChats:         int64(b.PartialChats),
-			AbandonedChats:       int64(b.AbandonedChats),
-			TotalToolCalls:       int64(b.TotalToolCalls),
-			FailedToolCalls:      int64(b.FailedToolCalls),
-			AvgToolLatencyMs:     sanitizeFloat64(b.AvgToolLatencyMs),
-			AvgSessionDurationMs: sanitizeFloat64(b.AvgSessionDurationMs),
+			BucketTimeUnixNano:       strconv.FormatInt(b.BucketTimeUnixNano, 10),
+			TotalChats:               int64(b.TotalChats),
+			ResolvedChats:            int64(b.ResolvedChats),
+			FailedChats:              int64(b.FailedChats),
+			PartialChats:             int64(b.PartialChats),
+			AbandonedChats:           int64(b.AbandonedChats),
+			TotalInputTokens:         b.TotalInputTokens,
+			TotalOutputTokens:        b.TotalOutputTokens,
+			TotalTokens:              b.TotalTokens,
+			CacheReadInputTokens:     b.CacheReadInputTokens,
+			CacheCreationInputTokens: b.CacheCreationInputTokens,
+			TotalCost:                sanitizeFloat64(b.TotalCost),
+			TotalToolCalls:           int64(b.TotalToolCalls),
+			FailedToolCalls:          int64(b.FailedToolCalls),
+			AvgToolLatencyMs:         sanitizeFloat64(b.AvgToolLatencyMs),
+			AvgSessionDurationMs:     sanitizeFloat64(b.AvgSessionDurationMs),
 		}
 	}
 	return result
@@ -1733,6 +1757,23 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 		Traces:     traces,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// GetChatMetricsByIDs retrieves token and cost metrics for specific chat IDs.
+// This is used by the chat service to enrich chat overview data with metrics from ClickHouse.
+func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, chatIDs []string) (map[string]repo.ChatMetricsRow, error) {
+	if s.chRepo == nil {
+		return make(map[string]repo.ChatMetricsRow), nil
+	}
+
+	result, err := s.chRepo.GetChatMetricsByIDs(ctx, repo.GetChatMetricsByIDsParams{
+		GramProjectID: projectID,
+		ChatIDs:       chatIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get chat metrics by ids: %w", err)
+	}
+	return result, nil
 }
 
 // toTopUsersFromPG converts PostgreSQL top users to API type.

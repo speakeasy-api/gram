@@ -182,3 +182,58 @@ func BuildLogsPayload(hooksLogsBody string, hooksLogsApikeyToken string, hooksLo
 
 	return v, nil
 }
+
+// BuildMetricsPayload builds the payload for the hooks metrics endpoint from
+// CLI flags.
+func BuildMetricsPayload(hooksMetricsBody string, hooksMetricsApikeyToken string, hooksMetricsProjectSlugInput string) (*hooks.MetricsPayload, error) {
+	var err error
+	var body MetricsRequestBody
+	{
+		err = json.Unmarshal([]byte(hooksMetricsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"resourceMetrics\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"intValue\": 1,\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeMetrics\": [\n               {\n                  \"metrics\": [\n                     {\n                        \"description\": \"abc123\",\n                        \"name\": \"abc123\",\n                        \"sum\": {\n                           \"aggregationTemporality\": 1,\n                           \"dataPoints\": [\n                              {\n                                 \"asDouble\": 1,\n                                 \"asInt\": 1,\n                                 \"attributes\": [\n                                    {\n                                       \"key\": \"abc123\",\n                                       \"value\": {\n                                          \"intValue\": 1,\n                                          \"stringValue\": \"abc123\"\n                                       }\n                                    }\n                                 ],\n                                 \"startTimeUnixNano\": \"abc123\",\n                                 \"timeUnixNano\": \"abc123\"\n                              }\n                           ],\n                           \"isMonotonic\": false\n                        },\n                        \"unit\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }'")
+		}
+		if body.ResourceMetrics == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("resourceMetrics", "body"))
+		}
+		for _, e := range body.ResourceMetrics {
+			if e != nil {
+				if err2 := ValidateOTELResourceMetricsRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if hooksMetricsApikeyToken != "" {
+			apikeyToken = &hooksMetricsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if hooksMetricsProjectSlugInput != "" {
+			projectSlugInput = &hooksMetricsProjectSlugInput
+		}
+	}
+	v := &hooks.MetricsPayload{}
+	if body.ResourceMetrics != nil {
+		v.ResourceMetrics = make([]*hooks.OTELResourceMetrics, len(body.ResourceMetrics))
+		for i, val := range body.ResourceMetrics {
+			if val == nil {
+				v.ResourceMetrics[i] = nil
+				continue
+			}
+			v.ResourceMetrics[i] = marshalOTELResourceMetricsRequestBodyToHooksOTELResourceMetrics(val)
+		}
+	} else {
+		v.ResourceMetrics = []*hooks.OTELResourceMetrics{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

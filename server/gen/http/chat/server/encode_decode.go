@@ -1659,6 +1659,10 @@ func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *Ch
 		Source:               v.Source,
 		CreatedAt:            v.CreatedAt,
 		UpdatedAt:            v.UpdatedAt,
+		TotalInputTokens:     v.TotalInputTokens,
+		TotalOutputTokens:    v.TotalOutputTokens,
+		TotalTokens:          v.TotalTokens,
+		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: v.LastMessageTimestamp,
 	}
 
@@ -1697,6 +1701,10 @@ func marshalChatChatOverviewWithResolutionsToChatOverviewWithResolutionsResponse
 		Source:               v.Source,
 		CreatedAt:            v.CreatedAt,
 		UpdatedAt:            v.UpdatedAt,
+		TotalInputTokens:     v.TotalInputTokens,
+		TotalOutputTokens:    v.TotalOutputTokens,
+		TotalTokens:          v.TotalTokens,
+		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: v.LastMessageTimestamp,
 	}
 	if v.Resolutions != nil {
