@@ -4,14 +4,10 @@ import { Card, Cards } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
-import {
-  PromptTemplate,
-  PromptTemplateKind,
-} from "@gram/client/models/components";
+import { PromptTemplate } from "@gram/client/models/components";
 import {
   invalidateAllTemplates,
   useDeleteTemplateMutation,
-  useTemplates,
 } from "@gram/client/react-query";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,16 +17,7 @@ import { Outlet } from "react-router";
 import { CustomToolsEmptyState } from "./CustomToolsEmptyState";
 import { MustacheHighlight } from "./ToolBuilder";
 import { ToolifyDialog, ToolifyProvider } from "./Toolify";
-
-export function useCustomTools() {
-  const { data, isLoading } = useTemplates();
-  return {
-    customTools: data?.templates.filter(
-      (template) => template.kind === PromptTemplateKind.HigherOrderTool,
-    ),
-    isLoading,
-  };
-}
+import { useCustomTools } from "./useCustomTools";
 
 export function CustomToolsRoot() {
   return (

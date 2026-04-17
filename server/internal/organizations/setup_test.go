@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -18,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -96,11 +97,7 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	_, err = orgrepo.New(conn).SetOrgWorkosID(ctx, orgrepo.SetOrgWorkosIDParams{
-		WorkosID:       conv.PtrToPGText(conv.PtrEmpty("org_workos_test")),
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	require.NoError(t, err)
+	// workos_id is set by InitAuthContext via UpsertOrganizationMetadata (from the mock IDP's workos_id).
 
 	err = userrepo.New(conn).SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{
 		ID:       authCtx.UserID,
@@ -146,11 +143,7 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	_, err = orgrepo.New(conn).SetOrgWorkosID(ctx, orgrepo.SetOrgWorkosIDParams{
-		WorkosID:       conv.PtrToPGText(conv.PtrEmpty("org_workos_test")),
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	require.NoError(t, err)
+	// workos_id is set by InitAuthContext via UpsertOrganizationMetadata (from the mock IDP's workos_id).
 
 	err = userrepo.New(conn).SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{
 		ID:       authCtx.UserID,
@@ -173,13 +166,13 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 // expectWorkOSOrgAdminRole stubs a successful WorkOS admin membership check for the session user.
 func expectWorkOSOrgAdminRole(t *testing.T, orgs *MockOrganizationProvider) {
 	t.Helper()
-	orgs.On("GetOrgMembership", mock.Anything, testAuthUserWorkOSID, "org_workos_test").Return(&thirdpartyworkos.Member{RoleSlug: "admin"}, nil).Once()
+	orgs.On("GetOrgMembership", mock.Anything, testAuthUserWorkOSID, mockidp.MockOrgID).Return(&thirdpartyworkos.Member{RoleSlug: "admin"}, nil).Once()
 }
 
 // expectWorkOSOrgNonAdminRole stubs WorkOS membership with a non-admin role.
 func expectWorkOSOrgNonAdminRole(t *testing.T, orgs *MockOrganizationProvider) {
 	t.Helper()
-	orgs.On("GetOrgMembership", mock.Anything, testAuthUserWorkOSID, "org_workos_test").Return(&thirdpartyworkos.Member{RoleSlug: "member"}, nil).Once()
+	orgs.On("GetOrgMembership", mock.Anything, testAuthUserWorkOSID, mockidp.MockOrgID).Return(&thirdpartyworkos.Member{RoleSlug: "member"}, nil).Once()
 }
 
 func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...access.Grant) context.Context {

@@ -12791,7 +12791,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetProjectMetricsSummaryPayload'
+              $ref: '#/components/schemas/GetHooksSummaryPayload'
         required: true
       responses:
         "200":
@@ -20343,6 +20343,11 @@ components:
     GetHooksSummaryPayload:
       type: object
       properties:
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogFilter'
+          description: Filter conditions (same as listHooksTraces)
         from:
           type: string
           description: Start time in ISO 8601 format
@@ -20353,6 +20358,18 @@ components:
           description: End time in ISO 8601 format
           example: "2025-12-19T11:00:00Z"
           format: date-time
+        types_to_include:
+          type: array
+          items:
+            type: string
+            enum:
+              - mcp
+              - local
+              - skill
+          description: Hook types to include (mcp, local, skill). If empty, includes all types.
+          example:
+            - mcp
+            - skill
       description: Payload for getting aggregated hooks metrics
       required:
         - from
@@ -20360,6 +20377,11 @@ components:
     GetHooksSummaryResult:
       type: object
       properties:
+        breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/HooksBreakdownRow'
+          description: 'Cross-dimensional pivot: (user, server, source, tool) x counts'
         servers:
           type: array
           items:
@@ -20370,6 +20392,11 @@ components:
           items:
             $ref: '#/components/schemas/SkillSummary'
           description: Aggregated metrics grouped by skill
+        time_series:
+          type: array
+          items:
+            $ref: '#/components/schemas/HooksTimeSeriesPoint'
+          description: Time-bucketed event counts by server and user
         total_events:
           type: integer
           description: Total number of hook events
@@ -20390,6 +20417,8 @@ components:
         - skills
         - total_events
         - total_sessions
+        - breakdown
+        - time_series
     GetInstanceForm:
       type: object
       properties:
@@ -20845,6 +20874,37 @@ components:
         - start_time_unix_nano
         - log_count
         - gram_urn
+    HooksBreakdownRow:
+      type: object
+      properties:
+        event_count:
+          type: integer
+          description: Total events for this combination
+          format: int64
+        failure_count:
+          type: integer
+          description: Number of failures for this combination
+          format: int64
+        hook_source:
+          type: string
+          description: Hook source (e.g. claude-desktop, cursor)
+        server_name:
+          type: string
+          description: Server name ('local' for non-MCP tools)
+        tool_name:
+          type: string
+          description: Tool name
+        user_email:
+          type: string
+          description: User email address
+      description: 'Cross-dimensional aggregation row: one entry per unique (user, server, hook_source, tool) combination'
+      required:
+        - user_email
+        - server_name
+        - hook_source
+        - tool_name
+        - event_count
+        - failure_count
     HooksServerSummary:
       type: object
       properties:
@@ -20879,6 +20939,28 @@ components:
         - success_count
         - failure_count
         - failure_rate
+    HooksTimeSeriesPoint:
+      type: object
+      properties:
+        bucket_start_ns:
+          type: string
+          description: Bucket start time in Unix nanoseconds (string for JS int64 precision)
+        event_count:
+          type: integer
+          description: Number of events in this bucket
+          format: int64
+        server_name:
+          type: string
+          description: Server name
+        user_email:
+          type: string
+          description: User email address
+      description: A single time-series bucket for hooks activity
+      required:
+        - bucket_start_ns
+        - server_name
+        - user_email
+        - event_count
     HooksUserSummary:
       type: object
       properties:
@@ -22452,8 +22534,6 @@ components:
           items:
             $ref: '#/components/schemas/ProjectEntry'
         slug:
-          type: string
-        sso_connection_id:
           type: string
         user_workspace_slugs:
           type: array

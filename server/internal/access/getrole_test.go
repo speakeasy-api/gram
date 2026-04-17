@@ -1,6 +1,7 @@
 package access
 
 import (
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"errors"
 	"testing"
 
@@ -21,16 +22,16 @@ func TestService_GetRole(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockSystemRole("role_admin", "Admin", "admin"),
 		mockRole("role_custom", "Custom Builder", "custom-builder", "Can build selected resources"),
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
-		mockMember("org_workos_test", "membership_1", "user_1", "custom-builder"),
-		mockMember("org_workos_test", "membership_2", "user_2", "custom-builder"),
-		mockMember("org_workos_test", "membership_3", "user_3", "admin"),
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
+		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"),
+		mockMember(mockidp.MockOrgID, "membership_3", "user_3", "admin"),
 		// user_workos_only has never logged into Gram — should not be counted
-		mockMember("org_workos_test", "membership_workos_only", "user_workos_only", "custom-builder"),
+		mockMember(mockidp.MockOrgID, "membership_workos_only", "user_workos_only", "custom-builder"),
 	}, nil).Once()
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
@@ -62,7 +63,7 @@ func TestService_GetRole_NotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{}, nil).Once()
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{}, nil).Once()
 
 	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_missing"})
 	require.Error(t, err)
@@ -103,7 +104,7 @@ func TestService_GetRole_WorkOSListRolesFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role(nil), errors.New("workos unavailable")).Once()
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role(nil), errors.New("workos unavailable")).Once()
 
 	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
 	require.Error(t, err)

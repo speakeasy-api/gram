@@ -1,6 +1,7 @@
 package access
 
 import (
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"errors"
 	"testing"
 
@@ -22,15 +23,15 @@ func TestService_ListMembers(t *testing.T) {
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "grace@example.com", "Grace", "user_2", "membership_2")
 
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockSystemRole("role_admin", "Admin", "admin"),
 		mockRole("role_builder", "Builder", "custom-builder", ""),
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
-		mockMember("org_workos_test", "membership_1", "user_1", "admin"),
-		mockMember("org_workos_test", "membership_2", "user_2", "custom-builder"),
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
+		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"),
 	}, nil).Once()
-	ti.roles.On("ListOrgUsers", mock.Anything, "org_workos_test").Return(map[string]thirdpartyworkos.User{
+	ti.roles.On("ListOrgUsers", mock.Anything, mockidp.MockOrgID).Return(map[string]thirdpartyworkos.User{
 		"user_1": mockUser("user_1", "Ada", "Lovelace", "ada@example.com"),
 		"user_2": mockUser("user_2", "Grace", "", "grace@example.com"),
 	}, nil).Once()
@@ -58,13 +59,13 @@ func TestService_ListMembers_WorkOSUsersFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockSystemRole("role_admin", "Admin", "admin"),
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
-		mockMember("org_workos_test", "membership_1", "user_1", "admin"),
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
 	}, nil).Once()
-	ti.roles.On("ListOrgUsers", mock.Anything, "org_workos_test").Return(map[string]thirdpartyworkos.User(nil), errors.New("workos unavailable")).Once()
+	ti.roles.On("ListOrgUsers", mock.Anything, mockidp.MockOrgID).Return(map[string]thirdpartyworkos.User(nil), errors.New("workos unavailable")).Once()
 
 	_, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
 	require.Error(t, err)

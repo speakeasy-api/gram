@@ -125,7 +125,6 @@ type OrganizationEntry struct {
 	Name               string
 	Slug               string
 	Projects           []*ProjectEntry
-	SsoConnectionID    *string
 	UserWorkspaceSlugs []string
 }
 

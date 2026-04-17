@@ -161,6 +161,10 @@ type GetHooksSummaryRequestBody struct {
 	From string `form:"from" json:"from" xml:"from"`
 	// End time in ISO 8601 format
 	To string `form:"to" json:"to" xml:"to"`
+	// Filter conditions (same as listHooksTraces)
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
+	// Hook types to include (mcp, local, skill). If empty, includes all types.
+	TypesToInclude []string `form:"types_to_include,omitempty" json:"types_to_include,omitempty" xml:"types_to_include,omitempty"`
 }
 
 // ListHooksTracesRequestBody is the type of the "telemetry" service
@@ -295,6 +299,10 @@ type GetHooksSummaryResponseBody struct {
 	TotalEvents *int64 `form:"total_events,omitempty" json:"total_events,omitempty" xml:"total_events,omitempty"`
 	// Total number of unique sessions
 	TotalSessions *int64 `form:"total_sessions,omitempty" json:"total_sessions,omitempty" xml:"total_sessions,omitempty"`
+	// Cross-dimensional pivot: (user, server, source, tool) x counts
+	Breakdown []*HooksBreakdownRowResponseBody `form:"breakdown,omitempty" json:"breakdown,omitempty" xml:"breakdown,omitempty"`
+	// Time-bucketed event counts by server and user
+	TimeSeries []*HooksTimeSeriesPointResponseBody `form:"time_series,omitempty" json:"time_series,omitempty" xml:"time_series,omitempty"`
 }
 
 // ListHooksTracesResponseBody is the type of the "telemetry" service
@@ -3199,6 +3207,36 @@ type SkillSummaryResponseBody struct {
 	UniqueUsers *int64 `form:"unique_users,omitempty" json:"unique_users,omitempty" xml:"unique_users,omitempty"`
 }
 
+// HooksBreakdownRowResponseBody is used to define fields on response body
+// types.
+type HooksBreakdownRowResponseBody struct {
+	// User email address
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Server name ('local' for non-MCP tools)
+	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	// Hook source (e.g. claude-desktop, cursor)
+	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
+	// Tool name
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Total events for this combination
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+	// Number of failures for this combination
+	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+}
+
+// HooksTimeSeriesPointResponseBody is used to define fields on response body
+// types.
+type HooksTimeSeriesPointResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS int64 precision)
+	BucketStartNs *string `form:"bucket_start_ns,omitempty" json:"bucket_start_ns,omitempty" xml:"bucket_start_ns,omitempty"`
+	// Server name
+	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	// User email address
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Number of events in this bucket
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+}
+
 // HookTraceSummaryResponseBody is used to define fields on response body types.
 type HookTraceSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
@@ -3441,6 +3479,22 @@ func NewGetHooksSummaryRequestBody(p *telemetry.GetHooksSummaryPayload) *GetHook
 	body := &GetHooksSummaryRequestBody{
 		From: p.From,
 		To:   p.To,
+	}
+	if p.Filters != nil {
+		body.Filters = make([]*LogFilterRequestBody, len(p.Filters))
+		for i, val := range p.Filters {
+			if val == nil {
+				body.Filters[i] = nil
+				continue
+			}
+			body.Filters[i] = marshalTelemetryLogFilterToLogFilterRequestBody(val)
+		}
+	}
+	if p.TypesToInclude != nil {
+		body.TypesToInclude = make([]string, len(p.TypesToInclude))
+		for i, val := range p.TypesToInclude {
+			body.TypesToInclude[i] = val
+		}
 	}
 	return body
 }
@@ -5343,6 +5397,22 @@ func NewGetHooksSummaryResultOK(body *GetHooksSummaryResponseBody) *telemetry.Ge
 		}
 		v.Skills[i] = unmarshalSkillSummaryResponseBodyToTelemetrySkillSummary(val)
 	}
+	v.Breakdown = make([]*telemetry.HooksBreakdownRow, len(body.Breakdown))
+	for i, val := range body.Breakdown {
+		if val == nil {
+			v.Breakdown[i] = nil
+			continue
+		}
+		v.Breakdown[i] = unmarshalHooksBreakdownRowResponseBodyToTelemetryHooksBreakdownRow(val)
+	}
+	v.TimeSeries = make([]*telemetry.HooksTimeSeriesPoint, len(body.TimeSeries))
+	for i, val := range body.TimeSeries {
+		if val == nil {
+			v.TimeSeries[i] = nil
+			continue
+		}
+		v.TimeSeries[i] = unmarshalHooksTimeSeriesPointResponseBodyToTelemetryHooksTimeSeriesPoint(val)
+	}
 
 	return v
 }
@@ -5894,6 +5964,12 @@ func ValidateGetHooksSummaryResponseBody(body *GetHooksSummaryResponseBody) (err
 	if body.TotalSessions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_sessions", "body"))
 	}
+	if body.Breakdown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("breakdown", "body"))
+	}
+	if body.TimeSeries == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("time_series", "body"))
+	}
 	for _, e := range body.Servers {
 		if e != nil {
 			if err2 := ValidateHooksServerSummaryResponseBody(e); err2 != nil {
@@ -5911,6 +5987,20 @@ func ValidateGetHooksSummaryResponseBody(body *GetHooksSummaryResponseBody) (err
 	for _, e := range body.Skills {
 		if e != nil {
 			if err2 := ValidateSkillSummaryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Breakdown {
+		if e != nil {
+			if err2 := ValidateHooksBreakdownRowResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.TimeSeries {
+		if e != nil {
+			if err2 := ValidateHooksTimeSeriesPointResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -9755,6 +9845,48 @@ func ValidateSkillSummaryResponseBody(body *SkillSummaryResponseBody) (err error
 	}
 	if body.UniqueUsers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("unique_users", "body"))
+	}
+	return
+}
+
+// ValidateHooksBreakdownRowResponseBody runs the validations defined on
+// HooksBreakdownRowResponseBody
+func ValidateHooksBreakdownRowResponseBody(body *HooksBreakdownRowResponseBody) (err error) {
+	if body.UserEmail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_email", "body"))
+	}
+	if body.ServerName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_name", "body"))
+	}
+	if body.HookSource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hook_source", "body"))
+	}
+	if body.ToolName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_name", "body"))
+	}
+	if body.EventCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))
+	}
+	if body.FailureCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failure_count", "body"))
+	}
+	return
+}
+
+// ValidateHooksTimeSeriesPointResponseBody runs the validations defined on
+// HooksTimeSeriesPointResponseBody
+func ValidateHooksTimeSeriesPointResponseBody(body *HooksTimeSeriesPointResponseBody) (err error) {
+	if body.BucketStartNs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_start_ns", "body"))
+	}
+	if body.ServerName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_name", "body"))
+	}
+	if body.UserEmail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_email", "body"))
+	}
+	if body.EventCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))
 	}
 	return
 }

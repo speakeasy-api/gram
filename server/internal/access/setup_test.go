@@ -75,11 +75,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	_, err = orgrepo.New(conn).SetOrgWorkosID(ctx, orgrepo.SetOrgWorkosIDParams{
-		WorkosID:       conv.PtrToPGText(conv.PtrEmpty("org_workos_test")),
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	require.NoError(t, err)
+	// workos_id is set by InitAuthContext via UpsertOrganizationMetadata (from the mock IDP's workos_id).
 
 	roles := newMockRoleProvider(t)
 
@@ -124,10 +120,10 @@ func seedOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 	t.Helper()
 
 	_, err := orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
-		ID:              organizationID,
-		Name:            "Test Org",
-		Slug:            "test-org",
-		SsoConnectionID: conv.PtrToPGText(nil),
+		ID:       organizationID,
+		Name:     "Test Org",
+		Slug:     "test-org",
+		WorkosID: conv.PtrToPGText(nil),
 	})
 	require.NoError(t, err)
 }

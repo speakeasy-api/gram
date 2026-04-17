@@ -1,5 +1,32 @@
 # dashboard
 
+## 0.41.0
+
+### Minor Changes
+
+- 63317cc: feat: replace MCPEnableButton with 3-state status dropdown (Disabled/Private/Public)
+- 91f7e0d: Improve OAuth configuration for external MCP servers with a new step-by-step wizard flow. Extracts OAuth setup into a dedicated wizard with state machine (useReducer), supports both proxy and external OAuth paradigms, and adds success/failure result steps.
+- ea1e23d: Add organisational collections and the capability to publish MCP servers to share within the organisation.
+- f749a53: Add plugins feature for distributing MCP server bundles to teams and allowing zip distribution
+- 60fe6ee: feat: replace home placeholder with data-driven project dashboard
+- ab0c415: Update for Hooks Dashboard. Hooks now has charts for server activity, source volume, user activity, error rates, and usage over time. A new metric cards row surfaces key KPIs at a glance. Includes a toggle to show/hide the raw trace log list alongside the charts.
+
+### Patch Changes
+
+- 7b34ae4: Add click-to-filter on attribute rows in the MCP logs detail sheet. Click any attribute to filter by equals, exclude, contains, or copy its value. Also fixes attribute filters returning too few results due to a hardcoded event_source filter that didn't account for attributes being spread across multiple log entries per trace.
+- 1ea6dff: Adds a super-admin interface for enabling RBAC to organisations.
+- dce4595: Surface AI Insights as a static button in the top breadcrumb bar across every project page. Pages that need a custom prompt or tool set declare it with `<InsightsConfig />`; everywhere else the global default applies.
+- aa3c846: Redesign MCP logs with color-coded severity badges, left-edge status dots, tighter row density, sample-query popovers on the filter and date-range inputs, and React performance fixes (memoized trace rows and stable callbacks)
+- 8e4fd98: Adds a better error handler for failed role resolution in the case that the user winds up with a corrupt session.
+- 3a3850e: Restore the rich tool-call rendering in the playground. The MCP Apps integration had replaced Elements' default tool UI for every tool call; now the playground delegates to the default `ToolFallback` and only appends the MCP App iframe when the tool has a UI resource binding. Elements now exports `ToolFallback` from its public API so consumers can compose around it.
+- be476e6: feat: use pre-aggregated summary endpoint for hooks analytics charts and KPIs
+- Updated dependencies [d2bf604]
+- Updated dependencies [f749a53]
+- Updated dependencies [3a3850e]
+- Updated dependencies [be476e6]
+  - @gram/client@0.33.0
+  - @gram-ai/elements@1.28.0
+
 ## 0.40.0
 
 ### Minor Changes

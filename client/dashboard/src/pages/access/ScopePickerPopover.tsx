@@ -41,7 +41,7 @@ function useMCPServers(enabled: boolean) {
         group = { projectId: t.projectId, projectName, servers: [] };
         groups.set(t.projectId, group);
       }
-      group.servers.push({ id: t.slug, name: t.name });
+      group.servers.push({ id: t.id, name: t.name });
     }
     return [...groups.values()];
   }, [data, organization.projects]);

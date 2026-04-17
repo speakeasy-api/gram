@@ -23,12 +23,14 @@ export const Sort = {
  */
 export type Sort = ClosedEnum<typeof Sort>;
 
-export const TypesToInclude = {
+export const ListHooksTracesPayloadTypesToInclude = {
   Mcp: "mcp",
   Local: "local",
   Skill: "skill",
 } as const;
-export type TypesToInclude = ClosedEnum<typeof TypesToInclude>;
+export type ListHooksTracesPayloadTypesToInclude = ClosedEnum<
+  typeof ListHooksTracesPayloadTypesToInclude
+>;
 
 /**
  * Payload for listing hook traces
@@ -61,16 +63,16 @@ export type ListHooksTracesPayload = {
   /**
    * Hook types to include (mcp, local, skill). If empty or not provided, includes all types.
    */
-  typesToInclude?: Array<TypesToInclude> | undefined;
+  typesToInclude?: Array<ListHooksTracesPayloadTypesToInclude> | undefined;
 };
 
 /** @internal */
 export const Sort$outboundSchema: z.ZodMiniEnum<typeof Sort> = z.enum(Sort);
 
 /** @internal */
-export const TypesToInclude$outboundSchema: z.ZodMiniEnum<
-  typeof TypesToInclude
-> = z.enum(TypesToInclude);
+export const ListHooksTracesPayloadTypesToInclude$outboundSchema: z.ZodMiniEnum<
+  typeof ListHooksTracesPayloadTypesToInclude
+> = z.enum(ListHooksTracesPayloadTypesToInclude);
 
 /** @internal */
 export type ListHooksTracesPayload$Outbound = {
@@ -95,7 +97,9 @@ export const ListHooksTracesPayload$outboundSchema: z.ZodMiniType<
     limit: z._default(z.int(), 50),
     sort: z._default(Sort$outboundSchema, "desc"),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
-    typesToInclude: z.optional(z.array(TypesToInclude$outboundSchema)),
+    typesToInclude: z.optional(
+      z.array(ListHooksTracesPayloadTypesToInclude$outboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {

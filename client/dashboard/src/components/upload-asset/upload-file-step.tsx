@@ -5,8 +5,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { OpenApiSourceInput } from "../OpenApiSourceInput";
 import { Type } from "../ui/type";
-import { useStep } from "./step";
-import { useStepper } from "./stepper";
+import { useStep } from "./step/use-step";
+import { useStepper } from "./stepper/use-stepper";
 import type { UploadOpenAPIv3Result } from "@gram/client/models/components";
 
 export default function UploadFileStep() {

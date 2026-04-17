@@ -13,7 +13,7 @@ import {
   ToolsetEntry,
 } from "@gram/client/models/components";
 import { Button, cn, Stack } from "@speakeasy-api/moonshine";
-import { useCloneToolset, useDeleteToolset } from "./Toolset";
+import { useCloneToolset, useDeleteToolset } from "./useToolsetActions";
 
 // Flexible type that accepts both ToolsetEntry (from SDK) and our transformed Toolset
 // The tools/resources arrays just need items with minimal properties

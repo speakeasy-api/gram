@@ -1,5 +1,24 @@
 # server
 
+## 0.40.0
+
+### Minor Changes
+
+- ea1e23d: Add organisational collections and the capability to publish MCP servers to share within the organisation.
+- f749a53: Add plugins feature for distributing MCP server bundles to teams and allowing zip distribution
+
+### Patch Changes
+
+- d2bf604: Adds a new project metrics summary endpoint containing new data to power the new homepage
+- 1ea6dff: Adds a super-admin interface for enabling RBAC to organisations.
+- f127399: Set a hard limit on concurrent HTTP requests to Gram Function runners deployed on Fly. This prevents OOM errors when a large number of tool calls are made in a short period of time. This can cause memory exhaustion and crashes.
+- 8e4fd98: Adds a better error handler for failed role resolution in the case that the user winds up with a corrupt session.
+- 7b925e4: Remove the legacy column sso_connection_id
+- 7376613: Add database migration for plugins tables (plugins, plugin_servers, plugin_assignments)
+  to support the upcoming Plugins feature for distributing MCP server bundles.
+- be476e6: feat: use pre-aggregated summary endpoint for hooks analytics charts and KPIs
+- ba580e4: Fixes a race condition where concurrent `collections.List` calls could fail with `"default registry collection already exists"` while bootstrapping the default Registry collection. The ensure routine now treats unique-constraint violations as success and re-fetches the existing rows.
+
 ## 0.39.0
 
 ### Minor Changes

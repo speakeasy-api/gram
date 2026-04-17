@@ -13,7 +13,6 @@ import (
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -49,16 +48,24 @@ type AuthConfigurations struct {
 	Environment            string
 }
 
+// ProjectFilterFunc filters a list of project IDs down to those the current
+// user is allowed to see. It is injected to avoid an import cycle with the
+// access package. A nil value disables filtering (all projects are returned).
+type ProjectFilterFunc func(ctx context.Context, projectIDs []string) ([]string, error)
+
 // Service for gram dashboard authentication endpoints
+
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	sessions     *sessions.Manager
-	cfg          AuthConfigurations
-	projectsRepo *projectsRepo.Queries
-	envRepo      *envRepo.Queries
-	orgRepo      *orgRepo.Queries
+	tracer         trace.Tracer
+	logger         *slog.Logger
+	db             *pgxpool.Pool
+	sessions       *sessions.Manager
+	cfg            AuthConfigurations
+	accessLoader   AccessLoader
+	filterProjects ProjectFilterFunc
+	projectsRepo   *projectsRepo.Queries
+	envRepo        *envRepo.Queries
+	orgRepo        *orgRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -69,18 +76,22 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	cfg AuthConfigurations,
+	accessLoader AccessLoader,
+	filterProjects ProjectFilterFunc,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
-		logger:       logger,
-		db:           db,
-		sessions:     sessions,
-		cfg:          cfg,
-		projectsRepo: projectsRepo.New(db),
-		envRepo:      envRepo.New(db),
-		orgRepo:      orgRepo.New(db),
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
+		logger:         logger,
+		db:             db,
+		sessions:       sessions,
+		cfg:            cfg,
+		accessLoader:   accessLoader,
+		filterProjects: filterProjects,
+		projectsRepo:   projectsRepo.New(db),
+		envRepo:        envRepo.New(db),
+		orgRepo:        orgRepo.New(db),
 	}
 }
 
@@ -99,7 +110,17 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.sessions.Authenticate(ctx, key)
+	ctx, err := s.sessions.Authenticate(ctx, key)
+	if err != nil {
+		return ctx, err
+	}
+	if s.accessLoader != nil {
+		ctx, err = s.accessLoader.PrepareContext(ctx)
+		if err != nil {
+			return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").Log(ctx, s.logger)
+		}
+	}
+	return ctx, nil
 }
 
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
@@ -171,13 +192,8 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 	}
 
-	orgMetadata, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              activeOrg.ID,
-		Name:            activeOrg.Name,
-		Slug:            activeOrg.Slug,
-		SsoConnectionID: conv.PtrToPGText(activeOrg.SsoConnectionID),
-		Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
-	})
+	// Org metadata was already upserted for all orgs by GetUserInfoFromSpeakeasy.
+	orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, activeOrg.ID)
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
@@ -245,15 +261,6 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	for _, org := range userInfo.Organizations {
 		if org.ID == selectedOrg {
 			orgFound = true
-			if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-				ID:              org.ID,
-				Name:            org.Name,
-				Slug:            org.Slug,
-				SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
-				Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
-			}); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
-			}
 			break
 		}
 	}
@@ -307,7 +314,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, fromCache, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
@@ -316,7 +323,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	if userInfo.Admin {
 		for _, org := range userInfo.Organizations {
 			if org.ID == authCtx.ActiveOrganizationID {
-				userInfo.Organizations = []gen.OrganizationEntry{org}
+				userInfo.Organizations = []sessions.Organization{org}
 			}
 		}
 	}
@@ -351,8 +358,31 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		if err != nil {
 			return nil, err
 		}
-		var orgProjects []*gen.ProjectEntry
+		// Build the full list of project IDs, then filter to only those the
+		// user is allowed to see (mirrors the projects.List endpoint).
+		projectIDs := make([]string, 0, len(projectRows))
+		for _, p := range projectRows {
+			projectIDs = append(projectIDs, p.ID.String())
+		}
+
+		allowedIDs := projectIDs
+		if s.filterProjects != nil && len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
+			allowedIDs, err = s.filterProjects(ctx, projectIDs)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		allowed := make(map[string]struct{}, len(allowedIDs))
+		for _, id := range allowedIDs {
+			allowed[id] = struct{}{}
+		}
+
+		orgProjects := make([]*gen.ProjectEntry, 0, len(allowedIDs))
 		for _, project := range projectRows {
+			if _, ok := allowed[project.ID.String()]; !ok {
+				continue
+			}
 			orgProjects = append(orgProjects, &gen.ProjectEntry{
 				ID:   project.ID.String(),
 				Name: project.Name,
@@ -360,25 +390,10 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			})
 		}
 
-		// write through organization metadata when not from cache to keep entries updated
-		// TODO: there may be a better place to do this
-		if !fromCache {
-			if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-				ID:              org.ID,
-				Name:            org.Name,
-				Slug:            org.Slug,
-				SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
-				Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
-			}); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
-			}
-		}
-
 		organizations = append(organizations, &gen.OrganizationEntry{
 			ID:                 org.ID,
 			Name:               org.Name,
 			Slug:               org.Slug,
-			SsoConnectionID:    org.SsoConnectionID,
 			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
 			Projects:           orgProjects,
 		})
@@ -447,11 +462,11 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 
 	whitelisted := false
 	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              info.Organizations[0].ID,
-		Name:            info.Organizations[0].Name,
-		Slug:            info.Organizations[0].Slug,
-		SsoConnectionID: conv.PtrToPGText(nil),
-		Whitelisted:     conv.PtrToPGBool(&whitelisted),
+		ID:          info.Organizations[0].ID,
+		Name:        info.Organizations[0].Name,
+		Slug:        info.Organizations[0].Slug,
+		WorkosID:    conv.PtrToPGText(info.Organizations[0].WorkosID),
+		Whitelisted: conv.PtrToPGBool(&whitelisted),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 	}
