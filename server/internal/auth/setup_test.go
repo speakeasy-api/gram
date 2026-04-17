@@ -455,9 +455,13 @@ func (ti *testInstance) createTestOrganization(ctx context.Context, org MockOrga
 // createTestProject creates a project record in the database for testing and returns its ID.
 func (ti *testInstance) createTestProject(ctx context.Context, orgID, name, slug string) (projectsRepo.Project, error) {
 	q := projectsRepo.New(ti.conn)
-	return q.CreateProject(ctx, projectsRepo.CreateProjectParams{
+	project, err := q.CreateProject(ctx, projectsRepo.CreateProjectParams{
 		OrganizationID: orgID,
 		Name:           name,
 		Slug:           slug,
 	})
+	if err != nil {
+		return project, fmt.Errorf("failed to create project: %w", err)
+	}
+	return project, nil
 }
