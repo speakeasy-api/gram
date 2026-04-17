@@ -42,7 +42,7 @@ export function ProjectDashboard() {
   const isProjectEmpty =
     !isOverviewPending &&
     !isAuditLogsPending &&
-    overview &&
+    !!overview &&
     overview?.summary?.activeServersCount === 0 &&
     overview?.summary?.totalToolCalls === 0;
 
@@ -55,7 +55,11 @@ export function ProjectDashboard() {
         </Badge>
       </Page.Section.Description>
       <Page.Section.CTA>
-        <p className="text-muted text-xs">Showing data from the last 7 days</p>
+        {isProjectEmpty && (
+          <p className="text-muted text-xs">
+            Showing data from the last 7 days
+          </p>
+        )}
       </Page.Section.CTA>
 
       <Page.Section.Body>
