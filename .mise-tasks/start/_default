@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
 #MISE description="Start all development processes with madprocs"
+#MISE raw=true
+#MISE interactive=true
 
 #USAGE flag "--tls-cert <file>" env="GRAM_SSL_CERT_FILE" help="Path to TLS certificate file for web ui"
 #USAGE flag "--tls-key <file>" env="GRAM_SSL_KEY_FILE" help="Path to TLS key file for web ui"
