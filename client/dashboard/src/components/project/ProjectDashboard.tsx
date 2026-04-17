@@ -55,7 +55,7 @@ export function ProjectDashboard() {
         </Badge>
       </Page.Section.Description>
       <Page.Section.CTA>
-        {isProjectEmpty && (
+        {!isProjectEmpty && (
           <p className="text-muted text-xs">
             Showing data from the last 7 days
           </p>
