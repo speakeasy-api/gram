@@ -1,4 +1,5 @@
 import { useIsAdmin, useOrganization } from "@/contexts/Auth";
+import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Switch } from "./ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, GripVertical, Shield } from "lucide-react";
@@ -184,6 +185,15 @@ function RBACDevToolbarInner() {
   const queryClient = useQueryClient();
   const organization = useOrganization();
   const projects = organization?.projects ?? [];
+  const { data: toolsetsData } = useListToolsetsForOrg();
+  const projectResources = projects.map((project) => ({
+    id: project.id,
+    label: project.slug,
+  }));
+  const mcpResources = (toolsetsData?.toolsets ?? []).map((toolset) => ({
+    id: toolset.id,
+    label: toolset.name,
+  }));
   const rootRef = useRef<HTMLDivElement>(null);
   const dragOffset = useRef<{
     ox: number;
@@ -407,14 +417,13 @@ function RBACDevToolbarInner() {
                           const isRestricted =
                             scopeState.resources !== null &&
                             scopeState.resources.length > 0;
-                          const knownResources =
-                            def.resourceType === "project" ||
-                            def.resourceType === "mcp"
-                              ? projects.map((p) => ({
-                                  id: p.id,
-                                  label: p.slug,
-                                }))
-                              : [];
+                          let knownResources: { id: string; label: string }[] =
+                            [];
+                          if (def.resourceType === "project") {
+                            knownResources = projectResources;
+                          } else if (def.resourceType === "mcp") {
+                            knownResources = mcpResources;
+                          }
 
                           return (
                             <div key={def.scope}>

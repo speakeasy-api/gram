@@ -2,21 +2,19 @@ package access
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
-	"regexp"
-	"strings"
-	"time"
-
-	"database/sql"
-
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
+	"log/slog"
+	"regexp"
+	"strings"
+	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	srv "github.com/speakeasy-api/gram/server/gen/http/access/server"
