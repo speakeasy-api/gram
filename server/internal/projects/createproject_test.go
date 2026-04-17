@@ -72,7 +72,7 @@ func TestProjectsService_CreateProject_ForbiddenWithoutOrgAdminGrant(t *testing.
 	t.Parallel()
 
 	ctx, ti := newTestProjectsService(t, true)
-	ctx = access.GrantsToContext(ctx, &access.Grants{})
+	ctx = access.GrantsToContext(ctx, nil)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -95,7 +95,7 @@ func TestProjectsService_CreateProject_SkipsRBACWhenDisabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProjectsService(t, false)
-	ctx = access.GrantsToContext(ctx, &access.Grants{})
+	ctx = access.GrantsToContext(ctx, nil)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 

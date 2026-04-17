@@ -27,7 +27,7 @@ func TestProjectsService_ListProjects_SkipsRBACWhenDisabled(t *testing.T) {
 	require.NoError(t, err)
 
 	// Clear grants so no project would be visible if RBAC were enforced.
-	ctx = access.GrantsToContext(ctx, &access.Grants{})
+	ctx = access.GrantsToContext(ctx, nil)
 
 	result, err := ti.service.ListProjects(ctx, &gen.ListProjectsPayload{
 		OrganizationID: authCtx.ActiveOrganizationID,
