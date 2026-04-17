@@ -68,7 +68,7 @@ func ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx context.Context
 		client.StartWorkflowOptions{
 			ID:                       id,
 			TaskQueue:                string(temporalEnv.Queue()),
-			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 			WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 			WorkflowRunTimeout:       15 * time.Minute,
 			StartDelay:               10 * time.Second,
@@ -81,8 +81,8 @@ func ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx context.Context
 func ProcessWorkOSOrganizationEventsWorkflowDebounced(ctx workflow.Context, params ProcessWorkOSEventsParams) (*ProcessWorkOSEventsResult, error) {
 	sig := processWorkOSOrganizationEventsDebounceSignal(params)
 	return Debounce(
-		sig,
 		ProcessWorkOSOrganizationEventsWorkflow,
+		sig,
 		func(params ProcessWorkOSEventsParams, result *ProcessWorkOSEventsResult) bool {
 			return result.HasMore
 		},
