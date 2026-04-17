@@ -749,10 +749,23 @@ async function initAPIKey(init: {
       apikeyHeaderGramKey: existing,
     });
     if (vres.ok) {
-      log.info(`Using existing GRAM_API_KEY environment variable.`);
-      return;
+      const requiredScopes = new Set(["producer", "chat", "hooks"]);
+      const existingScopes = new Set(vres.value.scopes ?? []);
+      const missingScopes = [...requiredScopes].filter(
+        (scope) => !existingScopes.has(scope),
+      );
+
+      if (missingScopes.length === 0) {
+        log.info(`Using existing GRAM_API_KEY environment variable.`);
+        return;
+      }
+
+      log.warn(
+        `Existing GRAM_API_KEY is missing required scopes: ${missingScopes.join(", ")}. Creating a new API key...`,
+      );
+    } else {
+      log.warn(`Existing GRAM_API_KEY is invalid. Creating a new API key...`);
     }
-    log.warn(`Existing GRAM_API_KEY is invalid. Creating a new API key...`);
   }
 
   // Revoke any existing seed-key before creating a new one
@@ -774,7 +787,10 @@ async function initAPIKey(init: {
   const keyRes = await keysCreate(
     gram,
     {
-      createKeyForm: { name: "seed-key", scopes: ["producer", "chat"] },
+      createKeyForm: {
+        name: "seed-key",
+        scopes: ["producer", "chat", "hooks"],
+      },
     },
     {
       sessionHeaderGramSession: sessionId,

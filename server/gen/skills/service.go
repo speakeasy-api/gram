@@ -28,6 +28,14 @@ type Service interface {
 	SetSettings(context.Context, *SetSettingsPayload) (res *SkillCaptureSettings, err error)
 	// Capture a skill artifact and associated metadata.
 	Capture(context.Context, *CaptureSkillForm, io.ReadCloser) (res *CaptureSkillResult, err error)
+	// List captured versions for a skill.
+	ListVersions(context.Context, *ListVersionsPayload) (res *ListSkillVersionsResult, err error)
+	// List skills and versions that are pending review.
+	ListPending(context.Context, *ListPendingPayload) (res *ListPendingSkillsResult, err error)
+	// Approve a captured skill version and mark it active for the lineage.
+	ApproveVersion(context.Context, *ApproveVersionPayload) (res *SkillVersion, err error)
+	// Mark a captured skill version as superseded.
+	SupersedeVersion(context.Context, *SupersedeVersionPayload) (res *SkillVersion, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -50,7 +58,15 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"get", "list", "getSettings", "setSettings", "capture"}
+var MethodNames = [9]string{"get", "list", "getSettings", "setSettings", "capture", "listVersions", "listPending", "approveVersion", "supersedeVersion"}
+
+// ApproveVersionPayload is the payload type of the skills service
+// approveVersion method.
+type ApproveVersionPayload struct {
+	VersionID        string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
 
 type CaptureSkillAsset struct {
 	ID            string
@@ -105,9 +121,41 @@ type ListPayload struct {
 	ProjectSlugInput *string
 }
 
+// ListPendingPayload is the payload type of the skills service listPending
+// method.
+type ListPendingPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListPendingSkillsResult is the result type of the skills service listPending
+// method.
+type ListPendingSkillsResult struct {
+	Skills []*PendingSkillEntry
+}
+
+// ListSkillVersionsResult is the result type of the skills service
+// listVersions method.
+type ListSkillVersionsResult struct {
+	Versions []*SkillVersion
+}
+
 // ListSkillsResult is the result type of the skills service list method.
 type ListSkillsResult struct {
 	Skills []*SkillEntry
+}
+
+// ListVersionsPayload is the payload type of the skills service listVersions
+// method.
+type ListVersionsPayload struct {
+	SkillID          string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+type PendingSkillEntry struct {
+	Skill    *Skill
+	Versions []*SkillVersion
 }
 
 // SetSettingsPayload is the payload type of the skills service setSettings
@@ -156,14 +204,42 @@ type SkillEntry struct {
 	ActiveVersion *SkillVersionSummary
 }
 
+// SkillVersion is the result type of the skills service approveVersion method.
+type SkillVersion struct {
+	ID                 string
+	SkillID            string
+	AssetID            *string
+	ContentSha256      string
+	AssetFormat        string
+	SizeBytes          int64
+	SkillBytes         *int64
+	State              string
+	CapturedByUserID   *string
+	AuthorName         *string
+	FirstSeenTraceID   *string
+	FirstSeenSessionID *string
+	FirstSeenAt        *string
+	CreatedAt          string
+	UpdatedAt          string
+}
+
 type SkillVersionSummary struct {
 	ID            string
 	ContentSha256 string
 	AssetFormat   string
 	SizeBytes     int64
 	AuthorName    *string
+	State         *string
 	CreatedAt     string
 	FirstSeenAt   *string
+}
+
+// SupersedeVersionPayload is the payload type of the skills service
+// supersedeVersion method.
+type SupersedeVersionPayload struct {
+	VersionID        string
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

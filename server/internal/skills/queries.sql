@@ -161,6 +161,17 @@ WHERE s.project_id = @project_id
   AND sv.skill_id = @skill_id
 ORDER BY sv.created_at DESC;
 
+-- name: ListPendingSkillVersions :many
+SELECT
+  sqlc.embed(s),
+  sqlc.embed(sv)
+FROM skill_versions sv
+INNER JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.deleted IS FALSE
+  AND sv.state = 'pending_review'
+ORDER BY s.created_at DESC, sv.created_at DESC;
+
 -- name: UpdateSkillVersionState :one
 UPDATE skill_versions sv
 SET
@@ -188,6 +199,16 @@ WHERE skills.project_id = @project_id
   )
 RETURNING *;
 
+-- name: ClearSkillActiveVersion :one
+UPDATE skills
+SET
+    active_version_id = NULL
+  , updated_at = clock_timestamp()
+WHERE skills.project_id = @project_id
+  AND skills.id = @id
+  AND skills.deleted IS FALSE
+RETURNING *;
+
 -- name: SetSkillActiveVersionIfNull :one
 UPDATE skills
 SET
@@ -204,6 +225,62 @@ WHERE skills.project_id = @project_id
       AND sv.skill_id = skills.id
   )
 RETURNING *;
+
+-- name: CreateSkillsCaptureAttempt :one
+INSERT INTO skills_capture_attempts (
+    organization_id
+  , project_id
+  , captured_by_user_id
+  , skill_name
+  , skill_slug
+  , scope
+  , discovery_root
+  , source_type
+  , resolution_status
+  , content_sha256
+  , asset_format
+  , content_length
+  , outcome
+  , reason
+  , skill_id
+  , skill_version_id
+  , asset_id
+)
+VALUES (
+    @organization_id
+  , @project_id
+  , @captured_by_user_id
+  , sqlc.narg(skill_name)
+  , sqlc.narg(skill_slug)
+  , @scope
+  , @discovery_root
+  , @source_type
+  , @resolution_status
+  , sqlc.narg(content_sha256)
+  , sqlc.narg(asset_format)
+  , sqlc.narg(content_length)
+  , @outcome
+  , @reason
+  , sqlc.narg(skill_id)
+  , sqlc.narg(skill_version_id)
+  , sqlc.narg(asset_id)
+)
+RETURNING *;
+
+-- name: ListSkillsCaptureAttempts :many
+SELECT *
+FROM skills_capture_attempts
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
+
+-- name: ListSkillsCaptureAttemptsBySlug :many
+SELECT *
+FROM skills_capture_attempts
+WHERE project_id = @project_id
+  AND skill_slug = @skill_slug
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
 
 -- name: UpsertOrganizationCapturePolicy :one
 INSERT INTO skills_capture_policies (

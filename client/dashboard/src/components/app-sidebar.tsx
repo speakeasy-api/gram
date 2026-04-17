@@ -15,7 +15,7 @@ import {
 import { useSlugs } from "@/contexts/Sdk";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
-import { useGetPeriodUsage } from "@gram/client/react-query";
+import { useFeaturesGet, useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
 import { Building2Icon, MinusIcon, TestTube2Icon } from "lucide-react";
 import * as React from "react";
@@ -27,12 +27,17 @@ import { Type } from "./ui/type";
 
 function resolveNavGroupItems(
   routes: ReturnType<typeof useRoutes>,
+  skillsCaptureEnabled: boolean,
 ): Record<string, AppRoute[]> {
   return Object.fromEntries(
-    Object.entries(APP_NAV_GROUPS).map(([group, routeKeys]) => [
-      group,
-      routeKeys.map((routeKey) => routes[routeKey as AppNavRouteKey]),
-    ]),
+    Object.entries(APP_NAV_GROUPS)
+      .map(([group, routeKeys]) => [
+        group,
+        routeKeys
+          .filter((routeKey) => routeKey !== "skills" || skillsCaptureEnabled)
+          .map((routeKey) => routes[routeKey as AppNavRouteKey]),
+      ])
+      .filter(([, items]) => items.length > 0),
   ) as Record<string, AppRoute[]>;
 }
 
@@ -40,9 +45,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const { orgSlug } = useSlugs();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const { data: featuresData } = useFeaturesGet(undefined, undefined, {
+    throwOnError: false,
+  });
 
   const { settings: settingsItems = [routes.settings], ...navGroups } =
-    resolveNavGroupItems(routes);
+    resolveNavGroupItems(routes, featuresData?.skillsCaptureEnabled ?? false);
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>

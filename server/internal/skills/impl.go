@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
@@ -76,6 +77,7 @@ type Service struct {
 	storage    assets.BlobStore
 	repo       *assetsrepo.Queries
 	skillsRepo *skillsrepo.Queries
+	features   *productfeatures.Client
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -88,6 +90,7 @@ func NewService(
 	sessionsMgr *sessions.Manager,
 	storage assets.BlobStore,
 	accessManager *access.Manager,
+	features *productfeatures.Client,
 ) *Service {
 	return &Service{
 		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills"),
@@ -98,7 +101,75 @@ func NewService(
 		storage:    storage,
 		repo:       assetsrepo.New(db),
 		skillsRepo: skillsrepo.New(db),
+		features:   features,
 	}
+}
+
+func (s *Service) requireSkillsCaptureEnabled(ctx context.Context, organizationID string) error {
+	if organizationID == "" {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	if s.features == nil {
+		return nil
+	}
+
+	enabled, err := s.features.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureSkillsCapture)
+	if err != nil {
+		return fmt.Errorf("check skills capture feature: %w", err)
+	}
+	if !enabled {
+		return oops.E(oops.CodeForbidden, nil, "skills capture is not enabled for this organization")
+	}
+
+	return nil
+}
+
+func (s *Service) recordCaptureAttempt(
+	ctx context.Context,
+	repo *skillsrepo.Queries,
+	organizationID string,
+	projectID uuid.UUID,
+	userID string,
+	skillSlug string,
+	payload *gen.CaptureSkillForm,
+	outcome string,
+	reason string,
+	skillID uuid.NullUUID,
+	versionID uuid.NullUUID,
+	assetID uuid.NullUUID,
+) error {
+	if payload == nil {
+		return nil
+	}
+
+	_, err := repo.CreateSkillsCaptureAttempt(ctx, skillsrepo.CreateSkillsCaptureAttemptParams{
+		OrganizationID:   organizationID,
+		ProjectID:        projectID,
+		CapturedByUserID: userID,
+		SkillName:        conv.PtrToPGTextEmpty(conv.PtrEmpty(payload.Name)),
+		SkillSlug:        conv.PtrToPGTextEmpty(conv.PtrEmpty(skillSlug)),
+		Scope:            payload.Scope,
+		DiscoveryRoot:    payload.DiscoveryRoot,
+		SourceType:       payload.SourceType,
+		ResolutionStatus: payload.ResolutionStatus,
+		ContentSha256:    conv.PtrToPGTextEmpty(conv.PtrEmpty(payload.ContentSha256)),
+		AssetFormat:      conv.PtrToPGTextEmpty(conv.PtrEmpty(payload.AssetFormat)),
+		ContentLength: func() pgtype.Int8 {
+			if payload.ContentLength <= 0 {
+				return pgtype.Int8{Int64: 0, Valid: false}
+			}
+			return pgtype.Int8{Int64: payload.ContentLength, Valid: true}
+		}(),
+		Outcome:        outcome,
+		Reason:         reason,
+		SkillID:        skillID,
+		SkillVersionID: versionID,
+		AssetID:        assetID,
+	})
+	if err != nil {
+		return fmt.Errorf("create skills capture attempt: %w", err)
+	}
+	return nil
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -122,6 +193,9 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.Skill,
 	}
 
 	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 
@@ -149,6 +223,9 @@ func (s *Service) List(ctx context.Context, _ *gen.ListPayload) (*gen.ListSkills
 	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
+	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
 
 	rows, err := s.skillsRepo.ListSkillsWithActiveVersion(ctx, *authCtx.ProjectID)
 	if err != nil {
@@ -174,6 +251,9 @@ func (s *Service) GetSettings(ctx context.Context, _ *gen.GetSettingsPayload) (*
 	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
+	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
 
 	settings, err := s.getCaptureSettings(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	if err != nil {
@@ -190,6 +270,9 @@ func (s *Service) SetSettings(ctx context.Context, payload *gen.SetSettingsPaylo
 	}
 
 	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 
@@ -210,6 +293,229 @@ func (s *Service) SetSettings(ctx context.Context, payload *gen.SetSettingsPaylo
 	return settings, nil
 }
 
+func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPayload) (*gen.ListSkillVersionsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
+
+	skillID, err := uuid.Parse(payload.SkillID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid skill id")
+	}
+
+	versions, err := s.skillsRepo.ListSkillVersions(ctx, skillsrepo.ListSkillVersionsParams{
+		ProjectID: *authCtx.ProjectID,
+		SkillID:   skillID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("list skill versions: %w", err), "error loading skill versions").Log(ctx, s.logger)
+	}
+
+	result := &gen.ListSkillVersionsResult{Versions: make([]*gen.SkillVersion, 0, len(versions))}
+	for i := range versions {
+		result.Versions = append(result.Versions, buildSkillVersion(&versions[i]))
+	}
+	return result, nil
+}
+
+func (s *Service) ListPending(ctx context.Context, _ *gen.ListPendingPayload) (*gen.ListPendingSkillsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.skillsRepo.ListPendingSkillVersions(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("list pending skill versions: %w", err), "error loading pending skills").Log(ctx, s.logger)
+	}
+
+	pendingBySkillID := map[uuid.UUID]*gen.PendingSkillEntry{}
+	orderedSkillIDs := make([]uuid.UUID, 0)
+	for i := range rows {
+		entry, exists := pendingBySkillID[rows[i].Skill.ID]
+		if !exists {
+			entry = &gen.PendingSkillEntry{
+				Skill:    buildSkill(rows[i].Skill),
+				Versions: make([]*gen.SkillVersion, 0),
+			}
+			pendingBySkillID[rows[i].Skill.ID] = entry
+			orderedSkillIDs = append(orderedSkillIDs, rows[i].Skill.ID)
+		}
+		entry.Versions = append(entry.Versions, buildSkillVersion(&rows[i].SkillVersion))
+	}
+
+	result := &gen.ListPendingSkillsResult{Skills: make([]*gen.PendingSkillEntry, 0, len(orderedSkillIDs))}
+	for _, skillID := range orderedSkillIDs {
+		result.Skills = append(result.Skills, pendingBySkillID[skillID])
+	}
+
+	return result, nil
+}
+
+func (s *Service) ApproveVersion(ctx context.Context, payload *gen.ApproveVersionPayload) (*gen.SkillVersion, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
+
+	versionID, err := uuid.Parse(payload.VersionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid version id")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing resource").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	repo := skillsrepo.New(dbtx)
+	version, err := repo.GetSkillVersion(ctx, skillsrepo.GetSkillVersionParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        versionID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get skill version: %w", err), "error loading skill version").Log(ctx, s.logger)
+	}
+	if version.State != skillVersionStatePending {
+		return nil, oops.E(oops.CodeConflict, nil, "skill version must be pending review to approve")
+	}
+
+	versions, err := repo.ListSkillVersions(ctx, skillsrepo.ListSkillVersionsParams{
+		ProjectID: *authCtx.ProjectID,
+		SkillID:   version.SkillID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("list skill versions for approval: %w", err), "error approving skill version").Log(ctx, s.logger)
+	}
+	for i := range versions {
+		if versions[i].State == "active" && versions[i].ID != version.ID {
+			if _, err := repo.UpdateSkillVersionState(ctx, skillsrepo.UpdateSkillVersionStateParams{
+				State:     "superseded",
+				ID:        versions[i].ID,
+				ProjectID: *authCtx.ProjectID,
+			}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("supersede existing active version: %w", err), "error approving skill version").Log(ctx, s.logger)
+			}
+		}
+	}
+
+	version, err = repo.UpdateSkillVersionState(ctx, skillsrepo.UpdateSkillVersionStateParams{
+		State:     "active",
+		ID:        version.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("mark skill version active: %w", err), "error approving skill version").Log(ctx, s.logger)
+	}
+
+	if _, err := repo.SetSkillActiveVersion(ctx, skillsrepo.SetSkillActiveVersionParams{
+		ActiveVersionID: uuid.NullUUID{UUID: version.ID, Valid: true},
+		ProjectID:       *authCtx.ProjectID,
+		ID:              version.SkillID,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("set active skill version: %w", err), "error approving skill version").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error approving skill version").Log(ctx, s.logger)
+	}
+
+	return buildSkillVersion(&version), nil
+}
+
+func (s *Service) SupersedeVersion(ctx context.Context, payload *gen.SupersedeVersionPayload) (*gen.SkillVersion, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
+
+	versionID, err := uuid.Parse(payload.VersionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid version id")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing resource").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	repo := skillsrepo.New(dbtx)
+	version, err := repo.GetSkillVersion(ctx, skillsrepo.GetSkillVersionParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        versionID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get skill version for supersede: %w", err), "error superseding skill version").Log(ctx, s.logger)
+	}
+	if version.State != skillVersionStatePending && version.State != "active" {
+		return nil, oops.E(oops.CodeConflict, nil, "skill version must be pending review or active to supersede")
+	}
+
+	version, err = repo.UpdateSkillVersionState(ctx, skillsrepo.UpdateSkillVersionStateParams{
+		State:     "superseded",
+		ID:        versionID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("supersede skill version: %w", err), "error superseding skill version").Log(ctx, s.logger)
+	}
+
+	skill, err := repo.GetSkill(ctx, skillsrepo.GetSkillParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        version.SkillID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get skill for supersede: %w", err), "error superseding skill version").Log(ctx, s.logger)
+	}
+	if skill.ActiveVersionID.Valid && skill.ActiveVersionID.UUID == version.ID {
+		if _, err := repo.ClearSkillActiveVersion(ctx, skillsrepo.ClearSkillActiveVersionParams{
+			ProjectID: *authCtx.ProjectID,
+			ID:        skill.ID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("clear active skill version: %w", err), "error superseding skill version").Log(ctx, s.logger)
+		}
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error superseding skill version").Log(ctx, s.logger)
+	}
+
+	return buildSkillVersion(&version), nil
+}
+
 func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, reader io.ReadCloser) (*gen.CaptureSkillResult, error) {
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return reader.Close()
@@ -220,13 +526,68 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	skillSlug := conv.ToSlug(payload.Name)
+	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
+		if recordErr := s.recordCaptureAttempt(
+			ctx,
+			s.skillsRepo,
+			authCtx.ActiveOrganizationID,
+			*authCtx.ProjectID,
+			authCtx.UserID,
+			skillSlug,
+			payload,
+			"rejected",
+			"feature_disabled",
+			uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		); recordErr != nil {
+			s.logger.WarnContext(ctx, "failed to record capture attempt", attr.SlogError(recordErr))
+		}
+		return nil, err
+	}
+
 	effectiveMode, err := s.getEffectiveCaptureMode(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	if !captureModeAllowsScope(effectiveMode, payload.Scope) {
+		reason := "scope_not_permitted"
 		if effectiveMode == CaptureModeDisabled {
+			reason = "policy_disabled"
+			if recordErr := s.recordCaptureAttempt(
+				ctx,
+				s.skillsRepo,
+				authCtx.ActiveOrganizationID,
+				*authCtx.ProjectID,
+				authCtx.UserID,
+				skillSlug,
+				payload,
+				"rejected",
+				reason,
+				uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			); recordErr != nil {
+				s.logger.WarnContext(ctx, "failed to record capture attempt", attr.SlogError(recordErr))
+			}
 			return nil, oops.E(oops.CodeForbidden, nil, "skill capture is disabled")
+		}
+		if recordErr := s.recordCaptureAttempt(
+			ctx,
+			s.skillsRepo,
+			authCtx.ActiveOrganizationID,
+			*authCtx.ProjectID,
+			authCtx.UserID,
+			skillSlug,
+			payload,
+			"rejected",
+			reason,
+			uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		); recordErr != nil {
+			s.logger.WarnContext(ctx, "failed to record capture attempt", attr.SlogError(recordErr))
 		}
 		return nil, oops.E(
 			oops.CodeForbidden,
@@ -256,7 +617,6 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 		return nil, oops.E(oops.CodeBadRequest, nil, "skill name exceeds %d characters", maxSkillNameLen)
 	}
 
-	skillSlug := conv.ToSlug(payload.Name)
 	if skillSlug == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "skill name must include at least one alphanumeric character")
 	}
@@ -305,16 +665,32 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 			return nil, oops.E(oops.CodeUnexpected, err, "error accessing skill assets").Log(ctx, s.logger)
 		}
 		txClosed := false
-	defer o11y.NoLogDefer(func() error {
-		if txClosed || dbtx == nil {
-			return nil
-		}
-		return dbtx.Rollback(ctx)
-	})
+		defer o11y.NoLogDefer(func() error {
+			if txClosed || dbtx == nil {
+				return nil
+			}
+			return dbtx.Rollback(ctx)
+		})
 
 		err = s.ensureSkillLineageForCapture(ctx, s.skillsRepo.WithTx(dbtx), authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, skillSlug, contentSHA, payload, existingAssetID)
 		if err != nil {
 			return nil, err
+		}
+		if err := s.recordCaptureAttempt(
+			ctx,
+			s.skillsRepo.WithTx(dbtx),
+			authCtx.ActiveOrganizationID,
+			*authCtx.ProjectID,
+			authCtx.UserID,
+			skillSlug,
+			payload,
+			"duplicate",
+			"existing_asset",
+			uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			uuid.NullUUID{UUID: existingAssetID, Valid: true},
+		); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error recording capture attempt").Log(ctx, s.logger)
 		}
 
 		if err := dbtx.Commit(ctx); err != nil {
@@ -382,6 +758,22 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 			if err != nil {
 				return nil, err
 			}
+			if err := s.recordCaptureAttempt(
+				ctx,
+				skillsTxRepo,
+				authCtx.ActiveOrganizationID,
+				*authCtx.ProjectID,
+				authCtx.UserID,
+				skillSlug,
+				payload,
+				"duplicate",
+				"asset_conflict_reused",
+				uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				uuid.NullUUID{UUID: existingAssetID, Valid: true},
+			); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "error recording capture attempt").Log(ctx, s.logger)
+			}
 
 			if err := dbtx.Commit(ctx); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to save skill artifact").Log(ctx, s.logger)
@@ -398,6 +790,22 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 	err = s.ensureSkillLineageForCapture(ctx, skillsTxRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, skillSlug, contentSHA, payload, asset.ID)
 	if err != nil {
 		return nil, err
+	}
+	if err := s.recordCaptureAttempt(
+		ctx,
+		skillsTxRepo,
+		authCtx.ActiveOrganizationID,
+		*authCtx.ProjectID,
+		authCtx.UserID,
+		skillSlug,
+		payload,
+		"accepted",
+		"captured",
+		uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		uuid.NullUUID{UUID: asset.ID, Valid: true},
+	); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error recording capture attempt").Log(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -750,8 +1158,48 @@ func buildSkillVersionSummary(row skillsrepo.ListSkillsWithActiveVersionRow) *ge
 		AssetFormat:   row.ActiveVersionAssetFormat.String,
 		SizeBytes:     row.ActiveVersionSizeBytes.Int64,
 		AuthorName:    conv.FromPGText[string](row.ActiveVersionAuthorName),
+		State:         nil,
 		CreatedAt:     row.ActiveVersionCreatedAt.Time.Format(time.RFC3339),
 		FirstSeenAt:   firstSeenAt,
+	}
+}
+
+func buildSkillVersion(version *skillsrepo.SkillVersion) *gen.SkillVersion {
+	if version == nil {
+		return nil
+	}
+
+	var assetID *string
+	if version.AssetID != uuid.Nil {
+		assetID = conv.PtrEmpty(version.AssetID.String())
+	}
+
+	var skillBytes *int64
+	if version.SkillBytes.Valid {
+		skillBytes = conv.PtrEmpty(version.SkillBytes.Int64)
+	}
+
+	var firstSeenAt *string
+	if version.FirstSeenAt.Valid {
+		firstSeenAt = conv.PtrEmpty(version.FirstSeenAt.Time.Format(time.RFC3339))
+	}
+
+	return &gen.SkillVersion{
+		ID:                 version.ID.String(),
+		SkillID:            version.SkillID.String(),
+		AssetID:            assetID,
+		ContentSha256:      version.ContentSha256,
+		AssetFormat:        version.AssetFormat,
+		SizeBytes:          version.SizeBytes,
+		SkillBytes:         skillBytes,
+		State:              version.State,
+		CapturedByUserID:   conv.PtrEmpty(version.CapturedByUserID),
+		AuthorName:         conv.FromPGText[string](version.AuthorName),
+		FirstSeenTraceID:   conv.FromPGText[string](version.FirstSeenTraceID),
+		FirstSeenSessionID: conv.FromPGText[string](version.FirstSeenSessionID),
+		FirstSeenAt:        firstSeenAt,
+		CreatedAt:          version.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:          version.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

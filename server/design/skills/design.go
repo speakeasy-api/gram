@@ -134,6 +134,97 @@ var _ = Service("skills", func() {
 		Meta("openapi:operationId", "captureSkill")
 		Meta("openapi:extension:x-speakeasy-name-override", "capture")
 	})
+
+	Method("listVersions", func() {
+		Description("List captured versions for a skill.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Required("skill_id")
+			Attribute("skill_id", String)
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(ListSkillVersionsResult)
+
+		HTTP(func() {
+			GET("/rpc/skills.versions")
+			Param("skill_id")
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "listSkillVersions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listVersions")
+	})
+
+	Method("listPending", func() {
+		Description("List skills and versions that are pending review.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(ListPendingSkillsResult)
+
+		HTTP(func() {
+			GET("/rpc/skills.pending")
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "listPendingSkills")
+		Meta("openapi:extension:x-speakeasy-name-override", "listPending")
+	})
+
+	Method("approveVersion", func() {
+		Description("Approve a captured skill version and mark it active for the lineage.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Required("version_id")
+			Attribute("version_id", String)
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(SkillVersion)
+
+		HTTP(func() {
+			POST("/rpc/skills.approveVersion")
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "approveSkillVersion")
+		Meta("openapi:extension:x-speakeasy-name-override", "approveVersion")
+	})
+
+	Method("supersedeVersion", func() {
+		Description("Mark a captured skill version as superseded.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Required("version_id")
+			Attribute("version_id", String)
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(SkillVersion)
+
+		HTTP(func() {
+			POST("/rpc/skills.supersedeVersion")
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "supersedeSkillVersion")
+		Meta("openapi:extension:x-speakeasy-name-override", "supersedeVersion")
+	})
 })
 
 var ListSkillsResult = Type("ListSkillsResult", func() {
@@ -184,12 +275,68 @@ var SkillVersionSummary = Type("SkillVersionSummary", func() {
 	Attribute("asset_format", String)
 	Attribute("size_bytes", Int64)
 	Attribute("author_name", String)
+	Attribute("state", String, func() {
+		Enum("pending_review", "active", "superseded")
+	})
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
 	Attribute("first_seen_at", String, func() {
 		Format(FormatDateTime)
 	})
+})
+
+var SkillVersion = Type("SkillVersion", func() {
+	Required(
+		"id",
+		"skill_id",
+		"content_sha256",
+		"asset_format",
+		"size_bytes",
+		"state",
+		"created_at",
+		"updated_at",
+	)
+
+	Attribute("id", String)
+	Attribute("skill_id", String)
+	Attribute("asset_id", String)
+	Attribute("content_sha256", String)
+	Attribute("asset_format", String)
+	Attribute("size_bytes", Int64)
+	Attribute("skill_bytes", Int64)
+	Attribute("state", String, func() {
+		Enum("pending_review", "active", "superseded")
+	})
+	Attribute("captured_by_user_id", String)
+	Attribute("author_name", String)
+	Attribute("first_seen_trace_id", String)
+	Attribute("first_seen_session_id", String)
+	Attribute("first_seen_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+var ListSkillVersionsResult = Type("ListSkillVersionsResult", func() {
+	Required("versions")
+	Attribute("versions", ArrayOf(SkillVersion))
+})
+
+var PendingSkillEntry = Type("PendingSkillEntry", func() {
+	Required("skill", "versions")
+	Attribute("skill", Skill)
+	Attribute("versions", ArrayOf(SkillVersion))
+})
+
+var ListPendingSkillsResult = Type("ListPendingSkillsResult", func() {
+	Required("skills")
+	Attribute("skills", ArrayOf(PendingSkillEntry))
 })
 
 var CaptureSkillForm = Type("CaptureSkillForm", func() {

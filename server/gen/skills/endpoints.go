@@ -17,11 +17,15 @@ import (
 
 // Endpoints wraps the "skills" service endpoints.
 type Endpoints struct {
-	Get         goa.Endpoint
-	List        goa.Endpoint
-	GetSettings goa.Endpoint
-	SetSettings goa.Endpoint
-	Capture     goa.Endpoint
+	Get              goa.Endpoint
+	List             goa.Endpoint
+	GetSettings      goa.Endpoint
+	SetSettings      goa.Endpoint
+	Capture          goa.Endpoint
+	ListVersions     goa.Endpoint
+	ListPending      goa.Endpoint
+	ApproveVersion   goa.Endpoint
+	SupersedeVersion goa.Endpoint
 }
 
 // CaptureRequestData holds both the payload and the HTTP request body reader
@@ -38,11 +42,15 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Get:         NewGetEndpoint(s, a.APIKeyAuth),
-		List:        NewListEndpoint(s, a.APIKeyAuth),
-		GetSettings: NewGetSettingsEndpoint(s, a.APIKeyAuth),
-		SetSettings: NewSetSettingsEndpoint(s, a.APIKeyAuth),
-		Capture:     NewCaptureEndpoint(s, a.APIKeyAuth),
+		Get:              NewGetEndpoint(s, a.APIKeyAuth),
+		List:             NewListEndpoint(s, a.APIKeyAuth),
+		GetSettings:      NewGetSettingsEndpoint(s, a.APIKeyAuth),
+		SetSettings:      NewSetSettingsEndpoint(s, a.APIKeyAuth),
+		Capture:          NewCaptureEndpoint(s, a.APIKeyAuth),
+		ListVersions:     NewListVersionsEndpoint(s, a.APIKeyAuth),
+		ListPending:      NewListPendingEndpoint(s, a.APIKeyAuth),
+		ApproveVersion:   NewApproveVersionEndpoint(s, a.APIKeyAuth),
+		SupersedeVersion: NewSupersedeVersionEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -53,6 +61,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSettings = m(e.GetSettings)
 	e.SetSettings = m(e.SetSettings)
 	e.Capture = m(e.Capture)
+	e.ListVersions = m(e.ListVersions)
+	e.ListPending = m(e.ListPending)
+	e.ApproveVersion = m(e.ApproveVersion)
+	e.SupersedeVersion = m(e.SupersedeVersion)
 }
 
 // NewGetEndpoint returns an endpoint function that calls the method "get" of
@@ -227,5 +239,145 @@ func NewCaptureEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 			return nil, err
 		}
 		return s.Capture(ctx, ep.Payload, ep.Body)
+	}
+}
+
+// NewListVersionsEndpoint returns an endpoint function that calls the method
+// "listVersions" of service "skills".
+func NewListVersionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListVersionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListVersions(ctx, p)
+	}
+}
+
+// NewListPendingEndpoint returns an endpoint function that calls the method
+// "listPending" of service "skills".
+func NewListPendingEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPendingPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListPending(ctx, p)
+	}
+}
+
+// NewApproveVersionEndpoint returns an endpoint function that calls the method
+// "approveVersion" of service "skills".
+func NewApproveVersionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ApproveVersionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ApproveVersion(ctx, p)
+	}
+}
+
+// NewSupersedeVersionEndpoint returns an endpoint function that calls the
+// method "supersedeVersion" of service "skills".
+func NewSupersedeVersionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SupersedeVersionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SupersedeVersion(ctx, p)
 	}
 }

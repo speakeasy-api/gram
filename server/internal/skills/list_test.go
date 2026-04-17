@@ -138,6 +138,7 @@ type seedSkillVersionParams struct {
 	contentSHA256 string
 	authorName    string
 	firstSeenAt   pgtype.Timestamptz
+	state         string
 }
 
 func seedSkillVersion(
@@ -152,13 +153,18 @@ func seedSkillVersion(
 ) skillsrepo.SkillVersion {
 	t.Helper()
 
+	state := params.state
+	if state == "" {
+		state = "active"
+	}
+
 	version, err := ti.skillsRepo.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
 		AssetID:            assetID,
 		ContentSha256:      params.contentSHA256,
 		AssetFormat:        "zip",
 		SizeBytes:          128,
 		SkillBytes:         pgtype.Int8{},
-		State:              "active",
+		State:              state,
 		CapturedByUserID:   userID,
 		AuthorName:         pgtype.Text{String: params.authorName, Valid: params.authorName != ""},
 		FirstSeenTraceID:   pgtype.Text{},
