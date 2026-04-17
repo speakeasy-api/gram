@@ -91,7 +91,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { useModel } from "../playground/Openrouter";
-import { onboardingStepStorageKeys } from "../home/Home";
 import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
@@ -190,10 +189,6 @@ export function MCPDetailPage() {
     url.hash = value;
     window.history.replaceState(null, "", url.toString());
   };
-
-  useEffect(() => {
-    localStorage.setItem(onboardingStepStorageKeys.configure, "true");
-  }, []);
 
   // Calculate if there are missing required env vars for the tab indicator
   // Must be before early return to avoid hooks order issues
