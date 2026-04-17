@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import React from "react";
 import Step from "./index";
-import { useStep } from "./context";
+import { useStep } from "./use-step";
 
 type FrameProps = {
   children: React.ReactNode;
