@@ -17,18 +17,16 @@ import (
 // AnalyzeBatch scans a batch of messages against enabled detection sources
 // and writes the results back to the database.
 type AnalyzeBatch struct {
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	repo     *repo.Queries
-	scanPool *DetectorPool
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	repo   *repo.Queries
 }
 
-func NewAnalyzeBatch(logger *slog.Logger, db *pgxpool.Pool, pool *DetectorPool) *AnalyzeBatch {
+func NewAnalyzeBatch(logger *slog.Logger, db *pgxpool.Pool) *AnalyzeBatch {
 	return &AnalyzeBatch{
-		logger:   logger,
-		db:       db,
-		repo:     repo.New(db),
-		scanPool: pool,
+		logger: logger,
+		db:     db,
+		repo:   repo.New(db),
 	}
 }
 
@@ -73,7 +71,10 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 	scanStart := time.Now()
 	activity.RecordHeartbeat(ctx, 0)
 
-	batchFindings := a.scanPool.ScanBatch(contents)
+	batchFindings, err := ScanBatchParallel(contents)
+	if err != nil {
+		return nil, fmt.Errorf("scan batch: %w", err)
+	}
 
 	// Convert scan results to DB rows.
 	var rows []repo.InsertRiskResultsParams
