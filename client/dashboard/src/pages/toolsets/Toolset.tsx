@@ -22,9 +22,7 @@ import { Confirm } from "@gram/client/models/components";
 import { invalidateTemplate } from "@gram/client/react-query";
 import {
   queryKeyInstance,
-  useCloneToolsetMutation,
   useCreateToolsetMutation,
-  useDeleteToolsetMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
