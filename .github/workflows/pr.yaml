@@ -722,6 +722,10 @@ jobs:
       - name: Regenerate SDK
         run: mise run gen:sdk --skip-versioning --skip-upload-spec
 
+      # Prevent perpetual failure for code samples digest.
+      - name: Restore .speakeasy/workflow.lock
+        run: git checkout HEAD -- .speakeasy/workflow.lock
+
       - name: Check for dirty files
         run: mise run git:porcelain
 
