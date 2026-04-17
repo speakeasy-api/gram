@@ -6,30 +6,25 @@ import (
 	"os"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var (
@@ -119,40 +114,4 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 		temporalEnv:    temporalEnv,
 		sessionManager: sessionManager,
 	}
-}
-
-// withExactAccessGrants sets AccountType to "enterprise" and seeds the given grants
-// into the database, returning a context with those grants loaded.
-func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...access.Grant) context.Context {
-	t.Helper()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-
-	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "deployments-rbac-grants-"+uuid.NewString())
-	for _, grant := range grants {
-		_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			PrincipalUrn:   principal,
-			Scope:          string(grant.Scope),
-			Resource:       grant.Resource,
-		})
-		require.NoError(t, err)
-	}
-
-	loadedGrants, err := access.LoadGrants(ctx, conn, authCtx.ActiveOrganizationID, []urn.Principal{principal})
-	require.NoError(t, err)
-
-	return access.GrantsToContext(ctx, loadedGrants)
-}
-
-func requireOopsCode(t *testing.T, err error, code oops.Code) {
-	t.Helper()
-
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, code, oopsErr.Code)
 }

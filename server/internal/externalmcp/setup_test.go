@@ -6,22 +6,18 @@ import (
 	"os"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var (
@@ -86,30 +82,4 @@ func newTestExternalMCPService(t *testing.T) (context.Context, *testInstance) {
 		conn:           conn,
 		sessionManager: sessionManager,
 	}
-}
-
-func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...access.Grant) context.Context {
-	t.Helper()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-
-	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "externalmcp-rbac-grants-"+uuid.NewString())
-	for _, grant := range grants {
-		_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			PrincipalUrn:   principal,
-			Scope:          string(grant.Scope),
-			Resource:       grant.Resource,
-		})
-		require.NoError(t, err)
-	}
-
-	loadedGrants, err := access.LoadGrants(ctx, conn, authCtx.ActiveOrganizationID, []urn.Principal{principal})
-	require.NoError(t, err)
-
-	return access.GrantsToContext(ctx, loadedGrants)
 }
