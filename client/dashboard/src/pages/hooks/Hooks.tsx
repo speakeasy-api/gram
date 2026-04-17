@@ -240,7 +240,7 @@ function HooksContent() {
 
   // Parse initial hook types from URL (default to all types)
   const initialHookTypes = searchParams.get("hookTypes");
-  const defaultHookTypes: TypesToInclude[] = ["mcp", "local", "skill"];
+  const defaultHookTypes: TypesToInclude[] = ["mcp", "skill"];
   const parsedHookTypes: TypesToInclude[] = initialHookTypes
     ? (initialHookTypes
         .split(",")
@@ -605,8 +605,13 @@ function HooksContent() {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (types.length === 3) {
-            // All types selected - remove param (default)
+          const isDefault =
+            types.length === 2 &&
+            types.includes("mcp") &&
+            types.includes("skill") &&
+            !types.includes("local");
+          if (isDefault) {
+            // Default selection (mcp + skill) - remove param
             next.delete("hookTypes");
           } else if (types.length > 0) {
             next.set("hookTypes", types.join(","));
@@ -978,9 +983,17 @@ function HooksInnerContent({
 }
 
 const HOOK_TYPE_OPTIONS = [
-  { label: "MCP Servers", value: "mcp" as TypesToInclude },
-  { label: "Local Tools", value: "local" as TypesToInclude },
-  { label: "Skills", value: "skill" as TypesToInclude },
+  {
+    label: "MCP Servers",
+    labelShort: "Servers",
+    value: "mcp" as TypesToInclude,
+  },
+  {
+    label: "Local Tools",
+    labelShort: "Local",
+    value: "local" as TypesToInclude,
+  },
+  { label: "Skills", labelShort: "Skills", value: "skill" as TypesToInclude },
 ];
 
 function HookTypeFilter({
@@ -1003,10 +1016,13 @@ function HookTypeFilter({
       const selected = HOOK_TYPE_OPTIONS.find(
         (opt) => opt.value === selectedHookTypes[0],
       );
-      return `Showing ${selected?.label || selectedHookTypes[0]}`;
+      return `Showing ${selected?.labelShort || selectedHookTypes[0]}`;
     }
 
-    return `Showing ${selectedHookTypes.length} of 3 types`;
+    const labels = HOOK_TYPE_OPTIONS.filter((opt) =>
+      selectedHookTypes.includes(opt.value),
+    ).map((opt) => opt.labelShort);
+    return `Showing ${labels.join(" & ")}`;
   };
 
   return (
