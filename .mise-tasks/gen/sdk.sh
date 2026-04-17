@@ -3,11 +3,16 @@
 #MISE description="Generate SDK from OpenAPI spec"
 
 #USAGE flag "-c --check" help="Check if the Gram-Internal OpenAPI output is up-to-date"
+#USAGE flag "-s --skip-versioning" help="Skip automatic SDK version increments"
 
 set -e
 
 generate() {
-  speakeasy run
+  args=()
+  if [[ "${usage_skip_versioning:-}" == "true" ]]; then
+    args+=(--skip-versioning)
+  fi
+  speakeasy run "${args[@]}"
 }
 
 check_inputs() {

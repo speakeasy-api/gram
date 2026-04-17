@@ -720,7 +720,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Regenerate SDK
-        run: mise run gen:sdk
+        run: mise run gen:sdk --skip-versioning
 
       - name: Check for dirty files
         run: mise run git:porcelain
