@@ -194,11 +194,11 @@ func newManagerWithFakeWorkOSConfig(t *testing.T, fake *fakeWorkOSServer, idpCfg
 	// IDs back to Speakeasy org IDs. In the mock IDP the same ID is used for both.
 	oq := orgRepo.New(conn)
 	_, err = oq.UpsertOrganizationMetadata(context.Background(), orgRepo.UpsertOrganizationMetadataParams{
-		ID:              mockidp.MockOrgID,
-		Name:            mockidp.MockOrgName,
-		Slug:            mockidp.MockOrgSlug,
-		SsoConnectionID: pgtype.Text{Valid: false},
-		Whitelisted:     pgtype.Bool{Valid: false},
+		ID:          mockidp.MockOrgID,
+		Name:        mockidp.MockOrgName,
+		Slug:        mockidp.MockOrgSlug,
+		WorkosID:    pgtype.Text{Valid: false},
+		Whitelisted: pgtype.Bool{Valid: false},
 	})
 	require.NoError(t, err)
 	_, err = oq.SetOrgWorkosID(context.Background(), orgRepo.SetOrgWorkosIDParams{
@@ -281,6 +281,62 @@ func TestSyncWorkOSIDs_SkipsSetOrgWorkosIDWhenValidateOmitsWorkOSID(t *testing.T
 	org, err := orgRepo.New(ts.conn).GetOrganizationMetadata(ctx, mockidp.MockOrgID)
 	require.NoError(t, err)
 	require.False(t, org.WorkosID.Valid, "workos_id must remain unset when validate omits workos_id")
+}
+
+// TestUpsertAfterLogin_PreservesWorkosIDWhenIDPOmitsIt exercises the full Callback
+// flow: syncWorkOSIDs sets workos_id, then UpsertOrganizationMetadata is called
+// with nil WorkosID (IDP omitted it). The COALESCE in the upsert must preserve
+// the existing value.
+func TestUpsertAfterLogin_PreservesWorkosIDWhenIDPOmitsIt(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "wos_user_upsert_preserve"
+
+	fake := newFakeWorkOSServer()
+	fake.users = []fakeWOSUser{{ID: workosUserID, Email: mockidp.MockUserEmail}}
+	fake.memberships = []fakeWOSMembership{
+		{ID: "mem_preserve", UserID: workosUserID, OrganizationID: mockidp.MockOrgID, RoleSlug: "member"},
+	}
+
+	// First login WITH workos_id to populate it.
+	ts := newManagerWithFakeWorkOS(t, fake)
+	ctx := t.Context()
+	idToken := acquireIDToken(t, ctx, ts.mgr)
+
+	userInfo, err := ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	require.NoError(t, err)
+	require.NotEmpty(t, userInfo.Organizations)
+
+	// Simulate what Callback does: upsert org metadata with the IDP value.
+	oq := orgRepo.New(ts.conn)
+	_, err = oq.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:       userInfo.Organizations[0].ID,
+		Name:     userInfo.Organizations[0].Name,
+		Slug:     userInfo.Organizations[0].Slug,
+		WorkosID: pgtype.Text{String: mockidp.MockOrgID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	// Verify workos_id is set.
+	org, err := oq.GetOrganizationMetadata(ctx, mockidp.MockOrgID)
+	require.NoError(t, err)
+	require.True(t, org.WorkosID.Valid)
+	require.Equal(t, mockidp.MockOrgID, org.WorkosID.String)
+
+	// Now simulate a subsequent upsert where IDP omits workos_id (nil).
+	_, err = oq.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:       userInfo.Organizations[0].ID,
+		Name:     userInfo.Organizations[0].Name,
+		Slug:     userInfo.Organizations[0].Slug,
+		WorkosID: pgtype.Text{Valid: false}, // nil — IDP omitted it
+	})
+	require.NoError(t, err)
+
+	// workos_id must be preserved by the COALESCE.
+	org, err = oq.GetOrganizationMetadata(ctx, mockidp.MockOrgID)
+	require.NoError(t, err)
+	require.True(t, org.WorkosID.Valid, "workos_id must be preserved when upsert passes NULL")
+	require.Equal(t, mockidp.MockOrgID, org.WorkosID.String)
 }
 
 // TestSyncWorkOSIDs_UserWorkosIDSet verifies the user's workos_id is recorded
@@ -528,11 +584,11 @@ func TestSyncWorkOSIDs_SkipsNullWorkOSIDOrgs(t *testing.T) {
 
 	// Create a second org WITHOUT a workos_id.
 	_, err = orgRepo.New(ts.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              otherOrgID,
-		Name:            "No WorkOS Org",
-		Slug:            "no-workos-org",
-		SsoConnectionID: pgtype.Text{Valid: false},
-		Whitelisted:     pgtype.Bool{Valid: false},
+		ID:          otherOrgID,
+		Name:        "No WorkOS Org",
+		Slug:        "no-workos-org",
+		WorkosID:    pgtype.Text{Valid: false},
+		Whitelisted: pgtype.Bool{Valid: false},
 	})
 	require.NoError(t, err)
 

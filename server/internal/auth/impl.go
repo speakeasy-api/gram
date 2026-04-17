@@ -13,7 +13,6 @@ import (
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -171,13 +170,8 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 	}
 
-	orgMetadata, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              activeOrg.ID,
-		Name:            activeOrg.Name,
-		Slug:            activeOrg.Slug,
-		SsoConnectionID: conv.PtrToPGText(activeOrg.SsoConnectionID),
-		Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
-	})
+	// Org metadata was already upserted for all orgs by GetUserInfoFromSpeakeasy.
+	orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, activeOrg.ID)
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
@@ -245,15 +239,6 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	for _, org := range userInfo.Organizations {
 		if org.ID == selectedOrg {
 			orgFound = true
-			if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-				ID:              org.ID,
-				Name:            org.Name,
-				Slug:            org.Slug,
-				SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
-				Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
-			}); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
-			}
 			break
 		}
 	}
@@ -307,7 +292,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, fromCache, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
@@ -316,7 +301,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	if userInfo.Admin {
 		for _, org := range userInfo.Organizations {
 			if org.ID == authCtx.ActiveOrganizationID {
-				userInfo.Organizations = []gen.OrganizationEntry{org}
+				userInfo.Organizations = []sessions.Organization{org}
 			}
 		}
 	}
@@ -360,25 +345,10 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			})
 		}
 
-		// write through organization metadata when not from cache to keep entries updated
-		// TODO: there may be a better place to do this
-		if !fromCache {
-			if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-				ID:              org.ID,
-				Name:            org.Name,
-				Slug:            org.Slug,
-				SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
-				Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
-			}); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
-			}
-		}
-
 		organizations = append(organizations, &gen.OrganizationEntry{
 			ID:                 org.ID,
 			Name:               org.Name,
 			Slug:               org.Slug,
-			SsoConnectionID:    org.SsoConnectionID,
 			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
 			Projects:           orgProjects,
 		})
@@ -447,11 +417,11 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 
 	whitelisted := false
 	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              info.Organizations[0].ID,
-		Name:            info.Organizations[0].Name,
-		Slug:            info.Organizations[0].Slug,
-		SsoConnectionID: conv.PtrToPGText(nil),
-		Whitelisted:     conv.PtrToPGBool(&whitelisted),
+		ID:          info.Organizations[0].ID,
+		Name:        info.Organizations[0].Name,
+		Slug:        info.Organizations[0].Slug,
+		WorkosID:    conv.PtrToPGText(info.Organizations[0].WorkosID),
+		Whitelisted: conv.PtrToPGBool(&whitelisted),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 	}

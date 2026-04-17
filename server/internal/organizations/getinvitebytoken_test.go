@@ -24,7 +24,7 @@ func TestService_GetInviteByToken(t *testing.T) {
 		ID:                  "test-invitation-id",
 		Email:               "test@example.com",
 		State:               thirdpartyworkos.InvitationStatePending,
-		OrganizationID:      "org_workos_test",
+		OrganizationID:      mockidp.MockOrgID,
 		InviterUserID:       authCtx.UserID,
 		AcceptInvitationURL: "https://auth.workos.com/invite/accept?token=test-token",
 	}, nil).Once()

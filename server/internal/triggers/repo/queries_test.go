@@ -101,11 +101,11 @@ func newTriggerRepoTestContext(t *testing.T) (context.Context, *pgxpool.Pool, uu
 	orgID := fmt.Sprintf("org-%s", uuid.NewString()[:8])
 
 	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
-		ID:              orgID,
-		Name:            "Test Org",
-		Slug:            orgID,
-		SsoConnectionID: pgtype.Text{},
-		Whitelisted:     pgtype.Bool{},
+		ID:          orgID,
+		Name:        "Test Org",
+		Slug:        orgID,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
 	})
 	require.NoError(t, err)
 

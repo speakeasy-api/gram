@@ -3,7 +3,6 @@ package sessions
 import (
 	"time"
 
-	"github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 )
 
@@ -38,6 +37,17 @@ func (s Session) TTL() time.Duration {
 
 var _ cache.CacheableObject[CachedUserInfo] = (*CachedUserInfo)(nil)
 
+// Organization is an internal representation of a user's organization membership,
+// populated from the Speakeasy IDP response. This is distinct from the Goa-generated
+// auth.OrganizationEntry which is the API response type.
+type Organization struct {
+	ID                 string
+	Name               string
+	Slug               string
+	WorkosID           *string
+	UserWorkspaceSlugs []string
+}
+
 type CachedUserInfo struct {
 	UserID             string
 	UserWhitelisted    bool
@@ -46,7 +56,7 @@ type CachedUserInfo struct {
 	DisplayName        *string
 	PhotoURL           *string
 	UserPylonSignature *string
-	Organizations      []auth.OrganizationEntry
+	Organizations      []Organization
 }
 
 func UserInfoCacheKey(userID string) string {

@@ -153,13 +153,7 @@ export function ProjectMenu() {
             <ThemeToggle />
           </Stack>
 
-          <SimpleTooltip
-            tooltip={
-              organization?.ssoConnectionId
-                ? "User membership is managed through your Speakeasy account domain"
-                : "User membership is managed through your account"
-            }
-          >
+          <SimpleTooltip tooltip="User membership is managed through your account">
             <NavButton
               title="Manage members"
               href={membershipURL}
