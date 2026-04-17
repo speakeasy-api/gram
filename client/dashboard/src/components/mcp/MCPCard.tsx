@@ -8,7 +8,7 @@ import { ToolsetEntry } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { ArrowRight, Link2, Network } from "lucide-react";
 import { useMemo } from "react";
-import { useCatalogIconMap } from "../sources/Sources";
+import { useCatalogIconMap } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {

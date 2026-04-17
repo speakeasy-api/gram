@@ -1,4 +1,4 @@
-import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar";
+import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
 import { useIsAdmin } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useProductTier } from "@/hooks/useProductTier";

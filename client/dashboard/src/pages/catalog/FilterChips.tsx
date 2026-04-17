@@ -7,7 +7,7 @@ import type {
   ToolBehavior,
   ToolCountThreshold,
   UpdatedRange,
-} from "./FilterSidebar";
+} from "./filter-defaults";
 
 interface FilterChipsProps {
   values: FilterValues;

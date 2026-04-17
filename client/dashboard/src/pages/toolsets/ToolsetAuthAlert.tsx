@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Alert } from "@speakeasy-api/moonshine";
-import { useEnvironments } from "../environments/Environments";
+import { useEnvironments } from "../environments/useEnvironments";
 import { Toolset } from "@/lib/toolTypes";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 
