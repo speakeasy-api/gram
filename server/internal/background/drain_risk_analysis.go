@@ -150,7 +150,6 @@ func chunkUUIDs(ids []uuid.UUID, size int) [][]uuid.UUID {
 // RiskAnalysisSignaler sends signals to drain workflows.
 type RiskAnalysisSignaler interface {
 	SignalNewMessages(ctx context.Context, params DrainRiskAnalysisParams) error
-	GetWorkflowStatus(ctx context.Context, policyID uuid.UUID) (string, error)
 }
 
 // TemporalRiskAnalysisSignaler implements RiskAnalysisSignaler using Temporal.
@@ -185,23 +184,6 @@ func (s *TemporalRiskAnalysisSignaler) SignalNewMessages(ctx context.Context, pa
 		return fmt.Errorf("signal-with-start drain workflow: %w", err)
 	}
 	return nil
-}
-
-func (s *TemporalRiskAnalysisSignaler) GetWorkflowStatus(ctx context.Context, policyID uuid.UUID) (string, error) {
-	if s.TemporalEnv == nil {
-		return "not_started", nil
-	}
-
-	wfID := drainWorkflowID(policyID)
-	desc, err := s.TemporalEnv.Client().DescribeWorkflowExecution(ctx, wfID, "")
-	if err != nil {
-		return "not_started", nil //nolint:nilerr // workflow may not exist
-	}
-
-	if desc.WorkflowExecutionInfo.GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		return "running", nil
-	}
-	return "not_started", nil
 }
 
 func drainWorkflowID(policyID uuid.UUID) string {
