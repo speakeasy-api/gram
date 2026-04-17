@@ -366,7 +366,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		}
 
 		allowedIDs := projectIDs
-		if s.filterProjects != nil && len(projectIDs) > 0 {
+		if s.filterProjects != nil && len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
 			allowedIDs, err = s.filterProjects(ctx, projectIDs)
 			if err != nil {
 				return nil, err
