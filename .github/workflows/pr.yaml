@@ -34,6 +34,7 @@ jobs:
       migrations: ${{ steps.gates.outputs.migrations }}
       plog: ${{ steps.gates.outputs.plog }}
       sdk: ${{ steps.gates.outputs.sdk }}
+      sdk-gen: ${{ steps.gates.outputs.sdk-gen }}
       elements-examples: ${{ steps.list-elements-examples.outputs.examples }}
     steps:
       - name: Checkout source code
@@ -109,6 +110,13 @@ jobs:
             echo "SDK jobs will run."
           else
             echo "SDK jobs will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.sdk-gen }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" ]]; then
+            echo "sdk-gen=true" >> $GITHUB_OUTPUT
+            echo "SDK generation check will run."
+          else
+            echo "SDK generation check will be skipped."
           fi
       - id: list-elements-examples
         name: List elements examples
@@ -541,9 +549,12 @@ jobs:
 
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: changes
+    needs: [changes, sdk-gen-check]
     # Build dashboard docker image when server OR client changes exist (needed for preview environments)
-    if: needs.changes.outputs.client == 'true' || needs.changes.outputs.server == 'true'
+    if: |
+      !cancelled() &&
+      needs.sdk-gen-check.result != 'failure' &&
+      (needs.changes.outputs.client == 'true' || needs.changes.outputs.server == 'true')
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
     steps:
@@ -626,8 +637,11 @@ jobs:
 
   client-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: changes
-    if: needs.changes.outputs.client == 'true'
+    needs: [changes, sdk-gen-check]
+    if: |
+      !cancelled() &&
+      needs.sdk-gen-check.result != 'failure' &&
+      needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
@@ -671,13 +685,64 @@ jobs:
         if: success()
         run: pnpm store prune
 
+  sdk-gen-check:
+    name: Check SDK is up-to-date
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.sdk-gen == 'true'
+    env:
+      SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - name: Setup Mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache PNPM
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate SDK
+        run: mise run gen:sdk --skip-versioning --skip-upload-spec
+
+      # Prevent perpetual failure for code samples digest.
+      - name: Restore .speakeasy/workflow.lock
+        run: git checkout HEAD -- .speakeasy/workflow.lock
+
+      - name: Check for dirty files
+        run: mise run git:porcelain
+
+      - name: Prune PNPM store
+        if: success()
+        run: pnpm store prune
+
   ts-sdk-build-lint:
     strategy:
       matrix:
         target: ["client/sdk"]
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: changes
-    if: needs.changes.outputs.sdk == 'true'
+    needs: [changes, sdk-gen-check]
+    if: |
+      !cancelled() &&
+      needs.sdk-gen-check.result != 'failure' &&
+      needs.changes.outputs.sdk == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
@@ -1156,6 +1221,7 @@ jobs:
       - docker-build-server
       - docker-build-client
       - client-build-lint
+      - sdk-gen-check
       - ts-sdk-build-lint
       - cli-build-lint
       - plog-build-lint

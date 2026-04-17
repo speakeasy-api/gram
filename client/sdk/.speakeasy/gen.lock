@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 4de2991f561f259a4a04011e8ed8e5b1
+  docChecksum: 45919758faeab2171eea2d20607e4082
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
-  releaseVersion: 0.32.62
-  configChecksum: 9afcbafdfb513e73ad09628e125489be
+  releaseVersion: 0.32.63
+  configChecksum: e149d77e76a183b6556c7112f9e5af15
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -450,7 +450,7 @@ trackedFiles:
   docs/models/components/operator.md:
     last_write_checksum: sha1:a278250c76553362effdfb720017a38808eb6283
   docs/models/components/organizationentry.md:
-    last_write_checksum: sha1:69a03a891f0032a56e074a49b7e8447f40aabc9f
+    last_write_checksum: sha1:d25cab5c2265fb437653402838c61ed27f7dcbc7
   docs/models/components/organizationinvitation.md:
     last_write_checksum: sha1:f475d1717d144a756f11e994e4196a9977855b9c
   docs/models/components/organizationinvitationaccept.md:
@@ -1909,11 +1909,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:e6d6b7374904c428f34ab671f4fc006c905f036c
+    last_write_checksum: sha1:97d5dd9337b47c3411281226987b4764f477a50e
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:0889f34cd263229ddaeeca3e32dcd1cb87d6f2d8
+    last_write_checksum: sha1:d6f286848014fc40959f6c7bb785791152c5300f
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2485,7 +2485,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:8a9bc41af48aca25d5c490277118c58613b60601
+    last_write_checksum: sha1:b6db3127b6c49d110831aca8939dd1573969e499
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -3075,7 +3075,7 @@ trackedFiles:
     pristine_git_object: 72daadebf82cd22176d850f21cb20daacfec5554
   src/models/components/organizationentry.ts:
     id: aa6032ffcddc
-    last_write_checksum: sha1:80ae8c75259b4645abcc14af57a495f6e6ab77c5
+    last_write_checksum: sha1:ea941bf60c94870745f97d87fe5084c860dc91b1
     pristine_git_object: f2f7295b4ead4d4db3f38f721e08e3aa294ddafd
   src/models/components/organizationinvitation.ts:
     last_write_checksum: sha1:0fcf62d7978a20f641d6d96b6880857ae5b8a163

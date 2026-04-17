@@ -14,7 +14,6 @@ export type OrganizationEntry = {
   name: string;
   projects: Array<ProjectEntry>;
   slug: string;
-  ssoConnectionId?: string | undefined;
   userWorkspaceSlugs?: Array<string> | undefined;
 };
 
@@ -28,12 +27,10 @@ export const OrganizationEntry$inboundSchema: z.ZodMiniType<
     name: z.string(),
     projects: z.array(ProjectEntry$inboundSchema),
     slug: z.string(),
-    sso_connection_id: z.optional(z.string()),
     user_workspace_slugs: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "sso_connection_id": "ssoConnectionId",
       "user_workspace_slugs": "userWorkspaceSlugs",
     });
   }),
