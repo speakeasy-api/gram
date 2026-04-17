@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -306,9 +307,52 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 		Environment:            "test",
 	}
 
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, nil, nil)
 
-	return ctx, &testInstance{
+	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
+}
+
+func newTestAuthServiceWithFilter(t *testing.T, userInfo *MockUserInfo, filterProjects auth.ProjectFilterFunc) (context.Context, *testInstance) {
+	t.Helper()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	conn, err := infra.CloneTestDatabase(t, "authtest")
+	require.NoError(t, err)
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	mockServer := createMockAuthServer(userInfo)
+	t.Cleanup(mockServer.Close)
+
+	pylon, err := pylon.NewPylon(logger, "")
+	require.NoError(t, err)
+
+	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
+
+	billingClient := billing.NewStubClient(logger, tracerProvider)
+
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient, nil)
+
+	authConfigs := auth.AuthConfigurations{
+		SpeakeasyServerAddress: mockServer.URL,
+		GramServerURL:          "http://localhost:8080",
+		SignInRedirectURL:      "http://localhost:3000/dashboard",
+		Environment:            "test",
+	}
+
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, nil, filterProjects)
+
+	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
+}
+
+func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Pool, sessionManager *sessions.Manager, mockServer *httptest.Server, authConfigs auth.AuthConfigurations) *testInstance {
+	return &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
@@ -406,4 +450,14 @@ func (ti *testInstance) createTestOrganization(ctx context.Context, org MockOrga
 		return fmt.Errorf("failed to upsert organization metadata: %w", err)
 	}
 	return nil
+}
+
+// createTestProject creates a project record in the database for testing and returns its ID.
+func (ti *testInstance) createTestProject(ctx context.Context, orgID, name, slug string) (projectsRepo.Project, error) {
+	q := projectsRepo.New(ti.conn)
+	return q.CreateProject(ctx, projectsRepo.CreateProjectParams{
+		OrganizationID: orgID,
+		Name:           name,
+		Slug:           slug,
+	})
 }

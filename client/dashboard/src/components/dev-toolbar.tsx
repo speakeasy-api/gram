@@ -108,6 +108,27 @@ function saveState(state: OverrideState) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+const RESOURCES_CACHE_KEY = "gram-rbac-dev-resources";
+
+type CachedResources = {
+  projects: { id: string; label: string }[];
+  mcps: { id: string; label: string }[];
+};
+
+function loadCachedResources(): CachedResources | null {
+  try {
+    const raw = localStorage.getItem(RESOURCES_CACHE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function saveCachedResources(resources: CachedResources) {
+  localStorage.setItem(RESOURCES_CACHE_KEY, JSON.stringify(resources));
+}
+
 const POSITION_KEY = "gram-rbac-dev-toolbar-pos";
 
 function loadPosition(): { x: number; y: number } | null {
@@ -188,18 +209,35 @@ function RBACDevToolbarInner() {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(loadPosition);
   const queryClient = useQueryClient();
   const organization = useOrganization();
-  const projects = organization?.projects ?? [];
-  const { data: toolsetsData } = useListToolsetsForOrg(undefined, undefined, {
-    throwOnError: false,
-  });
-  const projectResources = projects.map((project) => ({
+  const liveProjects = (organization?.projects ?? []).map((project) => ({
     id: project.id,
     label: project.slug,
   }));
-  const mcpResources = (toolsetsData?.toolsets ?? []).map((toolset) => ({
+  const { data: toolsetsData } = useListToolsetsForOrg(undefined, undefined, {
+    throwOnError: false,
+  });
+  const liveMcps = (toolsetsData?.toolsets ?? []).map((toolset) => ({
     id: toolset.id,
     label: toolset.name,
   }));
+
+  // Cache the full resource list when overrides are off so the toolbar
+  // still shows all projects/MCPs after the user restricts scopes.
+  const orgProjects = organization?.projects;
+  const toolsets = toolsetsData?.toolsets;
+  useEffect(() => {
+    if (!state.enabled && orgProjects && orgProjects.length > 0) {
+      saveCachedResources({
+        projects: orgProjects.map((p) => ({ id: p.id, label: p.slug })),
+        mcps: (toolsets ?? []).map((t) => ({ id: t.id, label: t.name })),
+      });
+    }
+  }, [state.enabled, orgProjects, toolsets]);
+
+  const cached = loadCachedResources();
+  const projectResources =
+    state.enabled && cached ? cached.projects : liveProjects;
+  const mcpResources = state.enabled && cached ? cached.mcps : liveMcps;
   const rootRef = useRef<HTMLDivElement>(null);
   const dragOffset = useRef<{
     ox: number;
