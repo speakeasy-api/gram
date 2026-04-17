@@ -56,6 +56,7 @@ import {
   Chart as ChartJS,
   type TooltipItem,
   type ChartOptions,
+  type Scale,
 } from "chart.js";
 import { Bar, Line } from "react-chartjs-2";
 import { List, Settings } from "lucide-react";
@@ -122,6 +123,7 @@ type _BarLegend = Exclude<
   false
 >;
 type _BarTooltip = NonNullable<ChartOptions<"bar">["plugins"]>["tooltip"];
+type _BarScales = NonNullable<ChartOptions<"bar">["scales"]>;
 
 const SHARED_LEGEND = {
   display: false,
@@ -136,6 +138,27 @@ const SHARED_TOOLTIP = {
   padding: 12,
   boxPadding: 4,
 } satisfies _BarTooltip;
+
+const SHARED_BAR_SCALES = {
+  x: {
+    stacked: true,
+    grid: { color: CHART_COLORS.gridLine },
+    ticks: { color: CHART_COLORS.labelFaded, precision: 0 },
+    afterFit(scale: Scale) {
+      scale.paddingRight = 30;
+    },
+  },
+  y: {
+    stacked: true,
+    grid: { display: false },
+    ticks: {
+      color: CHART_COLORS.labelFaded,
+      crossAlign: "far" as const,
+      padding: 2,
+      font: { size: 12 },
+    },
+  },
+} satisfies _BarScales;
 
 // ---------------------------------------------------------------------------
 
@@ -1394,25 +1417,7 @@ function StackedBarChart({
         const el = event.native?.target as HTMLElement | null;
         if (el) el.style.cursor = elements.length ? "pointer" : "default";
       },
-      scales: {
-        x: {
-          stacked: true,
-          grid: { color: CHART_COLORS.gridLine },
-          ticks: { color: CHART_COLORS.labelFaded, precision: 0 },
-          afterFit(scale) {
-            scale.paddingRight = 30;
-          },
-        },
-        y: {
-          stacked: true,
-          ticks: {
-            color: CHART_COLORS.labelFaded,
-            crossAlign: "far",
-            padding: 2,
-          },
-          grid: { display: false },
-        },
-      },
+      scales: SHARED_BAR_SCALES,
       plugins: {
         legend: SHARED_LEGEND,
         tooltip: {
@@ -1637,21 +1642,7 @@ function ServerErrorRateChart({
         },
       },
     },
-    scales: {
-      x: {
-        stacked: true,
-        grid: { color: CHART_COLORS.gridLine },
-        ticks: { color: CHART_COLORS.labelFaded, precision: 0 },
-        afterFit(scale) {
-          scale.paddingRight = 30;
-        },
-      },
-      y: {
-        stacked: true,
-        grid: { display: false },
-        ticks: { color: CHART_COLORS.labelFaded, font: { size: 12 } },
-      },
-    },
+    scales: SHARED_BAR_SCALES,
   };
 
   return (
