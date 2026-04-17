@@ -150,6 +150,10 @@ WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND policy_version < @policy_version;
 
+-- name: DeleteAllRiskResultsForPolicy :exec
+DELETE FROM risk_results
+WHERE risk_policy_id = @risk_policy_id;
+
 -- name: DeleteRiskResultsForMessages :exec
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id

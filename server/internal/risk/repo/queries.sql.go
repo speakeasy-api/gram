@@ -145,6 +145,16 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 	return i, err
 }
 
+const deleteAllRiskResultsForPolicy = `-- name: DeleteAllRiskResultsForPolicy :exec
+DELETE FROM risk_results
+WHERE risk_policy_id = $1
+`
+
+func (q *Queries) DeleteAllRiskResultsForPolicy(ctx context.Context, riskPolicyID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteAllRiskResultsForPolicy, riskPolicyID)
+	return err
+}
+
 const deleteRiskPolicy = `-- name: DeleteRiskPolicy :exec
 UPDATE risk_policies
 SET deleted_at = clock_timestamp()
