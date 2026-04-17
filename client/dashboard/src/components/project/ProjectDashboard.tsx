@@ -1,4 +1,3 @@
-import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { Page } from "@/components/page-layout";
@@ -9,10 +8,11 @@ import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { useAuditLogs, useGetProjectOverview } from "@gram/client/react-query";
+import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
 import { cn } from "@/lib/utils";
 import { subDays } from "date-fns";
 import { useMemo } from "react";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge, Button, Card, Icon } from "@speakeasy-api/moonshine";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { ProjectOnboardingBanner } from "./ProjectOnboarding";
 
@@ -25,10 +25,18 @@ export function ProjectDashboard() {
   const to = useMemo(() => new Date(), []);
   const from = useMemo(() => subDays(to, 7), [to]);
 
+  const { data: featuresData, isPending: isFeaturesPending } = useFeaturesGet();
+  const logsEnabled = featuresData?.logsEnabled === true;
+
   const { data: overview, isPending: isOverviewPending } =
-    useGetProjectOverview({
-      getProjectMetricsSummaryPayload: { from, to },
-    });
+    useGetProjectOverview(
+      { getProjectMetricsSummaryPayload: { from, to } },
+      undefined,
+      { enabled: logsEnabled },
+    );
+
+  const isOverviewLoading =
+    isFeaturesPending || (logsEnabled && isOverviewPending);
 
   const { data: auditLogsData, isPending: isAuditLogsPending } = useAuditLogs({
     projectSlug,
@@ -40,11 +48,14 @@ export function ProjectDashboard() {
   );
 
   const isProjectEmpty =
-    !isOverviewPending &&
+    logsEnabled &&
+    !isOverviewLoading &&
     !isAuditLogsPending &&
     !!overview &&
     overview?.summary?.activeServersCount === 0 &&
     overview?.summary?.totalToolCalls === 0;
+
+  const showDisabledBanner = !isFeaturesPending && !logsEnabled;
 
   return (
     <Page.Section>
@@ -55,7 +66,7 @@ export function ProjectDashboard() {
         </Badge>
       </Page.Section.Description>
       <Page.Section.CTA>
-        {!isProjectEmpty && (
+        {logsEnabled && !isProjectEmpty && (
           <p className="text-muted text-xs">
             Showing data from the last 7 days
           </p>
@@ -64,175 +75,184 @@ export function ProjectDashboard() {
 
       <Page.Section.Body>
         <div className="space-y-8">
-          {isProjectEmpty && <ProjectOnboardingBanner />}
+          {(isProjectEmpty || showDisabledBanner) && (
+            <ProjectOnboardingBanner />
+          )}
 
-          {/* Row 0: KPI Cards */}
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            {isOverviewPending ? (
-              <Skeleton className="h-[100px] rounded-lg" />
-            ) : (
-              <MetricCard
-                title="Active Servers"
-                value={overview?.summary.activeServersCount ?? 0}
-                icon="server"
-              />
-            )}
-            {isOverviewPending ? (
-              <Skeleton className="h-[100px] rounded-lg" />
-            ) : (
-              <MetricCard
-                title="Tool Calls"
-                value={overview?.summary.totalToolCalls ?? 0}
-                icon="wrench"
-              />
-            )}
-            {isOverviewPending ? (
-              <Skeleton className="h-[100px] rounded-lg" />
-            ) : (
-              <MetricCard
-                title="End Users"
-                value={overview?.summary.activeUsersCount ?? 0}
-                icon="users"
-              />
-            )}
-            {isOverviewPending ? (
-              <Skeleton className="h-[100px] rounded-lg" />
-            ) : (
-              <MetricCard
-                title="Sessions"
-                value={overview?.summary.totalChats ?? 0}
-                icon="message-circle"
-              />
-            )}
-          </div>
+          {showDisabledBanner ? (
+            <LoggingDisabledBanner settingsHref={orgRoutes.logs.href()} />
+          ) : (
+            <>
+              {/* Row 0: KPI Cards */}
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                {isOverviewPending ? (
+                  <Skeleton className="h-[100px] rounded-lg" />
+                ) : (
+                  <MetricCard
+                    title="Active Servers"
+                    value={overview?.summary.activeServersCount ?? 0}
+                    icon="server"
+                  />
+                )}
+                {isOverviewPending ? (
+                  <Skeleton className="h-[100px] rounded-lg" />
+                ) : (
+                  <MetricCard
+                    title="Tool Calls"
+                    value={overview?.summary.totalToolCalls ?? 0}
+                    icon="wrench"
+                  />
+                )}
+                {isOverviewPending ? (
+                  <Skeleton className="h-[100px] rounded-lg" />
+                ) : (
+                  <MetricCard
+                    title="End Users"
+                    value={overview?.summary.activeUsersCount ?? 0}
+                    icon="users"
+                  />
+                )}
+                {isOverviewPending ? (
+                  <Skeleton className="h-[100px] rounded-lg" />
+                ) : (
+                  <MetricCard
+                    title="Sessions"
+                    value={overview?.summary.totalChats ?? 0}
+                    icon="message-circle"
+                  />
+                )}
+              </div>
 
-          {/* Row 1: Top Activity */}
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <DashboardCard
-              title="Top Users"
-              action={<ViewAllLink to={routes.hooks.href()} />}
-            >
-              {isOverviewPending ? (
-                <SkeletonList />
-              ) : (overview?.summary.topUsers.length ?? 0) === 0 ? (
-                <EmptyState message="No user activity recorded" />
-              ) : (
-                <RankedBarList
-                  items={(overview?.summary.topUsers ?? [])
-                    .slice(0, 5)
-                    .map((u) => ({
-                      key: u.userId,
-                      label: u.userId,
-                      value: u.activityCount,
-                    }))}
-                />
-              )}
-            </DashboardCard>
+              {/* Row 1: Top Activity */}
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <DashboardCard
+                  title="Top Users"
+                  action={<ViewAllLink to={routes.hooks.href()} />}
+                >
+                  {isOverviewPending ? (
+                    <SkeletonList />
+                  ) : (overview?.summary.topUsers.length ?? 0) === 0 ? (
+                    <EmptyState message="No user activity recorded" />
+                  ) : (
+                    <RankedBarList
+                      items={(overview?.summary.topUsers ?? [])
+                        .slice(0, 5)
+                        .map((u) => ({
+                          key: u.userId,
+                          label: u.userId,
+                          value: u.activityCount,
+                        }))}
+                    />
+                  )}
+                </DashboardCard>
 
-            <DashboardCard
-              title="Top Servers"
-              action={<ViewAllLink to={routes.hooks.href()} />}
-            >
-              {isOverviewPending ? (
-                <SkeletonList />
-              ) : (overview?.summary.topServers.length ?? 0) === 0 ? (
-                <EmptyState message="No server activity recorded" />
-              ) : (
-                <RankedBarList
-                  items={(overview?.summary.topServers ?? [])
-                    .slice(0, 5)
-                    .map((s) => ({
-                      key: s.serverName,
-                      label: s.serverName,
-                      value: s.toolCallCount,
-                    }))}
-                />
-              )}
-            </DashboardCard>
-          </div>
+                <DashboardCard
+                  title="Top Servers"
+                  action={<ViewAllLink to={routes.hooks.href()} />}
+                >
+                  {isOverviewPending ? (
+                    <SkeletonList />
+                  ) : (overview?.summary.topServers.length ?? 0) === 0 ? (
+                    <EmptyState message="No server activity recorded" />
+                  ) : (
+                    <RankedBarList
+                      items={(overview?.summary.topServers ?? [])
+                        .slice(0, 5)
+                        .map((s) => ({
+                          key: s.serverName,
+                          label: s.serverName,
+                          value: s.toolCallCount,
+                        }))}
+                    />
+                  )}
+                </DashboardCard>
+              </div>
 
-          {/* Row 2: Sessions */}
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <DashboardCard
-              title="Most Agent Sessions by User"
-              action={
-                <ViewAllLink
-                  to={
-                    // no hooks data and no chat sessions
-                    isProjectEmpty && overview?.summary.totalChats === 0
-                      ? routes.hooks.href()
-                      : // has hooks data but no chat sessions
-                        !isProjectEmpty && overview?.summary.totalChats === 0
-                        ? routes.observability.href()
-                        : routes.chatSessions.href()
+              {/* Row 2: Sessions */}
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <DashboardCard
+                  title="Most Agent Sessions by User"
+                  action={
+                    <ViewAllLink
+                      to={
+                        // no hooks data and no chat sessions
+                        isProjectEmpty && overview?.summary.totalChats === 0
+                          ? routes.hooks.href()
+                          : // has hooks data but no chat sessions
+                            !isProjectEmpty &&
+                              overview?.summary.totalChats === 0
+                            ? routes.observability.href()
+                            : routes.chatSessions.href()
+                      }
+                    />
                   }
-                />
-              }
-            >
-              {isOverviewPending ? (
-                <SkeletonList />
-              ) : (overview?.summary.topUsers.length ?? 0) === 0 ? (
-                <EmptyState message="No session activity recorded" />
-              ) : (
-                <ul className="divide-border divide-y">
-                  {(overview?.summary.topUsers ?? [])
-                    .slice(0, 5)
-                    .map((user, i) => (
-                      <li
-                        key={user.userId}
-                        className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
-                      >
-                        <Avatar className="size-8 shrink-0">
-                          <AvatarFallback
-                            className={cn(
-                              "text-xs font-medium",
-                              avatarColor(i),
-                            )}
+                >
+                  {isOverviewPending ? (
+                    <SkeletonList />
+                  ) : (overview?.summary.topUsers.length ?? 0) === 0 ? (
+                    <EmptyState message="No session activity recorded" />
+                  ) : (
+                    <ul className="divide-border divide-y">
+                      {(overview?.summary.topUsers ?? [])
+                        .slice(0, 5)
+                        .map((user, i) => (
+                          <li
+                            key={user.userId}
+                            className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
                           >
-                            {emailInitials(user.userId)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">
-                            {user.userId}
-                          </p>
-                          <p className="text-muted-foreground text-xs">
-                            {user.activityCount.toLocaleString()} calls
-                          </p>
-                        </div>
-                      </li>
-                    ))}
-                </ul>
-              )}
-            </DashboardCard>
+                            <Avatar className="size-8 shrink-0">
+                              <AvatarFallback
+                                className={cn(
+                                  "text-xs font-medium",
+                                  avatarColor(i),
+                                )}
+                              >
+                                {emailInitials(user.userId)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">
+                                {user.userId}
+                              </p>
+                              <p className="text-muted-foreground text-xs">
+                                {user.activityCount.toLocaleString()} calls
+                              </p>
+                            </div>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                </DashboardCard>
 
-            <DashboardCard
-              title="Most Used LLM Clients"
-              action={<ViewAllLink to={routes.hooks.href()} />}
-            >
-              {isOverviewPending ? (
-                <SkeletonList />
-              ) : (overview?.summary.llmClientBreakdown.length ?? 0) === 0 ? (
-                <EmptyState message="No LLM activity recorded" />
-              ) : (
-                <RankedBarList
-                  items={(overview?.summary.llmClientBreakdown ?? [])
-                    .slice(0, 5)
-                    .map((m) => ({
-                      key: m.clientName,
-                      label: m.clientName,
-                      value: m.activityCount,
-                    }))}
-                />
-              )}
-            </DashboardCard>
-          </div>
-
-          <ActivityTimelineCard
-            logs={recentLogs}
-            isPending={isAuditLogsPending}
-            viewAllHref={orgRoutes.auditLogs.href()}
-          />
+                <DashboardCard
+                  title="Most Used LLM Clients"
+                  action={<ViewAllLink to={routes.hooks.href()} />}
+                >
+                  {isOverviewPending ? (
+                    <SkeletonList />
+                  ) : (overview?.summary.llmClientBreakdown.length ?? 0) ===
+                    0 ? (
+                    <EmptyState message="No LLM activity recorded" />
+                  ) : (
+                    <RankedBarList
+                      items={(overview?.summary.llmClientBreakdown ?? [])
+                        .slice(0, 5)
+                        .map((m) => ({
+                          key: m.clientName,
+                          label: m.clientName,
+                          value: m.activityCount,
+                        }))}
+                    />
+                  )}
+                </DashboardCard>
+              </div>
+              <ActivityTimelineCard
+                logs={recentLogs}
+                isPending={isAuditLogsPending}
+                viewAllHref={orgRoutes.auditLogs.href()}
+              />
+            </>
+          )}
         </div>
       </Page.Section.Body>
     </Page.Section>
@@ -246,8 +266,32 @@ function ViewAllLink({ to }: { to: string }) {
       className="text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs no-underline"
     >
       View all
-      <ChevronRight className="size-3" />
+      <Icon name="arrow-right" />
     </Link>
+  );
+}
+
+function LoggingDisabledBanner({ settingsHref }: { settingsHref: string }) {
+  return (
+    <Card>
+      <Card.Content className="flex flex-col items-start gap-6">
+        <div className="space-y-1">
+          <h3 className="text-lg font-medium">Logging is disabled</h3>
+          <p className="text-muted-foreground text-sm">
+            Enable logging to see an overview of your project metrics, top
+            activity, and session data.
+          </p>
+        </div>
+        <Link to={settingsHref}>
+          <Button variant="secondary" size="sm">
+            <Button.Text>Enable in settings</Button.Text>
+            <Button.RightIcon>
+              <Icon name="arrow-right" />
+            </Button.RightIcon>
+          </Button>
+        </Link>
+      </Card.Content>
+    </Card>
   );
 }
 
