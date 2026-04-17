@@ -24,6 +24,7 @@ import (
 	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
 	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
+	externalc "github.com/speakeasy-api/gram/server/gen/http/external/client"
 	featuresc "github.com/speakeasy-api/gram/server/gen/http/features/client"
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
@@ -65,6 +66,7 @@ func UsageCommands() []string {
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|delete-domain)",
 		"environments (create-environment|list-environments|update-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
+		"external receive-work-os-webhook",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details)",
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
@@ -460,6 +462,12 @@ func ParseEndpoint(
 		environmentsGetToolsetEnvironmentToolsetIDFlag        = environmentsGetToolsetEnvironmentFlags.String("toolset-id", "REQUIRED", "")
 		environmentsGetToolsetEnvironmentSessionTokenFlag     = environmentsGetToolsetEnvironmentFlags.String("session-token", "", "")
 		environmentsGetToolsetEnvironmentProjectSlugInputFlag = environmentsGetToolsetEnvironmentFlags.String("project-slug-input", "", "")
+
+		externalFlags = flag.NewFlagSet("external", flag.ContinueOnError)
+
+		externalReceiveWorkOSWebhookFlags               = flag.NewFlagSet("receive-work-os-webhook", flag.ExitOnError)
+		externalReceiveWorkOSWebhookWorkosSignatureFlag = externalReceiveWorkOSWebhookFlags.String("workos-signature", "", "")
+		externalReceiveWorkOSWebhookStreamFlag          = externalReceiveWorkOSWebhookFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
 		mcpRegistriesFlags = flag.NewFlagSet("mcp-registries", flag.ContinueOnError)
 
@@ -1196,6 +1204,9 @@ func ParseEndpoint(
 	environmentsDeleteToolsetEnvironmentLinkFlags.Usage = environmentsDeleteToolsetEnvironmentLinkUsage
 	environmentsGetToolsetEnvironmentFlags.Usage = environmentsGetToolsetEnvironmentUsage
 
+	externalFlags.Usage = externalUsage
+	externalReceiveWorkOSWebhookFlags.Usage = externalReceiveWorkOSWebhookUsage
+
 	mcpRegistriesFlags.Usage = mcpRegistriesUsage
 	mcpRegistriesClearCacheFlags.Usage = mcpRegistriesClearCacheUsage
 	mcpRegistriesListRegistriesFlags.Usage = mcpRegistriesListRegistriesUsage
@@ -1391,6 +1402,8 @@ func ParseEndpoint(
 			svcf = domainsFlags
 		case "environments":
 			svcf = environmentsFlags
+		case "external":
+			svcf = externalFlags
 		case "mcp-registries":
 			svcf = mcpRegistriesFlags
 		case "collections":
@@ -1678,6 +1691,13 @@ func ParseEndpoint(
 
 			case "get-toolset-environment":
 				epf = environmentsGetToolsetEnvironmentFlags
+
+			}
+
+		case "external":
+			switch epn {
+			case "receive-work-os-webhook":
+				epf = externalReceiveWorkOSWebhookFlags
 
 			}
 
@@ -2374,6 +2394,16 @@ func ParseEndpoint(
 			case "get-toolset-environment":
 				endpoint = c.GetToolsetEnvironment()
 				data, err = environmentsc.BuildGetToolsetEnvironmentPayload(*environmentsGetToolsetEnvironmentToolsetIDFlag, *environmentsGetToolsetEnvironmentSessionTokenFlag, *environmentsGetToolsetEnvironmentProjectSlugInputFlag)
+			}
+		case "external":
+			c := externalc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "receive-work-os-webhook":
+				endpoint = c.ReceiveWorkOSWebhook()
+				data, err = externalc.BuildReceiveWorkOSWebhookPayload(*externalReceiveWorkOSWebhookWorkosSignatureFlag)
+				if err == nil {
+					data, err = externalc.BuildReceiveWorkOSWebhookStreamPayload(data, *externalReceiveWorkOSWebhookStreamFlag)
+				}
 			}
 		case "mcp-registries":
 			c := mcpregistriesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -4388,6 +4418,36 @@ func environmentsGetToolsetEnvironmentUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "environments get-toolset-environment --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// externalUsage displays the usage of the external command and its subcommands.
+func externalUsage() {
+	fmt.Fprintln(os.Stderr, `Endpoints for external services to interact with gram.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] external COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    receive-work-os-webhook: Endpoint to receive WorkOS webhooks.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s external COMMAND --help\n", os.Args[0])
+}
+func externalReceiveWorkOSWebhookUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external receive-work-os-webhook", os.Args[0])
+	fmt.Fprint(os.Stderr, " -workos-signature STRING")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Endpoint to receive WorkOS webhooks.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -workos-signature STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external receive-work-os-webhook --workos-signature \"abc123\" --stream \"goa.png\"")
 }
 
 // mcpRegistriesUsage displays the usage of the mcp-registries command and its

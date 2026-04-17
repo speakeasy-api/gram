@@ -272,6 +272,12 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_CONFIG_FILE"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "workos-api-key",
+			Usage:    "WorkOS API key for user identity lookups",
+			EnvVars:  []string{"WORKOS_API_KEY"},
+			Required: false,
+		},
 	}
 
 	flags = append(flags, clickHouseFlags...)
@@ -456,6 +462,16 @@ func newWorkerCommand() *cli.Command {
 
 			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, posthogClient, accessManager)
 
+			workosClient, _, err := newWorkOSClient(guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("failed to create WorkOS client: %w", err)
+			}
+
+			workosEventsClient, err := newWorkOSEventsClient(c, guardianPolicy)
+			if err != nil {
+				return fmt.Errorf("failed to create WorkOS events client: %w", err)
+			}
+
 			/**
 			 * BEGIN -- MCP service setup for agent client
 			 */
@@ -558,6 +574,8 @@ func newWorkerCommand() *cli.Command {
 				MCPRegistryClient:   mcpRegistryClient,
 				TelemetryLogger:     telemetryLogger,
 				TriggersApp:         triggerApp,
+				WorkOSClient:        workosClient,
+				WorkOSEventsClient:  workosEventsClient,
 				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
 			})
 

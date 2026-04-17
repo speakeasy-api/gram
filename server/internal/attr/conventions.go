@@ -189,6 +189,8 @@ const (
 	ProjectIDKey                   = attribute.Key("gram.project.id")
 	ProjectNameKey                 = attribute.Key("gram.project.name")
 	ProjectSlugKey                 = attribute.Key("gram.project.slug")
+	RoleWorkOSIDKey                = attribute.Key("gram.role.workos_id")
+	RoleWorkOSSlugKey              = attribute.Key("gram.role.workos_slug")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -271,6 +273,10 @@ const (
 	GenAIEvaluationScoreValueKey  = attribute.Key("gen_ai.evaluation.score.value") // Numeric score (0-100)
 	GenAIEvaluationScoreLabelKey  = attribute.Key("gen_ai.evaluation.score.label") // Low cardinality label (success, failure, partial, abandoned)
 	GenAIEvaluationExplanationKey = attribute.Key("gen_ai.evaluation.explanation") // Free-form explanation
+
+	WorkOSEventIDKey             = attribute.Key("gram.workos_event.id")
+	WorkOSEventTypeKey           = attribute.Key("gram.workos_event.type")
+	WorkOSEventOrganizationIDKey = attribute.Key("gram.workos_event.organization_id")
 )
 
 const (
@@ -833,6 +839,12 @@ func SlogProjectSlug(v string) slog.Attr      { return slog.String(string(Projec
 func ProjectName(v string) attribute.KeyValue { return ProjectNameKey.String(v) }
 func SlogProjectName(v string) slog.Attr      { return slog.String(string(ProjectNameKey), v) }
 
+func RoleWorkOSID(v string) attribute.KeyValue { return RoleWorkOSIDKey.String(v) }
+func SlogRoleWorkOSID(v string) slog.Attr      { return slog.String(string(RoleWorkOSIDKey), v) }
+
+func RoleWorkOSSlug(v string) attribute.KeyValue { return RoleWorkOSSlugKey.String(v) }
+func SlogRoleWorkOSSlug(v string) slog.Attr      { return slog.String(string(RoleWorkOSSlugKey), v) }
+
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }
 
@@ -1152,3 +1164,16 @@ func SlogLogSeverityText(v string) slog.Attr      { return slog.String(string(Lo
 
 func LogBody(v string) attribute.KeyValue { return LogBodyKey.String(v) }
 func SlogLogBody(v string) slog.Attr      { return slog.String(string(LogBodyKey), v) }
+
+func WorkOSEventID(v string) attribute.KeyValue { return WorkOSEventIDKey.String(v) }
+func SlogWorkOSEventID(v string) slog.Attr      { return slog.String(string(WorkOSEventIDKey), v) }
+
+func WorkOSEventType(v string) attribute.KeyValue { return WorkOSEventTypeKey.String(v) }
+func SlogWorkOSEventType(v string) slog.Attr      { return slog.String(string(WorkOSEventTypeKey), v) }
+
+func WorkOSEventOrganizationID(v string) attribute.KeyValue {
+	return WorkOSEventOrganizationIDKey.String(v)
+}
+func SlogWorkOSEventOrganizationID(v string) slog.Attr {
+	return slog.String(string(WorkOSEventOrganizationIDKey), v)
+}

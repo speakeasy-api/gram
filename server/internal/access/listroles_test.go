@@ -2,6 +2,7 @@ package access
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -54,8 +55,8 @@ func TestService_ListRoles(t *testing.T) {
 	require.Equal(t, "Admin", adminRole.Name)
 	require.True(t, adminRole.IsSystem)
 	require.Equal(t, 1, adminRole.MemberCount)
-	require.Equal(t, mockRoleTimestamp, adminRole.CreatedAt)
-	require.Equal(t, mockRoleTimestamp, adminRole.UpdatedAt)
+	require.Equal(t, mockRoleTimestamp.Format(time.RFC3339), adminRole.CreatedAt)
+	require.Equal(t, mockRoleTimestamp.Format(time.RFC3339), adminRole.UpdatedAt)
 	require.Len(t, adminRole.Grants, 1)
 	require.Equal(t, string(ScopeOrgAdmin), adminRole.Grants[0].Scope)
 	require.Nil(t, adminRole.Grants[0].Resources)

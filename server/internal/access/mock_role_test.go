@@ -4,16 +4,18 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/must"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
-const (
-	mockRoleTimestamp       = "2024-12-28T07:55:09Z"
-	mockMembershipTimestamp = "2024-11-15T15:04:05Z"
+var (
+	mockRoleTimestamp       = must.Value(time.Parse(time.RFC3339, "2024-12-28T07:55:09Z"))
+	mockMembershipTimestamp = must.Value(time.Parse(time.RFC3339, "2024-11-15T15:04:05Z"))
 )
 
 type MockRoleProvider struct {
@@ -130,7 +132,7 @@ func mockMember(orgID, membershipID, userID, roleSlug string) thirdpartyworkos.M
 		UserID:         userID,
 		OrganizationID: orgID,
 		RoleSlug:       roleSlug,
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}
 }
 

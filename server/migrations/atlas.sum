@@ -125,3 +125,5 @@ h1:1C6rVyiPu5pavQCmnjIEoqQdVVVXpTcCP+Xpk1mSImI=
 20260413142758_remote-mcp-servers.sql h1:V4dXOc4auWQbkecnpDDg8iLrgyCCd+3f/a1uX5dQyH8=
 20260413211711_registry-type-polymorphic.sql h1:wWsYj3Wbpt09ZBIDzTIwLa9qWKE4N2/MtcPUxhnAGjY=
 20260414000001_plugins.sql h1:vlPWOWRSVYp9DahP9QbPdDxFysburvzyTs+501IkYjU=
+20260403171316_add-roles-table.sql h1:9HT0JQx4VereASggjx3BbPVOoiy8abIWNylw8FmDj/s=
+20260408102708_redo_roles.sql h1:6PsHhoyv69F9f/mSguwWfWPZ63G38QKx7EO5PuXR9Ao=

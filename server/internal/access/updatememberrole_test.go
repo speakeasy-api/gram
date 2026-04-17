@@ -3,6 +3,7 @@ package access
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -34,7 +35,7 @@ func TestService_UpdateMemberRole(t *testing.T) {
 		UserID:         "user_1",
 		OrganizationID: "org_workos_test",
 		RoleSlug:       "custom-builder",
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("ListOrgUsers", mock.Anything, "org_workos_test").Return(map[string]thirdpartyworkos.User{
 		"user_1": mockUser("user_1", "Ada", "Lovelace", "ada@example.com"),
@@ -48,7 +49,7 @@ func TestService_UpdateMemberRole(t *testing.T) {
 	require.Equal(t, "ada@example.com", member.Email)
 	require.Equal(t, "role_builder", member.RoleID)
 	require.Nil(t, member.PhotoURL)
-	require.Equal(t, mockMembershipTimestamp, member.JoinedAt)
+	require.Equal(t, mockMembershipTimestamp.Format(time.RFC3339), member.JoinedAt)
 }
 
 func TestService_UpdateMemberRole_RoleNotFound(t *testing.T) {
@@ -140,7 +141,7 @@ func TestService_UpdateMemberRole_AuditLog(t *testing.T) {
 		UserID:         "user_1",
 		OrganizationID: "org_workos_test",
 		RoleSlug:       "custom-builder",
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("ListOrgUsers", mock.Anything, "org_workos_test").Return(map[string]thirdpartyworkos.User{
 		"user_1": mockUser("user_1", "Ada", "Lovelace", "ada@example.com"),

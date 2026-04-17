@@ -27,6 +27,8 @@ import (
 	"github.com/superfly/fly-go/tokens"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
+	"github.com/workos/workos-go/v6/pkg/events"
+	"github.com/workos/workos-go/v6/pkg/webhooks"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -687,4 +689,32 @@ func newTriggersApp(
 		serverURL,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
+}
+
+func newWorkOSEventsClient(c *cli.Context, guardianPolicy *guardian.Policy) (*events.Client, error) {
+	apiKey := c.String("workos-api-key")
+	if apiKey == "" || apiKey == "unset" {
+		if c.String("environment") != "local" {
+			return nil, errors.New("WorkOS API key not provided")
+		}
+	}
+
+	client := events.Client{
+		APIKey:     apiKey,
+		HTTPClient: guardianPolicy.PooledClient(),
+		Endpoint:   "", // use default endpoint
+	}
+
+	return &client, nil
+}
+
+func newWorkOSWebhooksClient(c *cli.Context) (*webhooks.Client, error) {
+	signingSecret := c.String("workos-webhook-secret")
+	if signingSecret == "" || signingSecret == "unset" {
+		if c.String("environment") != "local" {
+			return nil, errors.New("WorkOS webhook secret not provided")
+		}
+	}
+
+	return webhooks.NewClient(signingSecret), nil
 }
