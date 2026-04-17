@@ -340,6 +340,8 @@ type HooksTimeSeriesPoint struct {
 	UserEmail string
 	// Number of events in this bucket
 	EventCount int64
+	// Number of failed hook events in this bucket
+	FailureCount int64
 }
 
 // Aggregated hooks metrics for a single user

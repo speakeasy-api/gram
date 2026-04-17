@@ -3143,6 +3143,8 @@ type HooksTimeSeriesPointResponseBody struct {
 	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
 	// Number of events in this bucket
 	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
+	// Number of failed hook events in this bucket
+	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
 }
 
 // HookTraceSummaryResponseBody is used to define fields on response body types.
