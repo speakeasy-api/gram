@@ -75,12 +75,15 @@ export const TelemetryProvider = (props: { children: ReactNode }) => {
       return;
     }
 
-    if (getServerURL().includes("getgram.ai")) {
+    const serverURL = getServerURL();
+    if (serverURL.includes("getgram.ai")) {
+      const env = serverURL.includes("app.getgram.ai") ? "prod" : "dev";
       datadogRum.init({
         applicationId: "93afb64a-dd15-490c-a749-51b4c5c5a171",
         clientToken: "pub8358667232c624e2f91e1eaa0bd380fd",
         site: "datadoghq.com",
         service: "gram",
+        env,
         sessionSampleRate: 100,
         sessionReplaySampleRate: 100,
         trackUserInteractions: true,
