@@ -1,4 +1,4 @@
-import { useIsAdmin, useOrganization } from "@/contexts/Auth";
+import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Switch } from "./ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
@@ -170,7 +170,11 @@ const GROUP_ORDER: { key: ResourceType; label: string }[] = [
 ];
 
 export function RBACDevToolbar() {
+  const { session } = useSession();
   const isAdmin = useIsAdmin();
+  // Don't render when unauthenticated (e.g. login page) to avoid firing
+  // API calls like toolsets.listForOrg that will 401 and trigger the error boundary.
+  if (!session) return null;
   // Always visible in dev; in other environments, restricted to superadmins.
   if (import.meta.env.DEV || isAdmin) return <RBACDevToolbarInner />;
   return null;
@@ -185,7 +189,9 @@ function RBACDevToolbarInner() {
   const queryClient = useQueryClient();
   const organization = useOrganization();
   const projects = organization?.projects ?? [];
-  const { data: toolsetsData } = useListToolsetsForOrg();
+  const { data: toolsetsData } = useListToolsetsForOrg(undefined, undefined, {
+    throwOnError: false,
+  });
   const projectResources = projects.map((project) => ({
     id: project.id,
     label: project.slug,
