@@ -127,7 +127,7 @@ export function ProjectDashboard() {
 
             <DashboardCard
               title="Top Servers"
-              action={<ViewAllLink to={routes.observability.href()} />}
+              action={<ViewAllLink to={routes.hooks.href()} />}
             >
               {isOverviewPending ? (
                 <SkeletonList />
@@ -150,8 +150,20 @@ export function ProjectDashboard() {
           {/* Row 2: Sessions */}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <DashboardCard
-              title="MostAgent Sessions by User"
-              action={<ViewAllLink to={routes.chatSessions.href()} />}
+              title="Most Agent Sessions by User"
+              action={
+                <ViewAllLink
+                  to={
+                    // no hooks data and no chat sessions
+                    isProjectEmpty && overview?.summary.totalChats === 0
+                      ? routes.hooks.href()
+                      : // has hooks data but no chat sessions
+                        !isProjectEmpty && overview?.summary.totalChats === 0
+                        ? routes.observability.href()
+                        : routes.chatSessions.href()
+                  }
+                />
+              }
             >
               {isOverviewPending ? (
                 <SkeletonList />
@@ -192,7 +204,7 @@ export function ProjectDashboard() {
 
             <DashboardCard
               title="Most Used LLM Clients"
-              action={<ViewAllLink to={routes.observability.href()} />}
+              action={<ViewAllLink to={routes.hooks.href()} />}
             >
               {isOverviewPending ? (
                 <SkeletonList />
