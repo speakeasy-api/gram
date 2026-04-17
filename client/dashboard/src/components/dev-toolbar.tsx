@@ -226,10 +226,10 @@ function RBACDevToolbarInner() {
   const orgProjects = organization?.projects;
   const toolsets = toolsetsData?.toolsets;
   useEffect(() => {
-    if (!state.enabled && orgProjects && orgProjects.length > 0) {
+    if (!state.enabled && orgProjects && orgProjects.length > 0 && toolsets) {
       saveCachedResources({
         projects: orgProjects.map((p) => ({ id: p.id, label: p.slug })),
-        mcps: (toolsets ?? []).map((t) => ({ id: t.id, label: t.name })),
+        mcps: toolsets.map((t) => ({ id: t.id, label: t.name })),
       });
     }
   }, [state.enabled, orgProjects, toolsets]);
