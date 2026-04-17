@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -192,8 +193,13 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 	}
 
-	// Org metadata was already upserted for all orgs by GetUserInfoFromSpeakeasy.
-	orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, activeOrg.ID)
+	orgMetadata, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          activeOrg.ID,
+		Name:        activeOrg.Name,
+		Slug:        activeOrg.Slug,
+		WorkosID:    conv.PtrToPGText(activeOrg.WorkosID),
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
@@ -257,9 +263,11 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		selectedOrg = *payload.OrganizationID
 	}
 
+	var selected sessions.Organization
 	orgFound := false
 	for _, org := range userInfo.Organizations {
 		if org.ID == selectedOrg {
+			selected = org
 			orgFound = true
 			break
 		}
@@ -268,6 +276,16 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		return nil, oops.E(oops.CodeInvalid, nil, "organization not found in user info")
 	}
 	authCtx.ActiveOrganizationID = selectedOrg
+
+	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          selected.ID,
+		Name:        selected.Name,
+		Slug:        selected.Slug,
+		WorkosID:    conv.PtrToPGText(selected.WorkosID),
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
+	}
 
 	if err := s.sessions.StoreSession(ctx, sessions.Session{
 		SessionID:            *authCtx.SessionID,
