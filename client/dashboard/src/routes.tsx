@@ -341,13 +341,13 @@ const ROUTE_STRUCTURE = {
   },
   dlp: {
     title: "Risk Overview",
-    url: "dlp",
+    url: "risk-overview",
     icon: "shield",
     component: DlpOverview,
   },
   policyCenter: {
     title: "Policy Center",
-    url: "policies",
+    url: "risk-policies",
     icon: "shield-check",
     component: PolicyCenter,
   },
