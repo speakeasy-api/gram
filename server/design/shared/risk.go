@@ -45,6 +45,7 @@ var RiskResult = Type("RiskResult", func() {
 	Attribute("chat_id", String, "The chat session containing the message.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("chat_title", String, "Title of the chat session.")
 	Attribute("source", String, "Detection source (e.g. gitleaks).")
 	Attribute("rule_id", String, "The matched rule identifier.")
 	Attribute("description", String, "Human-readable description of the finding.")

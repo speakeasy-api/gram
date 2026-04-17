@@ -347,7 +347,7 @@ export default function PolicyCenter() {
 
         {/* Edit/Create Sheet */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent className="flex flex-col overflow-y-auto">
+          <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
             <SheetHeader className="px-6 pt-6">
               <SheetTitle>
                 {editingPolicy ? "Edit Policy" : "New Policy"}
@@ -499,8 +499,8 @@ function PolicySheetBody({
                     </p>
                   </div>
 
-                  {/* Toggle */}
-                  <Switch
+                  {/* Category checkbox */}
+                  <Checkbox
                     checked={isAvailable && cat === "secrets"}
                     disabled={!isAvailable}
                     onCheckedChange={() => {
@@ -574,105 +574,107 @@ function RunPanel({
     { refetchInterval: 5000 },
   );
 
+  const pct =
+    status && status.totalMessages > 0
+      ? Math.round((status.analyzedMessages / status.totalMessages) * 100)
+      : 0;
+
   return (
     <>
-      <SheetHeader>
+      <SheetHeader className="px-6 pt-6">
         <SheetTitle>{policy.name}</SheetTitle>
-        <SheetDescription>Analysis progress and run details.</SheetDescription>
+        <SheetDescription>
+          Analysis progress and workflow status
+        </SheetDescription>
       </SheetHeader>
 
-      <div className="space-y-6 py-6">
+      <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
+          <div className="flex items-center justify-center py-12">
             <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
           </div>
         ) : status ? (
           <>
-            {/* Workflow Status */}
-            <div className="space-y-2">
-              <label className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
-                Workflow
-              </label>
-              <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "inline-block h-2 w-2 rounded-full",
-                    status.workflowStatus === "running"
-                      ? "bg-green-500"
-                      : status.workflowStatus === "sleeping"
-                        ? "bg-yellow-500"
-                        : "bg-muted-foreground",
-                  )}
-                />
-                <span className="text-sm capitalize">
-                  {status.workflowStatus.replace("_", " ")}
-                </span>
+            {/* Status + Version row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="border-border rounded-lg border p-3">
+                <p className="text-muted-foreground mb-1 text-xs font-medium">
+                  Status
+                </p>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "inline-block h-2.5 w-2.5 rounded-full",
+                      status.workflowStatus === "running" &&
+                        "animate-pulse bg-green-500",
+                      status.workflowStatus === "sleeping" && "bg-yellow-500",
+                      status.workflowStatus === "not_started" &&
+                        "bg-muted-foreground",
+                    )}
+                  />
+                  <span className="text-sm font-medium capitalize">
+                    {status.workflowStatus === "not_started"
+                      ? "Idle"
+                      : status.workflowStatus}
+                  </span>
+                </div>
+              </div>
+              <div className="border-border rounded-lg border p-3">
+                <p className="text-muted-foreground mb-1 text-xs font-medium">
+                  Version
+                </p>
+                <p className="text-sm font-medium">v{status.policyVersion}</p>
               </div>
             </div>
 
             {/* Progress */}
-            <div className="space-y-2">
-              <label className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
-                Analysis Progress
-              </label>
-              <div className="space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span>
-                    {status.analyzedMessages.toLocaleString()} /{" "}
-                    {status.totalMessages.toLocaleString()} messages
-                  </span>
-                  <span className="text-muted-foreground">
-                    {status.totalMessages > 0
-                      ? Math.round(
-                          (status.analyzedMessages / status.totalMessages) *
-                            100,
-                        )
-                      : 0}
-                    %
-                  </span>
-                </div>
-                <div className="bg-muted h-2 overflow-hidden rounded-full">
-                  <div
-                    className="bg-primary h-full rounded-full transition-all"
-                    style={{
-                      width: `${status.totalMessages > 0 ? (status.analyzedMessages / status.totalMessages) * 100 : 0}%`,
-                    }}
-                  />
-                </div>
+            <div className="border-border rounded-lg border p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm font-medium">Analysis Progress</p>
+                <span className="text-muted-foreground text-xs font-medium">
+                  {pct}%
+                </span>
               </div>
-              {status.pendingMessages > 0 && (
-                <p className="text-muted-foreground text-xs">
-                  {status.pendingMessages.toLocaleString()} messages pending
-                </p>
-              )}
+              <div className="bg-muted mb-2 h-2 overflow-hidden rounded-full">
+                <div
+                  className="bg-primary h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <p className="text-muted-foreground text-xs">
+                {status.analyzedMessages.toLocaleString()} of{" "}
+                {status.totalMessages.toLocaleString()} messages analyzed
+                {status.pendingMessages > 0 && (
+                  <span>
+                    {" "}
+                    &middot; {status.pendingMessages.toLocaleString()} pending
+                  </span>
+                )}
+              </p>
             </div>
 
             {/* Findings */}
-            <div className="space-y-2">
-              <label className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+            <div className="border-border rounded-lg border p-4">
+              <p className="text-muted-foreground mb-1 text-xs font-medium">
                 Findings
-              </label>
-              <p className="text-2xl font-bold">
+              </p>
+              <p className="text-3xl font-bold tracking-tight">
                 {status.findingsCount.toLocaleString()}
               </p>
-              <p className="text-muted-foreground text-xs">
-                secrets and sensitive data detected
+              <p className="text-muted-foreground mt-1 text-xs">
+                secrets detected across all messages
               </p>
-            </div>
-
-            {/* Policy Version */}
-            <div className="space-y-2">
-              <label className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
-                Policy Version
-              </label>
-              <p className="text-sm">v{status.policyVersion}</p>
             </div>
           </>
         ) : null}
       </div>
 
-      <SheetFooter className="border-border border-t pt-4">
-        <Button onClick={onTrigger} disabled={isTriggerPending}>
+      <SheetFooter className="border-border border-t px-6 py-4">
+        <Button
+          onClick={onTrigger}
+          disabled={isTriggerPending}
+          className="w-full"
+        >
           {isTriggerPending && (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           )}

@@ -24109,6 +24109,9 @@ components:
           type: string
           description: The chat message that was scanned.
           format: uuid
+        chat_title:
+          type: string
+          description: Title of the chat session.
         confidence:
           type: number
           description: Confidence score for this finding.

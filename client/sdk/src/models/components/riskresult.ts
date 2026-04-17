@@ -18,6 +18,10 @@ export type RiskResult = {
    */
   chatMessageId: string;
   /**
+   * Title of the chat session.
+   */
+  chatTitle?: string | undefined;
+  /**
    * Confidence score for this finding.
    */
   confidence?: number | undefined;
@@ -81,6 +85,7 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
     z.object({
       chat_id: z.optional(z.string()),
       chat_message_id: z.string(),
+      chat_title: z.optional(z.string()),
       confidence: z.optional(z.number()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
@@ -103,6 +108,7 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
       return remap$(v, {
         "chat_id": "chatId",
         "chat_message_id": "chatMessageId",
+        "chat_title": "chatTitle",
         "created_at": "createdAt",
         "end_column": "endColumn",
         "end_line": "endLine",

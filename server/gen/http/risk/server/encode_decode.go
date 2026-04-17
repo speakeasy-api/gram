@@ -1910,6 +1910,7 @@ func marshalTypesRiskResultToRiskResultResponseBody(v *types.RiskResult) *RiskRe
 		PolicyVersion: v.PolicyVersion,
 		ChatMessageID: v.ChatMessageID,
 		ChatID:        v.ChatID,
+		ChatTitle:     v.ChatTitle,
 		Source:        v.Source,
 		RuleID:        v.RuleID,
 		Description:   v.Description,

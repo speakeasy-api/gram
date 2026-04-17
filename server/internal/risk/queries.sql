@@ -163,18 +163,20 @@ ORDER BY created_at DESC
 LIMIT @result_limit;
 
 -- name: ListRiskResultsByProjectFound :many
-SELECT rr.*, cm.chat_id
+SELECT rr.*, cm.chat_id, c.title AS chat_title
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chats c ON c.id = cm.chat_id
 WHERE rr.project_id = @project_id
   AND rr.found IS TRUE
 ORDER BY rr.created_at DESC
 LIMIT @result_limit;
 
 -- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.*, cm.chat_id
+SELECT rr.*, cm.chat_id, c.title AS chat_title
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chats c ON c.id = cm.chat_id
 WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
   AND rr.found IS TRUE
@@ -182,9 +184,10 @@ ORDER BY rr.created_at DESC
 LIMIT @result_limit;
 
 -- name: ListRiskResultsByChatFound :many
-SELECT rr.*, cm.chat_id
+SELECT rr.*, cm.chat_id, c.title AS chat_title
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chats c ON c.id = cm.chat_id
 WHERE cm.chat_id = @chat_id
   AND rr.project_id = @project_id
   AND rr.found IS TRUE

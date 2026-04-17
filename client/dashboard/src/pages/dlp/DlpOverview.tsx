@@ -117,6 +117,7 @@ export default function DlpOverview() {
                 <TableRow>
                   <TableHead>Category</TableHead>
                   <TableHead>Rule</TableHead>
+                  <TableHead>Chat</TableHead>
                   <TableHead>Match</TableHead>
                   <TableHead>Detected</TableHead>
                   <TableHead className="w-[100px]" />
@@ -147,6 +148,9 @@ export default function DlpOverview() {
                     </TableCell>
                     <TableCell className="font-mono text-xs">
                       {result.ruleId ?? "-"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground max-w-[200px] truncate text-xs">
+                      {result.chatTitle ?? "Untitled"}
                     </TableCell>
                     <TableCell className="max-w-xs truncate font-mono text-xs">
                       {result.match

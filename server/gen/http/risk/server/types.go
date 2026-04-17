@@ -1650,6 +1650,8 @@ type RiskResultResponseBody struct {
 	ChatMessageID string `form:"chat_message_id" json:"chat_message_id" xml:"chat_message_id"`
 	// The chat session containing the message.
 	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
+	// Title of the chat session.
+	ChatTitle *string `form:"chat_title,omitempty" json:"chat_title,omitempty" xml:"chat_title,omitempty"`
 	// Detection source (e.g. gitleaks).
 	Source string `form:"source" json:"source" xml:"source"`
 	// The matched rule identifier.

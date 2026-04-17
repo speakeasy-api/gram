@@ -413,9 +413,10 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 }
 
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_line, rr.start_column, rr.end_line, rr.end_column, rr.confidence, rr.tags, rr.created_at, cm.chat_id
+SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_line, rr.start_column, rr.end_line, rr.end_column, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chats c ON c.id = cm.chat_id
 WHERE cm.chat_id = $1
   AND rr.project_id = $2
   AND rr.found IS TRUE
@@ -446,6 +447,7 @@ type ListRiskResultsByChatFoundRow struct {
 	Tags          []string
 	CreatedAt     pgtype.Timestamptz
 	ChatID        uuid.UUID
+	ChatTitle     pgtype.Text
 }
 
 func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskResultsByChatFoundParams) ([]ListRiskResultsByChatFoundRow, error) {
@@ -476,6 +478,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 			&i.Tags,
 			&i.CreatedAt,
 			&i.ChatID,
+			&i.ChatTitle,
 		); err != nil {
 			return nil, err
 		}
@@ -590,9 +593,10 @@ func (q *Queries) ListRiskResultsByProject(ctx context.Context, arg ListRiskResu
 }
 
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_line, rr.start_column, rr.end_line, rr.end_column, rr.confidence, rr.tags, rr.created_at, cm.chat_id
+SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_line, rr.start_column, rr.end_line, rr.end_column, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chats c ON c.id = cm.chat_id
 WHERE rr.project_id = $1
   AND rr.risk_policy_id = $2
   AND rr.found IS TRUE
@@ -625,6 +629,7 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	Tags          []string
 	CreatedAt     pgtype.Timestamptz
 	ChatID        uuid.UUID
+	ChatTitle     pgtype.Text
 }
 
 func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg ListRiskResultsByProjectAndPolicyParams) ([]ListRiskResultsByProjectAndPolicyRow, error) {
@@ -655,6 +660,7 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 			&i.Tags,
 			&i.CreatedAt,
 			&i.ChatID,
+			&i.ChatTitle,
 		); err != nil {
 			return nil, err
 		}
@@ -667,9 +673,10 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 }
 
 const listRiskResultsByProjectFound = `-- name: ListRiskResultsByProjectFound :many
-SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_line, rr.start_column, rr.end_line, rr.end_column, rr.confidence, rr.tags, rr.created_at, cm.chat_id
+SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_line, rr.start_column, rr.end_line, rr.end_column, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chats c ON c.id = cm.chat_id
 WHERE rr.project_id = $1
   AND rr.found IS TRUE
 ORDER BY rr.created_at DESC
@@ -700,6 +707,7 @@ type ListRiskResultsByProjectFoundRow struct {
 	Tags          []string
 	CreatedAt     pgtype.Timestamptz
 	ChatID        uuid.UUID
+	ChatTitle     pgtype.Text
 }
 
 func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRiskResultsByProjectFoundParams) ([]ListRiskResultsByProjectFoundRow, error) {
@@ -730,6 +738,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 			&i.Tags,
 			&i.CreatedAt,
 			&i.ChatID,
+			&i.ChatTitle,
 		); err != nil {
 			return nil, err
 		}
