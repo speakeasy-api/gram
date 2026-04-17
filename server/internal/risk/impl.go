@@ -386,12 +386,24 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 		return oops.C(oops.CodeInvalid)
 	}
 
-	policy, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+	// Fetch current policy, then bump version (update with same values).
+	current, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+	}
+
+	policy, err := s.repo.UpdateRiskPolicy(ctx, repo.UpdateRiskPolicyParams{
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
+		Name:      current.Name,
+		Sources:   current.Sources,
+		Enabled:   current.Enabled,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "bump policy version").Log(ctx, s.logger)
 	}
 
 	if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{

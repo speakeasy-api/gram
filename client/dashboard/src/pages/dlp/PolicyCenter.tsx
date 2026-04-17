@@ -592,20 +592,7 @@ function RunPanel({
   return (
     <>
       <SheetHeader className="px-6 pt-6">
-        <div className="flex items-center justify-between">
-          <SheetTitle>{policy.name}</SheetTitle>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => refetch()}
-            disabled={isFetching}
-            tooltip="Refresh"
-          >
-            <RefreshCw
-              className={cn("h-4 w-4", isFetching && "animate-spin")}
-            />
-          </Button>
-        </div>
+        <SheetTitle>{policy.name}</SheetTitle>
         <SheetDescription>
           Analysis progress and workflow status
         </SheetDescription>
@@ -654,9 +641,23 @@ function RunPanel({
             <div className="border-border rounded-lg border p-4">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-sm font-medium">Analysis Progress</p>
-                <span className="text-muted-foreground text-xs font-medium">
-                  {pct}%
-                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => refetch()}
+                    disabled={isFetching}
+                    tooltip="Refresh"
+                    className="h-6 w-6"
+                  >
+                    <RefreshCw
+                      className={cn("h-3 w-3", isFetching && "animate-spin")}
+                    />
+                  </Button>
+                  <span className="text-muted-foreground text-xs font-medium">
+                    {pct}%
+                  </span>
+                </div>
               </div>
               <div className="bg-muted mb-2 h-2 overflow-hidden rounded-full">
                 <div
