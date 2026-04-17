@@ -168,7 +168,7 @@ There are %d messages total (indices 0-%d).%s`, conversationText, numMessages, n
 		"description": "Array of conversation segments",
 	}
 
-	jsonSchemaConfig := or.JSONSchemaConfig{
+	jsonSchemaConfig := or.ChatJSONSchemaConfig{
 		Name:        "chat_segments",
 		Schema:      schema,
 		Description: nil,

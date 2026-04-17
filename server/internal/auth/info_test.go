@@ -86,7 +86,7 @@ func TestService_Info(t *testing.T) {
 			ID:                 "other-org-456",
 			Name:               "Other Organization",
 			Slug:               "other-org",
-			SsoConnectionID:    nil,
+			WorkosID:           nil,
 			UserWorkspaceSlugs: []string{"other-workspace"},
 		})
 		ctx, instance := newTestAuthService(t, userInfo)
@@ -312,7 +312,7 @@ func TestService_Info_AdminOrgRelationshipUpserted(t *testing.T) {
 				ID:                 "speakeasy-team-org-id",
 				Name:               "Speakeasy Team",
 				Slug:               "speakeasy-team",
-				SsoConnectionID:    nil,
+				WorkosID:           nil,
 				UserWorkspaceSlugs: []string{"speakeasy-workspace"},
 			},
 		},

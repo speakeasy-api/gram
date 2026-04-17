@@ -79,11 +79,11 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 	// Upsert organization metadata in the database
 	orgQueries := orgRepo.New(conn)
 	_, err = orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              activeOrg.ID,
-		Name:            activeOrg.Name,
-		Slug:            activeOrg.Slug,
-		SsoConnectionID: conv.PtrToPGText(activeOrg.SsoConnectionID),
-		Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
+		ID:          activeOrg.ID,
+		Name:        activeOrg.Name,
+		Slug:        activeOrg.Slug,
+		WorkosID:    conv.PtrToPGText(activeOrg.WorkosID),
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
 	})
 	require.NoError(t, err)
 

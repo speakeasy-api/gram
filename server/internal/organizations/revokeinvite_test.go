@@ -1,6 +1,7 @@
 package organizations_test
 
 import (
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testWorkosOrgID = "org_workos_test"
+const testWorkosOrgID = mockidp.MockOrgID
 
 func TestService_RevokeInvite(t *testing.T) {
 	t.Parallel()

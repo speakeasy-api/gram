@@ -140,6 +140,13 @@ type testSetup struct {
 // and a fake WorkOS server. The mock IDP org is seeded into organization_metadata.
 func newManagerWithFakeWorkOS(t *testing.T, fake *fakeWorkOSServer) *testSetup {
 	t.Helper()
+	return newManagerWithFakeWorkOSConfig(t, fake, mockidp.NewConfig())
+}
+
+// newManagerWithFakeWorkOSConfig is like newManagerWithFakeWorkOS but uses the
+// given mock IDP config (e.g. to omit workos_id from /validate).
+func newManagerWithFakeWorkOSConfig(t *testing.T, fake *fakeWorkOSServer, idpCfg mockidp.Config) *testSetup {
+	t.Helper()
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -147,7 +154,6 @@ func newManagerWithFakeWorkOS(t *testing.T, fake *fakeWorkOSServer) *testSetup {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	idpCfg := mockidp.NewConfig()
 	idpSrv := httptest.NewServer(mockidp.Handler(idpCfg))
 	t.Cleanup(idpSrv.Close)
 
@@ -188,11 +194,11 @@ func newManagerWithFakeWorkOS(t *testing.T, fake *fakeWorkOSServer) *testSetup {
 	// IDs back to Speakeasy org IDs. In the mock IDP the same ID is used for both.
 	oq := orgRepo.New(conn)
 	_, err = oq.UpsertOrganizationMetadata(context.Background(), orgRepo.UpsertOrganizationMetadataParams{
-		ID:              mockidp.MockOrgID,
-		Name:            mockidp.MockOrgName,
-		Slug:            mockidp.MockOrgSlug,
-		SsoConnectionID: pgtype.Text{Valid: false},
-		Whitelisted:     pgtype.Bool{Valid: false},
+		ID:          mockidp.MockOrgID,
+		Name:        mockidp.MockOrgName,
+		Slug:        mockidp.MockOrgSlug,
+		WorkosID:    pgtype.Text{Valid: false},
+		Whitelisted: pgtype.Bool{Valid: false},
 	})
 	require.NoError(t, err)
 	_, err = oq.SetOrgWorkosID(context.Background(), orgRepo.SetOrgWorkosIDParams{
@@ -213,7 +219,7 @@ func acquireIDToken(t *testing.T, ctx context.Context, mgr *sessions.Manager) st
 }
 
 // TestSyncWorkOSIDs_PopulatesNonSSOOrg is the core regression test for the bug:
-// workos_id must be backfilled for orgs without an SSO connection.
+// workos_id must be backfilled from validate (workos_id) for orgs that sync with WorkOS.
 func TestSyncWorkOSIDs_PopulatesNonSSOOrg(t *testing.T) {
 	t.Parallel()
 
@@ -229,16 +235,108 @@ func TestSyncWorkOSIDs_PopulatesNonSSOOrg(t *testing.T) {
 
 	ts := newManagerWithFakeWorkOS(t, fake)
 	ctx := t.Context()
+
+	// Simulate an org row that has not yet been linked to WorkOS in Gram.
+	_, err := ts.conn.Exec(ctx, `UPDATE organization_metadata SET workos_id = NULL WHERE id = $1`, workosOrgID)
+	require.NoError(t, err)
+
 	idToken := acquireIDToken(t, ctx, ts.mgr)
 
 	// syncWorkOSIDs is called synchronously inside GetUserInfoFromSpeakeasy.
-	_, err := ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	_, err = ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
 	require.NoError(t, err)
 
 	org, err := orgRepo.New(ts.conn).GetOrganizationMetadata(ctx, workosOrgID)
 	require.NoError(t, err)
-	require.True(t, org.WorkosID.Valid, "workos_id should be populated for non-SSO org")
+	require.True(t, org.WorkosID.Valid, "workos_id should be populated from validate workos_id")
 	require.Equal(t, workosOrgID, org.WorkosID.String)
+}
+
+// TestSyncWorkOSIDs_SkipsSetOrgWorkosIDWhenValidateOmitsWorkOSID verifies that when
+// the Speakeasy validate response omits workos_id, Gram does not set organization_metadata.workos_id.
+func TestSyncWorkOSIDs_SkipsSetOrgWorkosIDWhenValidateOmitsWorkOSID(t *testing.T) {
+	t.Parallel()
+
+	cfg := mockidp.NewConfig()
+	cfg.Organization.WorkOSID = nil
+
+	const workosUserID = "wos_user_skip_validate_wos"
+
+	fake := newFakeWorkOSServer()
+	fake.users = []fakeWOSUser{{ID: workosUserID, Email: mockidp.MockUserEmail}}
+	fake.memberships = []fakeWOSMembership{
+		{ID: "mem_skip_v", UserID: workosUserID, OrganizationID: mockidp.MockOrgID, RoleSlug: "member"},
+	}
+
+	ts := newManagerWithFakeWorkOSConfig(t, fake, cfg)
+	ctx := t.Context()
+
+	_, err := ts.conn.Exec(ctx, `UPDATE organization_metadata SET workos_id = NULL WHERE id = $1`, mockidp.MockOrgID)
+	require.NoError(t, err)
+
+	idToken := acquireIDToken(t, ctx, ts.mgr)
+	_, err = ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	require.NoError(t, err)
+
+	org, err := orgRepo.New(ts.conn).GetOrganizationMetadata(ctx, mockidp.MockOrgID)
+	require.NoError(t, err)
+	require.False(t, org.WorkosID.Valid, "workos_id must remain unset when validate omits workos_id")
+}
+
+// TestUpsertAfterLogin_PreservesWorkosIDWhenIDPOmitsIt exercises the full Callback
+// flow: syncWorkOSIDs sets workos_id, then UpsertOrganizationMetadata is called
+// with nil WorkosID (IDP omitted it). The COALESCE in the upsert must preserve
+// the existing value.
+func TestUpsertAfterLogin_PreservesWorkosIDWhenIDPOmitsIt(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "wos_user_upsert_preserve"
+
+	fake := newFakeWorkOSServer()
+	fake.users = []fakeWOSUser{{ID: workosUserID, Email: mockidp.MockUserEmail}}
+	fake.memberships = []fakeWOSMembership{
+		{ID: "mem_preserve", UserID: workosUserID, OrganizationID: mockidp.MockOrgID, RoleSlug: "member"},
+	}
+
+	// First login WITH workos_id to populate it.
+	ts := newManagerWithFakeWorkOS(t, fake)
+	ctx := t.Context()
+	idToken := acquireIDToken(t, ctx, ts.mgr)
+
+	userInfo, err := ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	require.NoError(t, err)
+	require.NotEmpty(t, userInfo.Organizations)
+
+	// Simulate what Callback does: upsert org metadata with the IDP value.
+	oq := orgRepo.New(ts.conn)
+	_, err = oq.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:       userInfo.Organizations[0].ID,
+		Name:     userInfo.Organizations[0].Name,
+		Slug:     userInfo.Organizations[0].Slug,
+		WorkosID: pgtype.Text{String: mockidp.MockOrgID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	// Verify workos_id is set.
+	org, err := oq.GetOrganizationMetadata(ctx, mockidp.MockOrgID)
+	require.NoError(t, err)
+	require.True(t, org.WorkosID.Valid)
+	require.Equal(t, mockidp.MockOrgID, org.WorkosID.String)
+
+	// Now simulate a subsequent upsert where IDP omits workos_id (nil).
+	_, err = oq.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:       userInfo.Organizations[0].ID,
+		Name:     userInfo.Organizations[0].Name,
+		Slug:     userInfo.Organizations[0].Slug,
+		WorkosID: pgtype.Text{Valid: false}, // nil — IDP omitted it
+	})
+	require.NoError(t, err)
+
+	// workos_id must be preserved by the COALESCE.
+	org, err = oq.GetOrganizationMetadata(ctx, mockidp.MockOrgID)
+	require.NoError(t, err)
+	require.True(t, org.WorkosID.Valid, "workos_id must be preserved when upsert passes NULL")
+	require.Equal(t, mockidp.MockOrgID, org.WorkosID.String)
 }
 
 // TestSyncWorkOSIDs_UserWorkosIDSet verifies the user's workos_id is recorded
@@ -486,11 +584,11 @@ func TestSyncWorkOSIDs_SkipsNullWorkOSIDOrgs(t *testing.T) {
 
 	// Create a second org WITHOUT a workos_id.
 	_, err = orgRepo.New(ts.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              otherOrgID,
-		Name:            "No WorkOS Org",
-		Slug:            "no-workos-org",
-		SsoConnectionID: pgtype.Text{Valid: false},
-		Whitelisted:     pgtype.Bool{Valid: false},
+		ID:          otherOrgID,
+		Name:        "No WorkOS Org",
+		Slug:        "no-workos-org",
+		WorkosID:    pgtype.Text{Valid: false},
+		Whitelisted: pgtype.Bool{Valid: false},
 	})
 	require.NoError(t, err)
 

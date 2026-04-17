@@ -1,6 +1,7 @@
 package organizations_test
 
 import (
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
 	"time"
 
@@ -36,12 +37,12 @@ func TestService_ListInvites(t *testing.T) {
 
 	expectWorkOSOrgAdminRole(t, ti.orgs)
 
-	ti.orgs.On("ListInvitations", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Invitation{
+	ti.orgs.On("ListInvitations", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Invitation{
 		{
 			ID:             "test-invitation-id",
 			Email:          "test@example.com",
 			State:          thirdpartyworkos.InvitationStatePending,
-			OrganizationID: "org_workos_test",
+			OrganizationID: mockidp.MockOrgID,
 			InviterUserID:  workosInviterUserID,
 			ExpiresAt:      expiresAt,
 			CreatedAt:      createdAt,
@@ -51,7 +52,7 @@ func TestService_ListInvites(t *testing.T) {
 			ID:             "test-invitation-id-2",
 			Email:          "test2@example.com",
 			State:          thirdpartyworkos.InvitationStateAccepted,
-			OrganizationID: "org_workos_test",
+			OrganizationID: mockidp.MockOrgID,
 			InviterUserID:  workosInviterUserID,
 			ExpiresAt:      expiresAt,
 			CreatedAt:      createdAt,
@@ -86,7 +87,7 @@ func TestService_ListInvites_AllowsOrgReadGrant(t *testing.T) {
 
 	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID})
 
-	ti.orgs.On("ListInvitations", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Invitation{}, nil).Once()
+	ti.orgs.On("ListInvitations", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Invitation{}, nil).Once()
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
 	require.NoError(t, err)
@@ -103,7 +104,7 @@ func TestService_ListInvites_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) 
 
 	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
-	ti.orgs.On("ListInvitations", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Invitation{}, nil).Once()
+	ti.orgs.On("ListInvitations", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Invitation{}, nil).Once()
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
 	require.NoError(t, err)

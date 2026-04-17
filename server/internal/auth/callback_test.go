@@ -67,7 +67,7 @@ func TestService_Callback(t *testing.T) {
 			ID:                 "speakeasy-team-456",
 			Name:               "Speakeasy Team",
 			Slug:               "speakeasy-team",
-			SsoConnectionID:    nil,
+			WorkosID:           nil,
 			UserWorkspaceSlugs: []string{"speakeasy-workspace"},
 		})
 

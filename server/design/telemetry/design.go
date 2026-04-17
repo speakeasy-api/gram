@@ -1198,6 +1198,13 @@ var GetHooksSummaryPayload = Type("GetHooksSummaryPayload", func() {
 		Format(FormatDateTime)
 		Example("2025-12-19T11:00:00Z")
 	})
+	Attribute("filters", ArrayOf(LogFilter), "Filter conditions (same as listHooksTraces)")
+	Attribute("types_to_include", ArrayOf(String), "Hook types to include (mcp, local, skill). If empty, includes all types.", func() {
+		Elem(func() {
+			Enum("mcp", "local", "skill")
+		})
+		Example([]string{"mcp", "skill"})
+	})
 
 	Required("from", "to")
 })
@@ -1210,8 +1217,34 @@ var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
 	Attribute("skills", ArrayOf(SkillSummaryType), "Aggregated metrics grouped by skill")
 	Attribute("total_events", Int64, "Total number of hook events")
 	Attribute("total_sessions", Int64, "Total number of unique sessions")
+	Attribute("breakdown", ArrayOf(HooksBreakdownRowType), "Cross-dimensional pivot: (user, server, source, tool) x counts")
+	Attribute("time_series", ArrayOf(HooksTimeSeriesPointType), "Time-bucketed event counts by server and user")
 
-	Required("servers", "users", "skills", "total_events", "total_sessions")
+	Required("servers", "users", "skills", "total_events", "total_sessions", "breakdown", "time_series")
+})
+
+var HooksBreakdownRowType = Type("HooksBreakdownRow", func() {
+	Description("Cross-dimensional aggregation row: one entry per unique (user, server, hook_source, tool) combination")
+
+	Attribute("user_email", String, "User email address")
+	Attribute("server_name", String, "Server name ('local' for non-MCP tools)")
+	Attribute("hook_source", String, "Hook source (e.g. claude-desktop, cursor)")
+	Attribute("tool_name", String, "Tool name")
+	Attribute("event_count", Int64, "Total events for this combination")
+	Attribute("failure_count", Int64, "Number of failures for this combination")
+
+	Required("user_email", "server_name", "hook_source", "tool_name", "event_count", "failure_count")
+})
+
+var HooksTimeSeriesPointType = Type("HooksTimeSeriesPoint", func() {
+	Description("A single time-series bucket for hooks activity")
+
+	Attribute("bucket_start_ns", String, "Bucket start time in Unix nanoseconds (string for JS int64 precision)")
+	Attribute("server_name", String, "Server name")
+	Attribute("user_email", String, "User email address")
+	Attribute("event_count", Int64, "Number of events in this bucket")
+
+	Required("bucket_start_ns", "server_name", "user_email", "event_count")
 })
 
 var SkillSummaryType = Type("SkillSummary", func() {

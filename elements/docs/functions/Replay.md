@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.27.6**](../README.md)
+[**@gram-ai/elements v1.28.0**](../README.md)
 
 ***
 

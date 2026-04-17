@@ -823,6 +823,98 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 	assert.Contains(t, rr.Body.String(), "Server Not Found")
 }
 
+// TestServeInstallPage_ClaudeDesktop_NoSecurityInputs verifies that a public
+// MCP server with no required HTTP headers renders the simple "Add custom
+// connector" Claude Desktop install flow, including the Teams & Enterprise
+// admin connector footer.
+func TestServeInstallPage_ClaudeDesktop_NoSecurityInputs(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mcpSlug := "claude-desktop-public-" + uuid.New().String()[:8]
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Public Claude Desktop Toolset",
+		Slug:                   mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("public toolset with no security inputs"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	_, err = testInstance.conn.Exec(ctx,
+		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err = testInstance.service.ServeInstallPage(rr, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.Contains(t, body, `"Add custom connector"`, "should render the simple Add custom connector flow")
+	assert.Contains(t, body, "For Teams &amp; Enterprise", "should render the Teams & Enterprise admin connector footer")
+	assert.NotContains(t, body, "Settings &gt; Developer &gt; Local MCP Servers", "should not render the claude_desktop_config.json workaround flow")
+	assert.NotContains(t, body, "Claude Desktop does not yet support custom HTTP headers", "should not render the workaround explanation")
+}
+
+// TestServeInstallPage_ClaudeDesktop_WithSecurityInputs verifies that an MCP
+// server requiring HTTP-header credentials renders the claude_desktop_config.json
+// workaround flow (because Claude Desktop's custom connector UI does not yet
+// support custom HTTP headers) and hides the simple Add custom connector flow
+// and the Teams & Enterprise footer (which has the same UI limitation).
+func TestServeInstallPage_ClaudeDesktop_WithSecurityInputs(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mcpSlug := "claude-desktop-private-" + uuid.New().String()[:8]
+	_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Private Claude Desktop Toolset",
+		Slug:                   mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("private toolset producing security inputs via gram security mode"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err = testInstance.service.ServeInstallPage(rr, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.Contains(t, body, "Settings &gt; Developer &gt; Local MCP Servers", "should render the claude_desktop_config.json edit instructions")
+	assert.Contains(t, body, `"mcpServers"`, "should render the claude_desktop_config.json snippet")
+	assert.Contains(t, body, `"mcp-remote@0.1.25"`, "should render the mcp-remote command in the snippet")
+	assert.Contains(t, body, `"--header"`, "should render the --header argument in the snippet")
+	assert.Contains(t, body, "does not yet support custom HTTP headers", "should explain why the workaround is needed")
+	assert.NotContains(t, body, `"Add custom connector"`, "should not render the simple Add custom connector flow")
+	assert.NotContains(t, body, "For Teams &amp; Enterprise", "should not render the Teams & Enterprise admin connector footer")
+}
+
 // TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain verifies that a toolset
 // WITHOUT a custom domain can still be loaded via the platform domain when the
 // logged-in user's organization happens to have a custom domain configured. This

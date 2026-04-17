@@ -4,6 +4,17 @@
 
 ### Minor Changes
 
+- f749a53: Add plugins feature for distributing MCP server bundles to teams and allowing zip distribution
+
+### Patch Changes
+
+- d2bf604: Adds a new project metrics summary endpoint containing new data to power the new homepage
+- be476e6: feat: use pre-aggregated summary endpoint for hooks analytics charts and KPIs
+
+## 0.33.0
+
+### Minor Changes
+
 - 98d322b: Add support for triggers across Gram.
 
   This introduces webhook and scheduled triggers end to end, including server APIs, worker execution for trigger dispatch and cron processing, SDK support, and dashboard UI for managing trigger definitions and instances.

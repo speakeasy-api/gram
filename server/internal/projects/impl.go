@@ -18,7 +18,6 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	genAuth "github.com/speakeasy-api/gram/server/gen/auth"
 	srv "github.com/speakeasy-api/gram/server/gen/http/projects/server"
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -137,7 +136,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, fmt.Errorf("get session user info: %w", err)
 	}
 
-	if orgIdx := slices.IndexFunc(userInfo.Organizations, func(org genAuth.OrganizationEntry) bool {
+	if orgIdx := slices.IndexFunc(userInfo.Organizations, func(org sessions.Organization) bool {
 		return org.ID == payload.OrganizationID
 	}); orgIdx == -1 {
 		return nil, oops.C(oops.CodeForbidden)
@@ -227,7 +226,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		return nil, fmt.Errorf("get session user info: %w", err)
 	}
 
-	if orgIdx := slices.IndexFunc(userInfo.Organizations, func(org genAuth.OrganizationEntry) bool {
+	if orgIdx := slices.IndexFunc(userInfo.Organizations, func(org sessions.Organization) bool {
 		return org.ID == payload.OrganizationID
 	}); orgIdx == -1 {
 		return nil, oops.C(oops.CodeForbidden)
