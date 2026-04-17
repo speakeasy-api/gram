@@ -161,6 +161,10 @@ type GetHooksSummaryRequestBody struct {
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End time in ISO 8601 format
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Filter conditions (same as listHooksTraces)
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
+	// Hook types to include (mcp, local, skill). If empty, includes all types.
+	TypesToInclude []string `form:"types_to_include,omitempty" json:"types_to_include,omitempty" xml:"types_to_include,omitempty"`
 }
 
 // ListHooksTracesRequestBody is the type of the "telemetry" service
@@ -295,6 +299,10 @@ type GetHooksSummaryResponseBody struct {
 	TotalEvents int64 `form:"total_events" json:"total_events" xml:"total_events"`
 	// Total number of unique sessions
 	TotalSessions int64 `form:"total_sessions" json:"total_sessions" xml:"total_sessions"`
+	// Cross-dimensional pivot: (user, server, source, tool) x counts
+	Breakdown []*HooksBreakdownRowResponseBody `form:"breakdown" json:"breakdown" xml:"breakdown"`
+	// Time-bucketed event counts by server and user
+	TimeSeries []*HooksTimeSeriesPointResponseBody `form:"time_series" json:"time_series" xml:"time_series"`
 }
 
 // ListHooksTracesResponseBody is the type of the "telemetry" service
@@ -3071,6 +3079,36 @@ type SkillSummaryResponseBody struct {
 	UniqueUsers int64 `form:"unique_users" json:"unique_users" xml:"unique_users"`
 }
 
+// HooksBreakdownRowResponseBody is used to define fields on response body
+// types.
+type HooksBreakdownRowResponseBody struct {
+	// User email address
+	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
+	// Server name ('local' for non-MCP tools)
+	ServerName string `form:"server_name" json:"server_name" xml:"server_name"`
+	// Hook source (e.g. claude-desktop, cursor)
+	HookSource string `form:"hook_source" json:"hook_source" xml:"hook_source"`
+	// Tool name
+	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
+	// Total events for this combination
+	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
+	// Number of failures for this combination
+	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
+}
+
+// HooksTimeSeriesPointResponseBody is used to define fields on response body
+// types.
+type HooksTimeSeriesPointResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS int64 precision)
+	BucketStartNs string `form:"bucket_start_ns" json:"bucket_start_ns" xml:"bucket_start_ns"`
+	// Server name
+	ServerName string `form:"server_name" json:"server_name" xml:"server_name"`
+	// User email address
+	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
+	// Number of events in this bucket
+	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
+}
+
 // HookTraceSummaryResponseBody is used to define fields on response body types.
 type HookTraceSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
@@ -3446,6 +3484,30 @@ func NewGetHooksSummaryResponseBody(res *telemetry.GetHooksSummaryResult) *GetHo
 		}
 	} else {
 		body.Skills = []*SkillSummaryResponseBody{}
+	}
+	if res.Breakdown != nil {
+		body.Breakdown = make([]*HooksBreakdownRowResponseBody, len(res.Breakdown))
+		for i, val := range res.Breakdown {
+			if val == nil {
+				body.Breakdown[i] = nil
+				continue
+			}
+			body.Breakdown[i] = marshalTelemetryHooksBreakdownRowToHooksBreakdownRowResponseBody(val)
+		}
+	} else {
+		body.Breakdown = []*HooksBreakdownRowResponseBody{}
+	}
+	if res.TimeSeries != nil {
+		body.TimeSeries = make([]*HooksTimeSeriesPointResponseBody, len(res.TimeSeries))
+		for i, val := range res.TimeSeries {
+			if val == nil {
+				body.TimeSeries[i] = nil
+				continue
+			}
+			body.TimeSeries[i] = marshalTelemetryHooksTimeSeriesPointToHooksTimeSeriesPointResponseBody(val)
+		}
+	} else {
+		body.TimeSeries = []*HooksTimeSeriesPointResponseBody{}
 	}
 	return body
 }
@@ -5591,6 +5653,22 @@ func NewGetHooksSummaryPayload(body *GetHooksSummaryRequestBody, apikeyToken *st
 		From: *body.From,
 		To:   *body.To,
 	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
+		}
+	}
+	if body.TypesToInclude != nil {
+		v.TypesToInclude = make([]string, len(body.TypesToInclude))
+		for i, val := range body.TypesToInclude {
+			v.TypesToInclude[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -5918,6 +5996,18 @@ func ValidateGetHooksSummaryRequestBody(body *GetHooksSummaryRequestBody) (err e
 	}
 	if body.To != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.TypesToInclude {
+		if !(e == "mcp" || e == "local" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.types_to_include[*]", e, []any{"mcp", "local", "skill"}))
+		}
 	}
 	return
 }

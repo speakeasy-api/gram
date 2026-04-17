@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math"
 	"sort"
@@ -30,6 +31,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
+	"golang.org/x/sync/errgroup"
 )
 
 const logsDisabledMsg = "logs are not enabled for this organization"
@@ -1488,34 +1490,116 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		return nil, err
 	}
 
-	// Get server summary
-	serverRows, err := s.chRepo.GetHooksSummary(ctx, repo.GetHooksSummaryParams{
-		GramProjectID: authCtx.ProjectID.String(),
-		TimeStart:     timeStart,
-		TimeEnd:       timeEnd,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks summary: %v", err)
+	attributeFilters := toRepoAttributeFilters(payload.Filters)
+	typesToInclude := payload.TypesToInclude
+
+	// Compute time series bucket size: 5 min for ≤24h windows, 60 min otherwise
+	const fiveMinNs = int64(5 * 60 * 1e9)
+	const sixtyMinNs = int64(60 * 60 * 1e9)
+	bucketSizeNs := sixtyMinNs
+	if timeEnd-timeStart <= int64(24*60*60*1e9) {
+		bucketSizeNs = fiveMinNs
 	}
 
-	// Get user summary
-	userRows, err := s.chRepo.GetHooksUserSummary(ctx, repo.GetHooksUserSummaryParams{
-		GramProjectID: authCtx.ProjectID.String(),
-		TimeStart:     timeStart,
-		TimeEnd:       timeEnd,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks user summary: %v", err)
-	}
+	// Run all six independent ClickHouse queries in parallel
+	var (
+		serverRows       []repo.HooksServerSummaryRow
+		userRows         []repo.HooksUserSummaryRow
+		skillRows        []repo.SkillSummaryRow
+		breakdownRows    []repo.HooksBreakdownRow
+		timeSeriesPoints []repo.HooksTimeSeriesPoint
+		sessionCount     int64
+	)
+	eg, egCtx := errgroup.WithContext(ctx)
+	projectID := authCtx.ProjectID.String()
 
-	// Get skills summary
-	skillRows, err := s.chRepo.GetSkillsSummary(ctx, repo.GetSkillsSummaryParams{
-		GramProjectID: authCtx.ProjectID.String(),
-		TimeStart:     timeStart,
-		TimeEnd:       timeEnd,
+	eg.Go(func() error {
+		var err error
+		serverRows, err = s.chRepo.GetHooksSummary(egCtx, repo.GetHooksSummaryParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks server summary: %w", err)
+		}
+		return nil
 	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting skills summary: %v", err)
+	eg.Go(func() error {
+		var err error
+		userRows, err = s.chRepo.GetHooksUserSummary(egCtx, repo.GetHooksUserSummaryParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks user summary: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		skillRows, err = s.chRepo.GetSkillsSummary(egCtx, repo.GetSkillsSummaryParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get skills summary: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		breakdownRows, err = s.chRepo.GetHooksBreakdown(egCtx, repo.GetHooksBreakdownParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks breakdown: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		timeSeriesPoints, err = s.chRepo.GetHooksTimeSeries(egCtx, repo.GetHooksTimeSeriesParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			BucketSizeNs:   bucketSizeNs,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks time series: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		sessionCount, err = s.chRepo.GetHooksSessionCount(egCtx, repo.GetHooksSessionCountParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks session count: %w", err)
+		}
+		return nil
+	})
+	if err := eg.Wait(); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching hooks summary data")
 	}
 
 	// Transform server rows into response
@@ -1556,15 +1640,30 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		})
 	}
 
-	// Get unique session count
-	sessionCount, err := s.chRepo.GetHooksSessionCount(ctx, repo.GetHooksSessionCountParams{
-		GramProjectID: authCtx.ProjectID.String(),
-		TimeStart:     timeStart,
-		TimeEnd:       timeEnd,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks session count: %v", err)
+	// Transform breakdown rows into response
+	breakdown := make([]*telem_gen.HooksBreakdownRow, 0, len(breakdownRows))
+	for _, row := range breakdownRows {
+		breakdown = append(breakdown, &telem_gen.HooksBreakdownRow{
+			UserEmail:    row.UserEmail,
+			ServerName:   row.ServerName,
+			HookSource:   row.HookSource,
+			ToolName:     row.ToolName,
+			EventCount:   int64(row.EventCount),   //nolint:gosec // Bounded count
+			FailureCount: int64(row.FailureCount), //nolint:gosec // Bounded count
+		})
 	}
+
+	// Transform time series points into response
+	timeSeries := make([]*telem_gen.HooksTimeSeriesPoint, 0, len(timeSeriesPoints))
+	for _, pt := range timeSeriesPoints {
+		timeSeries = append(timeSeries, &telem_gen.HooksTimeSeriesPoint{
+			BucketStartNs: strconv.FormatInt(pt.BucketStartNs, 10),
+			ServerName:    pt.ServerName,
+			UserEmail:     pt.UserEmail,
+			EventCount:    int64(pt.EventCount), //nolint:gosec // Bounded count
+		})
+	}
+
 	totalSessions = sessionCount
 
 	return &telem_gen.GetHooksSummaryResult{
@@ -1573,6 +1672,8 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		Skills:        skills,
 		TotalEvents:   totalEvents,
 		TotalSessions: totalSessions,
+		Breakdown:     breakdown,
+		TimeSeries:    timeSeries,
 	}, nil
 }
 

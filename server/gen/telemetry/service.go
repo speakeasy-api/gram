@@ -144,6 +144,10 @@ type GetHooksSummaryPayload struct {
 	From string
 	// End time in ISO 8601 format
 	To string
+	// Filter conditions (same as listHooksTraces)
+	Filters []*LogFilter
+	// Hook types to include (mcp, local, skill). If empty, includes all types.
+	TypesToInclude []string
 }
 
 // GetHooksSummaryResult is the result type of the telemetry service
@@ -159,6 +163,10 @@ type GetHooksSummaryResult struct {
 	TotalEvents int64
 	// Total number of unique sessions
 	TotalSessions int64
+	// Cross-dimensional pivot: (user, server, source, tool) x counts
+	Breakdown []*HooksBreakdownRow
+	// Time-bucketed event counts by server and user
+	TimeSeries []*HooksTimeSeriesPoint
 }
 
 // GetMetricsSummaryResult is the result type of the telemetry service
@@ -289,6 +297,23 @@ type HookTraceSummary struct {
 	SkillName *string
 }
 
+// Cross-dimensional aggregation row: one entry per unique (user, server,
+// hook_source, tool) combination
+type HooksBreakdownRow struct {
+	// User email address
+	UserEmail string
+	// Server name ('local' for non-MCP tools)
+	ServerName string
+	// Hook source (e.g. claude-desktop, cursor)
+	HookSource string
+	// Tool name
+	ToolName string
+	// Total events for this combination
+	EventCount int64
+	// Number of failures for this combination
+	FailureCount int64
+}
+
 // Aggregated hooks metrics for a single server
 type HooksServerSummary struct {
 	// Server name (extracted from tool name, or 'local' for non-MCP tools)
@@ -303,6 +328,18 @@ type HooksServerSummary struct {
 	FailureCount int64
 	// Failure rate as a decimal (0.0 to 1.0)
 	FailureRate float64
+}
+
+// A single time-series bucket for hooks activity
+type HooksTimeSeriesPoint struct {
+	// Bucket start time in Unix nanoseconds (string for JS int64 precision)
+	BucketStartNs string
+	// Server name
+	ServerName string
+	// User email address
+	UserEmail string
+	// Number of events in this bucket
+	EventCount int64
 }
 
 // Aggregated hooks metrics for a single user
