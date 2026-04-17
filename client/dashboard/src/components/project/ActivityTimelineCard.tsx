@@ -115,6 +115,13 @@ export function ActivityTimelineCard({ logs, isPending, viewAllHref }: Props) {
 type ActionMeta = { icon: LucideIcon; bg: string; fg: string };
 
 function getActionMeta(action: string): ActionMeta {
+  if (action.includes(":delete") || action.includes(":revoke")) {
+    return {
+      icon: Trash2,
+      bg: "bg-red-100 dark:bg-red-950",
+      fg: "text-red-600 dark:text-red-400",
+    };
+  }
   if (action.startsWith("deployments:")) {
     return {
       icon: Rocket,
@@ -189,13 +196,6 @@ function getActionMeta(action: string): ActionMeta {
       icon: Sparkles,
       bg: "bg-violet-100 dark:bg-violet-950",
       fg: "text-violet-600 dark:text-violet-400",
-    };
-  }
-  if (action.endsWith(":delete") || action.endsWith(":revoke")) {
-    return {
-      icon: Trash2,
-      bg: "bg-red-100 dark:bg-red-950",
-      fg: "text-red-600 dark:text-red-400",
     };
   }
   return {

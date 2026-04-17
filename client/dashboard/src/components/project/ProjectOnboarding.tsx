@@ -1,6 +1,9 @@
+import { useRoutes } from "@/routes";
 import { Card, Button, Icon } from "@speakeasy-api/moonshine";
 
 export function ProjectOnboardingBanner() {
+  const routes = useRoutes();
+
   return (
     <Card className="bg-linear-to-tr from-white via-white to-blue-200 p-8">
       <Card.Header>
