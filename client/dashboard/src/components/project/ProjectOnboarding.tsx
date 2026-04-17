@@ -12,18 +12,22 @@ export function ProjectOnboardingBanner() {
           popular integrations, or deploy a chat interface — all from one place.
         </p>
         <div className="flex flex-wrap gap-4">
-          <Button variant="primary">
-            <Button.Text>Connect an API</Button.Text>
-            <Button.RightIcon>
-              <Icon name="arrow-right" className="h-4 w-4" />
-            </Button.RightIcon>
-          </Button>
-          <Button variant="secondary">
-            <Button.Text>Browse catalog</Button.Text>
-            <Button.RightIcon>
-              <Icon name="arrow-right" className="h-4 w-4" />
-            </Button.RightIcon>
-          </Button>
+          <routes.sources.Link>
+            <Button variant="primary">
+              <Button.Text>Connect an API</Button.Text>
+              <Button.RightIcon>
+                <Icon name="arrow-right" className="h-4 w-4" />
+              </Button.RightIcon>
+            </Button>
+          </routes.sources.Link>
+          <routes.catalog.Link>
+            <Button variant="secondary">
+              <Button.Text>Browse catalog</Button.Text>
+              <Button.RightIcon>
+                <Icon name="arrow-right" className="h-4 w-4" />
+              </Button.RightIcon>
+            </Button>
+          </routes.catalog.Link>
         </div>
       </Card.Content>
     </Card>
