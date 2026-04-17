@@ -4,7 +4,7 @@ import { Type } from "@/components/ui/type";
 import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 
-import { useEnvironments } from "../environments/Environments";
+import { useEnvironments } from "../environments/useEnvironments";
 
 interface EnvironmentSelectorProps {
   selectedEnvironment: string | null;

@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
-import { AsciiVideo, useWebGLStore } from "@/components/webgl";
+import { AsciiVideo } from "@/components/webgl";
+import { useWebGLStore } from "@/components/webgl/store";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -50,8 +51,9 @@ import { AnimatePresence, motion, useMotionValue } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { useMcpSlugValidation } from "../mcp/MCPDetails";
-import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
+import { useMcpSlugValidation } from "../mcp/mcp-details-utils";
+import { DeploymentLogs } from "./UploadOpenAPI";
+import { useUploadOpenAPISteps } from "./upload-openapi-utils";
 
 type OnboardingPath = "openapi" | "cli";
 type OnboardingStep =

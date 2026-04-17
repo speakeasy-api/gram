@@ -32,7 +32,7 @@ import { toast } from "sonner";
 import {
   getToolsetOAuthMode,
   useExternalMcpOAuthStatus,
-} from "./PlaygroundAuth";
+} from "./playground-auth-utils";
 import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
 import {
   PlaygroundMcpAppsProvider,

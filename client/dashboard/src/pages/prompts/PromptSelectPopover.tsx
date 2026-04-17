@@ -12,7 +12,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { PromptTemplate } from "@gram/client/models/components";
-import { usePrompts } from "./Prompts";
+import { usePrompts } from "./usePrompts";
 
 export function PromptSelectPopover({
   open,

@@ -28,7 +28,7 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import { ORG_ROUTE_STRUCTURE } from "@/routes";
+import { orgRoutePaths } from "@/routes";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -124,13 +124,8 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // Backwards-compat: redirect old /:orgSlug/:projectSlug/... URLs to /:orgSlug/projects/:projectSlug/...
   // If the second segment is a known project slug (and not "projects" or an org-level route),
   // redirect to the new URL structure.
-  // Derived from ORG_ROUTE_STRUCTURE so new org routes are automatically excluded from project slug redirects
-  const ORG_ROUTE_PATHS = [
-    "projects",
-    ...Object.values(ORG_ROUTE_STRUCTURE)
-      .map((r) => r.url)
-      .filter(Boolean),
-  ];
+  // Derived from org route structure so new org routes are automatically excluded from project slug redirects
+  const ORG_ROUTE_PATHS = ["projects", ...orgRoutePaths];
   const isProjectSlug = session.organization?.projects.some(
     (p) => p.slug === pathParts[1],
   );

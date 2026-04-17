@@ -1,4 +1,4 @@
-import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar";
+import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
 import { getServerURL } from "@/lib/utils";
 import { datadogRum } from "@datadog/browser-rum";
 import { Gram } from "@gram/client";
