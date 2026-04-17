@@ -254,7 +254,7 @@ function ViewAllLink({ to }: { to: string }) {
 type RankedBarListItem = { key: string; label: string; value: number };
 
 function RankedBarList({ items }: { items: RankedBarListItem[] }) {
-  const max = items[0]?.value ?? 1;
+  const max = items[0]?.value || 1;
   return (
     <ul className="my-1 space-y-3">
       {items.map((item, i) => (
