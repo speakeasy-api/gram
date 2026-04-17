@@ -1734,10 +1734,12 @@ function MultiLineChart({
   labels,
   tooltipLabels,
   datasets,
+  tooltipAfterBody,
 }: {
   labels: string[];
   tooltipLabels: string[];
   datasets: ReturnType<typeof buildTimeSeriesFromSummary>["datasets"];
+  tooltipAfterBody?: (dataIndex: number) => string[];
 }) {
   if (labels.length === 0) {
     return (
@@ -1757,6 +1759,12 @@ function MultiLineChart({
         ...SHARED_TOOLTIP,
         callbacks: {
           title: (items) => tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
+          ...(tooltipAfterBody
+            ? {
+                afterBody: (items) =>
+                  tooltipAfterBody(items[0]?.dataIndex ?? 0),
+              }
+            : {}),
         },
       },
     },
@@ -1847,35 +1855,80 @@ function ErrorsOverTimeChart({
   timeSeries,
   from,
   to,
+  serverNameMappings,
 }: {
   timeSeries: HooksTimeSeriesPoint[];
   from: Date;
   to: Date;
+  serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }) {
   const timeRangeMs = to.getTime() - from.getTime();
-  const { labels, tooltipLabels, datasets, hasErrors } = useMemo(() => {
-    const built = buildTimeSeriesFromSummary(
-      timeSeries,
-      () => "errors",
-      timeRangeMs,
-      (pt) => pt.failureCount,
-    );
-    const errorColor = "#ef4444";
-    const recoloredDatasets = built.datasets.map((ds) => ({
-      ...ds,
-      label: "Errors",
-      borderColor: errorColor,
-      backgroundColor: errorColor + "1a",
-      pointBackgroundColor: errorColor,
-    }));
-    const total = built.datasets[0]?.data.reduce((s, n) => s + n, 0) ?? 0;
-    return {
-      labels: built.labels,
-      tooltipLabels: built.tooltipLabels,
-      datasets: recoloredDatasets,
-      hasErrors: total > 0,
-    };
-  }, [timeSeries, timeRangeMs]);
+  const { labels, tooltipLabels, datasets, hasErrors, perServerByIndex } =
+    useMemo(() => {
+      const built = buildTimeSeriesFromSummary(
+        timeSeries,
+        () => "errors",
+        timeRangeMs,
+        (pt) => pt.failureCount,
+      );
+      const errorColor = "#ef4444";
+      const recoloredDatasets = built.datasets.map((ds) => ({
+        ...ds,
+        label: "Errors",
+        borderColor: errorColor,
+        backgroundColor: errorColor + "1a",
+        pointBackgroundColor: errorColor,
+      }));
+      const total = built.datasets[0]?.data.reduce((s, n) => s + n, 0) ?? 0;
+
+      // Build per-server error breakdown indexed by sorted timestamp position,
+      // using the same BigInt conversion as buildTimeSeriesFromSummary.
+      const allTimestamps = new Set<number>();
+      for (const pt of timeSeries) {
+        allTimestamps.add(Number(BigInt(pt.bucketStartNs) / BigInt(1_000_000)));
+      }
+      const sortedTs = Array.from(allTimestamps).sort((a, b) => a - b);
+      const tsIndex = new Map<number, number>(
+        sortedTs.map((ts, i): [number, number] => [ts, i]),
+      );
+
+      const accumulator = new Map<number, Map<string, number>>(
+        sortedTs.map((_, i): [number, Map<string, number>] => [
+          i,
+          new Map<string, number>(),
+        ]),
+      );
+
+      for (const pt of timeSeries) {
+        if (pt.failureCount === 0) continue;
+        const ms = Number(BigInt(pt.bucketStartNs) / BigInt(1_000_000));
+        const idx = tsIndex.get(ms);
+        if (idx === undefined) continue;
+        const displayName =
+          pt.serverName === "local"
+            ? (serverNameMappings.rawToDisplay.get("") ?? "Local Tools")
+            : (serverNameMappings.rawToDisplay.get(pt.serverName) ??
+              pt.serverName);
+        const map = accumulator.get(idx)!;
+        map.set(displayName, (map.get(displayName) ?? 0) + pt.failureCount);
+      }
+
+      const perServerByIndex: { name: string; count: number }[][] = [];
+      for (const [i, map] of accumulator) {
+        perServerByIndex[i] = Array.from(map.entries())
+          .filter(([, count]) => count > 0)
+          .map(([name, count]) => ({ name, count }))
+          .sort((a, b) => b.count - a.count);
+      }
+
+      return {
+        labels: built.labels,
+        tooltipLabels: built.tooltipLabels,
+        datasets: recoloredDatasets,
+        hasErrors: total > 0,
+        perServerByIndex,
+      };
+    }, [timeSeries, timeRangeMs, serverNameMappings.rawToDisplay]);
 
   if (!hasErrors) {
     return (
@@ -1890,6 +1943,11 @@ function ErrorsOverTimeChart({
       labels={labels}
       tooltipLabels={tooltipLabels}
       datasets={datasets}
+      tooltipAfterBody={(idx) => {
+        const servers = perServerByIndex[idx];
+        if (!servers || servers.length === 0) return [];
+        return servers.map((s) => `${s.name}: ${s.count}`);
+      }}
     />
   );
 }
@@ -2101,6 +2159,7 @@ function HooksAnalytics({
                 timeSeries={timeSeries}
                 from={from}
                 to={to}
+                serverNameMappings={serverNameMappings}
               />
             </div>
           )}
