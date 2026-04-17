@@ -535,7 +535,7 @@ function PolicySheetBody({
                             htmlFor={rule.id}
                             className="text-muted-foreground text-xs"
                           >
-                            {rule.description}
+                            {rule.title}
                           </label>
                         </div>
                       ))}
