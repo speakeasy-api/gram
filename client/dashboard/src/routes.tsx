@@ -52,7 +52,7 @@ import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
-import DlpOverview from "./pages/security/DlpOverview";
+import SecurityOverview from "./pages/security/SecurityOverview";
 import PolicyCenter from "./pages/security/PolicyCenter";
 import Team from "./pages/team/Team";
 import AcceptInvite from "./pages/invite/AcceptInvite";
@@ -343,7 +343,7 @@ const ROUTE_STRUCTURE = {
     title: "Risk Overview",
     url: "risk-overview",
     icon: "shield",
-    component: DlpOverview,
+    component: SecurityOverview,
   },
   policyCenter: {
     title: "Policy Center",

@@ -12,7 +12,6 @@
 !/**/*.map
 
 /eslint.config.mjs
-/.oxlintrc.json
 /cjs
 /.tshy
 /.tshy-*

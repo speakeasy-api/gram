@@ -195,7 +195,8 @@ export function resolveSecurity(
         applyBearer(state, spec);
         break;
       default:
-        throw SecurityError.unrecognizedType((spec satisfies never, type));
+        spec satisfies never;
+        throw SecurityError.unrecognizedType(type);
     }
   });
 

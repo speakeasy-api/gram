@@ -18,7 +18,7 @@ import {
 } from "@gram/client/react-query/index.js";
 import { RULE_CATEGORY_META } from "./policy-data";
 
-export default function DlpOverview() {
+export default function SecurityOverview() {
   const routes = useRoutes();
   const navigate = useNavigate();
   const { data: policiesData, isLoading: policiesLoading } =
