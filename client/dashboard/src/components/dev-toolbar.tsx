@@ -108,16 +108,17 @@ function saveState(state: OverrideState) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-const RESOURCES_CACHE_KEY = "gram-rbac-dev-resources";
+const resourcesCacheKey = (orgId: string) =>
+  `gram-rbac-dev-resources:${orgId}`;
 
 type CachedResources = {
   projects: { id: string; label: string }[];
   mcps: { id: string; label: string }[];
 };
 
-function loadCachedResources(): CachedResources | null {
+function loadCachedResources(orgId: string): CachedResources | null {
   try {
-    const raw = localStorage.getItem(RESOURCES_CACHE_KEY);
+    const raw = localStorage.getItem(resourcesCacheKey(orgId));
     if (raw) return JSON.parse(raw);
   } catch {
     // ignore
@@ -125,8 +126,8 @@ function loadCachedResources(): CachedResources | null {
   return null;
 }
 
-function saveCachedResources(resources: CachedResources) {
-  localStorage.setItem(RESOURCES_CACHE_KEY, JSON.stringify(resources));
+function saveCachedResources(resources: CachedResources, orgId: string) {
+  localStorage.setItem(resourcesCacheKey(orgId), JSON.stringify(resources));
 }
 
 const POSITION_KEY = "gram-rbac-dev-toolbar-pos";
@@ -225,16 +226,26 @@ function RBACDevToolbarInner() {
   // still shows all projects/MCPs after the user restricts scopes.
   const orgProjects = organization?.projects;
   const toolsets = toolsetsData?.toolsets;
+  const orgId = organization?.id ?? "";
   useEffect(() => {
-    if (!state.enabled && orgProjects && orgProjects.length > 0 && toolsets) {
-      saveCachedResources({
-        projects: orgProjects.map((p) => ({ id: p.id, label: p.slug })),
-        mcps: toolsets.map((t) => ({ id: t.id, label: t.name })),
-      });
+    if (
+      !state.enabled &&
+      orgId &&
+      orgProjects &&
+      orgProjects.length > 0 &&
+      toolsets
+    ) {
+      saveCachedResources(
+        {
+          projects: orgProjects.map((p) => ({ id: p.id, label: p.slug })),
+          mcps: toolsets.map((t) => ({ id: t.id, label: t.name })),
+        },
+        orgId,
+      );
     }
-  }, [state.enabled, orgProjects, toolsets]);
+  }, [state.enabled, orgId, orgProjects, toolsets]);
 
-  const cached = loadCachedResources();
+  const cached = orgId ? loadCachedResources(orgId) : null;
   const projectResources =
     state.enabled && cached ? cached.projects : liveProjects;
   const mcpResources = state.enabled && cached ? cached.mcps : liveMcps;
