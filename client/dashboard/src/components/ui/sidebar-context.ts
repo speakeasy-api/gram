@@ -1,6 +1,6 @@
 import * as React from "react";
 
-type SidebarContextProps = {
+export type SidebarContextProps = {
   state: "expanded" | "collapsed";
   open: boolean;
   setOpen: (open: boolean) => void;

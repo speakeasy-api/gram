@@ -20,7 +20,11 @@ import { Slot } from "@radix-ui/react-slot";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { VariantProps, cva } from "class-variance-authority";
 import * as React from "react";
-import { SidebarContext, useSidebar } from "@/components/ui/sidebar-context";
+import {
+  SidebarContext,
+  useSidebar,
+  type SidebarContextProps,
+} from "@/components/ui/sidebar-context";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
