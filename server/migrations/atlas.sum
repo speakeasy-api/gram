@@ -1,4 +1,4 @@
-h1:P+nBFUVEe8WWGJm7TSt3q8TBNSAiygZY0NHJ+PAuY/o=
+h1:7HNL9/SPpvHgvGIfLYBc7sAvVlHZHG1pQfkbRLhTZvU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -125,4 +125,4 @@ h1:P+nBFUVEe8WWGJm7TSt3q8TBNSAiygZY0NHJ+PAuY/o=
 20260413142758_remote-mcp-servers.sql h1:V4dXOc4auWQbkecnpDDg8iLrgyCCd+3f/a1uX5dQyH8=
 20260413211711_registry-type-polymorphic.sql h1:wWsYj3Wbpt09ZBIDzTIwLa9qWKE4N2/MtcPUxhnAGjY=
 20260414000001_plugins.sql h1:vlPWOWRSVYp9DahP9QbPdDxFysburvzyTs+501IkYjU=
-20260416190449_add-risk-analysis-tables.sql h1:5OOczo3ktAMrxfjozd6nj5FoBWHBOFCakD3LHDrCoks=
+20260417101011_add-risk-analysis-tables.sql h1:TJGhhs8oaD/i22/F+cl9CqiywSBYJYXnJFKpjZMX8TA=
