@@ -22,49 +22,37 @@ type Finding struct {
 	Tags        []string
 }
 
-// ScanWithGitleaks scans the given content string using a fresh gitleaks
-// detector and returns any findings. Each call creates its own detector
-// so it is safe for concurrent use.
-func ScanWithGitleaks(content string) ([]Finding, error) {
-	d, err := detect.NewDetectorDefaultConfig()
-	if err != nil {
-		return nil, fmt.Errorf("create gitleaks detector: %w", err)
-	}
-
-	findings := d.DetectString(content)
-	return convertFindings(findings), nil
+// DetectorPool holds pre-created gitleaks detectors for concurrent scanning.
+// Detectors must be created sequentially because gitleaks uses viper which
+// has global state that races on concurrent initialization.
+type DetectorPool struct {
+	detectors []*detect.Detector
 }
 
-// messageResult holds the scan output for a single message.
-type messageResult struct {
-	index    int
-	findings []Finding
-	err      error
-}
-
-// ScanBatchParallel scans multiple messages concurrently using a worker pool.
-// Detectors are created sequentially (gitleaks uses global viper state that
-// races on concurrent init), then used in parallel for scanning.
-func ScanBatchParallel(messages []string) ([][]Finding, error) {
-	n := len(messages)
-	if n == 0 {
-		return nil, nil
-	}
-
-	workers := min(runtime.NumCPU(), n)
-
-	// Create detectors sequentially — viper's global config map isn't
-	// safe for concurrent reads during NewDetectorDefaultConfig().
-	detectors := make([]*detect.Detector, workers)
-	for i := range workers {
+// NewDetectorPool creates a pool of gitleaks detectors. Must be called from
+// a single goroutine (e.g., at startup).
+func NewDetectorPool() (*DetectorPool, error) {
+	n := runtime.NumCPU()
+	detectors := make([]*detect.Detector, n)
+	for i := range n {
 		d, err := detect.NewDetectorDefaultConfig()
 		if err != nil {
 			return nil, fmt.Errorf("create gitleaks detector %d: %w", i, err)
 		}
 		detectors[i] = d
 	}
+	return &DetectorPool{detectors: detectors}, nil
+}
+
+// ScanBatch scans multiple messages concurrently using the pre-created detectors.
+func (p *DetectorPool) ScanBatch(messages []string) [][]Finding {
+	n := len(messages)
+	if n == 0 {
+		return nil
+	}
 
 	results := make([][]Finding, n)
+	workers := min(len(p.detectors), n)
 
 	ch := make(chan int, n)
 	for i := range n {
@@ -73,9 +61,8 @@ func ScanBatchParallel(messages []string) ([][]Finding, error) {
 	close(ch)
 
 	var wg sync.WaitGroup
-	for i, d := range detectors {
-		_ = i
-		d := d
+	for i := range workers {
+		d := p.detectors[i]
 		wg.Go(func() {
 			for idx := range ch {
 				findings := d.DetectString(messages[idx])
@@ -85,7 +72,18 @@ func ScanBatchParallel(messages []string) ([][]Finding, error) {
 	}
 
 	wg.Wait()
-	return results, nil
+	return results
+}
+
+// ScanWithGitleaks scans a single message. Creates a fresh detector each time
+// so it's safe for use in tests but not ideal for production hot paths.
+func ScanWithGitleaks(content string) ([]Finding, error) {
+	d, err := detect.NewDetectorDefaultConfig()
+	if err != nil {
+		return nil, fmt.Errorf("create gitleaks detector: %w", err)
+	}
+	findings := d.DetectString(content)
+	return convertFindings(findings), nil
 }
 
 func convertFindings(raw []report.Finding) []Finding {

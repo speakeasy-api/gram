@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -120,8 +121,17 @@ func NewActivities(
 		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
 		fetchUnanalyzedMessages:       risk_analysis.NewFetchUnanalyzed(logger, db),
-		analyzeBatch:                  risk_analysis.NewAnalyzeBatch(logger, db),
+		analyzeBatch:                  newAnalyzeBatchOrNil(logger, db),
 	}
+}
+
+func newAnalyzeBatchOrNil(logger *slog.Logger, db *pgxpool.Pool) *risk_analysis.AnalyzeBatch {
+	pool, err := risk_analysis.NewDetectorPool()
+	if err != nil {
+		logger.ErrorContext(context.Background(), "initialize gitleaks detector pool", attr.SlogError(err))
+		return nil
+	}
+	return risk_analysis.NewAnalyzeBatch(logger, db, pool)
 }
 
 func (a *Activities) TransitionDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID, status string) (*activities.TransitionDeploymentResult, error) {
