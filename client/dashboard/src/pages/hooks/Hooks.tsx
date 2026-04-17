@@ -156,6 +156,13 @@ const SHARED_BAR_SCALES = {
       crossAlign: "far" as const,
       padding: 2,
       font: { size: 12 },
+      callback(value) {
+        const label = this.getLabelForValue(value as number);
+        const display = label.includes("@")
+          ? label.split("@")[0]!.slice(0, 14) + "@…"
+          : label.slice(0, 14) + (label.length > 14 ? "…" : "");
+        return display;
+      },
     },
   },
 } satisfies _BarScales;
