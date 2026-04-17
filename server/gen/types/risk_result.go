@@ -28,14 +28,10 @@ type RiskResult struct {
 	Description *string
 	// The matched secret or sensitive data.
 	Match *string
-	// Start line within the message content.
-	StartLine *int
-	// Start column within the message content.
-	StartColumn *int
-	// End line within the message content.
-	EndLine *int
-	// End column within the message content.
-	EndColumn *int
+	// Start byte position within the message content.
+	StartPos *int
+	// End byte position within the message content.
+	EndPos *int
 	// Confidence score for this finding.
 	Confidence *float64
 	// Tags from the detection rule.

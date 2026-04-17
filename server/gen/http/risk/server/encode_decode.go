@@ -1915,10 +1915,8 @@ func marshalTypesRiskResultToRiskResultResponseBody(v *types.RiskResult) *RiskRe
 		RuleID:        v.RuleID,
 		Description:   v.Description,
 		Match:         v.Match,
-		StartLine:     v.StartLine,
-		StartColumn:   v.StartColumn,
-		EndLine:       v.EndLine,
-		EndColumn:     v.EndColumn,
+		StartPos:      v.StartPos,
+		EndPos:        v.EndPos,
 		Confidence:    v.Confidence,
 		CreatedAt:     v.CreatedAt,
 	}

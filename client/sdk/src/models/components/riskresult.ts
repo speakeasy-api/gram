@@ -34,13 +34,9 @@ export type RiskResult = {
    */
   description?: string | undefined;
   /**
-   * End column within the message content.
+   * End byte position within the message content.
    */
-  endColumn?: number | undefined;
-  /**
-   * End line within the message content.
-   */
-  endLine?: number | undefined;
+  endPos?: number | undefined;
   /**
    * The result ID.
    */
@@ -66,13 +62,9 @@ export type RiskResult = {
    */
   source: string;
   /**
-   * Start column within the message content.
+   * Start byte position within the message content.
    */
-  startColumn?: number | undefined;
-  /**
-   * Start line within the message content.
-   */
-  startLine?: number | undefined;
+  startPos?: number | undefined;
   /**
    * Tags from the detection rule.
    */
@@ -92,16 +84,14 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
         z.transform(v => new Date(v)),
       ),
       description: z.optional(z.string()),
-      end_column: z.optional(z.int()),
-      end_line: z.optional(z.int()),
+      end_pos: z.optional(z.int()),
       id: z.string(),
       match: z.optional(z.string()),
       policy_id: z.string(),
       policy_version: z.int(),
       rule_id: z.optional(z.string()),
       source: z.string(),
-      start_column: z.optional(z.int()),
-      start_line: z.optional(z.int()),
+      start_pos: z.optional(z.int()),
       tags: z.optional(z.array(z.string())),
     }),
     z.transform((v) => {
@@ -110,13 +100,11 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
         "chat_message_id": "chatMessageId",
         "chat_title": "chatTitle",
         "created_at": "createdAt",
-        "end_column": "endColumn",
-        "end_line": "endLine",
+        "end_pos": "endPos",
         "policy_id": "policyId",
         "policy_version": "policyVersion",
         "rule_id": "ruleId",
-        "start_column": "startColumn",
-        "start_line": "startLine",
+        "start_pos": "startPos",
       });
     }),
   );

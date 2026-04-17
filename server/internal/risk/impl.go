@@ -280,7 +280,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		results = make([]*types.RiskResult, 0, len(rows))
 		for _, row := range rows {
 			cid := row.ChatID.String()
-			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.PolicyVersion, row.ChatMessageID, &cid, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartLine, row.StartColumn, row.EndLine, row.EndColumn, row.Confidence, row.Tags, row.CreatedAt))
+			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.PolicyVersion, row.ChatMessageID, &cid, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 		}
 	} else if payload.PolicyID != nil && *payload.PolicyID != "" {
 		policyID, parseErr := uuid.Parse(*payload.PolicyID)
@@ -298,7 +298,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		results = make([]*types.RiskResult, 0, len(rows))
 		for _, row := range rows {
 			chatID := row.ChatID.String()
-			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.PolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartLine, row.StartColumn, row.EndLine, row.EndColumn, row.Confidence, row.Tags, row.CreatedAt))
+			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.PolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 		}
 	} else {
 		rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
@@ -311,7 +311,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		results = make([]*types.RiskResult, 0, len(rows))
 		for _, row := range rows {
 			chatID := row.ChatID.String()
-			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.PolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartLine, row.StartColumn, row.EndLine, row.EndColumn, row.Confidence, row.Tags, row.CreatedAt))
+			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.PolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 		}
 	}
 
@@ -455,7 +455,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 func foundRowToResult(
 	id, policyID uuid.UUID, policyVersion int64, chatMessageID uuid.UUID, chatID *string, chatTitle pgtype.Text,
 	source string, ruleID, description, match pgtype.Text,
-	startLine, startColumn, endLine, endColumn pgtype.Int4,
+	startPos, endPos pgtype.Int4,
 	confidence pgtype.Float8, tags []string, createdAt pgtype.Timestamptz,
 ) *types.RiskResult {
 	return &types.RiskResult{
@@ -469,10 +469,8 @@ func foundRowToResult(
 		RuleID:        ptrText(ruleID),
 		Description:   ptrText(description),
 		Match:         ptrText(match),
-		StartLine:     ptrInt4(startLine),
-		StartColumn:   ptrInt4(startColumn),
-		EndLine:       ptrInt4(endLine),
-		EndColumn:     ptrInt4(endColumn),
+		StartPos:      ptrInt4(startPos),
+		EndPos:        ptrInt4(endPos),
 		Confidence:    ptrFloat8(confidence),
 		Tags:          tags,
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),

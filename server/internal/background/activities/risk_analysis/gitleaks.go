@@ -21,10 +21,8 @@ type Finding struct {
 	RuleID      string
 	Description string
 	Match       string
-	StartLine   int
-	StartColumn int
-	EndLine     int
-	EndColumn   int
+	StartPos    int // Byte position in string
+	EndPos      int // Byte position in string
 	Tags        []string
 }
 
@@ -73,7 +71,7 @@ func ScanBatchParallel(messages []string) ([][]Finding, error) {
 		wg.Go(func() {
 			for idx := range ch {
 				findings := d.DetectString(messages[idx])
-				results[idx] = convertFindings(findings)
+				results[idx] = convertFindings(messages[idx], findings)
 			}
 		})
 	}
@@ -89,25 +87,53 @@ func ScanWithGitleaks(content string) ([]Finding, error) {
 		return nil, fmt.Errorf("create gitleaks detector: %w", err)
 	}
 	findings := d.DetectString(content)
-	return convertFindings(findings), nil
+	return convertFindings(content, findings), nil
 }
 
-func convertFindings(raw []report.Finding) []Finding {
+func convertFindings(content string, raw []report.Finding) []Finding {
 	out := make([]Finding, 0, len(raw))
 	for _, f := range raw {
 		tags := parseTags(f.Tags)
+		// Calculate byte positions from line/column
+		startPos := lineColToBytePos(content, f.StartLine, f.StartColumn)
+		endPos := lineColToBytePos(content, f.EndLine, f.EndColumn)
 		out = append(out, Finding{
 			RuleID:      f.RuleID,
 			Description: f.Description,
 			Match:       f.Match,
-			StartLine:   f.StartLine,
-			StartColumn: f.StartColumn,
-			EndLine:     f.EndLine,
-			EndColumn:   f.EndColumn,
+			StartPos:    startPos,
+			EndPos:      endPos,
 			Tags:        tags,
 		})
 	}
 	return out
+}
+
+// lineColToBytePos converts line and column numbers to byte position in string.
+// Lines and columns are 1-indexed as per gitleaks convention.
+func lineColToBytePos(content string, line, col int) int {
+	if line <= 0 || col <= 0 {
+		return 0
+	}
+
+	currentLine := 1
+	currentCol := 1
+
+	for i, ch := range content {
+		if currentLine == line && currentCol == col {
+			return i
+		}
+
+		if ch == '\n' {
+			currentLine++
+			currentCol = 1
+		} else {
+			currentCol++
+		}
+	}
+
+	// If we reach here, the position is beyond the end of content
+	return len(content)
 }
 
 func parseTags(tags []string) []string {

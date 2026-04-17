@@ -1804,10 +1804,8 @@ CREATE TABLE IF NOT EXISTS risk_results (
   rule_id TEXT,
   description TEXT,
   match TEXT,
-  start_line INT,
-  start_column INT,
-  end_line INT,
-  end_column INT,
+  start_pos INT,
+  end_pos INT,
   confidence DOUBLE PRECISION,
   tags TEXT[],
 

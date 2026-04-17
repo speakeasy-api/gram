@@ -119,10 +119,8 @@ INSERT INTO risk_results (
   , rule_id
   , description
   , match
-  , start_line
-  , start_column
-  , end_line
-  , end_column
+  , start_pos
+  , end_pos
   , confidence
   , tags
 )
@@ -136,10 +134,8 @@ VALUES (
   , @rule_id
   , @description
   , @match
-  , @start_line
-  , @start_column
-  , @end_line
-  , @end_column
+  , @start_pos
+  , @end_pos
   , @confidence
   , @tags
 );

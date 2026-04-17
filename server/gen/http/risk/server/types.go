@@ -1660,14 +1660,10 @@ type RiskResultResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The matched secret or sensitive data.
 	Match *string `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
-	// Start line within the message content.
-	StartLine *int `form:"start_line,omitempty" json:"start_line,omitempty" xml:"start_line,omitempty"`
-	// Start column within the message content.
-	StartColumn *int `form:"start_column,omitempty" json:"start_column,omitempty" xml:"start_column,omitempty"`
-	// End line within the message content.
-	EndLine *int `form:"end_line,omitempty" json:"end_line,omitempty" xml:"end_line,omitempty"`
-	// End column within the message content.
-	EndColumn *int `form:"end_column,omitempty" json:"end_column,omitempty" xml:"end_column,omitempty"`
+	// Start byte position within the message content.
+	StartPos *int `form:"start_pos,omitempty" json:"start_pos,omitempty" xml:"start_pos,omitempty"`
+	// End byte position within the message content.
+	EndPos *int `form:"end_pos,omitempty" json:"end_pos,omitempty" xml:"end_pos,omitempty"`
 	// Confidence score for this finding.
 	Confidence *float64 `form:"confidence,omitempty" json:"confidence,omitempty" xml:"confidence,omitempty"`
 	// Tags from the detection rule.

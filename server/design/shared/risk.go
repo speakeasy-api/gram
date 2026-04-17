@@ -50,10 +50,8 @@ var RiskResult = Type("RiskResult", func() {
 	Attribute("rule_id", String, "The matched rule identifier.")
 	Attribute("description", String, "Human-readable description of the finding.")
 	Attribute("match", String, "The matched secret or sensitive data.")
-	Attribute("start_line", Int, "Start line within the message content.")
-	Attribute("start_column", Int, "Start column within the message content.")
-	Attribute("end_line", Int, "End line within the message content.")
-	Attribute("end_column", Int, "End column within the message content.")
+	Attribute("start_pos", Int, "Start byte position within the message content.")
+	Attribute("end_pos", Int, "End byte position within the message content.")
 	Attribute("confidence", Float64, "Confidence score for this finding.")
 	Attribute("tags", ArrayOf(String), "Tags from the detection rule.")
 	Attribute("created_at", String, "When this result was created.", func() {

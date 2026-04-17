@@ -834,10 +834,8 @@ type RiskResult struct {
 	RuleID        pgtype.Text
 	Description   pgtype.Text
 	Match         pgtype.Text
-	StartLine     pgtype.Int4
-	StartColumn   pgtype.Int4
-	EndLine       pgtype.Int4
-	EndColumn     pgtype.Int4
+	StartPos      pgtype.Int4
+	EndPos        pgtype.Int4
 	Confidence    pgtype.Float8
 	Tags          []string
 	CreatedAt     pgtype.Timestamptz

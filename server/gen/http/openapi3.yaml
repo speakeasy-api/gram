@@ -24005,13 +24005,9 @@ components:
                 description:
                     type: string
                     description: Human-readable description of the finding.
-                end_column:
+                end_pos:
                     type: integer
-                    description: End column within the message content.
-                    format: int64
-                end_line:
-                    type: integer
-                    description: End line within the message content.
+                    description: End byte position within the message content.
                     format: int64
                 id:
                     type: string
@@ -24034,13 +24030,9 @@ components:
                 source:
                     type: string
                     description: Detection source (e.g. gitleaks).
-                start_column:
+                start_pos:
                     type: integer
-                    description: Start column within the message content.
-                    format: int64
-                start_line:
-                    type: integer
-                    description: Start line within the message content.
+                    description: Start byte position within the message content.
                     format: int64
                 tags:
                     type: array

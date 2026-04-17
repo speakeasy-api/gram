@@ -334,10 +334,8 @@ type InsertRiskResultsParams struct {
 	RuleID        pgtype.Text
 	Description   pgtype.Text
 	Match         pgtype.Text
-	StartLine     pgtype.Int4
-	StartColumn   pgtype.Int4
-	EndLine       pgtype.Int4
-	EndColumn     pgtype.Int4
+	StartPos      pgtype.Int4
+	EndPos        pgtype.Int4
 	Confidence    pgtype.Float8
 	Tags          []string
 }
@@ -423,7 +421,7 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 }
 
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_line, rr.start_column, rr.end_line, rr.end_column, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title
+SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id
@@ -450,10 +448,8 @@ type ListRiskResultsByChatFoundRow struct {
 	RuleID        pgtype.Text
 	Description   pgtype.Text
 	Match         pgtype.Text
-	StartLine     pgtype.Int4
-	StartColumn   pgtype.Int4
-	EndLine       pgtype.Int4
-	EndColumn     pgtype.Int4
+	StartPos      pgtype.Int4
+	EndPos        pgtype.Int4
 	Confidence    pgtype.Float8
 	Tags          []string
 	CreatedAt     pgtype.Timestamptz
@@ -481,10 +477,8 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 			&i.RuleID,
 			&i.Description,
 			&i.Match,
-			&i.StartLine,
-			&i.StartColumn,
-			&i.EndLine,
-			&i.EndColumn,
+			&i.StartPos,
+			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
 			&i.CreatedAt,
@@ -502,7 +496,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 }
 
 const listRiskResultsByMessage = `-- name: ListRiskResultsByMessage :many
-SELECT id, project_id, risk_policy_id, policy_version, chat_message_id, source, found, rule_id, description, match, start_line, start_column, end_line, end_column, confidence, tags, created_at
+SELECT id, project_id, risk_policy_id, policy_version, chat_message_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, created_at
 FROM risk_results
 WHERE chat_message_id = $1
   AND project_id = $2
@@ -534,10 +528,8 @@ func (q *Queries) ListRiskResultsByMessage(ctx context.Context, arg ListRiskResu
 			&i.RuleID,
 			&i.Description,
 			&i.Match,
-			&i.StartLine,
-			&i.StartColumn,
-			&i.EndLine,
-			&i.EndColumn,
+			&i.StartPos,
+			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
 			&i.CreatedAt,
@@ -553,7 +545,7 @@ func (q *Queries) ListRiskResultsByMessage(ctx context.Context, arg ListRiskResu
 }
 
 const listRiskResultsByProject = `-- name: ListRiskResultsByProject :many
-SELECT id, project_id, risk_policy_id, policy_version, chat_message_id, source, found, rule_id, description, match, start_line, start_column, end_line, end_column, confidence, tags, created_at
+SELECT id, project_id, risk_policy_id, policy_version, chat_message_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, created_at
 FROM risk_results
 WHERE project_id = $1
 ORDER BY created_at DESC
@@ -585,10 +577,8 @@ func (q *Queries) ListRiskResultsByProject(ctx context.Context, arg ListRiskResu
 			&i.RuleID,
 			&i.Description,
 			&i.Match,
-			&i.StartLine,
-			&i.StartColumn,
-			&i.EndLine,
-			&i.EndColumn,
+			&i.StartPos,
+			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
 			&i.CreatedAt,
@@ -604,7 +594,7 @@ func (q *Queries) ListRiskResultsByProject(ctx context.Context, arg ListRiskResu
 }
 
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_line, rr.start_column, rr.end_line, rr.end_column, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title
+SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id
@@ -632,10 +622,8 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	RuleID        pgtype.Text
 	Description   pgtype.Text
 	Match         pgtype.Text
-	StartLine     pgtype.Int4
-	StartColumn   pgtype.Int4
-	EndLine       pgtype.Int4
-	EndColumn     pgtype.Int4
+	StartPos      pgtype.Int4
+	EndPos        pgtype.Int4
 	Confidence    pgtype.Float8
 	Tags          []string
 	CreatedAt     pgtype.Timestamptz
@@ -663,10 +651,8 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 			&i.RuleID,
 			&i.Description,
 			&i.Match,
-			&i.StartLine,
-			&i.StartColumn,
-			&i.EndLine,
-			&i.EndColumn,
+			&i.StartPos,
+			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
 			&i.CreatedAt,
@@ -684,7 +670,7 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 }
 
 const listRiskResultsByProjectFound = `-- name: ListRiskResultsByProjectFound :many
-SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_line, rr.start_column, rr.end_line, rr.end_column, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title
+SELECT rr.id, rr.project_id, rr.risk_policy_id, rr.policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id
@@ -710,10 +696,8 @@ type ListRiskResultsByProjectFoundRow struct {
 	RuleID        pgtype.Text
 	Description   pgtype.Text
 	Match         pgtype.Text
-	StartLine     pgtype.Int4
-	StartColumn   pgtype.Int4
-	EndLine       pgtype.Int4
-	EndColumn     pgtype.Int4
+	StartPos      pgtype.Int4
+	EndPos        pgtype.Int4
 	Confidence    pgtype.Float8
 	Tags          []string
 	CreatedAt     pgtype.Timestamptz
@@ -741,10 +725,8 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 			&i.RuleID,
 			&i.Description,
 			&i.Match,
-			&i.StartLine,
-			&i.StartColumn,
-			&i.EndLine,
-			&i.EndColumn,
+			&i.StartPos,
+			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
 			&i.CreatedAt,
