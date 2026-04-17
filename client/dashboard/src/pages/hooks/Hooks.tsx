@@ -91,15 +91,24 @@ const CHART_COLORS = {
 } as const;
 
 const USER_SOURCE_COLORS = [
-  "#7dd3fc", // sky-300
-  "#6ee7b7", // emerald-300
-  "#c4b5fd", // violet-300
-  "#fda4af", // rose-300
-  "#fde047", // yellow-300
-  "#5eead4", // teal-300
-  "#a5b4fc", // indigo-300
-  "#f0abfc", // fuchsia-300
-  "#bef264", // lime-300
+  "#3b82f6", // blue-500
+  "#fb923c", // orange-400
+  "#16a34a", // green-600
+  "#dc2626", // red-600
+  "#93c5fd", // blue-300
+  "#a3e635", // lime-400
+  "#f97316", // orange-500
+  "#4ade80", // green-400
+  "#172554", // blue-950
+];
+
+const BRAND_RED_COLORS = [
+  "#fb923c", // orange-400
+  "#ea580c", // orange-600
+  "#dc2626", // red-600
+  "#b91c1c", // red-700
+  "#991b1b", // red-800
+  "#7f1d1d", // red-900
 ];
 
 // ---------------------------------------------------------------------------
@@ -1321,8 +1330,8 @@ type StackedBarDataset = {
   label: string;
   data: number[];
   backgroundColor: string;
-  borderColor: string;
-  borderWidth: number;
+  borderColor?: string;
+  borderWidth?: number;
   barThickness: number;
   hoverBackgroundColor?: string;
   hoverBorderColor?: string;
@@ -1486,12 +1495,9 @@ function UsersPerServerChart({
       label: user,
       barThickness: 24,
       data: sortedServers.map((s) => s.userCounts.get(user) ?? 0),
-      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "44",
-      borderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
-      borderWidth: 1.5,
+      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
       hoverBackgroundColor:
-        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "99",
-      hoverBorderColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
+        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "cc",
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
@@ -1534,11 +1540,8 @@ function UserEventCountsChart({
         label: "Events",
         barThickness: 24,
         data: sortedUsers.map(([, count]) => count),
-        backgroundColor: color + "44",
-        borderColor: color,
-        borderWidth: 1.5,
-        hoverBackgroundColor: color + "99",
-        hoverBorderColor: color,
+        backgroundColor: color,
+        hoverBackgroundColor: color + "cc",
       },
     ];
 
@@ -1605,16 +1608,13 @@ function ServerErrorRateChart({
     });
 
     const chartLabels = sortedServers.map((s) => s.displayName);
-    const errorColor = "#ef4444";
-    const chartDatasets = sortedTools.map((tool) => ({
+    const chartDatasets = sortedTools.map((tool, i) => ({
       label: tool,
       barThickness: 16,
       data: sortedServers.map((s) => s.toolCounts.get(tool) ?? 0),
-      backgroundColor: errorColor + "1a",
-      borderColor: errorColor,
-      borderWidth: 1.5,
-      hoverBackgroundColor: errorColor + "33",
-      hoverBorderColor: errorColor,
+      backgroundColor: BRAND_RED_COLORS[i % BRAND_RED_COLORS.length],
+      hoverBackgroundColor:
+        BRAND_RED_COLORS[i % BRAND_RED_COLORS.length] + "cc",
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
