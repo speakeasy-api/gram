@@ -16,7 +16,7 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
-import { useToolsets } from "../toolsets/Toolsets";
+import { useToolsets } from "../toolsets/useToolsets";
 import { MCPEmptyState } from "./MCPEmptyState";
 
 const BUILT_IN_SERVERS = [
