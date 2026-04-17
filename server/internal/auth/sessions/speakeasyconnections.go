@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -200,9 +199,8 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 		}
 	}
 
-	// Upsert all orgs and sync WorkOS IDs/memberships
-	if err := s.syncOrgsAndWorkOSIDs(ctx, user, validateResp); err != nil {
-		return nil, fmt.Errorf("sync orgs: %w", err)
+	if err := s.syncWorkOSMemberships(ctx, user, validateResp); err != nil {
+		return nil, fmt.Errorf("sync workos memberships: %w", err)
 	}
 
 	var adminOverride string
@@ -396,24 +394,13 @@ func (p *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParam
 	return authURL, nil
 }
 
-func (s *Manager) syncOrgsAndWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow, validateResp validateTokenResponse) error {
-	// Upsert all orgs from the IDP response so that organization_metadata rows
-	// exist and stay current (name, slug, workos_id) for every org the user
-	// belongs to — not just the active one.
-	for _, org := range validateResp.Organizations {
-		if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-			ID:          org.ID,
-			Name:        org.Name,
-			Slug:        org.Slug,
-			WorkosID:    conv.PtrToPGText(org.WorkOSID),
-			Whitelisted: pgtype.Bool{Bool: false, Valid: false},
-		}); err != nil {
-			return fmt.Errorf("upsert organization metadata for %s: %w", org.ID, err)
-		}
-	}
-
-	// WorkOS-specific syncing is best-effort — failures are logged but don't
-	// block login since the critical org upserts above already succeeded.
+// syncWorkOSMemberships reconciles the user's WorkOS identity and membership
+// records against what WorkOS currently reports. Organization metadata upserts
+// are the caller's responsibility and happen at login/switch-scope sites where
+// the active org is known. Failures here are best-effort and logged — they
+// don't block authentication because WorkOS membership data is only used for
+// RBAC features that degrade gracefully without it.
+func (s *Manager) syncWorkOSMemberships(ctx context.Context, user userRepo.UpsertUserRow, validateResp validateTokenResponse) error {
 	if s.workos == nil {
 		return nil
 	}

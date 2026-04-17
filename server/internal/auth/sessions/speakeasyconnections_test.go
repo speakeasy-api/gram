@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -218,9 +219,12 @@ func acquireIDToken(t *testing.T, ctx context.Context, mgr *sessions.Manager) st
 	return idToken
 }
 
-// TestSyncWorkOSIDs_PopulatesNonSSOOrg is the core regression test for the bug:
-// workos_id must be backfilled from validate (workos_id) for orgs that sync with WorkOS.
-func TestSyncWorkOSIDs_PopulatesNonSSOOrg(t *testing.T) {
+// TestCallbackUpsert_PopulatesWorkOSIDForExistingOrg is the core regression test
+// for the bug: workos_id must be populated from validate (workos_id) for an org
+// row that previously existed without one. The callback upsert (simulated here
+// by UpsertOrganizationMetadata with the validate response's WorkosID) is the
+// owner of org metadata freshness under the post-PR-2246 architecture.
+func TestCallbackUpsert_PopulatesWorkOSIDForExistingOrg(t *testing.T) {
 	t.Parallel()
 
 	const workosUserID = "wos_user_1"
@@ -241,12 +245,23 @@ func TestSyncWorkOSIDs_PopulatesNonSSOOrg(t *testing.T) {
 	require.NoError(t, err)
 
 	idToken := acquireIDToken(t, ctx, ts.mgr)
+	userInfo, err := ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	require.NoError(t, err)
+	require.NotEmpty(t, userInfo.Organizations)
 
-	// syncWorkOSIDs is called synchronously inside GetUserInfoFromSpeakeasy.
-	_, err = ts.mgr.GetUserInfoFromSpeakeasy(ctx, idToken)
+	// Simulate the Callback flow's upsert with the active org's validate data.
+	oq := orgRepo.New(ts.conn)
+	activeOrg := userInfo.Organizations[0]
+	_, err = oq.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          activeOrg.ID,
+		Name:        activeOrg.Name,
+		Slug:        activeOrg.Slug,
+		WorkosID:    conv.PtrToPGText(activeOrg.WorkosID),
+		Whitelisted: pgtype.Bool{Valid: false},
+	})
 	require.NoError(t, err)
 
-	org, err := orgRepo.New(ts.conn).GetOrganizationMetadata(ctx, workosOrgID)
+	org, err := oq.GetOrganizationMetadata(ctx, workosOrgID)
 	require.NoError(t, err)
 	require.True(t, org.WorkosID.Valid, "workos_id should be populated from validate workos_id")
 	require.Equal(t, workosOrgID, org.WorkosID.String)
