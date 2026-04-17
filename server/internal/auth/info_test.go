@@ -428,7 +428,7 @@ func TestService_Info_ProjectFilter(t *testing.T) {
 		orgID := userInfo.Organizations[0].ID
 		p1, err := instance.createTestProject(ctx, orgID, "ProjectA", "project-a")
 		require.NoError(t, err)
-		_, err = instance.createTestProject(ctx, orgID, "ProjectB", "project-b")
+		p2, err := instance.createTestProject(ctx, orgID, "ProjectB", "project-b")
 		require.NoError(t, err)
 
 		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
@@ -438,10 +438,14 @@ func TestService_Info_ProjectFilter(t *testing.T) {
 		// The filter was called with both project IDs.
 		assert.Len(t, seen, 2)
 
-		// Only the first project should survive.
-		assert.Len(t, result.Organizations[0].Projects, 1)
-		assert.Equal(t, p1.ID.String(), result.Organizations[0].Projects[0].ID)
-		assert.Equal(t, "ProjectA", result.Organizations[0].Projects[0].Name)
+		// Only the first project (by UUID order) should survive.
+		// We cannot assume p1 sorts before p2 since UUIDs are random.
+		require.Len(t, result.Organizations[0].Projects, 1)
+		assert.Equal(t, seen[0], result.Organizations[0].Projects[0].ID)
+
+		// The surviving project must be one of the two we created.
+		validIDs := []string{p1.ID.String(), p2.ID.String()}
+		assert.Contains(t, validIDs, result.Organizations[0].Projects[0].ID)
 	})
 
 	t.Run("filter allows all projects", func(t *testing.T) {
