@@ -91,15 +91,15 @@ const CHART_COLORS = {
 } as const;
 
 const USER_SOURCE_COLORS = [
-  "#3b82f6", // blue-500
+  "#60a5fa", // blue-400
   "#fb923c", // orange-400
-  "#16a34a", // green-600
-  "#dc2626", // red-600
-  "#93c5fd", // blue-300
+  "#34d399", // emerald-400
+  "#f87171", // red-400
+  "#a78bfa", // violet-400
+  "#facc15", // yellow-400
+  "#22d3ee", // cyan-400
+  "#f472b6", // pink-400
   "#a3e635", // lime-400
-  "#f97316", // orange-500
-  "#4ade80", // green-400
-  "#172554", // blue-950
 ];
 
 const BRAND_RED_COLORS = [
