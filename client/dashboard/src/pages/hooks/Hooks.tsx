@@ -1674,6 +1674,7 @@ function buildTimeSeriesFromSummary(
   timeSeries: HooksTimeSeriesPoint[],
   keyFn: (p: HooksTimeSeriesPoint) => string,
   timeRangeMs: number,
+  valueFn: (p: HooksTimeSeriesPoint) => number = (p) => p.eventCount,
 ) {
   if (timeSeries.length === 0)
     return { labels: [], tooltipLabels: [], datasets: [] };
@@ -1686,7 +1687,7 @@ function buildTimeSeriesFromSummary(
     // Use BigInt conversion to avoid precision loss for ns timestamps
     const ms = Number(BigInt(pt.bucketStartNs) / BigInt(1_000_000));
     const series = seriesMap.get(key) ?? new Map<number, number>();
-    series.set(ms, (series.get(ms) ?? 0) + pt.eventCount);
+    series.set(ms, (series.get(ms) ?? 0) + valueFn(pt));
     seriesMap.set(key, series);
   }
 
@@ -1833,6 +1834,57 @@ function UserUsageTimeSeries({
       buildTimeSeriesFromSummary(timeSeries, (pt) => pt.userEmail, timeRangeMs),
     [timeSeries, timeRangeMs],
   );
+  return (
+    <MultiLineChart
+      labels={labels}
+      tooltipLabels={tooltipLabels}
+      datasets={datasets}
+    />
+  );
+}
+
+function ErrorsOverTimeChart({
+  timeSeries,
+  from,
+  to,
+}: {
+  timeSeries: HooksTimeSeriesPoint[];
+  from: Date;
+  to: Date;
+}) {
+  const timeRangeMs = to.getTime() - from.getTime();
+  const { labels, tooltipLabels, datasets, hasErrors } = useMemo(() => {
+    const built = buildTimeSeriesFromSummary(
+      timeSeries,
+      () => "errors",
+      timeRangeMs,
+      (pt) => pt.failureCount,
+    );
+    const errorColor = "#ef4444";
+    const recoloredDatasets = built.datasets.map((ds) => ({
+      ...ds,
+      label: "Errors",
+      borderColor: errorColor,
+      backgroundColor: errorColor + "1a",
+      pointBackgroundColor: errorColor,
+    }));
+    const total = built.datasets[0]?.data.reduce((s, n) => s + n, 0) ?? 0;
+    return {
+      labels: built.labels,
+      tooltipLabels: built.tooltipLabels,
+      datasets: recoloredDatasets,
+      hasErrors: total > 0,
+    };
+  }, [timeSeries, timeRangeMs]);
+
+  if (!hasErrors) {
+    return (
+      <div className="text-muted-foreground flex h-[200px] items-center justify-center text-sm">
+        No errors in this period
+      </div>
+    );
+  }
+
   return (
     <MultiLineChart
       labels={labels}
@@ -2042,6 +2094,16 @@ function HooksAnalytics({
             />
           )}
 
+          {timeSeries.length > 0 && (
+            <div className="border-border bg-card space-y-4 rounded-lg border p-4">
+              <h3 className="text font-semibold">Errors Over Time</h3>
+              <ErrorsOverTimeChart
+                timeSeries={timeSeries}
+                from={from}
+                to={to}
+              />
+            </div>
+          )}
           {hasServers && (
             <ServerErrorRateChart
               title="Errors per Server and Tool"
