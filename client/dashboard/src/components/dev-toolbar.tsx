@@ -108,8 +108,7 @@ function saveState(state: OverrideState) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-const resourcesCacheKey = (orgId: string) =>
-  `gram-rbac-dev-resources:${orgId}`;
+const resourcesCacheKey = (orgId: string) => `gram-rbac-dev-resources:${orgId}`;
 
 type CachedResources = {
   projects: { id: string; label: string }[];
