@@ -1633,7 +1633,7 @@ function ServerErrorRateChart({
         callbacks: {
           title: (items) => items[0]?.label ?? "",
           label: (ctx: TooltipItem<"bar">) =>
-            ` ${ctx.dataset.label}: ${(ctx.parsed.x ?? 0).toLocaleString()} errors`,
+            `${ctx.dataset.label}: ${(ctx.parsed.x ?? 0).toLocaleString()}`,
         },
       },
     },
