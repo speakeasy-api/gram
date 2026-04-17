@@ -82,6 +82,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 // OnMessagesStored implements chat.MessageObserver. It signals the drain
 // workflow for each enabled risk policy on the project.
+// Note: The framework handles async dispatch, so this method can perform I/O operations.
 func (s *Service) OnMessagesStored(ctx context.Context, projectID uuid.UUID) {
 	policies, err := s.repo.ListEnabledRiskPoliciesByProject(ctx, projectID)
 	if err != nil {

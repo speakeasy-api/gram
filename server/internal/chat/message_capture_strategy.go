@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ChatMessageCaptureStrategy captures completion messages to the database.
@@ -49,8 +51,23 @@ func (s *ChatMessageCaptureStrategy) AddObserver(obs MessageObserver) {
 }
 
 func (s *ChatMessageCaptureStrategy) notifyObservers(ctx context.Context, projectID uuid.UUID) {
+	// Dispatch observer notifications asynchronously to avoid blocking the chat hot path
+	// Each observer gets its own goroutine to ensure one slow observer doesn't block others
 	for _, obs := range s.observers {
-		obs.OnMessagesStored(ctx, projectID)
+		observer := obs // Capture loop variable
+		go func() {
+			// Use a detached context with timeout to prevent indefinite hanging
+			// This ensures observers can complete even if the request context is canceled
+			bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			// Copy trace information for observability
+			if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+				bgCtx = trace.ContextWithSpanContext(bgCtx, span.SpanContext())
+			}
+
+			observer.OnMessagesStored(bgCtx, projectID)
+		}()
 	}
 }
 
