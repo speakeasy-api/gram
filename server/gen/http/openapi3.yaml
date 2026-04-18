@@ -6,19 +6,43 @@ info:
 servers:
     - url: https://app.getgram.ai
 paths:
-    /admin/diagnostics.poke:
+    /admin/auth.callback:
         get:
             tags:
                 - admin
-            summary: poke admin
-            operationId: admin#poke
+            summary: callback admin
+            operationId: admin#callback
+            parameters:
+                - name: code
+                  in: query
+                  description: The authorization code returned
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: The authorization code returned
+                - name: state
+                  in: query
+                  description: The state parameter returned, which should match the one generated in the login step
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: The state parameter returned, which should match the one generated in the login step
             responses:
-                "200":
-                    description: OK response.
-                    content:
-                        application/json:
+                "307":
+                    description: Temporary Redirect response.
+                    headers:
+                        Gram-Admin-Session:
+                            description: The session cookie value to set for the admin session
                             schema:
-                                $ref: '#/components/schemas/PokeResponseBody'
+                                type: string
+                                description: The session cookie value to set for the admin session
+                        Location:
+                            description: The URL to redirect the client to after processing the callback
+                            schema:
+                                type: string
+                                description: The URL to redirect the client to after processing the callback
                 "400":
                     description: 'bad_request: request is invalid'
                     content:
@@ -73,6 +97,231 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /admin/auth.login:
+        get:
+            tags:
+                - admin
+            summary: login admin
+            operationId: admin#login
+            parameters:
+                - name: return_to
+                  in: query
+                  description: Optional URL to return the user to after login. Must be relative and under the admin service's base URL.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Optional URL to return the user to after login. Must be relative and under the admin service's base URL.
+            responses:
+                "307":
+                    description: Temporary Redirect response.
+                    headers:
+                        Location:
+                            description: The URL to redirect the user to for Google authentication
+                            schema:
+                                type: string
+                                description: The URL to redirect the user to for Google authentication
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+    /admin/auth.logout:
+        post:
+            tags:
+                - admin
+            summary: logout admin
+            operationId: admin#logout
+            parameters:
+                - name: gram_admin
+                  in: cookie
+                  description: The session cookie value to clear for logging out
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: The session cookie value to clear for logging out
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+    /admin/project.get:
+        get:
+            tags:
+                - admin
+            summary: getProject admin
+            description: Returns the project with the given id or slug.
+            operationId: admin#getProject
+            parameters:
+                - name: id_or_slug
+                  in: query
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetProjectResponseBody'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /rpc/access.createRole:
         post:
             description: Create a new custom role.
@@ -22848,6 +23097,16 @@ components:
                 - summary
                 - comparison
                 - metrics_mode
+        GetProjectResponseBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                slug:
+                    type: string
+            required:
+                - id
+                - slug
         GetProjectResult:
             type: object
             properties:
@@ -25263,13 +25522,6 @@ components:
                 - policy
                 - sort_order
                 - created_at
-        PokeResponseBody:
-            type: object
-            properties:
-                ok:
-                    type: boolean
-            required:
-                - ok
         Project:
             type: object
             properties:
@@ -28857,6 +29109,11 @@ components:
                 - projects
                 - scopes
     securitySchemes:
+        admin_auth_header_Authorization:
+            type: apiKey
+            description: Admin session auth for admin endpoints. Cookie-only credential; session is validated against Google on every request.
+            name: Authorization
+            in: header
         apikey_header_Authorization:
             type: apiKey
             description: key based auth.
@@ -28889,7 +29146,7 @@ tags:
     - name: access
       description: Manage roles and team member access control.
     - name: admin
-      description: Operational endpoints for administrative tasks.
+      description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: assets
       description: Manages assets used by Gram projects.
     - name: assistants

@@ -11,12 +11,25 @@ import (
 	"context"
 
 	goa "goa.design/goa/v3/pkg"
+	"goa.design/goa/v3/security"
 )
 
-// Operational endpoints for administrative tasks.
+// Operations supporting admin tasks, protected by Google workspace auth.
 type Service interface {
-	// Poke implements poke.
-	Poke(context.Context) (res *PokeResult, err error)
+	// Login implements login.
+	Login(context.Context, *LoginPayload) (res *LoginResult, err error)
+	// Callback implements callback.
+	Callback(context.Context, *CallbackPayload) (res *CallbackResult, err error)
+	// Logout implements logout.
+	Logout(context.Context, *LogoutPayload) (err error)
+	// Returns the project with the given id or slug.
+	GetProject(context.Context, *GetProjectPayload) (res *GetProjectResult, err error)
+}
+
+// Auther defines the authorization functions to be implemented by the service.
+type Auther interface {
+	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
+	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -33,11 +46,54 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"poke"}
+var MethodNames = [4]string{"login", "callback", "logout", "getProject"}
 
-// PokeResult is the result type of the admin service poke method.
-type PokeResult struct {
-	OK bool
+// CallbackPayload is the payload type of the admin service callback method.
+type CallbackPayload struct {
+	// The authorization code returned
+	Code string
+	// The state parameter returned, which should match the one generated in the
+	// login step
+	StateParam string
+}
+
+// CallbackResult is the result type of the admin service callback method.
+type CallbackResult struct {
+	// The URL to redirect the client to after processing the callback
+	Location string
+	// The session cookie value to set for the admin session
+	SessionID string
+}
+
+// GetProjectPayload is the payload type of the admin service getProject method.
+type GetProjectPayload struct {
+	AdminSessionToken *string
+	IDOrSlug          string
+}
+
+// GetProjectResult is the result type of the admin service getProject method.
+type GetProjectResult struct {
+	ID   string
+	Slug string
+}
+
+// LoginPayload is the payload type of the admin service login method.
+type LoginPayload struct {
+	// Optional URL to return the user to after login. Must be relative and under
+	// the admin service's base URL.
+	ReturnTo *string
+}
+
+// LoginResult is the result type of the admin service login method.
+type LoginResult struct {
+	// The URL to redirect the user to for Google authentication
+	Location string
+}
+
+// LogoutPayload is the payload type of the admin service logout method.
+type LogoutPayload struct {
+	// The session cookie value to clear for logging out
+	SessionID *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

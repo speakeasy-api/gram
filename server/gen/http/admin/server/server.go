@@ -18,8 +18,11 @@ import (
 
 // Server lists the admin service endpoint HTTP handlers.
 type Server struct {
-	Mounts []*MountPoint
-	Poke   http.Handler
+	Mounts     []*MountPoint
+	Login      http.Handler
+	Callback   http.Handler
+	Logout     http.Handler
+	GetProject http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -49,9 +52,15 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"Poke", "GET", "/admin/diagnostics.poke"},
+			{"Login", "GET", "/admin/auth.login"},
+			{"Callback", "GET", "/admin/auth.callback"},
+			{"Logout", "POST", "/admin/auth.logout"},
+			{"GetProject", "GET", "/admin/project.get"},
 		},
-		Poke: NewPokeHandler(e.Poke, mux, decoder, encoder, errhandler, formatter),
+		Login:      NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
+		Callback:   NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
+		Logout:     NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
+		GetProject: NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -60,7 +69,10 @@ func (s *Server) Service() string { return "admin" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
-	s.Poke = m(s.Poke)
+	s.Login = m(s.Login)
+	s.Callback = m(s.Callback)
+	s.Logout = m(s.Logout)
+	s.GetProject = m(s.GetProject)
 }
 
 // MethodNames returns the methods served.
@@ -68,7 +80,10 @@ func (s *Server) MethodNames() []string { return admin.MethodNames[:] }
 
 // Mount configures the mux to serve the admin endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
-	MountPokeHandler(mux, h.Poke)
+	MountLoginHandler(mux, h.Login)
+	MountCallbackHandler(mux, h.Callback)
+	MountLogoutHandler(mux, h.Logout)
+	MountGetProjectHandler(mux, h.GetProject)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -76,21 +91,21 @@ func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
 }
 
-// MountPokeHandler configures the mux to serve the "admin" service "poke"
+// MountLoginHandler configures the mux to serve the "admin" service "login"
 // endpoint.
-func MountPokeHandler(mux goahttp.Muxer, h http.Handler) {
+func MountLoginHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/admin/diagnostics.poke", f)
+	mux.Handle("GET", "/admin/auth.login", f)
 }
 
-// NewPokeHandler creates a HTTP handler which loads the HTTP request and calls
-// the "admin" service "poke" endpoint.
-func NewPokeHandler(
+// NewLoginHandler creates a HTTP handler which loads the HTTP request and
+// calls the "admin" service "login" endpoint.
+func NewLoginHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -99,15 +114,181 @@ func NewPokeHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		encodeResponse = EncodePokeResponse(encoder)
-		encodeError    = EncodePokeError(encoder, formatter)
+		decodeRequest  = DecodeLoginRequest(mux, decoder)
+		encodeResponse = EncodeLoginResponse(encoder)
+		encodeError    = EncodeLoginError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "poke")
+		ctx = context.WithValue(ctx, goa.MethodKey, "login")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
-		var err error
-		res, err := endpoint(ctx, nil)
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCallbackHandler configures the mux to serve the "admin" service
+// "callback" endpoint.
+func MountCallbackHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/auth.callback", f)
+}
+
+// NewCallbackHandler creates a HTTP handler which loads the HTTP request and
+// calls the "admin" service "callback" endpoint.
+func NewCallbackHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCallbackRequest(mux, decoder)
+		encodeResponse = EncodeCallbackResponse(encoder)
+		encodeError    = EncodeCallbackError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "callback")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountLogoutHandler configures the mux to serve the "admin" service "logout"
+// endpoint.
+func MountLogoutHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/auth.logout", f)
+}
+
+// NewLogoutHandler creates a HTTP handler which loads the HTTP request and
+// calls the "admin" service "logout" endpoint.
+func NewLogoutHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeLogoutRequest(mux, decoder)
+		encodeResponse = EncodeLogoutResponse(encoder)
+		encodeError    = EncodeLogoutError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "logout")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetProjectHandler configures the mux to serve the "admin" service
+// "getProject" endpoint.
+func MountGetProjectHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/project.get", f)
+}
+
+// NewGetProjectHandler creates a HTTP handler which loads the HTTP request and
+// calls the "admin" service "getProject" endpoint.
+func NewGetProjectHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetProjectRequest(mux, decoder)
+		encodeResponse = EncodeGetProjectResponse(encoder)
+		encodeError    = EncodeGetProjectError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getProject")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
 				errhandler(ctx, w, err)

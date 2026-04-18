@@ -1795,6 +1795,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   organization_id TEXT NOT NULL,
   project_id uuid,
 
+text_col TEXT NOT NULL,
+
   -- actor_id, action and subject_id are authoritative strings describing the
   -- who, what and on what of an audited event. Other fields are denormalized
   -- for convenient querying and display purposes, but the URNs are the source
