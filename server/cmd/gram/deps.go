@@ -423,6 +423,7 @@ func newBillingProvider(
 		retries.WaitMax = 10 * time.Second
 		retries.MaxAttempts = 3
 		sdkHTTPClient := guardianPolicy.PooledClient(guardian.WithRetryConfig(retries))
+		sdkHTTPClient.Timeout = 30 * time.Second
 		polarAPIKey := c.String("polar-api-key")
 		polarsdk := polargo.New(
 			polargo.WithSecurity(polarAPIKey),
