@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/pgx-contrib/pgxotel"
 	polargo "github.com/polarsource/polar-go"
+	"github.com/polarsource/polar-go/retry"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 	"github.com/superfly/fly-go/tokens"
@@ -417,8 +418,22 @@ func newBillingProvider(
 		if err := catalog.Validate(); err != nil {
 			return nil, nil, fmt.Errorf("invalid polar catalog configuration: %w", err)
 		}
+
+		retries := guardian.DefaultRetryConfig()
+		retries.WaitMax = 10
+		retries.MaxAttempts = 3
+		sdkHTTPClient := guardianPolicy.PooledClient(guardian.WithRetryConfig(retries))
 		polarAPIKey := c.String("polar-api-key")
-		polarsdk := polargo.New(polargo.WithSecurity(polarAPIKey), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
+		polarsdk := polargo.New(
+			polargo.WithSecurity(polarAPIKey),
+			polargo.WithClient(sdkHTTPClient),
+			polargo.WithRetryConfig(retry.Config{
+				Strategy:              "none", // The HTTP client handles retries already
+				Backoff:               nil,
+				RetryConnectionErrors: false,
+			}),
+		)
+
 		pclient := polar.NewClient(guardianPolicy, polarsdk, polarAPIKey, logger, tracerProvider, redisClient, catalog, c.String("polar-webhook-secret"))
 		tracker := tracking.New(pclient, posthogClient, logger)
 		return pclient, tracker, nil
