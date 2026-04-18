@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/multitracer"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -37,6 +38,7 @@ import (
 	"go.temporal.io/sdk/interceptor"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -707,4 +709,54 @@ func newTriggersApp(
 		serverURL,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
+}
+
+func newAdminOIDCClient(ctx context.Context, c *cli.Context, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, serverURL *url.URL) (*admin.OIDCClient, error) {
+	rawHDs := c.StringSlice("admin-allowed-hds")
+	adminAllowedHDs := []string{}
+	for _, hd := range rawHDs {
+		trimmed := strings.TrimSpace(hd)
+		if trimmed != "" {
+			adminAllowedHDs = append(adminAllowedHDs, trimmed)
+		}
+	}
+
+	if c.String("environment") == "local" {
+		policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+		if err != nil {
+			return nil, fmt.Errorf("create unsafe guarding policy: %w", err)
+		}
+
+		emulatorBase, err := url.Parse(c.String("admin-oidc-emulator-url"))
+		if err != nil {
+			return nil, fmt.Errorf("parse admin oidc emulator url: %w", err)
+		}
+
+		provider, err := oidc.NewProvider(ctx, emulatorBase.String())
+		if err != nil {
+			return nil, fmt.Errorf("create oidc provider for admin oidc emulator: %w", err)
+		}
+
+		return admin.NewOIDCClient(admin.OIDCClientOptions{
+			HTTPClient:   policy.PooledClient(),
+			Provider:     provider,
+			ClientID:     c.String("admin-oidc-client-id"),
+			ClientSecret: c.String("admin-oidc-client-secret"),
+			RedirectURL:  serverURL.JoinPath("/admin/auth.callback").String(),
+			AllowedHDs:   adminAllowedHDs,
+		}), nil
+	} else {
+		provider, err := oidc.NewProvider(ctx, "https://accounts.google.com")
+		if err != nil {
+			return nil, fmt.Errorf("create oidc provider for google: %w", err)
+		}
+		return admin.NewOIDCClient(admin.OIDCClientOptions{
+			HTTPClient:   guardianPolicy.PooledClient(),
+			Provider:     provider,
+			ClientID:     c.String("admin-oidc-client-id"),
+			ClientSecret: c.String("admin-oidc-client-secret"),
+			RedirectURL:  serverURL.JoinPath("/admin/auth.callback").String(),
+			AllowedHDs:   adminAllowedHDs,
+		}), nil
+	}
 }

@@ -61,7 +61,7 @@ func UsageCommands() []string {
 	return []string{
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role|get-rbac-status|enable-rbac|disable-rbac)",
-		"admin poke",
+		"admin (login|callback|logout|get-project)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant)",
 		"auditlogs (list|list-facets)",
@@ -103,7 +103,7 @@ func UsageCommands() []string {
 func UsageExamples() string {
 	return os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
-		os.Args[0] + " " + "admin poke" + "\n" +
+		os.Args[0] + " " + "admin login --return-to \"abc123\"" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
 		os.Args[0] + " " + "assistants list-assistants --session-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
 		""
@@ -177,7 +177,19 @@ func ParseEndpoint(
 
 		adminFlags = flag.NewFlagSet("admin", flag.ContinueOnError)
 
-		adminPokeFlags = flag.NewFlagSet("poke", flag.ExitOnError)
+		adminLoginFlags        = flag.NewFlagSet("login", flag.ExitOnError)
+		adminLoginReturnToFlag = adminLoginFlags.String("return-to", "", "")
+
+		adminCallbackFlags          = flag.NewFlagSet("callback", flag.ExitOnError)
+		adminCallbackCodeFlag       = adminCallbackFlags.String("code", "REQUIRED", "")
+		adminCallbackStateParamFlag = adminCallbackFlags.String("state-param", "REQUIRED", "")
+
+		adminLogoutFlags         = flag.NewFlagSet("logout", flag.ExitOnError)
+		adminLogoutSessionIDFlag = adminLogoutFlags.String("session-id", "", "")
+
+		adminGetProjectFlags                 = flag.NewFlagSet("get-project", flag.ExitOnError)
+		adminGetProjectIDOrSlugFlag          = adminGetProjectFlags.String("id-or-slug", "REQUIRED", "")
+		adminGetProjectAdminSessionTokenFlag = adminGetProjectFlags.String("admin-session-token", "", "")
 
 		assetsFlags = flag.NewFlagSet("assets", flag.ContinueOnError)
 
@@ -1266,7 +1278,10 @@ func ParseEndpoint(
 	accessDisableRBACFlags.Usage = accessDisableRBACUsage
 
 	adminFlags.Usage = adminUsage
-	adminPokeFlags.Usage = adminPokeUsage
+	adminLoginFlags.Usage = adminLoginUsage
+	adminCallbackFlags.Usage = adminCallbackUsage
+	adminLogoutFlags.Usage = adminLogoutUsage
+	adminGetProjectFlags.Usage = adminGetProjectUsage
 
 	assetsFlags.Usage = assetsUsage
 	assetsServeImageFlags.Usage = assetsServeImageUsage
@@ -1675,8 +1690,17 @@ func ParseEndpoint(
 
 		case "admin":
 			switch epn {
-			case "poke":
-				epf = adminPokeFlags
+			case "login":
+				epf = adminLoginFlags
+
+			case "callback":
+				epf = adminCallbackFlags
+
+			case "logout":
+				epf = adminLogoutFlags
+
+			case "get-project":
+				epf = adminGetProjectFlags
 
 			}
 
@@ -2443,8 +2467,18 @@ func ParseEndpoint(
 		case "admin":
 			c := adminc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
-			case "poke":
-				endpoint = c.Poke()
+			case "login":
+				endpoint = c.Login()
+				data, err = adminc.BuildLoginPayload(*adminLoginReturnToFlag)
+			case "callback":
+				endpoint = c.Callback()
+				data, err = adminc.BuildCallbackPayload(*adminCallbackCodeFlag, *adminCallbackStateParamFlag)
+			case "logout":
+				endpoint = c.Logout()
+				data, err = adminc.BuildLogoutPayload(*adminLogoutSessionIDFlag)
+			case "get-project":
+				endpoint = c.GetProject()
+				data, err = adminc.BuildGetProjectPayload(*adminGetProjectIDOrSlugFlag, *adminGetProjectAdminSessionTokenFlag)
 			}
 		case "assets":
 			c := assetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3453,28 +3487,91 @@ func accessDisableRBACUsage() {
 
 // adminUsage displays the usage of the admin command and its subcommands.
 func adminUsage() {
-	fmt.Fprintln(os.Stderr, `Operational endpoints for administrative tasks.`)
+	fmt.Fprintln(os.Stderr, `Operations supporting admin tasks, protected by Google workspace auth.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    poke: Poke implements poke.`)
+	fmt.Fprintln(os.Stderr, `    login: Login implements login.`)
+	fmt.Fprintln(os.Stderr, `    callback: Callback implements callback.`)
+	fmt.Fprintln(os.Stderr, `    logout: Logout implements logout.`)
+	fmt.Fprintln(os.Stderr, `    get-project: Returns the project with the given id or slug.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
 }
-func adminPokeUsage() {
+func adminLoginUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin poke", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] admin login", os.Args[0])
+	fmt.Fprint(os.Stderr, " -return-to STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Poke implements poke.`)
+	fmt.Fprintln(os.Stderr, `Login implements login.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -return-to STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin poke")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin login --return-to \"abc123\"")
+}
+
+func adminCallbackUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin callback", os.Args[0])
+	fmt.Fprint(os.Stderr, " -code STRING")
+	fmt.Fprint(os.Stderr, " -state-param STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Callback implements callback.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -code STRING: `)
+	fmt.Fprintln(os.Stderr, `    -state-param STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin callback --code \"abc123\" --state-param \"abc123\"")
+}
+
+func adminLogoutUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin logout", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-id STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Logout implements logout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-id STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin logout --session-id \"abc123\"")
+}
+
+func adminGetProjectUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-project", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id-or-slug STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns the project with the given id or slug.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id-or-slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-project --id-or-slug \"abc123\" --admin-session-token \"abc123\"")
 }
 
 // assetsUsage displays the usage of the assets command and its subcommands.

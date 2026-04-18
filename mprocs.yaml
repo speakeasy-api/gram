@@ -3,14 +3,17 @@ procs:
     cmd: ["mise", "run", "start:mock-idp"]
     stop:
       send-keys: ["<C-c>"]
+  mock-oidc:
+    cmd: ["mise", "run", "start:mock-oidc"]
+    stop: SIGTERM
   server:
     cmd: ["mise", "run", "start:server"]
     stop: SIGTERM
-  worker:
-    cmd: ["mise", "run", "start:worker"]
-    stop: SIGTERM
   admin:
     cmd: ["mise", "run", "start:admin"]
+    stop: SIGTERM
+  worker:
+    cmd: ["mise", "run", "start:worker"]
     stop: SIGTERM
   dashboard:
     cmd: ["mise", "run", "start:dashboard"]

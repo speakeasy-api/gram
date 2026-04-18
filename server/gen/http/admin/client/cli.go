@@ -6,3 +6,75 @@
 // $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
+
+import (
+	admin "github.com/speakeasy-api/gram/server/gen/admin"
+)
+
+// BuildLoginPayload builds the payload for the admin login endpoint from CLI
+// flags.
+func BuildLoginPayload(adminLoginReturnTo string) (*admin.LoginPayload, error) {
+	var returnTo *string
+	{
+		if adminLoginReturnTo != "" {
+			returnTo = &adminLoginReturnTo
+		}
+	}
+	v := &admin.LoginPayload{}
+	v.ReturnTo = returnTo
+
+	return v, nil
+}
+
+// BuildCallbackPayload builds the payload for the admin callback endpoint from
+// CLI flags.
+func BuildCallbackPayload(adminCallbackCode string, adminCallbackStateParam string) (*admin.CallbackPayload, error) {
+	var code string
+	{
+		code = adminCallbackCode
+	}
+	var stateParam string
+	{
+		stateParam = adminCallbackStateParam
+	}
+	v := &admin.CallbackPayload{}
+	v.Code = code
+	v.StateParam = stateParam
+
+	return v, nil
+}
+
+// BuildLogoutPayload builds the payload for the admin logout endpoint from CLI
+// flags.
+func BuildLogoutPayload(adminLogoutSessionID string) (*admin.LogoutPayload, error) {
+	var sessionID *string
+	{
+		if adminLogoutSessionID != "" {
+			sessionID = &adminLogoutSessionID
+		}
+	}
+	v := &admin.LogoutPayload{}
+	v.SessionID = sessionID
+
+	return v, nil
+}
+
+// BuildGetProjectPayload builds the payload for the admin getProject endpoint
+// from CLI flags.
+func BuildGetProjectPayload(adminGetProjectIDOrSlug string, adminGetProjectAdminSessionToken string) (*admin.GetProjectPayload, error) {
+	var idOrSlug string
+	{
+		idOrSlug = adminGetProjectIDOrSlug
+	}
+	var adminSessionToken *string
+	{
+		if adminGetProjectAdminSessionToken != "" {
+			adminSessionToken = &adminGetProjectAdminSessionToken
+		}
+	}
+	v := &admin.GetProjectPayload{}
+	v.IDOrSlug = idOrSlug
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
