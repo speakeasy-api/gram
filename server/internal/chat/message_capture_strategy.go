@@ -55,10 +55,10 @@ func (s *ChatMessageCaptureStrategy) notifyObservers(ctx context.Context, projec
 	// Each observer gets its own goroutine to ensure one slow observer doesn't block others
 	for _, obs := range s.observers {
 		observer := obs // Capture loop variable
-		go func() {
+		go func() {     //nolint:gosec // intentionally detached from request context so observers survive request cancellation
 			// Use a detached context with timeout to prevent indefinite hanging
 			// This ensures observers can complete even if the request context is canceled
-			bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second) //nolint:contextcheck
+			bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second) //nolint:contextcheck // intentionally detached from request context
 			defer cancel()
 
 			// Copy trace information for observability

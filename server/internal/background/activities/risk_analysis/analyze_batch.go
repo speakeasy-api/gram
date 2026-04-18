@@ -14,6 +14,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
+// Log key constants to satisfy sloglint no-raw-keys.
+const (
+	logKeyMessages      = "risk.messages"
+	logKeyFindings      = "risk.findings"
+	logKeyRowsWritten   = "risk.rows_written"
+	logKeyFetchContent  = "risk.fetch_content_duration"
+	logKeyScan          = "risk.scan_duration"
+	logKeyDBWrite       = "risk.db_write_duration"
+	logKeyTotal         = "risk.total_duration"
+	logKeyCount         = "risk.count"
+	logKeyBatchSize     = "risk.batch_size"
+	logKeyQueryDur      = "risk.query_duration"
+	logKeyTotalDur      = "risk.total_duration_fetch"
+	logKeyPolicyVersion = "risk.policy_version"
+)
+
 // AnalyzeBatch scans a batch of messages against enabled detection sources
 // and writes the results back to the database.
 type AnalyzeBatch struct {
@@ -84,13 +100,22 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 		findings := batchFindings[i]
 
 		if len(findings) == 0 {
-			rows = append(rows, emptyResultRow(args, msg.ID))
+			resultID, err := uuid.NewV7()
+			if err != nil {
+				return nil, fmt.Errorf("generate result id: %w", err)
+			}
+			rows = append(rows, emptyResultRow(resultID, args, msg.ID))
 			continue
 		}
 
 		for _, f := range findings {
 			findingsCount++
+			resultID, err := uuid.NewV7()
+			if err != nil {
+				return nil, fmt.Errorf("generate result id: %w", err)
+			}
 			rows = append(rows, repo.InsertRiskResultsParams{
+				ID:            resultID,
 				ProjectID:     args.ProjectID,
 				RiskPolicyID:  args.RiskPolicyID,
 				PolicyVersion: args.PolicyVersion,
@@ -138,13 +163,13 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 	writeDuration := time.Since(writeStart)
 
 	a.logger.InfoContext(ctx, "analyzed message batch",
-		slog.Int("messages", len(messages)),
-		slog.Int("findings", findingsCount),
-		slog.Int("rows_written", len(rows)),
-		slog.Duration("fetch_content", fetchDuration),
-		slog.Duration("scan", scanDuration),
-		slog.Duration("db_write", writeDuration),
-		slog.Duration("total", time.Since(start)),
+		slog.Int(logKeyMessages, len(messages)),
+		slog.Int(logKeyFindings, findingsCount),
+		slog.Int(logKeyRowsWritten, len(rows)),
+		slog.Duration(logKeyFetchContent, fetchDuration),
+		slog.Duration(logKeyScan, scanDuration),
+		slog.Duration(logKeyDBWrite, writeDuration),
+		slog.Duration(logKeyTotal, time.Since(start)),
 	)
 
 	return &AnalyzeBatchResult{
@@ -153,8 +178,9 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 	}, nil
 }
 
-func emptyResultRow(args AnalyzeBatchArgs, messageID uuid.UUID) repo.InsertRiskResultsParams {
+func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) repo.InsertRiskResultsParams {
 	return repo.InsertRiskResultsParams{
+		ID:            id,
 		ProjectID:     args.ProjectID,
 		RiskPolicyID:  args.RiskPolicyID,
 		PolicyVersion: args.PolicyVersion,

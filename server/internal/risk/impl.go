@@ -16,6 +16,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/risk/server"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -41,6 +42,7 @@ type Service struct {
 	db       *pgxpool.Pool
 	repo     *repo.Queries
 	auth     *auth.Auth
+	access   *access.Manager
 	signaler RiskAnalysisSignaler
 }
 
@@ -51,7 +53,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
-	accessLoader auth.AccessLoader,
+	accessManager *access.Manager,
 	signaler RiskAnalysisSignaler,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
@@ -61,7 +63,8 @@ func NewService(
 		logger:   logger,
 		db:       db,
 		repo:     repo.New(db),
-		auth:     auth.New(logger, db, sessions, accessLoader),
+		auth:     auth.New(logger, db, sessions, accessManager),
+		access:   accessManager,
 		signaler: signaler,
 	}
 }
@@ -80,9 +83,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// OnMessagesStored implements chat.MessageObserver. It signals the drain
-// workflow for each enabled risk policy on the project.
-// Note: The framework handles async dispatch, so this method can perform I/O operations.
+// OnMessagesStored implements chat.MessageObserver. The caller
+// (notifyObservers) already dispatches this in a goroutine with a
+// detached context, so this method can safely perform I/O.
 func (s *Service) OnMessagesStored(ctx context.Context, projectID uuid.UUID) {
 	policies, err := s.repo.ListEnabledRiskPoliciesByProject(ctx, projectID)
 	if err != nil {
@@ -106,6 +109,14 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
+	if err := validatePolicyName(payload.Name); err != nil {
+		return nil, err
+	}
+
 	sources := payload.Sources
 	if len(sources) == 0 {
 		sources = []string{"gitleaks"}
@@ -116,7 +127,13 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		enabled = *payload.Enabled
 	}
 
+	id, err := uuid.NewV7()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "generate policy id").Log(ctx, s.logger)
+	}
+
 	row, err := s.repo.CreateRiskPolicy(ctx, repo.CreateRiskPolicyParams{
+		ID:             id,
 		ProjectID:      *authCtx.ProjectID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Name:           payload.Name,
@@ -144,6 +161,10 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	rows, err := s.repo.ListRiskPolicies(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk policies").Log(ctx, s.logger)
@@ -165,6 +186,10 @@ func (s *Service) GetRiskPolicy(ctx context.Context, payload *gen.GetRiskPolicyP
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	id, err := uuid.Parse(payload.ID)
@@ -189,17 +214,34 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.C(oops.CodeInvalid)
 	}
 
-	sources := payload.Sources
-	if len(sources) == 0 {
-		sources = []string{"gitleaks"}
+	if err := validatePolicyName(payload.Name); err != nil {
+		return nil, err
 	}
 
-	enabled := true
+	// Fetch the current policy so we can preserve fields not provided in the payload.
+	current, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+	}
+
+	sources := current.Sources
+	if len(payload.Sources) > 0 {
+		sources = payload.Sources
+	}
+
+	enabled := current.Enabled
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
 	}
@@ -231,6 +273,10 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		return oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return err
+	}
+
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return oops.C(oops.CodeInvalid)
@@ -257,6 +303,10 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
+	}
+
 	rawLimit := payload.Limit
 	if rawLimit <= 0 || rawLimit > 500 {
 		rawLimit = 100
@@ -271,8 +321,9 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 			return nil, oops.C(oops.CodeInvalid)
 		}
 		rows, err := s.repo.ListRiskResultsByChatFound(ctx, repo.ListRiskResultsByChatFoundParams{
-			ChatID:    chatID,
-			ProjectID: *authCtx.ProjectID,
+			ChatID:      chatID,
+			ProjectID:   *authCtx.ProjectID,
+			ResultLimit: limit,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").Log(ctx, s.logger)
@@ -322,6 +373,10 @@ func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskP
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return nil, err
 	}
 
 	id, err := uuid.Parse(payload.ID)
@@ -387,26 +442,18 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 		return oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+		return err
+	}
+
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return oops.C(oops.CodeInvalid)
 	}
 
-	// Fetch current policy, then bump version (update with same values).
-	current, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+	policy, err := s.repo.BumpRiskPolicyVersion(ctx, repo.BumpRiskPolicyVersionParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
-	}
-
-	policy, err := s.repo.UpdateRiskPolicy(ctx, repo.UpdateRiskPolicyParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
-		Name:      current.Name,
-		Sources:   current.Sources,
-		Enabled:   current.Enabled,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "bump policy version").Log(ctx, s.logger)
@@ -450,6 +497,16 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		PendingMessages: pendingMessages,
 		TotalMessages:   totalMessages,
 	}, nil
+}
+
+func validatePolicyName(name string) error {
+	if name == "" {
+		return oops.E(oops.CodeInvalid, nil, "name must not be empty")
+	}
+	if len([]rune(name)) > 100 {
+		return oops.E(oops.CodeInvalid, nil, "name must be at most 100 characters")
+	}
+	return nil
 }
 
 func foundRowToResult(

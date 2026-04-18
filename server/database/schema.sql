@@ -1768,14 +1768,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_assignments_plugin_id_principal_urn_key
 -- Risk analysis policies for scanning chat messages against configurable rules.
 -- One workflow per policy drains unanalyzed messages and produces risk_results.
 CREATE TABLE IF NOT EXISTS risk_policies (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  id uuid NOT NULL,
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
 
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
-  sources TEXT[] NOT NULL DEFAULT '{gitleaks}',
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  version BIGINT NOT NULL DEFAULT 1,
+  name TEXT NOT NULL,
+  sources TEXT[] NOT NULL,
+  version BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1783,7 +1783,8 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT risk_policies_pkey PRIMARY KEY (id),
-  CONSTRAINT risk_policies_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+  CONSTRAINT risk_policies_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT risk_policies_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS risk_policies_project_id_idx
@@ -1793,14 +1794,14 @@ WHERE deleted IS FALSE;
 -- Individual findings produced by scanning a chat message against a risk policy.
 -- No soft delete: results are regenerated when the policy version changes.
 CREATE TABLE IF NOT EXISTS risk_results (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  id uuid NOT NULL,
   project_id uuid NOT NULL,
   risk_policy_id uuid NOT NULL,
   policy_version BIGINT NOT NULL,
   chat_message_id uuid NOT NULL,
   source TEXT NOT NULL,
 
-  found BOOLEAN NOT NULL DEFAULT FALSE,
+  found BOOLEAN NOT NULL,
   rule_id TEXT,
   description TEXT,
   match TEXT,
@@ -1822,3 +1823,6 @@ ON risk_results (project_id, risk_policy_id);
 
 CREATE INDEX IF NOT EXISTS risk_results_chat_message_id_idx
 ON risk_results (chat_message_id);
+
+CREATE INDEX IF NOT EXISTS risk_results_policy_version_message_idx
+ON risk_results (risk_policy_id, policy_version, chat_message_id);

@@ -251,6 +251,9 @@ func (a *Activities) FetchUnanalyzedMessages(ctx context.Context, input risk_ana
 }
 
 func (a *Activities) AnalyzeBatch(ctx context.Context, input risk_analysis.AnalyzeBatchArgs) (*risk_analysis.AnalyzeBatchResult, error) {
+	if a.analyzeBatch == nil {
+		return nil, fmt.Errorf("analyze batch: gitleaks detector pool not initialized")
+	}
 	result, err := a.analyzeBatch.Do(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("analyze batch: %w", err)

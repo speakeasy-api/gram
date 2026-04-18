@@ -24,7 +24,7 @@ export default function SecurityOverview() {
   const { data: policiesData, isLoading: policiesLoading } =
     useRiskListPolicies();
   const { data: resultsData, isLoading: resultsLoading } = useRiskListResults({
-    limit: 50,
+    limit: 500,
   });
 
   const policies = policiesData?.policies ?? [];
@@ -102,7 +102,7 @@ export default function SecurityOverview() {
             </p>
           </div>
           <div className="rounded-lg border p-4">
-            <p className="text-muted-foreground text-sm">Total Findings</p>
+            <p className="text-muted-foreground text-sm">Recent Findings</p>
             <p className="text-2xl font-bold">
               {totalFindings.toLocaleString()}
             </p>

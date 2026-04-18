@@ -169,7 +169,7 @@ environment: production`,
 				"Extracted string should match the expected secret")
 
 			// Also verify the positions are correct
-			assert.True(t, strings.Contains(tt.content, tt.matchString),
+			assert.Contains(t, tt.content, tt.matchString,
 				"Content should contain the match string")
 			assert.Equal(t, startPos, strings.Index(tt.content, tt.matchString),
 				"Start position should match string index")

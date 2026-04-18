@@ -1,17 +1,21 @@
 -- name: CreateRiskPolicy :one
 INSERT INTO risk_policies (
-    project_id
+    id
+  , project_id
   , organization_id
   , name
   , sources
   , enabled
+  , version
 )
 VALUES (
-    @project_id
+    @id
+  , @project_id
   , @organization_id
   , @name
   , @sources
   , @enabled
+  , 1
 )
 RETURNING *;
 
@@ -41,7 +45,20 @@ UPDATE risk_policies
 SET name = @name
   , sources = @sources
   , enabled = @enabled
-  , version = version + 1
+  , version = CASE
+      WHEN sources IS DISTINCT FROM @sources OR enabled IS DISTINCT FROM @enabled
+      THEN version + 1
+      ELSE version
+    END
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: BumpRiskPolicyVersion :one
+UPDATE risk_policies
+SET version = version + 1
   , updated_at = clock_timestamp()
 WHERE id = @id
   AND project_id = @project_id
@@ -110,7 +127,8 @@ WHERE id = ANY(@ids::uuid[])
 
 -- name: InsertRiskResults :copyfrom
 INSERT INTO risk_results (
-    project_id
+    id
+  , project_id
   , risk_policy_id
   , policy_version
   , chat_message_id
@@ -125,7 +143,8 @@ INSERT INTO risk_results (
   , tags
 )
 VALUES (
-    @project_id
+    @id
+  , @project_id
   , @risk_policy_id
   , @policy_version
   , @chat_message_id
@@ -192,7 +211,7 @@ WHERE cm.chat_id = @chat_id
   AND rr.project_id = @project_id
   AND rr.found IS TRUE
 ORDER BY rr.created_at DESC
-LIMIT 500;
+LIMIT @result_limit;
 
 -- name: ListRiskResultsByMessage :many
 SELECT *

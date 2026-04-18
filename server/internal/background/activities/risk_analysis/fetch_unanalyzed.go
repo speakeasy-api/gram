@@ -79,10 +79,10 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*Fe
 	}
 
 	a.logger.InfoContext(ctx, "fetched unanalyzed message IDs",
-		slog.Int("count", len(ids)),
-		slog.Int64("policy_version", policy.Version),
-		slog.Duration("query_duration", time.Since(queryStart)),
-		slog.Duration("total_duration", time.Since(start)),
+		slog.Int(logKeyCount, len(ids)),
+		slog.Int64(logKeyPolicyVersion, policy.Version),
+		slog.Duration(logKeyQueryDur, time.Since(queryStart)),
+		slog.Duration(logKeyTotalDur, time.Since(start)),
 	)
 
 	return &FetchUnanalyzedResult{

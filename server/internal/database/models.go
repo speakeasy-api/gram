@@ -813,9 +813,9 @@ type RiskPolicy struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
 	OrganizationID string
+	Enabled        bool
 	Name           string
 	Sources        []string
-	Enabled        bool
 	Version        int64
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
