@@ -421,7 +421,7 @@ func newBillingProvider(
 
 		retries := guardian.DefaultRetryConfig()
 		retries.WaitMax = 10 * time.Second
-		retries.MaxAttempts = 3
+		retries.MaxAttempts = 2
 		sdkHTTPClient := guardianPolicy.PooledClient(guardian.WithRetryConfig(retries))
 		sdkHTTPClient.Timeout = 30 * time.Second
 		polarAPIKey := c.String("polar-api-key")
