@@ -60,26 +60,22 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 
 	var a *Activities
 
-	// ── Drain loop ──────────────────────────────────────────────────────
-	for {
-		// Fetch reads the current policy version from the DB each time,
-		// so version bumps (policy updates) are picked up automatically.
-		var fetchResult risk_analysis.FetchUnanalyzedResult
-		err := workflow.ExecuteActivity(ctx, a.FetchUnanalyzedMessages, risk_analysis.FetchUnanalyzedArgs{
-			ProjectID:    params.ProjectID,
-			RiskPolicyID: params.RiskPolicyID,
-			BatchLimit:   drainFetchLimit,
-		}).Get(ctx, &fetchResult)
-		if err != nil {
-			logger.Error("fetch unanalyzed message IDs", "error", err.Error())
-			break
-		}
+	// ── Fetch unanalyzed messages ──────────────────────────────────────
+	// Reads the current policy version from the DB each time, so version
+	// bumps (policy updates) are picked up automatically.
+	var fetchResult risk_analysis.FetchUnanalyzedResult
+	err := workflow.ExecuteActivity(ctx, a.FetchUnanalyzedMessages, risk_analysis.FetchUnanalyzedArgs{
+		ProjectID:    params.ProjectID,
+		RiskPolicyID: params.RiskPolicyID,
+		BatchLimit:   drainFetchLimit,
+	}).Get(ctx, &fetchResult)
+	if err != nil {
+		logger.Error("fetch unanalyzed message IDs", "error", err.Error())
+		// Fall through to sleep — the next signal will retry.
+	}
 
-		if len(fetchResult.MessageIDs) == 0 {
-			break
-		}
-
-		// Fan out batches with bounded concurrency.
+	// ── Analyze batches ────────────────────────────────────────────────
+	if len(fetchResult.MessageIDs) > 0 {
 		batches := chunkUUIDs(fetchResult.MessageIDs, drainBatchSize)
 		pending := make([]workflow.Future, 0, min(len(batches), drainMaxConcurrency))
 
@@ -91,7 +87,6 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 				pending = pending[1:]
 			}
 
-			// Use version and sources from the fetch result (read from DB).
 			f := workflow.ExecuteActivity(ctx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
 				ProjectID:     params.ProjectID,
 				RiskPolicyID:  params.RiskPolicyID,
@@ -108,20 +103,16 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 			}
 		}
 
-		// ContinueAsNew if history is getting large.
-		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
-			drainSignals(signalCh)
-			return workflow.NewContinueAsNewError(ctx, DrainRiskAnalysisWorkflow, params)
-		}
+		// More messages may remain — ContinueAsNew to process them.
+		drainSignals(signalCh)
+		return workflow.NewContinueAsNewError(ctx, DrainRiskAnalysisWorkflow, params)
 	}
 
 	// ── Sleep until signaled ────────────────────────────────────────────
-	// Check for queued signals before blocking.
 	if drainSignals(signalCh) {
 		return workflow.NewContinueAsNewError(ctx, DrainRiskAnalysisWorkflow, params)
 	}
 
-	// Block until a signal arrives, then ContinueAsNew.
 	signalCh.Receive(ctx, nil)
 	drainSignals(signalCh)
 	return workflow.NewContinueAsNewError(ctx, DrainRiskAnalysisWorkflow, params)
