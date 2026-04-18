@@ -510,20 +510,16 @@ func validatePolicyName(name string) error {
 }
 
 func foundRowToResult(
-	id, policyID uuid.UUID, policyVersion int64, chatMessageID uuid.NullUUID, chatID *string, chatTitle pgtype.Text,
+	id, policyID uuid.UUID, policyVersion int64, chatMessageID uuid.UUID, chatID *string, chatTitle pgtype.Text,
 	source string, ruleID, description, match pgtype.Text,
 	startPos, endPos pgtype.Int4,
 	confidence pgtype.Float8, tags []string, createdAt pgtype.Timestamptz,
 ) *types.RiskResult {
-	var msgID string
-	if chatMessageID.Valid {
-		msgID = chatMessageID.UUID.String()
-	}
 	return &types.RiskResult{
 		ID:            id.String(),
 		PolicyID:      policyID.String(),
 		PolicyVersion: policyVersion,
-		ChatMessageID: msgID,
+		ChatMessageID: chatMessageID.String(),
 		ChatID:        chatID,
 		ChatTitle:     ptrText(chatTitle),
 		Source:        source,

@@ -369,7 +369,7 @@ type InsertRiskResultsParams struct {
 	ProjectID     uuid.UUID
 	RiskPolicyID  uuid.UUID
 	PolicyVersion int64
-	ChatMessageID uuid.NullUUID
+	ChatMessageID uuid.UUID
 	Source        string
 	Found         bool
 	RuleID        pgtype.Text
@@ -484,7 +484,7 @@ type ListRiskResultsByChatFoundRow struct {
 	ProjectID     uuid.UUID
 	RiskPolicyID  uuid.UUID
 	PolicyVersion int64
-	ChatMessageID uuid.NullUUID
+	ChatMessageID uuid.UUID
 	Source        string
 	Found         bool
 	RuleID        pgtype.Text
@@ -546,7 +546,7 @@ ORDER BY created_at DESC
 `
 
 type ListRiskResultsByMessageParams struct {
-	ChatMessageID uuid.NullUUID
+	ChatMessageID uuid.UUID
 	ProjectID     uuid.UUID
 }
 
@@ -658,7 +658,7 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	ProjectID     uuid.UUID
 	RiskPolicyID  uuid.UUID
 	PolicyVersion int64
-	ChatMessageID uuid.NullUUID
+	ChatMessageID uuid.UUID
 	Source        string
 	Found         bool
 	RuleID        pgtype.Text
@@ -732,7 +732,7 @@ type ListRiskResultsByProjectFoundRow struct {
 	ProjectID     uuid.UUID
 	RiskPolicyID  uuid.UUID
 	PolicyVersion int64
-	ChatMessageID uuid.NullUUID
+	ChatMessageID uuid.UUID
 	Source        string
 	Found         bool
 	RuleID        pgtype.Text

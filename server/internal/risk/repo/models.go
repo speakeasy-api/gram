@@ -28,7 +28,7 @@ type RiskResult struct {
 	ProjectID     uuid.UUID
 	RiskPolicyID  uuid.UUID
 	PolicyVersion int64
-	ChatMessageID uuid.NullUUID
+	ChatMessageID uuid.UUID
 	Source        string
 	Found         bool
 	RuleID        pgtype.Text

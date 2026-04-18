@@ -1798,7 +1798,7 @@ CREATE TABLE IF NOT EXISTS risk_results (
   project_id uuid NOT NULL,
   risk_policy_id uuid NOT NULL,
   policy_version BIGINT NOT NULL,
-  chat_message_id uuid,
+  chat_message_id uuid NOT NULL,
   source TEXT NOT NULL,
 
   found BOOLEAN NOT NULL,
