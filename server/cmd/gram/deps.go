@@ -258,12 +258,13 @@ type redisClientOptions struct {
 func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
 	db := 0
 	redisClient := redis.NewClient(&redis.Options{
-		Addr:         opts.redisAddr,
-		Password:     opts.redisPassword,
-		DB:           db,
-		DialTimeout:  1 * time.Second,
-		ReadTimeout:  300 * time.Millisecond,
-		WriteTimeout: 1 * time.Second,
+		Addr:            opts.redisAddr,
+		Password:        opts.redisPassword,
+		DB:              db,
+		DialTimeout:     1 * time.Second,
+		ReadTimeout:     300 * time.Millisecond,
+		WriteTimeout:    1 * time.Second,
+		DisableIdentity: true,
 	})
 
 	if err := redisClient.Ping(ctx).Err(); err != nil {
