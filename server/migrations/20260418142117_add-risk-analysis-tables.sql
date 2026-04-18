@@ -23,7 +23,7 @@ CREATE TABLE "risk_results" (
   "project_id" uuid NOT NULL,
   "risk_policy_id" uuid NOT NULL,
   "policy_version" bigint NOT NULL,
-  "chat_message_id" uuid NOT NULL,
+  "chat_message_id" uuid NULL,
   "source" text NOT NULL,
   "found" boolean NOT NULL,
   "rule_id" text NULL,
