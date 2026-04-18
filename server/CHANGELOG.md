@@ -1,5 +1,11 @@
 # server
 
+## 0.40.1
+
+### Patch Changes
+
+- 3d9188f: Change ID Token syncing behavior to be slighlty less eager
+
 ## 0.40.0
 
 ### Minor Changes
