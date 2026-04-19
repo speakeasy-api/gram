@@ -212,20 +212,20 @@ ON package_versions (package_id DESC, major DESC, minor DESC, patch DESC, prerel
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS skills (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  project_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  skill_uuid TEXT CHECK (skill_uuid <> '' AND CHAR_LENGTH(skill_uuid) <= 100),
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 2000),
-  skill_uuid TEXT CHECK (skill_uuid <> '' AND CHAR_LENGTH(skill_uuid) <= 100),
-  active_version_id uuid,
   created_by_user_id TEXT NOT NULL,
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  organization_id TEXT NOT NULL,
 
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  active_version_id uuid,
+  project_id uuid NOT NULL,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT skills_pkey PRIMARY KEY (id),
@@ -241,24 +241,23 @@ ON skills (project_id, skill_uuid)
 WHERE skill_uuid IS NOT NULL AND deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS skill_versions (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  skill_id uuid NOT NULL,
-  asset_id uuid NOT NULL,
+  size_bytes BIGINT NOT NULL CHECK (size_bytes >= 0),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  first_seen_at timestamptz,
+  skill_bytes BIGINT CHECK (skill_bytes >= 0),
 
   content_sha256 TEXT NOT NULL,
   asset_format TEXT NOT NULL CHECK (asset_format IN ('zip')),
-  size_bytes BIGINT NOT NULL CHECK (size_bytes >= 0),
-  skill_bytes BIGINT CHECK (skill_bytes >= 0),
   state TEXT NOT NULL CHECK (state IN ('pending_review', 'active', 'superseded')),
-
   captured_by_user_id TEXT NOT NULL,
   author_name TEXT CHECK (author_name <> '' AND CHAR_LENGTH(author_name) <= 255),
   first_seen_trace_id TEXT CHECK (first_seen_trace_id <> '' AND CHAR_LENGTH(first_seen_trace_id) <= 100),
   first_seen_session_id TEXT CHECK (first_seen_session_id <> '' AND CHAR_LENGTH(first_seen_session_id) <= 100),
-  first_seen_at timestamptz,
 
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  asset_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
 
   CONSTRAINT skill_versions_pkey PRIMARY KEY (id),
   CONSTRAINT skill_versions_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,

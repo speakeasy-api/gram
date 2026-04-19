@@ -20,7 +20,7 @@ SET
 WHERE project_id = $1
   AND id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+RETURNING created_at, deleted_at, updated_at, skill_uuid, slug, description, created_by_user_id, name, organization_id, id, active_version_id, project_id, deleted
 `
 
 type ArchiveSkillParams struct {
@@ -32,18 +32,18 @@ func (q *Queries) ArchiveSkill(ctx context.Context, arg ArchiveSkillParams) (Ski
 	row := q.db.QueryRow(ctx, archiveSkill, arg.ProjectID, arg.ID)
 	var i Skill
 	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SkillUuid,
 		&i.Slug,
 		&i.Description,
-		&i.SkillUuid,
-		&i.ActiveVersionID,
 		&i.CreatedByUserID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.Name,
+		&i.OrganizationID,
+		&i.ID,
+		&i.ActiveVersionID,
+		&i.ProjectID,
 		&i.Deleted,
 	)
 	return i, err
@@ -70,7 +70,7 @@ VALUES (
   , $7
   , $8
 )
-RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+RETURNING created_at, deleted_at, updated_at, skill_uuid, slug, description, created_by_user_id, name, organization_id, id, active_version_id, project_id, deleted
 `
 
 type CreateSkillParams struct {
@@ -97,18 +97,18 @@ func (q *Queries) CreateSkill(ctx context.Context, arg CreateSkillParams) (Skill
 	)
 	var i Skill
 	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SkillUuid,
 		&i.Slug,
 		&i.Description,
-		&i.SkillUuid,
-		&i.ActiveVersionID,
 		&i.CreatedByUserID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.Name,
+		&i.OrganizationID,
+		&i.ID,
+		&i.ActiveVersionID,
+		&i.ProjectID,
 		&i.Deleted,
 	)
 	return i, err
@@ -150,7 +150,7 @@ SELECT
   , $10
   , $11
 FROM skill_lookup
-RETURNING id, skill_id, asset_id, content_sha256, asset_format, size_bytes, skill_bytes, state, captured_by_user_id, author_name, first_seen_trace_id, first_seen_session_id, first_seen_at, created_at, updated_at
+RETURNING size_bytes, updated_at, created_at, first_seen_at, skill_bytes, content_sha256, asset_format, state, captured_by_user_id, author_name, first_seen_trace_id, first_seen_session_id, id, asset_id, skill_id
 `
 
 type CreateSkillVersionParams struct {
@@ -187,27 +187,27 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 	)
 	var i SkillVersion
 	err := row.Scan(
-		&i.ID,
-		&i.SkillID,
-		&i.AssetID,
+		&i.SizeBytes,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.FirstSeenAt,
+		&i.SkillBytes,
 		&i.ContentSha256,
 		&i.AssetFormat,
-		&i.SizeBytes,
-		&i.SkillBytes,
 		&i.State,
 		&i.CapturedByUserID,
 		&i.AuthorName,
 		&i.FirstSeenTraceID,
 		&i.FirstSeenSessionID,
-		&i.FirstSeenAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.ID,
+		&i.AssetID,
+		&i.SkillID,
 	)
 	return i, err
 }
 
 const getSkill = `-- name: GetSkill :one
-SELECT id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+SELECT created_at, deleted_at, updated_at, skill_uuid, slug, description, created_by_user_id, name, organization_id, id, active_version_id, project_id, deleted
 FROM skills
 WHERE project_id = $1
   AND id = $2
@@ -223,25 +223,25 @@ func (q *Queries) GetSkill(ctx context.Context, arg GetSkillParams) (Skill, erro
 	row := q.db.QueryRow(ctx, getSkill, arg.ProjectID, arg.ID)
 	var i Skill
 	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SkillUuid,
 		&i.Slug,
 		&i.Description,
-		&i.SkillUuid,
-		&i.ActiveVersionID,
 		&i.CreatedByUserID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.Name,
+		&i.OrganizationID,
+		&i.ID,
+		&i.ActiveVersionID,
+		&i.ProjectID,
 		&i.Deleted,
 	)
 	return i, err
 }
 
 const getSkillBySkillUUID = `-- name: GetSkillBySkillUUID :one
-SELECT id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+SELECT created_at, deleted_at, updated_at, skill_uuid, slug, description, created_by_user_id, name, organization_id, id, active_version_id, project_id, deleted
 FROM skills
 WHERE project_id = $1
   AND skill_uuid = $2
@@ -257,25 +257,25 @@ func (q *Queries) GetSkillBySkillUUID(ctx context.Context, arg GetSkillBySkillUU
 	row := q.db.QueryRow(ctx, getSkillBySkillUUID, arg.ProjectID, arg.SkillUuid)
 	var i Skill
 	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SkillUuid,
 		&i.Slug,
 		&i.Description,
-		&i.SkillUuid,
-		&i.ActiveVersionID,
 		&i.CreatedByUserID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.Name,
+		&i.OrganizationID,
+		&i.ID,
+		&i.ActiveVersionID,
+		&i.ProjectID,
 		&i.Deleted,
 	)
 	return i, err
 }
 
 const getSkillBySlug = `-- name: GetSkillBySlug :one
-SELECT id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+SELECT created_at, deleted_at, updated_at, skill_uuid, slug, description, created_by_user_id, name, organization_id, id, active_version_id, project_id, deleted
 FROM skills
 WHERE project_id = $1
   AND slug = $2
@@ -291,25 +291,25 @@ func (q *Queries) GetSkillBySlug(ctx context.Context, arg GetSkillBySlugParams) 
 	row := q.db.QueryRow(ctx, getSkillBySlug, arg.ProjectID, arg.Slug)
 	var i Skill
 	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SkillUuid,
 		&i.Slug,
 		&i.Description,
-		&i.SkillUuid,
-		&i.ActiveVersionID,
 		&i.CreatedByUserID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.Name,
+		&i.OrganizationID,
+		&i.ID,
+		&i.ActiveVersionID,
+		&i.ProjectID,
 		&i.Deleted,
 	)
 	return i, err
 }
 
 const getSkillVersion = `-- name: GetSkillVersion :one
-SELECT sv.id, sv.skill_id, sv.asset_id, sv.content_sha256, sv.asset_format, sv.size_bytes, sv.skill_bytes, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.first_seen_at, sv.created_at, sv.updated_at
+SELECT sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
 FROM skill_versions sv
 INNER JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -325,27 +325,27 @@ func (q *Queries) GetSkillVersion(ctx context.Context, arg GetSkillVersionParams
 	row := q.db.QueryRow(ctx, getSkillVersion, arg.ProjectID, arg.ID)
 	var i SkillVersion
 	err := row.Scan(
-		&i.ID,
-		&i.SkillID,
-		&i.AssetID,
+		&i.SizeBytes,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.FirstSeenAt,
+		&i.SkillBytes,
 		&i.ContentSha256,
 		&i.AssetFormat,
-		&i.SizeBytes,
-		&i.SkillBytes,
 		&i.State,
 		&i.CapturedByUserID,
 		&i.AuthorName,
 		&i.FirstSeenTraceID,
 		&i.FirstSeenSessionID,
-		&i.FirstSeenAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.ID,
+		&i.AssetID,
+		&i.SkillID,
 	)
 	return i, err
 }
 
 const getSkillVersionByHash = `-- name: GetSkillVersionByHash :one
-SELECT sv.id, sv.skill_id, sv.asset_id, sv.content_sha256, sv.asset_format, sv.size_bytes, sv.skill_bytes, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.first_seen_at, sv.created_at, sv.updated_at
+SELECT sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
 FROM skill_versions sv
 INNER JOIN skills s ON s.id = sv.skill_id
 WHERE sv.skill_id = $1
@@ -363,27 +363,27 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 	row := q.db.QueryRow(ctx, getSkillVersionByHash, arg.SkillID, arg.ContentSha256, arg.ProjectID)
 	var i SkillVersion
 	err := row.Scan(
-		&i.ID,
-		&i.SkillID,
-		&i.AssetID,
+		&i.SizeBytes,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.FirstSeenAt,
+		&i.SkillBytes,
 		&i.ContentSha256,
 		&i.AssetFormat,
-		&i.SizeBytes,
-		&i.SkillBytes,
 		&i.State,
 		&i.CapturedByUserID,
 		&i.AuthorName,
 		&i.FirstSeenTraceID,
 		&i.FirstSeenSessionID,
-		&i.FirstSeenAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.ID,
+		&i.AssetID,
+		&i.SkillID,
 	)
 	return i, err
 }
 
 const listSkillVersions = `-- name: ListSkillVersions :many
-SELECT sv.id, sv.skill_id, sv.asset_id, sv.content_sha256, sv.asset_format, sv.size_bytes, sv.skill_bytes, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.first_seen_at, sv.created_at, sv.updated_at
+SELECT sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
 FROM skill_versions sv
 INNER JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -406,21 +406,21 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 	for rows.Next() {
 		var i SkillVersion
 		if err := rows.Scan(
-			&i.ID,
-			&i.SkillID,
-			&i.AssetID,
+			&i.SizeBytes,
+			&i.UpdatedAt,
+			&i.CreatedAt,
+			&i.FirstSeenAt,
+			&i.SkillBytes,
 			&i.ContentSha256,
 			&i.AssetFormat,
-			&i.SizeBytes,
-			&i.SkillBytes,
 			&i.State,
 			&i.CapturedByUserID,
 			&i.AuthorName,
 			&i.FirstSeenTraceID,
 			&i.FirstSeenSessionID,
-			&i.FirstSeenAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.ID,
+			&i.AssetID,
+			&i.SkillID,
 		); err != nil {
 			return nil, err
 		}
@@ -433,7 +433,7 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 }
 
 const listSkills = `-- name: ListSkills :many
-SELECT id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+SELECT created_at, deleted_at, updated_at, skill_uuid, slug, description, created_by_user_id, name, organization_id, id, active_version_id, project_id, deleted
 FROM skills
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -450,18 +450,18 @@ func (q *Queries) ListSkills(ctx context.Context, projectID uuid.UUID) ([]Skill,
 	for rows.Next() {
 		var i Skill
 		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.ProjectID,
-			&i.Name,
+			&i.CreatedAt,
+			&i.DeletedAt,
+			&i.UpdatedAt,
+			&i.SkillUuid,
 			&i.Slug,
 			&i.Description,
-			&i.SkillUuid,
-			&i.ActiveVersionID,
 			&i.CreatedByUserID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
+			&i.Name,
+			&i.OrganizationID,
+			&i.ID,
+			&i.ActiveVersionID,
+			&i.ProjectID,
 			&i.Deleted,
 		); err != nil {
 			return nil, err
@@ -488,7 +488,7 @@ WHERE skills.project_id = $2
     WHERE sv.id = $1
       AND sv.skill_id = skills.id
   )
-RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+RETURNING created_at, deleted_at, updated_at, skill_uuid, slug, description, created_by_user_id, name, organization_id, id, active_version_id, project_id, deleted
 `
 
 type SetSkillActiveVersionParams struct {
@@ -501,18 +501,18 @@ func (q *Queries) SetSkillActiveVersion(ctx context.Context, arg SetSkillActiveV
 	row := q.db.QueryRow(ctx, setSkillActiveVersion, arg.ActiveVersionID, arg.ProjectID, arg.ID)
 	var i Skill
 	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SkillUuid,
 		&i.Slug,
 		&i.Description,
-		&i.SkillUuid,
-		&i.ActiveVersionID,
 		&i.CreatedByUserID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.Name,
+		&i.OrganizationID,
+		&i.ID,
+		&i.ActiveVersionID,
+		&i.ProjectID,
 		&i.Deleted,
 	)
 	return i, err
@@ -530,7 +530,7 @@ SET
 WHERE project_id = $6
   AND id = $7
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+RETURNING created_at, deleted_at, updated_at, skill_uuid, slug, description, created_by_user_id, name, organization_id, id, active_version_id, project_id, deleted
 `
 
 type UpdateSkillParams struct {
@@ -555,18 +555,18 @@ func (q *Queries) UpdateSkill(ctx context.Context, arg UpdateSkillParams) (Skill
 	)
 	var i Skill
 	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SkillUuid,
 		&i.Slug,
 		&i.Description,
-		&i.SkillUuid,
-		&i.ActiveVersionID,
 		&i.CreatedByUserID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.Name,
+		&i.OrganizationID,
+		&i.ID,
+		&i.ActiveVersionID,
+		&i.ProjectID,
 		&i.Deleted,
 	)
 	return i, err
@@ -581,7 +581,7 @@ FROM skills s
 WHERE sv.id = $2
   AND s.id = sv.skill_id
   AND s.project_id = $3
-RETURNING sv.id, sv.skill_id, sv.asset_id, sv.content_sha256, sv.asset_format, sv.size_bytes, sv.skill_bytes, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.first_seen_at, sv.created_at, sv.updated_at
+RETURNING sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
 `
 
 type UpdateSkillVersionStateParams struct {
@@ -594,21 +594,21 @@ func (q *Queries) UpdateSkillVersionState(ctx context.Context, arg UpdateSkillVe
 	row := q.db.QueryRow(ctx, updateSkillVersionState, arg.State, arg.ID, arg.ProjectID)
 	var i SkillVersion
 	err := row.Scan(
-		&i.ID,
-		&i.SkillID,
-		&i.AssetID,
+		&i.SizeBytes,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.FirstSeenAt,
+		&i.SkillBytes,
 		&i.ContentSha256,
 		&i.AssetFormat,
-		&i.SizeBytes,
-		&i.SkillBytes,
 		&i.State,
 		&i.CapturedByUserID,
 		&i.AuthorName,
 		&i.FirstSeenTraceID,
 		&i.FirstSeenSessionID,
-		&i.FirstSeenAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.ID,
+		&i.AssetID,
+		&i.SkillID,
 	)
 	return i, err
 }

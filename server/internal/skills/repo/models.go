@@ -10,35 +10,35 @@ import (
 )
 
 type Skill struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	Name            string
+	CreatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	SkillUuid       pgtype.Text
 	Slug            string
 	Description     pgtype.Text
-	SkillUuid       pgtype.Text
-	ActiveVersionID uuid.NullUUID
 	CreatedByUserID string
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
+	Name            string
+	OrganizationID  string
+	ID              uuid.UUID
+	ActiveVersionID uuid.NullUUID
+	ProjectID       uuid.UUID
 	Deleted         bool
 }
 
 type SkillVersion struct {
-	ID                 uuid.UUID
-	SkillID            uuid.UUID
-	AssetID            uuid.UUID
+	SizeBytes          int64
+	UpdatedAt          pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	FirstSeenAt        pgtype.Timestamptz
+	SkillBytes         pgtype.Int8
 	ContentSha256      string
 	AssetFormat        string
-	SizeBytes          int64
-	SkillBytes         pgtype.Int8
 	State              string
 	CapturedByUserID   string
 	AuthorName         pgtype.Text
 	FirstSeenTraceID   pgtype.Text
 	FirstSeenSessionID pgtype.Text
-	FirstSeenAt        pgtype.Timestamptz
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
+	ID                 uuid.UUID
+	AssetID            uuid.UUID
+	SkillID            uuid.UUID
 }
