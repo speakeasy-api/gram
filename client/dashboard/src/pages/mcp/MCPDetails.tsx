@@ -419,11 +419,14 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   // Fetch data needed to detect system-provided vars on the attached env.
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
-  const { data: mcpMetadataData } = useGetMcpMetadata(
-    { toolsetSlug: toolset.slug },
-    undefined,
-    { throwOnError: false, retry: false },
-  );
+  const {
+    data: mcpMetadataData,
+    isLoading: mcpMetadataLoading,
+    isError: mcpMetadataError,
+  } = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
+    throwOnError: false,
+    retry: false,
+  });
   const mcpMetadata = mcpMetadataData?.metadata;
 
   const attachedEnvironment = mcpMetadata?.defaultEnvironmentId
@@ -439,6 +442,11 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
         : [],
     [envVars, attachedEnvironment],
   );
+
+  // If we can't determine system vars due to a still-loading or errored metadata
+  // query, fail closed — disable the "Public" option to prevent silent bypass of
+  // the warning dialog.
+  const publicOptionUnavailable = mcpMetadataLoading || mcpMetadataError;
 
   const currentStatus: ServerStatus = !toolset.mcpEnabled
     ? "disabled"
@@ -563,7 +571,10 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
             <DropdownMenuItem
               key={option.value}
               onSelect={() => handleSelect(option.value)}
-              disabled={option.value === currentStatus}
+              disabled={
+                option.value === currentStatus ||
+                (option.value === "public" && publicOptionUnavailable)
+              }
               className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
             >
               <span
@@ -579,7 +590,9 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
                   {option.label}
                 </span>
                 <span className="text-muted-foreground text-xs">
-                  {option.description}
+                  {option.value === "public" && publicOptionUnavailable
+                    ? "Loading environment data…"
+                    : option.description}
                 </span>
               </div>
             </DropdownMenuItem>
