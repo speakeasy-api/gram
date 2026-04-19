@@ -848,6 +848,17 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   tool_outcome TEXT,
   tool_outcome_notes TEXT,
 
+  -- Canonical hash of (role, content, tool_calls, tool_call_id) used to detect
+  -- whether an incoming completion request has diverged from the stored history
+  -- (e.g., client-side conversation compaction). Nullable because existing rows
+  -- have no hash; backfilled lazily during the next capture turn.
+  content_hash BYTEA,
+
+  -- Monotonic counter per chat. Bumped when the matcher detects divergence from
+  -- the stored content chain (compaction or edit). Messages belonging to the
+  -- same logical conversation view share a generation.
+  generation INTEGER NOT NULL DEFAULT 0,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
@@ -856,6 +867,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 );
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
 
 CREATE TABLE IF NOT EXISTS chat_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

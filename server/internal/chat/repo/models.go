@@ -50,6 +50,8 @@ type ChatMessage struct {
 	ToolUrn          urn.Tool
 	ToolOutcome      pgtype.Text
 	ToolOutcomeNotes pgtype.Text
+	ContentHash      []byte
+	Generation       int32
 	CreatedAt        pgtype.Timestamptz
 }
 
