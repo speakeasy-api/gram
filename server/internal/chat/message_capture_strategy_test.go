@@ -45,6 +45,15 @@ func makeResponse(content string) openrouter.CompletionResponse {
 	}
 }
 
+// runTurn threads a single request through StartOrResumeChat + CaptureMessage
+// the same way the unified client does — so tests exercise the session handoff.
+func runTurn(t *testing.T, ctx context.Context, s *chat.ChatMessageCaptureStrategy, req openrouter.CompletionRequest, resp openrouter.CompletionResponse) {
+	t.Helper()
+	sess, err := s.StartOrResumeChat(ctx, req)
+	require.NoError(t, err)
+	require.NoError(t, s.CaptureMessage(ctx, sess, req, resp))
+}
+
 func listAllMessages(t *testing.T, ctx context.Context, conn *pgxpool.Pool, chatID, projectID uuid.UUID) []repo.ChatMessage {
 	t.Helper()
 	rows, err := repo.New(conn).ListChatMessages(ctx, repo.ListChatMessagesParams{
@@ -64,27 +73,19 @@ func TestMatcher_CleanAppend(t *testing.T) {
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
-	require.NoError(t, s.StartOrResumeChat(ctx, makeRequest(chatID, projectID, orgID,
-		openrouter.CreateMessageUser("Hello"),
-	)))
-	require.NoError(t, s.CaptureMessage(ctx,
+	runTurn(t, ctx, s,
 		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("Hello")),
 		makeResponse("Hi there"),
-	))
+	)
 
-	require.NoError(t, s.StartOrResumeChat(ctx, makeRequest(chatID, projectID, orgID,
-		openrouter.CreateMessageUser("Hello"),
-		openrouter.CreateMessageAssistant("Hi there"),
-		openrouter.CreateMessageUser("How are you?"),
-	)))
-	require.NoError(t, s.CaptureMessage(ctx,
+	runTurn(t, ctx, s,
 		makeRequest(chatID, projectID, orgID,
 			openrouter.CreateMessageUser("Hello"),
 			openrouter.CreateMessageAssistant("Hi there"),
 			openrouter.CreateMessageUser("How are you?"),
 		),
 		makeResponse("Doing well"),
-	))
+	)
 
 	rows := listAllMessages(t, ctx, conn, chatID, projectID)
 	require.Len(t, rows, 4)
@@ -104,19 +105,14 @@ func TestMatcher_CompactionBumpsGeneration(t *testing.T) {
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
-	// Round 1: 3 user/assistant pairs
-	seed := []or.ChatMessages{
-		openrouter.CreateMessageUser("one"),
-	}
-	require.NoError(t, s.StartOrResumeChat(ctx, makeRequest(chatID, projectID, orgID, seed...)))
-	require.NoError(t, s.CaptureMessage(ctx, makeRequest(chatID, projectID, orgID, seed...), makeResponse("r1")))
+	seed := []or.ChatMessages{openrouter.CreateMessageUser("one")}
+	runTurn(t, ctx, s, makeRequest(chatID, projectID, orgID, seed...), makeResponse("r1"))
 
 	seed = append(seed,
 		openrouter.CreateMessageAssistant("r1"),
 		openrouter.CreateMessageUser("two"),
 	)
-	require.NoError(t, s.StartOrResumeChat(ctx, makeRequest(chatID, projectID, orgID, seed...)))
-	require.NoError(t, s.CaptureMessage(ctx, makeRequest(chatID, projectID, orgID, seed...), makeResponse("r2")))
+	runTurn(t, ctx, s, makeRequest(chatID, projectID, orgID, seed...), makeResponse("r2"))
 
 	beforeCount := len(listAllMessages(t, ctx, conn, chatID, projectID))
 	require.Equal(t, 4, beforeCount)
@@ -126,8 +122,7 @@ func TestMatcher_CompactionBumpsGeneration(t *testing.T) {
 		openrouter.CreateMessageSystem("Summary: user said hi, assistant said hi back."),
 		openrouter.CreateMessageUser("continue"),
 	}
-	require.NoError(t, s.StartOrResumeChat(ctx, makeRequest(chatID, projectID, orgID, compacted...)))
-	require.NoError(t, s.CaptureMessage(ctx, makeRequest(chatID, projectID, orgID, compacted...), makeResponse("ok")))
+	runTurn(t, ctx, s, makeRequest(chatID, projectID, orgID, compacted...), makeResponse("ok"))
 
 	rows := listAllMessages(t, ctx, conn, chatID, projectID)
 	require.Len(t, rows, 7, "original 4 + compacted 3 (system, user, assistant)")
@@ -150,13 +145,11 @@ func TestMatcher_EditBumpsGeneration(t *testing.T) {
 	chatID := uuid.New()
 
 	round1 := []or.ChatMessages{openrouter.CreateMessageUser("original question")}
-	require.NoError(t, s.StartOrResumeChat(ctx, makeRequest(chatID, projectID, orgID, round1...)))
-	require.NoError(t, s.CaptureMessage(ctx, makeRequest(chatID, projectID, orgID, round1...), makeResponse("answer")))
+	runTurn(t, ctx, s, makeRequest(chatID, projectID, orgID, round1...), makeResponse("answer"))
 
 	// Client edits the first user message and retries.
 	round2 := []or.ChatMessages{openrouter.CreateMessageUser("edited question")}
-	require.NoError(t, s.StartOrResumeChat(ctx, makeRequest(chatID, projectID, orgID, round2...)))
-	require.NoError(t, s.CaptureMessage(ctx, makeRequest(chatID, projectID, orgID, round2...), makeResponse("different answer")))
+	runTurn(t, ctx, s, makeRequest(chatID, projectID, orgID, round2...), makeResponse("different answer"))
 
 	rows := listAllMessages(t, ctx, conn, chatID, projectID)
 	require.Len(t, rows, 4)
@@ -175,24 +168,22 @@ func TestMatcher_LazyBackfillsMissingHash(t *testing.T) {
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
-	require.NoError(t, s.StartOrResumeChat(ctx, makeRequest(chatID, projectID, orgID,
-		openrouter.CreateMessageUser("hi"),
-	)))
-	require.NoError(t, s.CaptureMessage(ctx,
+	runTurn(t, ctx, s,
 		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("hi")),
 		makeResponse("hello"),
-	))
+	)
 
 	// Simulate pre-migration rows by nulling out the hashes.
 	_, err := conn.Exec(ctx, "UPDATE chat_messages SET content_hash = NULL WHERE chat_id = $1", chatID)
 	require.NoError(t, err)
 
 	// Reload with full history + new message. Should backfill hashes and clean-append.
-	require.NoError(t, s.StartOrResumeChat(ctx, makeRequest(chatID, projectID, orgID,
+	_, err = s.StartOrResumeChat(ctx, makeRequest(chatID, projectID, orgID,
 		openrouter.CreateMessageUser("hi"),
 		openrouter.CreateMessageAssistant("hello"),
 		openrouter.CreateMessageUser("follow up"),
-	)))
+	))
+	require.NoError(t, err)
 
 	rows := listAllMessages(t, ctx, conn, chatID, projectID)
 	require.Len(t, rows, 3)

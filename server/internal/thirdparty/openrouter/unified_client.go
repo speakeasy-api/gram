@@ -79,16 +79,20 @@ func NewUnifiedClient(
 }
 
 type initializeRequestResult struct {
-	apiKey      string
-	requestBody OpenAIChatRequest
+	apiKey         string
+	requestBody    OpenAIChatRequest
+	captureSession CaptureSession
 }
 
 // initializeRequest creates the OpenAI-compatible request body with defaults applied.
 func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionRequest) (*initializeRequestResult, error) {
+	var captureSession CaptureSession
 	if c.messageCaptureStrategy != nil {
-		if err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req); err != nil {
-			return nil, fmt.Errorf("failed to start or resume chat: %w", err)
+		sess, err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("start or resume chat: %w", err)
 		}
+		captureSession = sess
 	}
 
 	// Provision API key
@@ -133,8 +137,9 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 	}
 
 	return &initializeRequestResult{
-		apiKey:      apiKey,
-		requestBody: reqBody,
+		apiKey:         apiKey,
+		requestBody:    reqBody,
+		captureSession: captureSession,
 	}, nil
 }
 
@@ -174,10 +179,10 @@ func (c *ChatClient) makeHTTPRequest(ctx context.Context, apiKey string, reqBody
 }
 
 // onMessageComplete applies message capture and usage tracking strategies.
-func (c *ChatClient) onMessageComplete(ctx context.Context, req CompletionRequest, response CompletionResponse) {
+func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSession, req CompletionRequest, response CompletionResponse) {
 	// Apply message capture strategy
 	if c.messageCaptureStrategy != nil {
-		if err := c.messageCaptureStrategy.CaptureMessage(ctx, req, response); err != nil {
+		if err := c.messageCaptureStrategy.CaptureMessage(ctx, session, req, response); err != nil {
 			// Log error but don't fail the request
 			c.logger.ErrorContext(ctx, "failed to capture message", attr.SlogError(err))
 		}
@@ -332,7 +337,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	}
 
 	// Apply message capture and usage tracking strategies
-	c.onMessageComplete(context.WithoutCancel(ctx), req, *response)
+	c.onMessageComplete(context.WithoutCancel(ctx), initResult.captureSession, req, *response)
 
 	return response, nil
 }
@@ -369,6 +374,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		ctx:                  ctx,
 		body:                 httpResp.Body,
 		request:              req,
+		captureSession:       initResult.captureSession,
 		logger:               c.logger,
 		client:               c,
 		telemetryService:     c.telemetryLogger,
@@ -433,6 +439,7 @@ type streamingResponseReader struct {
 	ctx              context.Context //nolint:containedctx // Context needed for telemetry and async operations
 	body             io.ReadCloser
 	request          CompletionRequest
+	captureSession   CaptureSession
 	logger           *slog.Logger
 	client           *ChatClient
 	telemetryService TelemetryLogger
@@ -495,7 +502,7 @@ func (r *streamingResponseReader) Close() error {
 		}
 
 		// Use WithoutCancel to ensure message capture completes even if the stream was killed
-		r.client.onMessageComplete(context.WithoutCancel(r.ctx), r.request, response)
+		r.client.onMessageComplete(context.WithoutCancel(r.ctx), r.captureSession, r.request, response)
 	}
 
 	return err
