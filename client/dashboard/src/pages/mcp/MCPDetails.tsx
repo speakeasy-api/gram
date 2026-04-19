@@ -419,14 +419,11 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   // Fetch data needed to detect system-provided vars on the attached env.
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
-  const {
-    data: mcpMetadataData,
-    isLoading: mcpMetadataLoading,
-    isError: mcpMetadataError,
-  } = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
-    throwOnError: false,
-    retry: false,
-  });
+  const { data: mcpMetadataData, isLoading: mcpMetadataLoading } =
+    useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
+      throwOnError: false,
+      retry: false,
+    });
   const mcpMetadata = mcpMetadataData?.metadata;
 
   const attachedEnvironment = mcpMetadata?.defaultEnvironmentId
@@ -443,10 +440,15 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
     [envVars, attachedEnvironment],
   );
 
-  // If we can't determine system vars due to a still-loading or errored metadata
-  // query, fail closed — disable the "Public" option to prevent silent bypass of
-  // the warning dialog.
-  const publicOptionUnavailable = mcpMetadataLoading || mcpMetadataError;
+  // While the metadata query is loading for the first time we can't know
+  // whether system vars exist, so disable the "Public" option to prevent a
+  // silent bypass of the warning dialog. We intentionally do NOT fail-closed on
+  // query errors: the endpoint returns 404 when no metadata row exists for a
+  // toolset (a common, safe state meaning "no attached env"), and `retry: false`
+  // would otherwise lock the option permanently on that 404. Other call sites
+  // (MCPAuthenticationTab, MCPEnvironmentSettings) treat missing metadata the
+  // same way.
+  const publicOptionUnavailable = mcpMetadataLoading;
 
   const currentStatus: ServerStatus = !toolset.mcpEnabled
     ? "disabled"
