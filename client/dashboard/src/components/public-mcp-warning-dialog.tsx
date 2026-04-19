@@ -48,18 +48,19 @@ export function PublicMcpWarningDialog({
               <ShieldAlert
                 className="h-5 w-5 shrink-0"
                 style={{ color: "#C83228" }}
+                aria-hidden="true"
               />
               Share system secrets with public callers.
             </Dialog.Title>
           </Dialog.Header>
 
           <div className="mt-4 space-y-4 text-sm">
-            <p className="text-muted-foreground">
+            <Dialog.Description className="text-muted-foreground">
               Anyone with this URL will call with values from{" "}
               <strong className="text-foreground">{environmentName}</strong>.
               System values are shared. Treat them as team credentials, not user
               credentials.
-            </p>
+            </Dialog.Description>
 
             <div className="space-y-2">
               <p
@@ -87,7 +88,7 @@ export function PublicMcpWarningDialog({
               className="text-foreground inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
             >
               Review in {environmentName}
-              <ExternalLink className="h-3.5 w-3.5" />
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
             </a>
           </div>
 
