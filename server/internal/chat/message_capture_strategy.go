@@ -1,12 +1,15 @@
 package chat
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -69,63 +72,109 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		return oops.E(oops.CodeUnexpected, err, "create chat")
 	}
 
-	// Get the number of already-stored messages so we can insert any new ones
-	chatCount, err := s.repo.CountChatMessages(ctx, chatID)
+	// Load the current generation's stored messages and walk them against the
+	// incoming request to detect divergence (client compaction or edit).
+	currentGen, err := s.repo.GetMaxGenerationForChat(ctx, chatID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to get chat history", attr.SlogError(err))
-		return oops.E(oops.CodeUnexpected, err, "count chat messages")
+		s.logger.ErrorContext(ctx, "failed to get chat generation", attr.SlogError(err))
+		return oops.E(oops.CodeUnexpected, err, "get chat generation")
 	}
 
-	// This shouldn't happen, and also it doesn't really matter if it does, but we error anyway so we can fix it
-	if int(chatCount) > len(request.Messages) {
-		return oops.E(oops.CodeInvalid, nil, "chat history mismatch")
+	stored, err := s.repo.ListChatMessagesForMatch(ctx, repo.ListChatMessagesForMatchParams{
+		ChatID:     chatID,
+		Generation: currentGen,
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to list chat messages for match", attr.SlogError(err))
+		return oops.E(oops.CodeUnexpected, err, "list chat messages for match")
 	}
 
-	// If the stored chat history is shorter than the request, insert the missing messages
-	// Most of the time, this just serves to store the new message the user just sent
-	if int(chatCount) < len(request.Messages) {
-		newMessages := request.Messages[int(chatCount):]
-		rows := make([]chatMessageRow, len(newMessages))
-		for i, msg := range newMessages {
-			var toolCallID string
-			if tc := openrouter.GetToolCallID(msg); tc != nil {
-				toolCallID = *tc
-			}
-
-			metadata := httpMetadata{
-				Source:    string(request.UsageSource),
-				Origin:    "",
-				UserAgent: "",
-				IPAddress: "",
-			}
-
-			if request.HTTPMetadata != nil {
-				metadata.Origin = request.HTTPMetadata.Origin
-				metadata.UserAgent = request.HTTPMetadata.UserAgent
-				metadata.IPAddress = request.HTTPMetadata.IPAddress
-			}
-
-			rows[i] = chatMessageRow{
-				projectID:        projectID,
-				chatID:           chatID,
-				userID:           userID,
-				externalUserID:   externalUserID,
-				messageID:        "",
-				toolCallID:       toolCallID,
-				role:             openrouter.GetRole(msg),
-				model:            request.Model,
-				content:          msg,
-				metadata:         metadata,
-				finishReason:     nil,
-				toolCalls:        nil,
-				promptTokens:     0,
-				completionTokens: 0,
-				totalTokens:      0,
+	var parentHash []byte
+	matchedPrefix := 0
+	diverged := false
+	for i, row := range stored {
+		if i >= len(request.Messages) {
+			diverged = true
+			break
+		}
+		storedHash := row.ContentHash
+		if len(storedHash) == 0 {
+			// Lazy backfill: historical rows have no hash. Compute from stored
+			// fields and persist so subsequent turns skip this path.
+			storedHash = chainMessageHash(parentHash, row.Role, row.Content, row.ToolCallID.String)
+			if err := s.repo.BackfillChatMessageHash(ctx, repo.BackfillChatMessageHashParams{
+				ID:          row.ID,
+				ContentHash: storedHash,
+			}); err != nil {
+				s.logger.WarnContext(ctx, "failed to backfill chat message hash", attr.SlogError(err))
 			}
 		}
-		if err := storeMessages(ctx, s.logger, s.db, s.assetStorage, rows); err != nil {
-			s.logger.ErrorContext(ctx, "failed to store chat messages", attr.SlogError(err))
+		if !bytes.Equal(storedHash, hashIncomingMessage(parentHash, request.Messages[i])) {
+			diverged = true
+			break
 		}
+		parentHash = storedHash
+		matchedPrefix = i + 1
+	}
+
+	generation := currentGen
+	if diverged {
+		// Compaction or edit: start a fresh chain at a new generation. Old rows
+		// stay as audit history.
+		generation = currentGen + 1
+		parentHash = nil
+		matchedPrefix = 0
+	}
+
+	newMessages := request.Messages[matchedPrefix:]
+	if len(newMessages) == 0 {
+		return nil
+	}
+
+	rows := make([]chatMessageRow, len(newMessages))
+	for i, msg := range newMessages {
+		var toolCallID string
+		if tc := openrouter.GetToolCallID(msg); tc != nil {
+			toolCallID = *tc
+		}
+
+		metadata := httpMetadata{
+			Source:    string(request.UsageSource),
+			Origin:    "",
+			UserAgent: "",
+			IPAddress: "",
+		}
+
+		if request.HTTPMetadata != nil {
+			metadata.Origin = request.HTTPMetadata.Origin
+			metadata.UserAgent = request.HTTPMetadata.UserAgent
+			metadata.IPAddress = request.HTTPMetadata.IPAddress
+		}
+
+		h := hashIncomingMessage(parentHash, msg)
+		rows[i] = chatMessageRow{
+			projectID:        projectID,
+			chatID:           chatID,
+			userID:           userID,
+			externalUserID:   externalUserID,
+			messageID:        "",
+			toolCallID:       toolCallID,
+			role:             openrouter.GetRole(msg),
+			model:            request.Model,
+			content:          msg,
+			metadata:         metadata,
+			finishReason:     nil,
+			toolCalls:        nil,
+			promptTokens:     0,
+			completionTokens: 0,
+			totalTokens:      0,
+			contentHash:      h,
+			generation:       generation,
+		}
+		parentHash = h
+	}
+	if err := storeMessages(ctx, s.logger, s.db, s.assetStorage, rows); err != nil {
+		s.logger.ErrorContext(ctx, "failed to store chat messages", attr.SlogError(err))
 	}
 
 	return nil
@@ -167,7 +216,23 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 		ipAddress = request.HTTPMetadata.IPAddress
 	}
 
-	// Store message
+	// The assistant response extends whatever chain StartOrResumeChat just
+	// wrote to - take the tip's generation and hash and link from there.
+	var generation int32
+	var parentHash []byte
+	tip, err := s.repo.GetChatChainTip(ctx, request.ChatID)
+	switch {
+	case err == nil:
+		generation = tip.Generation
+		parentHash = tip.ContentHash
+	case errors.Is(err, pgx.ErrNoRows):
+		// First-ever message: no user turn reached StartOrResumeChat, so chain
+		// starts fresh at generation 0.
+	default:
+		s.logger.ErrorContext(ctx, "failed to get chat chain tip", attr.SlogError(err))
+		return fmt.Errorf("get chat chain tip: %w", err)
+	}
+
 	_, err = s.repo.CreateChatMessage(ctx, []repo.CreateChatMessageParams{{
 		ChatID:           request.ChatID,
 		Role:             "assistant",
@@ -190,6 +255,8 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 		UserAgent:        conv.ToPGText(userAgent),
 		IpAddress:        conv.ToPGText(ipAddress),
 		Source:           conv.ToPGText(string(request.UsageSource)),
+		ContentHash:      hashAssistantResponse(parentHash, response.Content),
+		Generation:       generation,
 	}})
 
 	if err != nil {

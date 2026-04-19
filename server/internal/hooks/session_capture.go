@@ -207,6 +207,8 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		Origin:           conv.ToPGTextEmpty(""),
 		UserAgent:        conv.ToPGTextEmpty(""),
 		IpAddress:        conv.ToPGTextEmpty(""),
+		ContentHash:      nil,
+		Generation:       0,
 	}
 
 	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle); err != nil {
@@ -274,6 +276,8 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		Origin:           conv.ToPGTextEmpty(""),
 		UserAgent:        conv.ToPGTextEmpty(""),
 		IpAddress:        conv.ToPGTextEmpty(""),
+		ContentHash:      nil,
+		Generation:       0,
 	}
 
 	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle)
@@ -323,6 +327,8 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 		Origin:           conv.ToPGTextEmpty(""),
 		UserAgent:        conv.ToPGTextEmpty(""),
 		IpAddress:        conv.ToPGTextEmpty(""),
+		ContentHash:      nil,
+		Generation:       0,
 	}
 
 	// If this was an error, we could optionally set tool_outcome based on isError

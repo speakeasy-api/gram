@@ -306,6 +306,8 @@ func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *g
 		Origin:           conv.ToPGTextEmpty(""),
 		UserAgent:        conv.ToPGTextEmpty(""),
 		IpAddress:        conv.ToPGTextEmpty(""),
+		ContentHash:      nil,
+		Generation:       0,
 	}
 
 	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle)
@@ -355,6 +357,8 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 		Origin:           conv.ToPGTextEmpty(""),
 		UserAgent:        conv.ToPGTextEmpty(""),
 		IpAddress:        conv.ToPGTextEmpty(""),
+		ContentHash:      nil,
+		Generation:       0,
 	}
 
 	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle)
@@ -400,6 +404,8 @@ func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.C
 		Origin:           conv.ToPGTextEmpty(""),
 		UserAgent:        conv.ToPGTextEmpty(""),
 		IpAddress:        conv.ToPGTextEmpty(""),
+		ContentHash:      nil,
+		Generation:       0,
 	}
 
 	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle); err != nil {
@@ -461,6 +467,8 @@ func (s *Service) persistCursorUserPrompt(ctx context.Context, payload *gen.Curs
 		Origin:           conv.ToPGTextEmpty(""),
 		UserAgent:        conv.ToPGTextEmpty(""),
 		IpAddress:        conv.ToPGTextEmpty(""),
+		ContentHash:      nil,
+		Generation:       0,
 	}
 
 	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, parsedProjectID, msgParams, activities.DefaultCursorChatTitle)
