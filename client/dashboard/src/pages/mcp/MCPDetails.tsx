@@ -408,8 +408,10 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   const queryClient = useQueryClient();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<ServerStatus | null>(null);
-  const [publicWarningPending, setPublicWarningPending] =
-    useState<ServerStatus | null>(null);
+  const [publicWarningPending, setPublicWarningPending] = useState<{
+    target: ServerStatus;
+    sourceStatus: ServerStatus;
+  } | null>(null);
   const [isMaxServersModalOpen, setIsMaxServersModalOpen] = useState(false);
   const updateToolsetMutation = useUpdateToolsetMutation();
   const telemetry = useTelemetry();
@@ -513,7 +515,10 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
       if (needsPublicWarning) {
         // Show the system-vars warning first. If the user confirms, we chain to
         // ServerEnableDialog when the transition also requires enablement.
-        setPublicWarningPending(status);
+        setPublicWarningPending({
+          target: status,
+          sourceStatus: currentStatus,
+        });
       } else if (needsEnableDialog) {
         setPendingStatus(status);
       } else {
@@ -523,14 +528,15 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   };
 
   const handlePublicWarningConfirm = () => {
-    const target = publicWarningPending;
+    const pending = publicWarningPending;
     setPublicWarningPending(null);
-    if (!target) return;
-    // If we also need the enablement dialog (disabled → public), chain it now.
-    if (currentStatus === "disabled") {
-      setPendingStatus(target);
+    if (!pending) return;
+    // Use the source status captured when the dialog opened, not the live
+    // currentStatus — the toolset query may have revalidated in the meantime.
+    if (pending.sourceStatus === "disabled") {
+      setPendingStatus(pending.target);
     } else {
-      applyStatus(target);
+      applyStatus(pending.target);
     }
   };
 
