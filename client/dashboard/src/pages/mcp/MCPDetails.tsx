@@ -606,7 +606,6 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
         onClose={() => setPublicWarningPending(null)}
         onConfirm={handlePublicWarningConfirm}
         isLoading={updateToolsetMutation.isPending}
-        environmentName={attachedEnvironment?.name ?? ""}
         environmentSlug={attachedEnvironment?.slug ?? ""}
         variableNames={systemVarNames}
       />

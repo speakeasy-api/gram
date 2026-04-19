@@ -7,7 +7,6 @@ interface PublicMcpWarningDialogProps {
   onClose: () => void;
   onConfirm: () => void;
   isLoading?: boolean;
-  environmentName: string;
   environmentSlug: string;
   variableNames: string[];
 }
@@ -17,7 +16,6 @@ export function PublicMcpWarningDialog({
   onClose,
   onConfirm,
   isLoading = false,
-  environmentName,
   environmentSlug,
   variableNames,
 }: PublicMcpWarningDialogProps) {
@@ -36,15 +34,7 @@ export function PublicMcpWarningDialog({
       >
         <div className="p-6">
           <Dialog.Header>
-            <Dialog.Title
-              className="flex items-center gap-2 text-2xl"
-              style={{
-                fontFamily: 'Tobias, "Taviraj", Georgia, serif',
-                fontWeight: 100,
-                letterSpacing: "-0.04em",
-                lineHeight: 1.1,
-              }}
-            >
+            <Dialog.Title className="flex items-center gap-2">
               <ShieldAlert
                 className="h-5 w-5 shrink-0"
                 style={{ color: "#C83228" }}
@@ -56,10 +46,9 @@ export function PublicMcpWarningDialog({
 
           <div className="mt-4 space-y-4 text-sm">
             <Dialog.Description className="text-muted-foreground">
-              Anyone with this URL will call with values from{" "}
-              <strong className="text-foreground">{environmentName}</strong>.
-              System values are shared. Treat them as team credentials, not user
-              credentials.
+              Anyone with this URL will call with values from the Default
+              Environment. System values are shared. Treat them as team or
+              public credentials, not user credentials.
             </Dialog.Description>
 
             <div className="space-y-2">
@@ -87,7 +76,7 @@ export function PublicMcpWarningDialog({
               rel="noopener noreferrer"
               className="text-foreground inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
             >
-              Review in {environmentName}
+              Review in &quot;Default Environment&quot;
               <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
             </a>
           </div>

@@ -26,7 +26,6 @@ const defaultProps = {
   isOpen: true,
   onClose: vi.fn(),
   onConfirm: vi.fn(),
-  environmentName: "Production",
   environmentSlug: "production",
   variableNames: ["STRIPE_API_KEY", "DATABASE_URL"],
 };
@@ -38,12 +37,13 @@ describe("PublicMcpWarningDialog", () => {
     expect(
       screen.getByText("Share system secrets with public callers."),
     ).toBeTruthy();
-    // "Production" appears both in the body and in the link label; use getAllByText.
-    expect(screen.getAllByText(/Production/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/from the Default Environment/)).toBeTruthy();
     expect(screen.getByText("STRIPE_API_KEY")).toBeTruthy();
     expect(screen.getByText("DATABASE_URL")).toBeTruthy();
 
-    const link = screen.getByRole("link", { name: /Review in Production/ });
+    const link = screen.getByRole("link", {
+      name: /Review in "Default Environment"/,
+    });
     expect(link.getAttribute("href")).toBe("/environments/production");
     expect(link.getAttribute("target")).toBe("_blank");
   });
