@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.32.65
+
+### Patch Changes
+
+- e56314e: Captures token and cost metrics for Claude agent sessions
+
 ## 0.33.0
 
 ### Minor Changes
