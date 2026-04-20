@@ -128,7 +128,7 @@ When the user asks about "current period", "selected period", "this timeframe", 
       variant: "standalone",
       systemPrompt,
       model: {
-        defaultModel: "anthropic/claude-sonnet-4.5",
+        defaultModel: "anthropic/claude-sonnet-4.6",
       },
       welcome: {
         title,

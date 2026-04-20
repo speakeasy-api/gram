@@ -18,7 +18,7 @@ import {
 } from "@gram/client/react-query";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { ChatDetailPanel } from "./ChatDetailPanel";
 import { ChatLogsFilters } from "./ChatLogsFilters";
@@ -125,11 +125,14 @@ function isValidPreset(value: string | null): value is DateRangePreset {
 
 export default function ChatLogs() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedChat, setSelectedChat] =
-    useState<ChatOverviewWithResolutions | null>(null);
 
   const [offset, setOffset] = useState(0);
   const limit = 50;
+
+  // Cache the most-recently-selected chat so the drawer keeps its data when the
+  // user paginates the list and the selected row scrolls off the current page.
+  const [cachedChat, setCachedChat] =
+    useState<ChatOverviewWithResolutions | null>(null);
 
   // Copilot config - whitelist of tools for chat session analysis
   const mcpConfig = useObservabilityMcpConfig({
@@ -152,7 +155,13 @@ export default function ChatLogs() {
         { request: { id: chatId } },
         {
           onSuccess: () => {
-            setSelectedChat((current) =>
+            setSearchParams((prev) => {
+              if (prev.get("chatId") !== chatId) return prev;
+              const next = new URLSearchParams(prev);
+              next.delete("chatId");
+              return next;
+            });
+            setCachedChat((current) =>
               current?.id === chatId ? null : current,
             );
             invalidateAllListChatsWithResolutions(queryClient);
@@ -160,7 +169,7 @@ export default function ChatLogs() {
         },
       );
     },
-    [deleteChatMutation, queryClient],
+    [deleteChatMutation, queryClient, setSearchParams],
   );
 
   // Parse URL params
@@ -312,6 +321,45 @@ export default function ChatLogs() {
   const total = lastTotalRef.current;
   const hasMore =
     total > 0 ? offset + chats.length < total : chats.length === limit;
+
+  // Stable deep-link for the currently opened chat. URL (`chatId`) is source of
+  // truth; the list is the fresh source for the full object; cache holds the
+  // last-seen object so pagination doesn't drop it.
+  const urlChatId = searchParams.get("chatId");
+  const selectedChat = useMemo<ChatOverviewWithResolutions | null>(() => {
+    if (!urlChatId) return null;
+    const fromList = chats.find((c) => c.id === urlChatId);
+    if (fromList) return fromList;
+    if (cachedChat?.id === urlChatId) return cachedChat;
+    return null;
+  }, [urlChatId, chats, cachedChat]);
+
+  useEffect(() => {
+    if (!urlChatId) {
+      if (cachedChat) setCachedChat(null);
+      return;
+    }
+    const fromList = chats.find((c) => c.id === urlChatId);
+    if (fromList && fromList !== cachedChat) {
+      setCachedChat(fromList);
+    }
+  }, [urlChatId, chats, cachedChat]);
+
+  const setSelectedChat = useCallback(
+    (chat: ChatOverviewWithResolutions | null) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (chat) {
+          next.set("chatId", chat.id);
+        } else {
+          next.delete("chatId");
+        }
+        return next;
+      });
+      if (chat) setCachedChat(chat);
+    },
+    [setSearchParams],
+  );
 
   // Format date range for copilot context
   const dateRangeContext = useMemo(() => {
