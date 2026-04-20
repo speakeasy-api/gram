@@ -12700,6 +12700,9 @@ paths:
       tags:
         - risk
       x-speakeasy-name-override: createPolicy
+      x-speakeasy-react-hook:
+        name: RiskCreatePolicy
+        type: mutation
   /rpc/risk.policies.delete:
     delete:
       description: Delete a risk analysis policy.
