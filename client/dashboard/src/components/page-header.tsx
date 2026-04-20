@@ -70,6 +70,7 @@ const breadcrumbSubstitutions = {
   // here so breadcrumbs stay in sync with the rest of the UI.
   slack: "Assistants",
   clis: "Skills",
+  dlp: "Overview",
 };
 
 function PageHeaderBreadcrumbs({
