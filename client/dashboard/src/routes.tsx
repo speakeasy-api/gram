@@ -339,7 +339,7 @@ const ROUTE_STRUCTURE = {
     icon: "layout-dashboard",
     component: ObservabilityOverview,
   },
-  dlp: {
+  riskOverview: {
     title: "Risk Overview",
     url: "risk-overview",
     icon: "shield",
