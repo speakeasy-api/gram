@@ -51,24 +51,22 @@ func (s *ChatMessageCaptureStrategy) AddObserver(obs MessageObserver) {
 }
 
 func (s *ChatMessageCaptureStrategy) notifyObservers(ctx context.Context, projectID uuid.UUID) {
-	// Dispatch observer notifications asynchronously to avoid blocking the chat hot path
-	// Each observer gets its own goroutine to ensure one slow observer doesn't block others
-	for _, obs := range s.observers {
-		observer := obs // Capture loop variable
-		go func() {     //nolint:gosec // intentionally detached from request context so observers survive request cancellation
-			// Use a detached context with timeout to prevent indefinite hanging
-			// This ensures observers can complete even if the request context is canceled
-			bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second) //nolint:contextcheck // intentionally detached from request context
-			defer cancel()
+	// Dispatch observer notifications in a single goroutine to avoid spawning
+	// one goroutine per observer. Observers run sequentially within the
+	// goroutine — they are lightweight (e.g. signaling a Temporal workflow)
+	// and should not block each other meaningfully.
+	go func() { //nolint:gosec // intentionally detached from request context so observers survive request cancellation
+		bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second) //nolint:contextcheck // intentionally detached from request context
+		defer cancel()
 
-			// Copy trace information for observability
-			if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
-				bgCtx = trace.ContextWithSpanContext(bgCtx, span.SpanContext())
-			}
+		if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+			bgCtx = trace.ContextWithSpanContext(bgCtx, span.SpanContext())
+		}
 
-			observer.OnMessagesStored(bgCtx, projectID)
-		}()
-	}
+		for _, obs := range s.observers {
+			obs.OnMessagesStored(bgCtx, projectID)
+		}
+	}()
 }
 
 func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request openrouter.CompletionRequest) error {
