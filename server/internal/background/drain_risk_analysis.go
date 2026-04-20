@@ -3,6 +3,8 @@ package background
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -180,4 +182,84 @@ func (s *TemporalRiskAnalysisSignaler) SignalNewMessages(ctx context.Context, pa
 
 func drainWorkflowID(policyID uuid.UUID) string {
 	return fmt.Sprintf("v1:drain-risk-analysis:%s", policyID.String())
+}
+
+// ── Throttled Signaler ──────────────────────────────────────────────────
+
+// throttleEntry tracks per-policy signal state.
+type throttleEntry struct {
+	mu      sync.Mutex
+	pending bool
+	timer   *time.Timer
+}
+
+// ThrottledSignaler wraps a RiskAnalysisSignaler with per-policy throttling.
+// The first signal for a policy fires immediately. Subsequent signals within
+// the cooldown window are coalesced into a single trailing signal that fires
+// when the window expires.
+type ThrottledSignaler struct {
+	inner    RiskAnalysisSignaler
+	cooldown time.Duration
+	entries  sync.Map // uuid.UUID → *throttleEntry
+	logger   *slog.Logger
+}
+
+// NewThrottledSignaler wraps inner with a per-policy cooldown. A zero or
+// negative cooldown disables throttling.
+func NewThrottledSignaler(inner RiskAnalysisSignaler, cooldown time.Duration, logger *slog.Logger) *ThrottledSignaler {
+	return &ThrottledSignaler{
+		inner:    inner,
+		cooldown: cooldown,
+		logger:   logger,
+	}
+}
+
+func (t *ThrottledSignaler) SignalNewMessages(ctx context.Context, params DrainRiskAnalysisParams) error {
+	if t.cooldown <= 0 {
+		return t.inner.SignalNewMessages(ctx, params)
+	}
+
+	val, _ := t.entries.LoadOrStore(params.RiskPolicyID, &throttleEntry{})
+	entry := val.(*throttleEntry)
+
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+
+	if entry.timer == nil {
+		// No active cooldown — fire immediately and start the window.
+		entry.pending = false
+		entry.timer = time.AfterFunc(t.cooldown, func() {
+			t.onCooldownExpired(params)
+		})
+		return t.inner.SignalNewMessages(ctx, params)
+	}
+
+	// Inside cooldown window — mark pending for trailing fire.
+	entry.pending = true
+	return nil
+}
+
+func (t *ThrottledSignaler) onCooldownExpired(params DrainRiskAnalysisParams) {
+	val, ok := t.entries.Load(params.RiskPolicyID)
+	if !ok {
+		return
+	}
+	entry := val.(*throttleEntry)
+
+	entry.mu.Lock()
+	pending := entry.pending
+	entry.pending = false
+	if pending {
+		// Restart the cooldown for the trailing signal.
+		entry.timer.Reset(t.cooldown)
+	} else {
+		entry.timer = nil
+	}
+	entry.mu.Unlock()
+
+	if pending {
+		if err := t.inner.SignalNewMessages(context.Background(), params); err != nil {
+			t.logger.Error("throttled trailing signal failed", "error", err.Error())
+		}
+	}
 }

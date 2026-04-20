@@ -761,7 +761,11 @@ func newStartCommand() *cli.Command {
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
-			riskSignaler := &background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv}
+			riskSignaler := background.NewThrottledSignaler(
+				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv},
+				time.Minute,
+				logger,
+			)
 			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, accessManager, riskSignaler)
 			captureStrategy.AddObserver(riskService)
 			risk.Attach(mux, riskService)
