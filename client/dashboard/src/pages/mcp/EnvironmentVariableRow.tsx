@@ -36,7 +36,6 @@ interface EnvironmentVariableRowProps {
   onEditHeaderName: (id: string) => void;
   onHeaderDisplayNameChange: (id: string, value: string) => void;
   onHeaderBlur: () => void;
-  readOnly?: boolean;
 }
 
 const MODE_OPTIONS: Array<{
@@ -76,7 +75,6 @@ export function EnvironmentVariableRow({
   onEditHeaderName,
   onHeaderDisplayNameChange,
   onHeaderBlur,
-  readOnly,
 }: EnvironmentVariableRowProps) {
   const isEditingHeader = editingHeaderId === envVar.id;
   const headerName = getHeaderDisplayName(
@@ -218,7 +216,7 @@ export function EnvironmentVariableRow({
             onValueChange={(value) =>
               onStateChange(envVar.id, value as EnvVarState)
             }
-            disabled={isDisabled || readOnly}
+            disabled={isDisabled}
           >
             <SelectTrigger
               tabIndex={-1}
@@ -271,11 +269,7 @@ export function EnvironmentVariableRow({
                 value={editingValue}
                 onChange={(value) => onValueChange(envVar.id, value)}
                 placeholder="Enter value..."
-                className={cn(
-                  "placeholder:text-muted-foreground h-full w-full border-0 bg-transparent px-3 pr-9 font-mono text-sm shadow-none focus:outline-none focus-visible:ring-0",
-                  readOnly && "cursor-not-allowed opacity-50",
-                )}
-                disabled={readOnly}
+                className="placeholder:text-muted-foreground h-full w-full border-0 bg-transparent px-3 pr-9 font-mono text-sm shadow-none focus:outline-none focus-visible:ring-0"
               />
             )}
           </div>
