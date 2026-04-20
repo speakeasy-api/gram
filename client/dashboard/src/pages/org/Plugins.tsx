@@ -339,7 +339,11 @@ export default function Plugins() {
                   (fd.get("githubUsername") as string) || undefined;
                 publishMutation.mutate({
                   security: { sessionHeaderGramSession: "" },
-                  request: { githubUsername: username },
+                  request: {
+                    publishPluginsRequestBody: {
+                      githubUsername: username,
+                    },
+                  },
                 });
                 setIsPublishDialogOpen(false);
               }}
