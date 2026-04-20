@@ -98,6 +98,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={routes.plugins}
                 scope={["build:read", "build:write"]}
               />
+              <ScopeGatedNavItem
+                item={routes.environments}
+                scope={["build:read", "build:write"]}
+              />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -140,10 +144,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>settings</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <ScopeGatedNavItem
-                item={routes.environments}
-                scope={["build:read", "build:write"]}
-              />
               <ScopeGatedNavItem item={routes.settings} scope="build:write" />
             </SidebarMenu>
           </SidebarGroupContent>

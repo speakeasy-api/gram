@@ -25,22 +25,29 @@ export function ProjectDashboard() {
   const to = useMemo(() => new Date(), []);
   const from = useMemo(() => subDays(to, 7), [to]);
 
-  const { data: featuresData, isPending: isFeaturesPending } = useFeaturesGet();
+  const {
+    data: featuresData,
+    isPending: isFeaturesPending,
+    isError: isFeaturesError,
+  } = useFeaturesGet(undefined, undefined, { throwOnError: false });
   const logsEnabled = featuresData?.logsEnabled === true;
 
   const { data: overview, isPending: isOverviewPending } =
     useGetProjectOverview(
       { getProjectMetricsSummaryPayload: { from, to } },
       undefined,
-      { enabled: logsEnabled },
+      { enabled: logsEnabled, throwOnError: false },
     );
 
+  const featuresSettled = !isFeaturesPending || isFeaturesError;
   const isOverviewLoading =
-    isFeaturesPending || (logsEnabled && isOverviewPending);
+    !featuresSettled || (logsEnabled && isOverviewPending);
 
-  const { data: auditLogsData, isPending: isAuditLogsPending } = useAuditLogs({
-    projectSlug,
-  });
+  const { data: auditLogsData, isPending: isAuditLogsPending } = useAuditLogs(
+    { projectSlug },
+    undefined,
+    { throwOnError: false },
+  );
 
   const recentLogs = useMemo(
     () => (auditLogsData?.result.logs ?? []).slice(0, 10),
@@ -48,14 +55,16 @@ export function ProjectDashboard() {
   );
 
   const isProjectEmpty =
-    logsEnabled &&
-    !isOverviewLoading &&
-    !isAuditLogsPending &&
-    !!overview &&
-    overview?.summary?.activeServersCount === 0 &&
-    overview?.summary?.totalToolCalls === 0;
+    isFeaturesError ||
+    (logsEnabled &&
+      !isOverviewLoading &&
+      !isAuditLogsPending &&
+      !!overview &&
+      overview?.summary?.activeServersCount === 0 &&
+      overview?.summary?.totalToolCalls === 0);
 
-  const showDisabledBanner = !isFeaturesPending && !logsEnabled;
+  const showDisabledBanner =
+    !isFeaturesPending && !isFeaturesError && !logsEnabled;
 
   return (
     <Page.Section>
@@ -81,7 +90,7 @@ export function ProjectDashboard() {
 
           {showDisabledBanner ? (
             <LoggingDisabledBanner settingsHref={orgRoutes.logs.href()} />
-          ) : (
+          ) : isFeaturesError ? null : (
             <>
               {/* Row 0: KPI Cards */}
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">

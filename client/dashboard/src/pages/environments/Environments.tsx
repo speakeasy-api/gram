@@ -79,8 +79,8 @@ function EnvironmentsInner() {
       <Page.Section>
         <Page.Section.Title>Environments</Page.Section.Title>
         <Page.Section.Description>
-          Use environments to manage API keys, allowing Gram to handle
-          authentication for you
+          Create re-usable environment configurations and share amongst multiple
+          MCP servers
         </Page.Section.Description>
         <Page.Section.CTA>
           <RequireScope scope="build:write" level="component">
