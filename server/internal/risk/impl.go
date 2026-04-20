@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -48,6 +49,21 @@ type Service struct {
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
+
+// NewObserver creates a lightweight chat.MessageObserver that signals the risk
+// drain workflow when new messages are stored. Use this in contexts (e.g. the
+// worker process) where the full risk Service is not needed.
+func NewObserver(logger *slog.Logger, db *pgxpool.Pool, signaler RiskAnalysisSignaler) chat.MessageObserver {
+	return &Service{
+		tracer:   tracenoop.NewTracerProvider().Tracer(""),
+		logger:   logger.With(attr.SlogComponent("risk")),
+		db:       db,
+		repo:     repo.New(db),
+		auth:     nil,
+		access:   nil,
+		signaler: signaler,
+	}
+}
 
 func NewService(
 	logger *slog.Logger,
@@ -283,14 +299,8 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		return oops.C(oops.CodeInvalid)
 	}
 
-	// Purge all risk results for this policy first.
-	if err := s.repo.DeleteAllRiskResultsForPolicy(ctx, repo.DeleteAllRiskResultsForPolicyParams{
-		RiskPolicyID: id,
-		ProjectID:    *authCtx.ProjectID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete risk results for policy").Log(ctx, s.logger)
-	}
-
+	// Soft-delete only — list queries already filter out results for deleted
+	// policies via the risk_policies join, so orphaned rows are harmless.
 	if err := s.repo.DeleteRiskPolicy(ctx, repo.DeleteRiskPolicyParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
