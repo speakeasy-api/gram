@@ -9,7 +9,7 @@ export function ResourcesEmptyState({
   onAddResources: () => void;
 }) {
   const cta = (
-    <RequireScope scope="mcp:write" level="section">
+    <RequireScope scope="mcp:write" level="component">
       <Button size="sm" onClick={onAddResources}>
         ADD RESOURCES
       </Button>

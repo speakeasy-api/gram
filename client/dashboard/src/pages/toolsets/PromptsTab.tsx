@@ -64,7 +64,7 @@ export function PromptsTabContent({
         heading="No prompts yet"
         description="Add prompt templates to this MCP server."
         nonEmptyProjectCTA={
-          <RequireScope scope="mcp:write" level="section">
+          <RequireScope scope="mcp:write" level="component">
             <Stack gap={2} direction="horizontal">
               <routes.prompts.newPrompt.Link>
                 <Button size="sm">Create Prompt</Button>
