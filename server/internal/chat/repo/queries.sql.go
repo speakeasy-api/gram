@@ -805,7 +805,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 }
 
 const listChatMessagesForMatch = `-- name: ListChatMessagesForMatch :many
-SELECT id, seq, role, content, content_raw, tool_calls, tool_call_id, content_hash
+SELECT id, role, content, tool_call_id, content_hash
 FROM chat_messages
 WHERE chat_id = $1 AND generation = $2
 ORDER BY seq ASC
@@ -818,11 +818,8 @@ type ListChatMessagesForMatchParams struct {
 
 type ListChatMessagesForMatchRow struct {
 	ID          uuid.UUID
-	Seq         int64
 	Role        string
 	Content     string
-	ContentRaw  []byte
-	ToolCalls   []byte
 	ToolCallID  pgtype.Text
 	ContentHash []byte
 }
@@ -838,11 +835,8 @@ func (q *Queries) ListChatMessagesForMatch(ctx context.Context, arg ListChatMess
 		var i ListChatMessagesForMatchRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.Seq,
 			&i.Role,
 			&i.Content,
-			&i.ContentRaw,
-			&i.ToolCalls,
 			&i.ToolCallID,
 			&i.ContentHash,
 		); err != nil {
