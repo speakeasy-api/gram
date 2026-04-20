@@ -363,7 +363,7 @@ function MCPDetailPageInner() {
             </TabsContent>
 
             <TabsContent value="authentication" className="mt-0 w-full">
-              <RequireScope scope="mcp:write" level="section">
+              <RequireScope scope="mcp:write" level="page">
                 <MCPAuthenticationTab toolset={toolset} />
               </RequireScope>
             </TabsContent>
