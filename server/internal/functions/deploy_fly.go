@@ -628,7 +628,7 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 	machineMeta := maps.Clone(baseMetadata)
 	machineMeta[fly.MachineConfigMetadataKeyFlyProcessGroup] = "gram_functions_runner"
 
-	memoryMB := 8192
+	memoryMB := 4096
 	softLimit, hardLimit := concurrencyLimits(memoryMB)
 
 	return &fly.MachineConfig{
