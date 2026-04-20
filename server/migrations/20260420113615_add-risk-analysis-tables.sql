@@ -41,9 +41,7 @@ CREATE TABLE "risk_results" (
   CONSTRAINT "risk_results_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "risk_results_risk_policy_id_fkey" FOREIGN KEY ("risk_policy_id") REFERENCES "risk_policies" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
--- Create index "risk_results_chat_message_id_idx" to table: "risk_results"
-CREATE INDEX "risk_results_chat_message_id_idx" ON "risk_results" ("chat_message_id");
--- Create index "risk_results_policy_version_message_idx" to table: "risk_results"
-CREATE INDEX "risk_results_policy_version_message_idx" ON "risk_results" ("risk_policy_id", "risk_policy_version", "chat_message_id");
--- Create index "risk_results_project_id_risk_policy_id_idx" to table: "risk_results"
-CREATE INDEX "risk_results_project_id_risk_policy_id_idx" ON "risk_results" ("project_id", "risk_policy_id");
+-- Create index "risk_results_project_chat_message_idx" to table: "risk_results"
+CREATE INDEX "risk_results_project_chat_message_idx" ON "risk_results" ("project_id", "chat_message_id");
+-- Create index "risk_results_project_policy_version_message_idx" to table: "risk_results"
+CREATE INDEX "risk_results_project_policy_version_message_idx" ON "risk_results" ("project_id", "risk_policy_id", "risk_policy_version", "chat_message_id");
