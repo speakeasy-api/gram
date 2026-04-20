@@ -13,13 +13,20 @@ import type { InsightsConfigOptions } from "./insights-context";
 export type { InsightsConfigOptions } from "./insights-context";
 
 /**
- * Shared hover-animation class for any "AI Insights" CTA (the nav trigger,
- * per-chart Explore buttons, etc.). Cycles the element's `color` through the
- * Speakeasy brand rainbow — same palette as the login page's brand bar.
- * Must be used inside an <InsightsProvider> so <InsightsRainbowStyles /> is
- * mounted.
+ * Cycles an element's `color` through the Speakeasy brand rainbow on hover —
+ * used for small icon-only "Explore with AI" CTAs where a border treatment
+ * would be invisible. Requires <InsightsRainbowStyles /> in the tree.
  */
 export const INSIGHTS_AI_RAINBOW_CLASS = "insights-ai-rainbow";
+
+/**
+ * Reveals a full-spectrum Speakeasy brand gradient border on hover — same
+ * 9-stop palette as the login page's BrandGradientBar. Used for the nav-bar
+ * AI Insights trigger where the button shape can host a real border.
+ * Requires <InsightsRainbowStyles /> in the tree. Works best on elements
+ * with a 1px border and a border-radius.
+ */
+export const INSIGHTS_AI_RAINBOW_BORDER_CLASS = "insights-ai-rainbow-border";
 
 function InsightsRainbowStyles() {
   return (
@@ -35,6 +42,35 @@ function InsightsRainbowStyles() {
       }
       .${INSIGHTS_AI_RAINBOW_CLASS}:hover {
         animation: insights-ai-rainbow 2.5s linear infinite;
+      }
+
+      /* Gradient border via a masked pseudo-element. Mask cuts the interior
+         so only the 1px ring shows; border-radius is inherited so rounded
+         corners stay intact. Fades in on hover; the underlying border goes
+         transparent so we don't double up. */
+      .${INSIGHTS_AI_RAINBOW_BORDER_CLASS} {
+        position: relative;
+      }
+      .${INSIGHTS_AI_RAINBOW_BORDER_CLASS}::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        padding: 1px;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #320F1E 0%, #C83228 12.5%, #FB873F 25%, #D2DC91 37.5%, #5A8250 50%, #002314 62%, #00143C 74%, #2873D7 86%, #9BC3FF 100%);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        mask-composite: exclude;
+        opacity: 0;
+        transition: opacity 200ms ease;
+        pointer-events: none;
+      }
+      .${INSIGHTS_AI_RAINBOW_BORDER_CLASS}:hover::before {
+        opacity: 1;
+      }
+      .${INSIGHTS_AI_RAINBOW_BORDER_CLASS}:hover {
+        border-color: transparent;
       }
     `}</style>
   );
@@ -58,7 +94,7 @@ export function InsightsTrigger({ className }: { className?: string }) {
       className={cn(
         "border-border hover:bg-accent inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
         isExpanded && "bg-accent text-accent-foreground",
-        INSIGHTS_AI_RAINBOW_CLASS,
+        INSIGHTS_AI_RAINBOW_BORDER_CLASS,
         className,
       )}
     >
