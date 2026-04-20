@@ -22,18 +22,18 @@ func readScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
 // grantsFromOverrides builds a Grants object from parsed scope overrides.
 // Scopes with no resources get wildcard access; scopes with resources get
 // one grant per resource ID.
-func grantsFromOverrides(overrides []RoleGrant) *Grants {
-	var rows []Grant
+func grantsFromOverrides(overrides []RoleGrant) []Grant {
+	var grants []Grant
 	for _, o := range overrides {
 		if len(o.Resources) == 0 {
-			rows = append(rows, Grant{Scope: Scope(o.Scope), Resource: WildcardResource})
+			grants = append(grants, Grant{Scope: Scope(o.Scope), Resource: WildcardResource})
 			continue
 		}
 		for _, r := range o.Resources {
-			rows = append(rows, Grant{Scope: Scope(o.Scope), Resource: r})
+			grants = append(grants, Grant{Scope: Scope(o.Scope), Resource: r})
 		}
 	}
-	return &Grants{rows: rows}
+	return grants
 }
 
 func parseOverrideHeader(value string) []RoleGrant {

@@ -1,8 +1,8 @@
 package access
 
 import (
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"context"
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -22,7 +22,9 @@ func TestService_ListRoles_ForbiddenWithoutOrgReadGrant(t *testing.T) {
 	ctx = withRBACGrants(t, ctx)
 
 	_, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestService_ListRoles_AllowsOrgReadGrant(t *testing.T) {
@@ -50,7 +52,9 @@ func TestService_GetRole_ForbiddenWithoutOrgReadGrant(t *testing.T) {
 	ctx = withRBACGrants(t, ctx)
 
 	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestService_GetRole_AllowsOrgReadGrant(t *testing.T) {
@@ -80,7 +84,9 @@ func TestService_ListScopes_ForbiddenWithoutOrgReadGrant(t *testing.T) {
 	ctx = withRBACGrants(t, ctx)
 
 	_, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestService_ListScopes_AllowsOrgReadGrant(t *testing.T) {
@@ -101,7 +107,9 @@ func TestService_ListMembers_ForbiddenWithoutOrgReadGrant(t *testing.T) {
 	ctx = withRBACGrants(t, ctx)
 
 	_, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestService_ListMembers_AllowsOrgReadGrant(t *testing.T) {
@@ -135,7 +143,9 @@ func TestService_CreateRole_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	ctx = withRBACGrants(t, ctx)
 
 	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{Name: "Denied", Description: "Denied"})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestService_CreateRole_AllowsOrgAdminGrant(t *testing.T) {
@@ -169,7 +179,9 @@ func TestService_UpdateRole_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	ctx = withRBACGrants(t, ctx)
 
 	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: "role_custom"})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestService_UpdateRole_AllowsOrgAdminGrant(t *testing.T) {
@@ -206,7 +218,9 @@ func TestService_DeleteRole_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	ctx = withRBACGrants(t, ctx)
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestService_DeleteRole_AllowsOrgAdminGrant(t *testing.T) {
@@ -233,7 +247,9 @@ func TestService_UpdateMemberRole_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	ctx = withRBACGrants(t, ctx)
 
 	_, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "user_1", RoleID: "role_builder"})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
@@ -274,7 +290,7 @@ func withRBACGrants(t *testing.T, ctx context.Context, grants ...Grant) context.
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	return GrantsToContext(ctx, &Grants{rows: grants})
+	return GrantsToContext(ctx, grants)
 }
 
 func testAccessAuthContext(t *testing.T, ctx context.Context) *contextvalues.AuthContext {

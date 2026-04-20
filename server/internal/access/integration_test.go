@@ -37,7 +37,9 @@ func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 	require.NoError(t, err)
 
 	err = manager.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolB"})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
