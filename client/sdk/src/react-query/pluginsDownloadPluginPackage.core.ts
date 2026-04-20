@@ -49,7 +49,6 @@ export function buildPluginsDownloadPluginPackageQuery(
       pluginId: request.pluginId,
       platform: request.platform,
       gramSession: request.gramSession,
-      gramProject: request.gramProject,
     }),
     queryFn: async function pluginsDownloadPluginPackageQueryFn(
       ctx,
@@ -80,7 +79,6 @@ export function queryKeyPluginsDownloadPluginPackage(
     pluginId: string;
     platform: operations.Platform;
     gramSession?: string | undefined;
-    gramProject?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "plugins", "downloadPluginPackage", parameters];

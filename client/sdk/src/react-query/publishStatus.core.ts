@@ -43,10 +43,7 @@ export function buildPublishStatusQuery(
   queryFn: (context: QueryFunctionContext) => Promise<PublishStatusQueryData>;
 } {
   return {
-    queryKey: queryKeyPublishStatus({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyPublishStatus({ gramSession: request?.gramSession }),
     queryFn: async function publishStatusQueryFn(
       ctx,
     ): Promise<PublishStatusQueryData> {
@@ -72,10 +69,7 @@ export function buildPublishStatusQuery(
 }
 
 export function queryKeyPublishStatus(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "plugins", "getPublishStatus", parameters];
 }

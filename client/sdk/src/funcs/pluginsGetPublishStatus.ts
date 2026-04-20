@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * getPublishStatus plugins
  *
  * @remarks
- * Check whether GitHub publishing is configured and connected for this project.
+ * Check whether GitHub publishing is configured and connected for this organization.
  */
 export function pluginsGetPublishStatus(
   client: GramCore,
@@ -101,10 +101,6 @@ async function $do(
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
-      explode: false,
-      charEncoding: "none",
-    }),
     "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -113,11 +109,6 @@ async function $do(
 
   const requestSecurity = resolveSecurity(
     [
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.projectSlugHeaderGramProject,
-      },
       {
         fieldName: "Gram-Session",
         type: "apiKey:header",

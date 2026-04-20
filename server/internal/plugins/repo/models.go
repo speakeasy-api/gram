@@ -12,7 +12,6 @@ import (
 type Plugin struct {
 	ID             uuid.UUID
 	OrganizationID string
-	ProjectID      uuid.UUID
 	Name           string
 	Slug           string
 	Description    pgtype.Text
@@ -33,7 +32,7 @@ type PluginAssignment struct {
 
 type PluginGithubConnection struct {
 	ID             uuid.UUID
-	ProjectID      uuid.UUID
+	OrganizationID string
 	InstallationID int64
 	RepoOwner      string
 	RepoName       string

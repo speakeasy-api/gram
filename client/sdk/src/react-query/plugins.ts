@@ -56,7 +56,7 @@ export type PluginsQueryError =
  * listPlugins plugins
  *
  * @remarks
- * List all plugins for the current project.
+ * List all plugins for the current organization.
  */
 export function usePlugins(
   request?: operations.ListPluginsRequest | undefined,
@@ -79,7 +79,7 @@ export function usePlugins(
  * listPlugins plugins
  *
  * @remarks
- * List all plugins for the current project.
+ * List all plugins for the current organization.
  */
 export function usePluginsSuspense(
   request?: operations.ListPluginsRequest | undefined,
@@ -100,12 +100,7 @@ export function usePluginsSuspense(
 
 export function setPluginsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: PluginsQueryData,
 ): PluginsQueryData | undefined {
   const key = queryKeyPlugins(...queryKeyBase);
@@ -116,10 +111,7 @@ export function setPluginsData(
 export function invalidatePlugins(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
+    [parameters: { gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

@@ -17,7 +17,7 @@ import (
 
 // Manage distributable plugin bundles of MCP servers and hooks.
 type Service interface {
-	// List all plugins for the current project.
+	// List all plugins for the current organization.
 	ListPlugins(context.Context, *ListPluginsPayload) (res *ListPluginsResult, err error)
 	// Get a plugin with its servers and assignments.
 	GetPlugin(context.Context, *GetPluginPayload) (res *Plugin, err error)
@@ -41,7 +41,8 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	DownloadPluginPackage(context.Context, *DownloadPluginPackagePayload) (res *DownloadPluginPackageResult, body io.ReadCloser, err error)
-	// Check whether GitHub publishing is configured and connected for this project.
+	// Check whether GitHub publishing is configured and connected for this
+	// organization.
 	GetPublishStatus(context.Context, *GetPublishStatusPayload) (res *PublishStatusResult, err error)
 	// Generate and publish all plugin packages to a GitHub repository.
 	PublishPlugins(context.Context, *PublishPluginsPayload) (res *PublishPluginsResult, err error)
@@ -72,9 +73,8 @@ var MethodNames = [12]string{"listPlugins", "getPlugin", "createPlugin", "update
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
 type AddPluginServerPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
-	PluginID         string
+	SessionToken *string
+	PluginID     string
 	// Gram toolset ID for the MCP server.
 	ToolsetID string
 	// Display name for the server.
@@ -86,8 +86,7 @@ type AddPluginServerPayload struct {
 // CreatePluginPayload is the payload type of the plugins service createPlugin
 // method.
 type CreatePluginPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken *string
 	// Display name for the plugin.
 	Name string
 	// Optional URL-safe identifier. Auto-generated from name if omitted.
@@ -99,9 +98,8 @@ type CreatePluginPayload struct {
 // DeletePluginPayload is the payload type of the plugins service deletePlugin
 // method.
 type DeletePluginPayload struct {
-	ID               string
-	SessionToken     *string
-	ProjectSlugInput *string
+	ID           string
+	SessionToken *string
 }
 
 // DownloadPluginPackagePayload is the payload type of the plugins service
@@ -110,9 +108,8 @@ type DownloadPluginPackagePayload struct {
 	// The plugin to download.
 	PluginID string
 	// Target platform to download plugins for.
-	Platform         string
-	SessionToken     *string
-	ProjectSlugInput *string
+	Platform     string
+	SessionToken *string
 }
 
 // DownloadPluginPackageResult is the result type of the plugins service
@@ -124,23 +121,20 @@ type DownloadPluginPackageResult struct {
 
 // GetPluginPayload is the payload type of the plugins service getPlugin method.
 type GetPluginPayload struct {
-	ID               string
-	SessionToken     *string
-	ProjectSlugInput *string
+	ID           string
+	SessionToken *string
 }
 
 // GetPublishStatusPayload is the payload type of the plugins service
 // getPublishStatus method.
 type GetPublishStatusPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken *string
 }
 
 // ListPluginsPayload is the payload type of the plugins service listPlugins
 // method.
 type ListPluginsPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken *string
 }
 
 // ListPluginsResult is the result type of the plugins service listPlugins
@@ -199,8 +193,7 @@ type PluginServer struct {
 // PublishPluginsPayload is the payload type of the plugins service
 // publishPlugins method.
 type PublishPluginsPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken *string
 }
 
 // PublishPluginsResult is the result type of the plugins service
@@ -229,18 +222,16 @@ type PublishStatusResult struct {
 // removePluginServer method.
 type RemovePluginServerPayload struct {
 	// The plugin server ID to remove.
-	ID               string
-	PluginID         string
-	SessionToken     *string
-	ProjectSlugInput *string
+	ID           string
+	PluginID     string
+	SessionToken *string
 }
 
 // SetPluginAssignmentsPayload is the payload type of the plugins service
 // setPluginAssignments method.
 type SetPluginAssignmentsPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
-	PluginID         string
+	SessionToken *string
+	PluginID     string
 	// List of principal URNs to assign.
 	PrincipalUrns []string
 }
@@ -255,9 +246,8 @@ type SetPluginAssignmentsResult struct {
 // UpdatePluginPayload is the payload type of the plugins service updatePlugin
 // method.
 type UpdatePluginPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
-	ID               string
+	SessionToken *string
+	ID           string
 	// Updated display name.
 	Name string
 	// Updated slug.
@@ -269,13 +259,12 @@ type UpdatePluginPayload struct {
 // UpdatePluginServerPayload is the payload type of the plugins service
 // updatePluginServer method.
 type UpdatePluginServerPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
-	ID               string
-	PluginID         string
-	DisplayName      string
-	Policy           string
-	SortOrder        int32
+	SessionToken *string
+	ID           string
+	PluginID     string
+	DisplayName  string
+	Policy       string
+	SortOrder    int32
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

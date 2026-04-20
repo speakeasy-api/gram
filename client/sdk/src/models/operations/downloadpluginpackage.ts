@@ -10,7 +10,6 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type DownloadPluginPackageSecurity = {
-  projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
@@ -39,10 +38,6 @@ export type DownloadPluginPackageRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 export type DownloadPluginPackageResponse = {
@@ -52,7 +47,6 @@ export type DownloadPluginPackageResponse = {
 
 /** @internal */
 export type DownloadPluginPackageSecurity$Outbound = {
-  "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -62,12 +56,10 @@ export const DownloadPluginPackageSecurity$outboundSchema: z.ZodMiniType<
   DownloadPluginPackageSecurity
 > = z.pipe(
   z.object({
-    projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -93,7 +85,6 @@ export type DownloadPluginPackageRequest$Outbound = {
   plugin_id: string;
   platform: string;
   "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -105,13 +96,11 @@ export const DownloadPluginPackageRequest$outboundSchema: z.ZodMiniType<
     pluginId: z.string(),
     platform: Platform$outboundSchema,
     gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       pluginId: "plugin_id",
       gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
     });
   }),
 );
