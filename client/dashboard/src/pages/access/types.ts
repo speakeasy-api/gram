@@ -8,7 +8,8 @@ export type Scope =
   | "mcp:write"
   | "mcp:connect"
   | "remote-mcp:read"
-  | "remote-mcp:write";
+  | "remote-mcp:write"
+  | "remote-mcp:connect";
 
 /** What kind of resource a scope protects. */
 export type ResourceType = "org" | "project" | "mcp" | "remote-mcp";

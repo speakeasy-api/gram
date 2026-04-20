@@ -17,20 +17,20 @@ import (
 // All header access should go through this wrapper.
 type Headers struct {
 	logger *slog.Logger
-	repo   *repo.Queries
+	db     repo.DBTX
 	enc    *encryption.Client
 }
 
 func NewHeaders(logger *slog.Logger, db repo.DBTX, enc *encryption.Client) *Headers {
 	return &Headers{
 		logger: logger.With(attr.SlogComponent("remote_mcp_server_headers")),
-		repo:   repo.New(db),
+		db:     db,
 		enc:    enc,
 	}
 }
 
 func (h *Headers) ListHeaders(ctx context.Context, serverID uuid.UUID, redacted bool) ([]repo.RemoteMcpServerHeader, error) {
-	headers, err := h.repo.ListHeadersByServerID(ctx, serverID)
+	headers, err := repo.New(h.db).ListHeadersByServerID(ctx, serverID)
 	if err != nil {
 		return nil, fmt.Errorf("list headers: %w", err)
 	}
@@ -65,7 +65,7 @@ func (h *Headers) ListHeadersByServerIDs(ctx context.Context, serverIDs []uuid.U
 		return map[uuid.UUID][]repo.RemoteMcpServerHeader{}, nil
 	}
 
-	headers, err := h.repo.ListHeadersByServerIDs(ctx, serverIDs)
+	headers, err := repo.New(h.db).ListHeadersByServerIDs(ctx, serverIDs)
 	if err != nil {
 		return nil, fmt.Errorf("list headers by server ids: %w", err)
 	}
@@ -99,7 +99,7 @@ func (h *Headers) CreateHeader(ctx context.Context, params repo.CreateHeaderPara
 		return repo.RemoteMcpServerHeader{}, fmt.Errorf("encrypt header %s: %w", params.Name, err)
 	}
 
-	header, err := h.repo.CreateHeader(ctx, params)
+	header, err := repo.New(h.db).CreateHeader(ctx, params)
 	if err != nil {
 		return repo.RemoteMcpServerHeader{}, fmt.Errorf("create header %s: %w", params.Name, err)
 	}
@@ -121,7 +121,7 @@ func (h *Headers) UpsertHeader(ctx context.Context, params repo.UpsertHeaderPara
 		return repo.RemoteMcpServerHeader{}, fmt.Errorf("encrypt header %s: %w", params.Name, err)
 	}
 
-	header, err := h.repo.UpsertHeader(ctx, repo.UpsertHeaderParams(createParams))
+	header, err := repo.New(h.db).UpsertHeader(ctx, repo.UpsertHeaderParams(createParams))
 	if err != nil {
 		return repo.RemoteMcpServerHeader{}, fmt.Errorf("upsert header %s: %w", params.Name, err)
 	}
@@ -134,7 +134,7 @@ func (h *Headers) UpsertHeader(ctx context.Context, params repo.UpsertHeaderPara
 }
 
 func (h *Headers) DeleteHeader(ctx context.Context, serverID uuid.UUID, name string) error {
-	err := h.repo.DeleteHeader(ctx, repo.DeleteHeaderParams{
+	err := repo.New(h.db).DeleteHeader(ctx, repo.DeleteHeaderParams{
 		RemoteMcpServerID: serverID,
 		Name:              name,
 	})
