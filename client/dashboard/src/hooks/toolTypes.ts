@@ -108,6 +108,7 @@ export function useLatestDeployment(
 ) {
   return useLatestDeploymentQuery(undefined, undefined, {
     staleTime: 1000 * 60 * 60, // 1 hour
+    throwOnError: false,
     ...options,
   });
 }
