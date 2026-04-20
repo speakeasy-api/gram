@@ -476,14 +476,15 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		totalMessages = 0
 	}
 
-	pendingMessages, err := s.repo.CountUnanalyzedMessages(ctx, repo.CountUnanalyzedMessagesParams{
-		ProjectID:         uuid.NullUUID{UUID: row.ProjectID, Valid: true},
+	analyzedMessages, err := s.repo.CountAnalyzedMessages(ctx, repo.CountAnalyzedMessagesParams{
+		ProjectID:         row.ProjectID,
 		RiskPolicyID:      row.ID,
 		RiskPolicyVersion: row.Version,
 	})
 	if err != nil {
-		pendingMessages = 0
+		analyzedMessages = 0
 	}
+	pendingMessages := max(totalMessages-analyzedMessages, 0)
 
 	return &types.RiskPolicy{
 		ID:              row.ID.String(),

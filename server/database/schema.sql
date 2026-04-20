@@ -1780,15 +1780,13 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT risk_policies_pkey PRIMARY KEY (id),
-  CONSTRAINT risk_policies_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
+  CONSTRAINT risk_policies_pkey PRIMARY KEY (id)
 );
 
 CREATE INDEX IF NOT EXISTS risk_policies_project_id_idx
 ON risk_policies (project_id)
-WHERE deleted IS FALSE;
+WHERE deleted_at IS NULL;
 
 -- Individual findings produced by scanning a chat message against a risk policy.
 -- No soft delete: results are regenerated when the policy version changes.
