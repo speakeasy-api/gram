@@ -1,8 +1,9 @@
 import type { ElementsConfig } from "@gram-ai/elements";
 import { Chat, GramElementsProvider } from "@gram-ai/elements";
+import { useThreadRuntime } from "@assistant-ui/react";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Wand2, ChevronRight, Sparkles, Terminal } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
 import { InsightsContext, useInsightsState } from "./insights-context";
@@ -10,6 +11,34 @@ import type { InsightsConfigOptions } from "./insights-context";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
 export type { InsightsConfigOptions } from "./insights-context";
+
+/**
+ * Shared hover-animation class for any "AI Insights" CTA (the nav trigger,
+ * per-chart Explore buttons, etc.). Cycles the element's `color` through the
+ * Speakeasy brand rainbow — same palette as the login page's brand bar.
+ * Must be used inside an <InsightsProvider> so <InsightsRainbowStyles /> is
+ * mounted.
+ */
+export const INSIGHTS_AI_RAINBOW_CLASS = "insights-ai-rainbow";
+
+function InsightsRainbowStyles() {
+  return (
+    <style>{`
+      @keyframes insights-ai-rainbow {
+        0%   { color: #C83228; }
+        16%  { color: #FB873F; }
+        33%  { color: #D2DC91; }
+        50%  { color: #5A8250; }
+        66%  { color: #2873D7; }
+        83%  { color: #9BC3FF; }
+        100% { color: #C83228; }
+      }
+      .${INSIGHTS_AI_RAINBOW_CLASS}:hover {
+        animation: insights-ai-rainbow 2.5s linear infinite;
+      }
+    `}</style>
+  );
+}
 
 /**
  * Header-bar trigger for opening the AI Insights sidebar. Renders only
@@ -27,8 +56,9 @@ export function InsightsTrigger({ className }: { className?: string }) {
       aria-label={isExpanded ? "Close AI Insights" : "Open AI Insights"}
       aria-pressed={isExpanded}
       className={cn(
-        "border-border hover:bg-accent hover:text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
+        "border-border hover:bg-accent inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
         isExpanded && "bg-accent text-accent-foreground",
+        INSIGHTS_AI_RAINBOW_CLASS,
         className,
       )}
     >
@@ -87,6 +117,10 @@ export function InsightsProvider({
 }: InsightsProviderProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [override, setOverride] = useState<InsightsConfigOptions | null>(null);
+  const [pendingPrompt, setPendingPrompt] = useState<{
+    text: string;
+    nonce: number;
+  } | null>(null);
   const { theme } = useMoonshineConfig();
 
   // Resolve effective values: per-page override wins, fall back to defaults.
@@ -147,18 +181,29 @@ When the user asks about "current period", "selected period", "this timeframe", 
     [],
   );
 
+  const handleSendPrompt = useCallback((text: string) => {
+    // Nonce lets the bridge detect repeat clicks on the same prompt (same
+    // chart twice in a row); reference-equal objects would otherwise be
+    // skipped by the bridge's useEffect.
+    setPendingPrompt({ text, nonce: Date.now() });
+  }, []);
+
+  const consumePendingPrompt = useCallback(() => setPendingPrompt(null), []);
+
   const contextValue = useMemo(
     () => ({
       available: !hideTrigger,
       isExpanded,
       setIsExpanded,
       setOverride: handleSetOverride,
+      sendPrompt: handleSendPrompt,
     }),
-    [hideTrigger, isExpanded, handleSetOverride],
+    [hideTrigger, isExpanded, handleSetOverride, handleSendPrompt],
   );
 
   return (
     <InsightsContext.Provider value={contextValue}>
+      <InsightsRainbowStyles />
       <div className="flex h-full w-full">
         {/* Main content area - shrinks when sidebar opens */}
         <div
@@ -220,6 +265,10 @@ When the user asks about "current period", "selected period", "this timeframe", 
           {/* Chat content */}
           <div className="flex-1 overflow-hidden">
             <GramElementsProvider config={elementsConfig}>
+              <PendingPromptBridge
+                pending={pendingPrompt}
+                onConsume={consumePendingPrompt}
+              />
               <Chat />
             </GramElementsProvider>
           </div>
@@ -235,3 +284,31 @@ When the user asks about "current period", "selected period", "this timeframe", 
  * to avoid breaking out-of-tree consumers; remove after migration.
  */
 export const InsightsSidebar = InsightsProvider;
+
+/**
+ * Lives inside GramElementsProvider so it can access useThreadRuntime().
+ * When a pending prompt is queued via InsightsContext.sendPrompt, this bridge
+ * appends it to the current thread as a user message, triggering the
+ * assistant to respond. It fires once per nonce so repeat clicks on the
+ * same CTA still work.
+ */
+function PendingPromptBridge({
+  pending,
+  onConsume,
+}: {
+  pending: { text: string; nonce: number } | null;
+  onConsume: () => void;
+}) {
+  const runtime = useThreadRuntime();
+  const firedNonceRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!pending || !runtime) return;
+    if (firedNonceRef.current === pending.nonce) return;
+    firedNonceRef.current = pending.nonce;
+    runtime.append(pending.text);
+    onConsume();
+  }, [pending, runtime, onConsume]);
+
+  return null;
+}
