@@ -8,7 +8,7 @@ import type {
   ToolBehavior,
   ToolCountThreshold,
   UpdatedRange,
-} from "../FilterSidebar";
+} from "../filter-defaults";
 
 /**
  * Sort options for the catalog listing.

@@ -725,6 +725,10 @@ func newStartCommand() *cli.Command {
 					SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("site-url")),
 					Environment:            c.String("environment"),
 				},
+				accessManager,
+				func(ctx context.Context, projectIDs []string) ([]string, error) {
+					return accessManager.Filter(ctx, access.ScopeBuildRead, projectIDs)
+				},
 			))
 			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, accessManager))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, accessManager))

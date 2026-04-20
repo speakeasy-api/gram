@@ -15,8 +15,8 @@ import {
 } from "@gram/client/react-query/index.js";
 import { AlertCircle, Eye, EyeOff, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
-import { useEnvironments } from "./Environments";
+import { useNavigate } from "react-router";
+import { useEnvironment } from "./useEnvironment";
 import { MoreActions } from "@/components/ui/more-actions";
 
 interface SaveActionBarProps {
@@ -156,21 +156,6 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
       </Dialog.Content>
     </Dialog>
   );
-}
-
-export function useEnvironment(slug?: string) {
-  let { environmentSlug } = useParams();
-  if (slug) environmentSlug = slug;
-
-  const environments = useEnvironments();
-
-  const environment = environments.find(
-    (environment) => environment.slug === environmentSlug,
-  );
-
-  return environment
-    ? Object.assign(environment, { refetch: environments.refetch })
-    : null;
 }
 
 export default function EnvironmentPage() {

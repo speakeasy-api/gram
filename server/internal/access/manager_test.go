@@ -38,7 +38,9 @@ func TestManagerRequire_requiresAuthContext(t *testing.T) {
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
 	err := manager.Require(t.Context(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	requireOopsCode(t, err, oops.CodeUnauthorized)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
 
 func TestManagerRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
@@ -54,10 +56,12 @@ func TestManagerRequire_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: nil})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), nil)
 
 	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestManagerRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
@@ -66,7 +70,9 @@ func TestManagerRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	requireOopsCode(t, err, oops.CodeUnexpected)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 	require.ErrorIs(t, err, ErrMissingGrants)
 }
 
@@ -76,7 +82,9 @@ func TestManagerRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{err: errors.New("boom")}, workos.NewStubClient(), cache.NoopCache)
 
 	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
-	requireOopsCode(t, err, oops.CodeUnexpected)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 }
 
 func TestResolveRoleSlug_cachesEmptyMembershipResult(t *testing.T) {
@@ -106,20 +114,22 @@ func TestManagerRequireAny_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: []Grant{{Scope: ScopeMCPConnect, Resource: "tool_a"}}})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeMCPConnect, Resource: "tool_a"}})
 
 	err := manager.RequireAny(ctx,
 		Check{Scope: ScopeMCPConnect, ResourceID: "tool_b"},
 		Check{Scope: ScopeMCPConnect, ResourceID: "tool_c"},
 	)
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestManagerFilter_returnsAllowedSubset(t *testing.T) {
 	t.Parallel()
 
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: []Grant{{Scope: ScopeBuildRead, Resource: "proj_123"}}})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Resource: "proj_123"}})
 
 	resourceIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
 	require.NoError(t, err)
@@ -130,10 +140,12 @@ func TestManagerRequire_rejectsInvalidCheck(t *testing.T) {
 	t.Parallel()
 
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: []Grant{{Scope: ScopeBuildRead, Resource: WildcardResource}}})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Resource: WildcardResource}})
 
 	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: ""})
-	requireOopsCode(t, err, oops.CodeUnexpected)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 	require.ErrorIs(t, err, ErrInvalidCheck)
 }
 
@@ -141,10 +153,12 @@ func TestManagerRequire_requiresChecks(t *testing.T) {
 	t.Parallel()
 
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), &Grants{rows: []Grant{{Scope: ScopeBuildRead, Resource: WildcardResource}}})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Resource: WildcardResource}})
 
 	err := manager.Require(ctx)
-	requireOopsCode(t, err, oops.CodeUnexpected)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 	require.ErrorIs(t, err, ErrNoChecks)
 }
 
@@ -354,14 +368,6 @@ func TestCanUseOverride_prodPlusNonAdmin(t *testing.T) {
 	enforce, err := manager.shouldEnforce(ctx)
 	require.NoError(t, err)
 	require.False(t, enforce)
-}
-
-func requireOopsCode(t *testing.T, err error, code oops.Code) {
-	t.Helper()
-
-	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, code, shareableErr.Code)
 }
 
 func testLogger(t *testing.T) *slog.Logger {

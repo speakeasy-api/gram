@@ -1,7 +1,4 @@
 import { cn } from "@/lib/utils";
-import { StepperContextProvider } from "./context";
-
-export { useStepper } from "./context";
 
 type FrameProps = {
   children: React.ReactNode;
@@ -15,7 +12,4 @@ const Frame = ({ children, className }: FrameProps) => {
   );
 };
 
-export default {
-  Provider: StepperContextProvider,
-  Frame,
-};
+export default Frame;

@@ -1,36 +1,11 @@
 import { useRegisterChatTelemetry, useTelemetry } from "@/contexts/Telemetry";
 import { UIMessage } from "ai";
-import { createContext, useContext, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { v7 as uuidv7 } from "uuid";
+import { ChatContext } from "./useChatContext";
 
 type AppendFn = (message: { content: string }) => void;
-
-const ChatContext = createContext<{
-  id: string;
-  setId: (id: string) => void;
-  url: string;
-  messages: UIMessage[];
-  setMessages: (messages: UIMessage[]) => void;
-  appendMessage: AppendFn;
-  setAppendMessage: (appendMessage: AppendFn) => void;
-}>({
-  id: "",
-  setId: () => {},
-  url: "",
-  messages: [],
-  setMessages: () => {},
-  appendMessage: () => {},
-  setAppendMessage: () => {},
-});
-
-export const useChatContext = () => {
-  return useContext(ChatContext);
-};
-
-export const useChatMessages = () => {
-  return useChatContext().messages;
-};
 
 export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
   const telemetry = useTelemetry();

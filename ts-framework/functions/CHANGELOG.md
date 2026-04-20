@@ -1,5 +1,11 @@
 # @gram-ai/functions
 
+## 0.14.1
+
+### Patch Changes
+
+- a0de333: Fix pnpm install warning by pointing gf bin to source .ts instead of compiled dist
+
 ## 0.14.0
 
 ### Minor Changes

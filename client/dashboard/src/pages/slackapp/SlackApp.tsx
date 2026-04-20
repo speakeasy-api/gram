@@ -1,7 +1,8 @@
 import { AssetImage } from "@/components/asset-image";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { Page } from "@/components/page-layout";
-import { CompactUpload, useAssetImageUploadHandler } from "@/components/upload";
+import { CompactUpload } from "@/components/upload";
+import { useAssetImageUploadHandler } from "@/components/useAssetImageUploadHandler";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,7 @@ import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { useToolsets } from "@/pages/toolsets/Toolsets";
+import { useToolsets } from "@/pages/toolsets/useToolsets";
 import {
   useListSlackApps,
   useCreateSlackAppMutation,

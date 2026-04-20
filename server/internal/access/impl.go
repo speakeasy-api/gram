@@ -609,7 +609,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	// Return override scopes when active so the frontend sees the same restricted
 	// set as the enforcement layer.
 	if overrides, ok := s.access.getScopeOverrides(ctx); ok {
-		return &gen.ListUserGrantsResult{Grants: grantsFromRows(grantsFromOverrides(overrides).rows)}, nil
+		return &gen.ListUserGrantsResult{Grants: grantsFromRows(grantsFromOverrides(overrides))}, nil
 	}
 
 	enforce, err := s.access.shouldEnforce(ctx)
@@ -661,7 +661,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return nil, oops.E(oops.CodeUnexpected, err, "load effective user grants").Log(ctx, logger)
 	}
 
-	return &gen.ListUserGrantsResult{Grants: grantsFromRows(grants.rows)}, nil
+	return &gen.ListUserGrantsResult{Grants: grantsFromRows(grants)}, nil
 }
 
 // UpdateMemberRole is intentionally stricter than member listing: it only

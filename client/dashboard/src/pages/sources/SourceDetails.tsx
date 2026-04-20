@@ -1,7 +1,7 @@
 import { DetailHero } from "@/components/detail-hero";
 import MonacoEditorLazy from "@/components/monaco-editor.lazy";
 import { Page } from "@/components/page-layout";
-import { useFetchSourceContent } from "@/components/sources/ViewSourceDialogContent";
+import { useFetchSourceContent } from "@/components/sources/useFetchSourceContent";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import {
   PageTabsTrigger,

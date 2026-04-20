@@ -7,7 +7,8 @@ import { PromptTemplate } from "@gram/client/models/components";
 import { useUpdateToolsetMutation } from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
-import { PromptTemplateCard, usePrompts } from "../prompts/Prompts";
+import { PromptTemplateCard } from "../prompts/Prompts";
+import { usePrompts } from "../prompts/usePrompts";
 import { PromptSelectPopover } from "../prompts/PromptSelectPopover";
 
 export function PromptsTabContent({

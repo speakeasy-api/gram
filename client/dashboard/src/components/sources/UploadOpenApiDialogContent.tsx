@@ -1,6 +1,6 @@
 import { OpenApiSourceInput } from "@/components/OpenApiSourceInput";
 import { Spinner } from "@/components/ui/spinner";
-import { useUploadOpenAPISteps } from "@/pages/onboarding/UploadOpenAPI";
+import { useUploadOpenAPISteps } from "@/pages/onboarding/upload-openapi-utils";
 import { UploadedDocument } from "@/pages/onboarding/Wizard";
 import { Button, Dialog } from "@speakeasy-api/moonshine";
 import React from "react";

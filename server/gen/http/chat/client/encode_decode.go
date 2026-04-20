@@ -1708,6 +1708,10 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		Source:               v.Source,
 		CreatedAt:            *v.CreatedAt,
 		UpdatedAt:            *v.UpdatedAt,
+		TotalInputTokens:     v.TotalInputTokens,
+		TotalOutputTokens:    v.TotalOutputTokens,
+		TotalTokens:          v.TotalTokens,
+		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: *v.LastMessageTimestamp,
 	}
 
@@ -1746,6 +1750,10 @@ func unmarshalChatOverviewWithResolutionsResponseBodyToChatChatOverviewWithResol
 		Source:               v.Source,
 		CreatedAt:            *v.CreatedAt,
 		UpdatedAt:            *v.UpdatedAt,
+		TotalInputTokens:     v.TotalInputTokens,
+		TotalOutputTokens:    v.TotalOutputTokens,
+		TotalTokens:          v.TotalTokens,
+		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: *v.LastMessageTimestamp,
 	}
 	res.Resolutions = make([]*chat.ChatResolution, len(v.Resolutions))

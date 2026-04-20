@@ -7,28 +7,15 @@ import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { Environment } from "@gram/client/models/components/environment.js";
-import {
-  useCreateEnvironmentMutation,
-  useListEnvironmentsSuspense,
-} from "@gram/client/react-query/index.js";
+import { useCreateEnvironmentMutation } from "@gram/client/react-query/index.js";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
 import { Button } from "@speakeasy-api/moonshine";
 import { handleAPIError } from "@/lib/errors";
+import { useEnvironments } from "./useEnvironments";
 export function EnvironmentsRoot() {
   return <Outlet />;
-}
-
-export function useEnvironments() {
-  const { data: environments, refetch: refetchEnvironments } =
-    useListEnvironmentsSuspense(undefined, undefined, {
-      refetchOnWindowFocus: false,
-    });
-
-  return Object.assign(environments?.environments || [], {
-    refetch: refetchEnvironments,
-  });
 }
 
 export default function Environments() {

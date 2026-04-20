@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.41.1
+
+### Patch Changes
+
+- e56314e: Captures token and cost metrics for Claude agent sessions
+- Updated dependencies [e56314e]
+  - @gram/client@0.32.65
+
 ## 0.41.0
 
 ### Minor Changes

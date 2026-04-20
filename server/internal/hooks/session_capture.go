@@ -49,9 +49,17 @@ func isConversationEvent(eventName string) bool {
 	}
 }
 
-// sessionIDToUUID converts a Claude Code session_id string to a deterministic UUIDv5.
-// Uses RFC 4122 compliant UUIDv5 generation so the same session_id always maps to the same UUID.
+// sessionIDToUUID converts a Claude Code session_id string to a UUID.
+// The session_id is expected to already be a valid UUID string.
+// If parsing fails, falls back to generating a deterministic UUIDv5 from the session_id.
 func sessionIDToUUID(sessionID string) uuid.UUID {
+	// Try to parse the session ID as a UUID directly
+	parsedUUID, err := uuid.Parse(sessionID)
+	if err == nil {
+		return parsedUUID
+	}
+
+	// Fallback: generate a deterministic UUIDv5 from the session ID string
 	return uuid.NewSHA1(claudeSessionNamespace, []byte(sessionID))
 }
 

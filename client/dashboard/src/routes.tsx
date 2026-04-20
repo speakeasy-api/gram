@@ -664,7 +664,10 @@ const ORG_ROUTE_STRUCTURE = {
 type OrgRouteStructure = typeof ORG_ROUTE_STRUCTURE;
 type OrgRoutesWithGoTo = TransformRouteToGoTo<OrgRouteStructure>;
 
-export { ORG_ROUTE_STRUCTURE };
+/** The URL segments used by org-level routes (for redirect logic). */
+export const orgRoutePaths = Object.values(ORG_ROUTE_STRUCTURE)
+  .map((r) => r.url)
+  .filter(Boolean);
 
 export const useOrgRoutes = (): OrgRoutesWithGoTo => {
   const location = useLocation();

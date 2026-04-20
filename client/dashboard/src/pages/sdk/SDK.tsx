@@ -7,7 +7,8 @@ import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { capitalize } from "@/lib/utils";
 import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
-import { AgentifyProvider, useAgentify } from "../playground/Agentify";
+import { AgentifyProvider } from "../playground/Agentify";
+import { useAgentify } from "../playground/useAgentify";
 import {
   CODE_SAMPLES,
   FRAMEWORKS,

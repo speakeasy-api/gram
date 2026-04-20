@@ -50,7 +50,7 @@ func TestPluginsService_CreatePlugin_ForbiddenWithoutOrgAdmin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestPluginsService(t)
-	ctx = access.GrantsToContext(ctx, &access.Grants{})
+	ctx = access.GrantsToContext(ctx, nil)
 
 	_, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{
 		Name: "Forbidden Plugin",

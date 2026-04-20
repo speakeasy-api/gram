@@ -4,9 +4,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadAssetStep from "@/components/upload-asset/step";
-import UploadAssetStepper, {
-  useStepper,
-} from "@/components/upload-asset/stepper";
+import UploadAssetStepper from "@/components/upload-asset/stepper";
+import { useStepper } from "@/components/upload-asset/stepper/use-stepper";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
