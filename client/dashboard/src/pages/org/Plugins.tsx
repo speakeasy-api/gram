@@ -136,7 +136,7 @@ export default function Plugins() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Title>Plugins</Page.Header.Title>
+        <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
         {(data?.plugins ?? []).length === 0 ? (
