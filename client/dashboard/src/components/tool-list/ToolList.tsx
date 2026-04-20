@@ -47,6 +47,8 @@ interface ToolListProps {
   onCreateToolset?: (toolUrns: string[]) => void;
   onTestInPlayground?: () => void;
   className?: string;
+  /** When true, hides action menus and selection checkboxes for a view-only presentation. */
+  readOnly?: boolean;
   // Selection mode props for AddToolsDialog
   selectionMode?: "add" | "remove";
   selectedUrns?: string[];
@@ -266,6 +268,7 @@ function ToolRow({
   onTestInPlayground,
   onRemove,
   onToolClick,
+  readOnly,
 }: {
   tool: Tool;
   availableToolUrns?: string[];
@@ -277,6 +280,7 @@ function ToolRow({
   onTestInPlayground?: () => void;
   onRemove?: () => void;
   onToolClick?: (tool: Tool) => void;
+  readOnly?: boolean;
 }) {
   const isDisabled = false;
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -411,15 +415,19 @@ function ToolRow({
         onClick={() => onToolClick?.(tool)}
       >
         <div className="flex min-w-0 flex-[0_1_60%] items-center gap-4">
-          <Checkbox
-            checked={isSelected}
-            onCheckedChange={onCheckboxChange}
-            onClick={(e) => e.stopPropagation()}
-            className={cn(
-              "shrink-0 transition-opacity",
-              !isSelected && !isFocused && "opacity-0 group-hover:opacity-100",
-            )}
-          />
+          {!readOnly && (
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={onCheckboxChange}
+              onClick={(e) => e.stopPropagation()}
+              className={cn(
+                "shrink-0 transition-opacity",
+                !isSelected &&
+                  !isFocused &&
+                  "opacity-0 group-hover:opacity-100",
+              )}
+            />
+          )}
           <div className="flex min-w-0 flex-1 flex-col">
             <Stack direction="horizontal" gap={2} align="center">
               <p className="text-foreground truncate text-sm leading-6">
@@ -448,7 +456,7 @@ function ToolRow({
               availableToolUrns={availableToolUrns ?? []}
             />
           )}
-          <MoreActions actions={actions} />
+          {!readOnly && <MoreActions actions={actions} />}
         </div>
       </div>
 
@@ -689,6 +697,7 @@ export function ToolList({
   onCreateToolset,
   onTestInPlayground,
   className,
+  readOnly,
   selectionMode,
   selectedUrns = [],
   onSelectionChange,
@@ -1040,6 +1049,7 @@ export function ToolList({
                             : undefined
                         }
                         onToolClick={onToolClick}
+                        readOnly={readOnly}
                       />
                     );
                   })}

@@ -140,6 +140,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>settings</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+              <ScopeGatedNavItem
+                item={routes.environments}
+                scope={["build:read", "build:write"]}
+              />
               <ScopeGatedNavItem item={routes.settings} scope="build:write" />
             </SidebarMenu>
           </SidebarGroupContent>

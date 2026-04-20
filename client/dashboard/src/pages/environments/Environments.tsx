@@ -83,12 +83,14 @@ function EnvironmentsInner() {
           authentication for you
         </Page.Section.Description>
         <Page.Section.CTA>
-          <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
-            <Button.LeftIcon>
-              <Plus className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>New Environment</Button.Text>
-          </Button>
+          <RequireScope scope="build:write" level="component">
+            <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
+              <Button.LeftIcon>
+                <Plus className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>New Environment</Button.Text>
+            </Button>
+          </RequireScope>
         </Page.Section.CTA>
         <Page.Section.Body>
           <Cards>
