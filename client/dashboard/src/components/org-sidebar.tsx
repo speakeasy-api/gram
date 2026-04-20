@@ -30,16 +30,16 @@ function ScopeGatedNavItem({
   scope: Scope | Scope[];
 }) {
   return (
-    <SidebarMenuItem>
-      <RequireScope scope={scope} level="section">
+    <RequireScope scope={scope} level="section">
+      <SidebarMenuItem>
         <NavButton
           title={item.title}
           href={item.href()}
           active={item.active}
           Icon={item.Icon}
         />
-      </RequireScope>
-    </SidebarMenuItem>
+      </SidebarMenuItem>
+    </RequireScope>
   );
 }
 
