@@ -263,16 +263,17 @@ func (s *Service) GetInviteByToken(ctx context.Context, payload *gen.GetInviteBy
 	return invitationToGenAccept(invite, orgName), nil
 }
 
-// speakeasyTeamSlug gates admin-only endpoints. Same pattern as
-// projects.SetOrganizationWhitelist.
-const speakeasyTeamSlug = "speakeasy-team"
+// speakeasyTeamOrgID gates admin-only endpoints. Same pattern as
+// projects.SetOrganizationWhitelist — org ID, not slug, because slugs are
+// not DB-unique.
+const speakeasyTeamOrgID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
 
 func (s *Service) requireSpeakeasyTeam(ctx context.Context, action string) (*contextvalues.AuthContext, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if ac.OrganizationSlug != speakeasyTeamSlug {
+	if ac.ActiveOrganizationID != speakeasyTeamOrgID {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can %s", action).Log(ctx, s.logger, attr.SlogOrganizationID(ac.ActiveOrganizationID))
 	}
 	return ac, nil
