@@ -1768,7 +1768,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_assignments_plugin_id_principal_urn_key
 -- Risk analysis policies for scanning chat messages against configurable rules.
 -- One workflow per policy drains unanalyzed messages and produces risk_results.
 CREATE TABLE IF NOT EXISTS risk_policies (
-  id uuid NOT NULL,
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
 
@@ -1794,7 +1794,7 @@ WHERE deleted IS FALSE;
 -- Individual findings produced by scanning a chat message against a risk policy.
 -- No soft delete: results are regenerated when the policy version changes.
 CREATE TABLE IF NOT EXISTS risk_results (
-  id uuid NOT NULL,
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
   risk_policy_id uuid NOT NULL,
