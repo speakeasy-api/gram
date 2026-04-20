@@ -690,7 +690,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 
 	repoName := ac.OrganizationSlug + "-plugins"
 
-	if err := s.github.Client.CreateRepo(ctx, s.github.InstallationID, s.github.Org, repoName, false); err != nil {
+	if err := s.github.Client.CreateRepo(ctx, s.github.InstallationID, s.github.Org, repoName, true); err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "create github repo").Log(ctx, s.logger)
 	}
 
