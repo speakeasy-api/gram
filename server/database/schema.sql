@@ -1330,7 +1330,8 @@ ON toolset_origins (toolset_id)
 WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS toolset_origins_origin_registry_specifier_idx
-ON toolset_origins (origin_registry_specifier);
+ON toolset_origins (origin_registry_specifier)
+WHERE deleted IS FALSE;
 
 -- Organization MCP collections: named groups of toolsets published within an org
 CREATE TABLE IF NOT EXISTS organization_mcp_collections (

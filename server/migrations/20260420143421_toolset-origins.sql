@@ -14,6 +14,6 @@ CREATE TABLE "toolset_origins" (
   CONSTRAINT "toolset_origins_origin_registry_specifier_check" CHECK (origin_registry_specifier <> ''::text)
 );
 -- Create index "toolset_origins_origin_registry_specifier_idx" to table: "toolset_origins"
-CREATE INDEX "toolset_origins_origin_registry_specifier_idx" ON "toolset_origins" ("origin_registry_specifier");
+CREATE INDEX "toolset_origins_origin_registry_specifier_idx" ON "toolset_origins" ("origin_registry_specifier") WHERE (deleted IS FALSE);
 -- Create index "toolset_origins_toolset_id_key" to table: "toolset_origins"
 CREATE UNIQUE INDEX "toolset_origins_toolset_id_key" ON "toolset_origins" ("toolset_id") WHERE (deleted IS FALSE);
