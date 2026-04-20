@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 // PluginServerInfo contains the resolved information for a single MCP server.
@@ -59,7 +61,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	owner := marketplaceOwner{Name: cfg.OrgName, Email: cfg.OrgEmail}
 
 	claudeManifest, err := marshalJSON(marketplaceManifest{
-		Name:    cfg.OrgName + "-gram",
+		Name:    conv.ToSlug(cfg.OrgName) + "-gram",
 		Owner:   owner,
 		Plugins: claudePlugins,
 	})
@@ -69,7 +71,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	files[".claude-plugin/marketplace.json"] = claudeManifest
 
 	cursorManifest, err := marshalJSON(marketplaceManifest{
-		Name:    cfg.OrgName + "-gram",
+		Name:    conv.ToSlug(cfg.OrgName) + "-gram",
 		Owner:   owner,
 		Plugins: cursorPlugins,
 	})
