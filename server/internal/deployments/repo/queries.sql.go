@@ -1609,12 +1609,12 @@ SELECT
   p.user_id,
   p.created_at,
   COALESCE(ls.status, 'unknown') AS status,
-  COALESCE(oa.c, 0)::bigint        AS openapiv3_asset_count,
-  COALESCE(ht.c, 0)::bigint        AS openapiv3_tool_count,
-  COALESCE(fn.asset_c, 0)::bigint  AS functions_asset_count,
-  COALESCE(fn.tool_c, 0)::bigint   AS functions_tool_count,
-  COALESCE(ema.c, 0)::bigint       AS external_mcp_asset_count,
-  COALESCE(emtd.c, 0)::bigint      AS external_mcp_tool_count
+  COALESCE(oa.c, 0)        AS openapiv3_asset_count,
+  COALESCE(ht.c, 0)        AS openapiv3_tool_count,
+  COALESCE(fn.asset_c, 0)  AS functions_asset_count,
+  COALESCE(fn.tool_c, 0)   AS functions_tool_count,
+  COALESCE(ema.c, 0)       AS external_mcp_asset_count,
+  COALESCE(emtd.c, 0)      AS external_mcp_tool_count
 FROM paged p
 LEFT JOIN LATERAL (
   SELECT status FROM deployment_statuses
