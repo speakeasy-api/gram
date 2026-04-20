@@ -969,6 +969,17 @@ type ToolsetEnvironment struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type ToolsetOrigin struct {
+	ID                      uuid.UUID
+	OrganizationID          string
+	ToolsetID               uuid.UUID
+	OriginRegistrySpecifier string
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
+	Deleted                 bool
+}
+
 type ToolsetPrompt struct {
 	ID               uuid.UUID
 	ProjectID        uuid.UUID
