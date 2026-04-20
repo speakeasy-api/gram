@@ -37,6 +37,7 @@ import (
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
+	remotemcpc "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/client"
 	resourcesc "github.com/speakeasy-api/gram/server/gen/http/resources/client"
 	slackc "github.com/speakeasy-api/gram/server/gen/http/slack/client"
 	telemetryc "github.com/speakeasy-api/gram/server/gen/http/telemetry/client"
@@ -79,6 +80,7 @@ func UsageCommands() []string {
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
+		"remote-mcp (create-server|list-servers|get-server|update-server|delete-server)",
 		"resources list-resources",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
@@ -794,6 +796,37 @@ func ParseEndpoint(
 		projectsSetOrganizationWhitelistBodyFlag        = projectsSetOrganizationWhitelistFlags.String("body", "REQUIRED", "")
 		projectsSetOrganizationWhitelistApikeyTokenFlag = projectsSetOrganizationWhitelistFlags.String("apikey-token", "", "")
 
+		remoteMcpFlags = flag.NewFlagSet("remote-mcp", flag.ContinueOnError)
+
+		remoteMcpCreateServerFlags                = flag.NewFlagSet("create-server", flag.ExitOnError)
+		remoteMcpCreateServerBodyFlag             = remoteMcpCreateServerFlags.String("body", "REQUIRED", "")
+		remoteMcpCreateServerSessionTokenFlag     = remoteMcpCreateServerFlags.String("session-token", "", "")
+		remoteMcpCreateServerApikeyTokenFlag      = remoteMcpCreateServerFlags.String("apikey-token", "", "")
+		remoteMcpCreateServerProjectSlugInputFlag = remoteMcpCreateServerFlags.String("project-slug-input", "", "")
+
+		remoteMcpListServersFlags                = flag.NewFlagSet("list-servers", flag.ExitOnError)
+		remoteMcpListServersSessionTokenFlag     = remoteMcpListServersFlags.String("session-token", "", "")
+		remoteMcpListServersApikeyTokenFlag      = remoteMcpListServersFlags.String("apikey-token", "", "")
+		remoteMcpListServersProjectSlugInputFlag = remoteMcpListServersFlags.String("project-slug-input", "", "")
+
+		remoteMcpGetServerFlags                = flag.NewFlagSet("get-server", flag.ExitOnError)
+		remoteMcpGetServerIDFlag               = remoteMcpGetServerFlags.String("id", "REQUIRED", "")
+		remoteMcpGetServerSessionTokenFlag     = remoteMcpGetServerFlags.String("session-token", "", "")
+		remoteMcpGetServerApikeyTokenFlag      = remoteMcpGetServerFlags.String("apikey-token", "", "")
+		remoteMcpGetServerProjectSlugInputFlag = remoteMcpGetServerFlags.String("project-slug-input", "", "")
+
+		remoteMcpUpdateServerFlags                = flag.NewFlagSet("update-server", flag.ExitOnError)
+		remoteMcpUpdateServerBodyFlag             = remoteMcpUpdateServerFlags.String("body", "REQUIRED", "")
+		remoteMcpUpdateServerSessionTokenFlag     = remoteMcpUpdateServerFlags.String("session-token", "", "")
+		remoteMcpUpdateServerApikeyTokenFlag      = remoteMcpUpdateServerFlags.String("apikey-token", "", "")
+		remoteMcpUpdateServerProjectSlugInputFlag = remoteMcpUpdateServerFlags.String("project-slug-input", "", "")
+
+		remoteMcpDeleteServerFlags                = flag.NewFlagSet("delete-server", flag.ExitOnError)
+		remoteMcpDeleteServerIDFlag               = remoteMcpDeleteServerFlags.String("id", "REQUIRED", "")
+		remoteMcpDeleteServerSessionTokenFlag     = remoteMcpDeleteServerFlags.String("session-token", "", "")
+		remoteMcpDeleteServerApikeyTokenFlag      = remoteMcpDeleteServerFlags.String("apikey-token", "", "")
+		remoteMcpDeleteServerProjectSlugInputFlag = remoteMcpDeleteServerFlags.String("project-slug-input", "", "")
+
 		resourcesFlags = flag.NewFlagSet("resources", flag.ContinueOnError)
 
 		resourcesListResourcesFlags                = flag.NewFlagSet("list-resources", flag.ExitOnError)
@@ -1289,6 +1322,13 @@ func ParseEndpoint(
 	projectsDeleteProjectFlags.Usage = projectsDeleteProjectUsage
 	projectsSetOrganizationWhitelistFlags.Usage = projectsSetOrganizationWhitelistUsage
 
+	remoteMcpFlags.Usage = remoteMcpUsage
+	remoteMcpCreateServerFlags.Usage = remoteMcpCreateServerUsage
+	remoteMcpListServersFlags.Usage = remoteMcpListServersUsage
+	remoteMcpGetServerFlags.Usage = remoteMcpGetServerUsage
+	remoteMcpUpdateServerFlags.Usage = remoteMcpUpdateServerUsage
+	remoteMcpDeleteServerFlags.Usage = remoteMcpDeleteServerUsage
+
 	resourcesFlags.Usage = resourcesUsage
 	resourcesListResourcesFlags.Usage = resourcesListResourcesUsage
 
@@ -1425,6 +1465,8 @@ func ParseEndpoint(
 			svcf = featuresFlags
 		case "projects":
 			svcf = projectsFlags
+		case "remote-mcp":
+			svcf = remoteMcpFlags
 		case "resources":
 			svcf = resourcesFlags
 		case "slack":
@@ -1920,6 +1962,25 @@ func ParseEndpoint(
 
 			case "set-organization-whitelist":
 				epf = projectsSetOrganizationWhitelistFlags
+
+			}
+
+		case "remote-mcp":
+			switch epn {
+			case "create-server":
+				epf = remoteMcpCreateServerFlags
+
+			case "list-servers":
+				epf = remoteMcpListServersFlags
+
+			case "get-server":
+				epf = remoteMcpGetServerFlags
+
+			case "update-server":
+				epf = remoteMcpUpdateServerFlags
+
+			case "delete-server":
+				epf = remoteMcpDeleteServerFlags
 
 			}
 
@@ -2619,6 +2680,25 @@ func ParseEndpoint(
 			case "set-organization-whitelist":
 				endpoint = c.SetOrganizationWhitelist()
 				data, err = projectsc.BuildSetOrganizationWhitelistPayload(*projectsSetOrganizationWhitelistBodyFlag, *projectsSetOrganizationWhitelistApikeyTokenFlag)
+			}
+		case "remote-mcp":
+			c := remotemcpc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-server":
+				endpoint = c.CreateServer()
+				data, err = remotemcpc.BuildCreateServerPayload(*remoteMcpCreateServerBodyFlag, *remoteMcpCreateServerSessionTokenFlag, *remoteMcpCreateServerApikeyTokenFlag, *remoteMcpCreateServerProjectSlugInputFlag)
+			case "list-servers":
+				endpoint = c.ListServers()
+				data, err = remotemcpc.BuildListServersPayload(*remoteMcpListServersSessionTokenFlag, *remoteMcpListServersApikeyTokenFlag, *remoteMcpListServersProjectSlugInputFlag)
+			case "get-server":
+				endpoint = c.GetServer()
+				data, err = remotemcpc.BuildGetServerPayload(*remoteMcpGetServerIDFlag, *remoteMcpGetServerSessionTokenFlag, *remoteMcpGetServerApikeyTokenFlag, *remoteMcpGetServerProjectSlugInputFlag)
+			case "update-server":
+				endpoint = c.UpdateServer()
+				data, err = remotemcpc.BuildUpdateServerPayload(*remoteMcpUpdateServerBodyFlag, *remoteMcpUpdateServerSessionTokenFlag, *remoteMcpUpdateServerApikeyTokenFlag, *remoteMcpUpdateServerProjectSlugInputFlag)
+			case "delete-server":
+				endpoint = c.DeleteServer()
+				data, err = remotemcpc.BuildDeleteServerPayload(*remoteMcpDeleteServerIDFlag, *remoteMcpDeleteServerSessionTokenFlag, *remoteMcpDeleteServerApikeyTokenFlag, *remoteMcpDeleteServerProjectSlugInputFlag)
 			}
 		case "resources":
 			c := resourcesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -5924,6 +6004,139 @@ func projectsSetOrganizationWhitelistUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects set-organization-whitelist --body '{\n      \"organization_id\": \"abc123\",\n      \"whitelisted\": false\n   }' --apikey-token \"abc123\"")
+}
+
+// remoteMcpUsage displays the usage of the remote-mcp command and its
+// subcommands.
+func remoteMcpUsage() {
+	fmt.Fprintln(os.Stderr, `Managing remote MCP servers.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-mcp COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-server: Create a new remote MCP server`)
+	fmt.Fprintln(os.Stderr, `    list-servers: List all remote MCP servers for a project`)
+	fmt.Fprintln(os.Stderr, `    get-server: Get a remote MCP server by ID`)
+	fmt.Fprintln(os.Stderr, `    update-server: Update a remote MCP server`)
+	fmt.Fprintln(os.Stderr, `    delete-server: Delete a remote MCP server`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s remote-mcp COMMAND --help\n", os.Args[0])
+}
+func remoteMcpCreateServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp create-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new remote MCP server`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp create-server --body '{\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"abc123\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteMcpListServersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp list-servers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all remote MCP servers for a project`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp list-servers --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteMcpGetServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp get-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a remote MCP server by ID`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp get-server --id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteMcpUpdateServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp update-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update a remote MCP server`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp update-server --body '{\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"abc123\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteMcpDeleteServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp delete-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a remote MCP server`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp delete-server --id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // resourcesUsage displays the usage of the resources command and its

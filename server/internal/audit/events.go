@@ -8,17 +8,18 @@ import (
 type subjectType string
 
 const (
-	subjectTypeAPIKey       subjectType = "api_key"
-	subjectTypeAccessMember subjectType = "access_member"
-	subjectTypeAccessRole   subjectType = "access_role"
-	subjectTypeAsset        subjectType = "asset"
-	subjectTypeCustomDomain subjectType = "custom_domain"
-	subjectTypeDeployment   subjectType = "deployment"
-	subjectTypeEnvironment  subjectType = "environment"
-	subjectTypeProject      subjectType = "project"
-	subjectTypeTemplate     subjectType = "template"
-	subjectTypeToolset      subjectType = "toolset"
-	subjectTypeVariation    subjectType = "variation"
+	subjectTypeAPIKey          subjectType = "api_key"
+	subjectTypeAccessMember    subjectType = "access_member"
+	subjectTypeAccessRole      subjectType = "access_role"
+	subjectTypeAsset           subjectType = "asset"
+	subjectTypeCustomDomain    subjectType = "custom_domain"
+	subjectTypeDeployment      subjectType = "deployment"
+	subjectTypeEnvironment     subjectType = "environment"
+	subjectTypeProject         subjectType = "project"
+	subjectTypeTemplate        subjectType = "template"
+	subjectTypeRemoteMcpServer subjectType = "remote_mcp_server"
+	subjectTypeToolset         subjectType = "toolset"
+	subjectTypeVariation       subjectType = "variation"
 )
 
 type Action string
