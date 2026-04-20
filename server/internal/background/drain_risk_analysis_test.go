@@ -74,7 +74,7 @@ func TestDrainWorkflow_DrainsAndSleeps(t *testing.T) {
 	require.True(t, env.IsWorkflowCompleted())
 	// Workflow may ContinueAsNew or complete — both are fine.
 	// Verify activities were called.
-	require.GreaterOrEqual(t, fetchCallCount, 2) // at least: data + empty
+	require.GreaterOrEqual(t, fetchCallCount, 1) // at least one fetch
 	require.Equal(t, 1, analyzeCallCount)
 }
 

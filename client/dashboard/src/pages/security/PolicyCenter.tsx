@@ -445,7 +445,7 @@ function PolicySheetBody({
         <Label className="text-sm font-medium">Policy Name</Label>
         <Input
           value={formName}
-          onChange={(e) => setFormName(e.target.value)}
+          onChange={(value) => setFormName(value)}
           placeholder="e.g. Secret Detection"
         />
       </div>

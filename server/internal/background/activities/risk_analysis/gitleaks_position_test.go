@@ -20,70 +20,70 @@ func TestLineColToBytePos(t *testing.T) {
 		{
 			name:    "first character",
 			content: "hello world",
-			line:    1,
+			line:    0,
 			col:     1,
 			want:    0,
 		},
 		{
 			name:    "middle of first line",
 			content: "hello world",
-			line:    1,
+			line:    0,
 			col:     7,
 			want:    6,
 		},
 		{
 			name:    "end of first line",
 			content: "hello world",
-			line:    1,
+			line:    0,
 			col:     12,
 			want:    11,
 		},
 		{
 			name:    "second line start",
 			content: "hello\nworld",
-			line:    2,
+			line:    1,
 			col:     1,
 			want:    6,
 		},
 		{
 			name:    "second line middle",
 			content: "hello\nworld",
-			line:    2,
+			line:    1,
 			col:     3,
 			want:    8,
 		},
 		{
 			name:    "multi-line with various lengths",
 			content: "first line\nsecond\nthird line here",
-			line:    3,
+			line:    2,
 			col:     7,
 			want:    24,
 		},
 		{
 			name:    "empty lines",
 			content: "first\n\n\nfourth",
-			line:    4,
+			line:    3,
 			col:     1,
 			want:    8,
 		},
 		{
 			name:    "beyond end of content",
 			content: "hello",
-			line:    1,
+			line:    0,
 			col:     10,
 			want:    5,
 		},
 		{
 			name:    "invalid line",
 			content: "hello",
-			line:    0,
+			line:    -1,
 			col:     1,
 			want:    0,
 		},
 		{
 			name:    "invalid column",
 			content: "hello",
-			line:    1,
+			line:    0,
 			col:     0,
 			want:    0,
 		},
@@ -114,9 +114,9 @@ func TestLineColToBytePosWithActualSecrets(t *testing.T) {
 			name:        "AWS key in single line",
 			content:     `AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE`,
 			matchString: "AKIAIOSFODNN7EXAMPLE",
-			startLine:   1,
+			startLine:   0,
 			startCol:    19,
-			endLine:     1,
+			endLine:     0,
 			endCol:      39,
 		},
 		{
@@ -126,9 +126,9 @@ func TestLineColToBytePosWithActualSecrets(t *testing.T) {
   "other": "value"
 }`,
 			matchString: "sk-proj-1234567890abcdef",
-			startLine:   2,
+			startLine:   1,
 			startCol:    15,
-			endLine:     2,
+			endLine:     1,
 			endCol:      39,
 		},
 		{
@@ -136,9 +136,9 @@ func TestLineColToBytePosWithActualSecrets(t *testing.T) {
 			content: `const db =
   "postgresql://user:password123@localhost/db";`,
 			matchString: "password123",
-			startLine:   2,
+			startLine:   1,
 			startCol:    22,
-			endLine:     2,
+			endLine:     1,
 			endCol:      33,
 		},
 		{
@@ -147,9 +147,9 @@ func TestLineColToBytePosWithActualSecrets(t *testing.T) {
 github_token: ghp_1234567890abcdefghijklmnopqrstuvwxyz
 environment: production`,
 			matchString: "ghp_1234567890abcdefghijklmnopqrstuvwxyz",
-			startLine:   2,
+			startLine:   1,
 			startCol:    15,
-			endLine:     2,
+			endLine:     1,
 			endCol:      55,
 		},
 	}
@@ -248,37 +248,37 @@ func TestBytePosEdgeCases(t *testing.T) {
 		{
 			name:    "Unicode characters",
 			content: "Hello 世界\nNext line",
-			line:    1,
+			line:    0,
 			col:     7, // Position of 世
 		},
 		{
 			name:    "Emoji in content",
 			content: "🔒 API_KEY=secret123 🚀",
-			line:    1,
+			line:    0,
 			col:     4, // After emoji and space
 		},
 		{
 			name:    "Multiple emojis",
 			content: "Line 1 ✅\n🔑 token=abc123def\n❌ Invalid",
-			line:    2,
+			line:    1,
 			col:     9, // Position of 'a' in abc123def
 		},
 		{
 			name:    "Tabs and spaces",
 			content: "\t\tAPI_KEY=secret123",
-			line:    1,
+			line:    0,
 			col:     11, // Position of 's' in secret
 		},
 		{
 			name:    "Windows line endings",
 			content: "First line\r\nSecond line",
-			line:    2,
+			line:    1,
 			col:     1,
 		},
 		{
 			name:    "Mixed emoji and secrets",
 			content: "⚠️ WARNING: password=SuperSecret!123 🛑",
-			line:    1,
+			line:    0,
 			col:     22, // Position of 'S' in SuperSecret
 		},
 	}
