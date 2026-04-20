@@ -369,11 +369,15 @@ function MCPDetailPageInner() {
             </TabsContent>
 
             <TabsContent value="performance" className="mt-0 w-full">
-              <MCPPerformanceTab toolset={toolset} />
+              <RequireScope scope="mcp:write" level="page">
+                <MCPPerformanceTab toolset={toolset} />
+              </RequireScope>
             </TabsContent>
 
             <TabsContent value="settings" className="mt-0 w-full">
-              <MCPSettingsTab toolset={toolset} />
+              <RequireScope scope="mcp:write" level="page">
+                <MCPSettingsTab toolset={toolset} />
+              </RequireScope>
             </TabsContent>
           </div>
         </Tabs>
