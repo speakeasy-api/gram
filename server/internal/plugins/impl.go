@@ -99,10 +99,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 		return nil, err
 	}
 
-	rows, err := s.repo.ListPlugins(ctx, repo.ListPluginsParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
-	})
+	rows, err := s.repo.ListPlugins(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins").Log(ctx, s.logger)
 	}
@@ -144,7 +141,6 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -191,7 +187,7 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 
 	plugin, err := s.repo.CreatePlugin(ctx, repo.CreatePluginParams{
 		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
+		ProjectID:      *ac.ProjectID, // Deprecated: will be removed when project_id column is dropped.
 		Name:           payload.Name,
 		Slug:           slug,
 		Description:    conv.PtrToPGText(payload.Description),
@@ -230,7 +226,6 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 	plugin, err := s.repo.UpdatePlugin(ctx, repo.UpdatePluginParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
 		Name:           payload.Name,
 		Slug:           slug,
 		Description:    conv.PtrToPGText(payload.Description),
@@ -274,8 +269,8 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
 	}
 
-	// Verify the plugin belongs to this project before mutating.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	// Verify the plugin belongs to this org before mutating.
+	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.C(oops.CodeNotFound)
 		}
@@ -301,7 +296,6 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 	if err := txRepo.DeletePlugin(ctx, repo.DeletePluginParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete plugin").Log(ctx, s.logger)
 	}
@@ -329,8 +323,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
 	}
 
-	// Verify the plugin belongs to this project.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	// Verify the plugin belongs to this org.
+	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
@@ -342,7 +336,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset id").Log(ctx, s.logger)
 	}
 
-	// Verify the toolset exists and belongs to the same project.
+	// Verify the toolset exists and belongs to the same org.
 	toolset, err := toolsetsrepo.New(s.db).GetToolsetByID(ctx, toolsetID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -350,8 +344,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "verify toolset").Log(ctx, s.logger)
 	}
-	if toolset.ProjectID != *ac.ProjectID {
-		return nil, oops.E(oops.CodeBadRequest, nil, "toolset belongs to a different project")
+	if toolset.OrganizationID != ac.ActiveOrganizationID {
+		return nil, oops.E(oops.CodeBadRequest, nil, "toolset belongs to a different organization")
 	}
 
 	row, err := s.repo.AddPluginServer(ctx, repo.AddPluginServerParams{
@@ -391,8 +385,8 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
 	}
 
-	// Verify the plugin belongs to this project.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	// Verify the plugin belongs to this org.
+	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
@@ -435,8 +429,8 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 		return oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
 	}
 
-	// Verify the plugin belongs to this project.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	// Verify the plugin belongs to this org.
+	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.C(oops.CodeNotFound)
 		}
@@ -469,8 +463,8 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
 	}
 
-	// Verify the plugin belongs to this project.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	// Verify the plugin belongs to this org.
+	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
@@ -534,7 +528,6 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	dbPlugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -544,7 +537,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	}
 
 	// Resolve all plugin infos and find the matching one.
-	allInfos, err := s.resolvePluginInfos(ctx, *ac.ProjectID)
+	allInfos, err := s.resolvePluginInfos(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -603,8 +596,8 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 
 // --- Internal helpers ---
 
-func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) ([]PluginInfo, error) {
-	rows, err := s.repo.ListPluginsWithServersForProject(ctx, projectID)
+func (s *Service) resolvePluginInfos(ctx context.Context, orgID string) ([]PluginInfo, error) {
+	rows, err := s.repo.ListPluginsWithServersForOrg(ctx, orgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with servers").Log(ctx, s.logger)
 	}

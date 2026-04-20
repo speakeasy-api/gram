@@ -3676,41 +3676,38 @@ func NewDownloadPluginPackageGatewayErrorResponseBody(res *goa.ServiceError) *Do
 }
 
 // NewListPluginsPayload builds a plugins service listPlugins endpoint payload.
-func NewListPluginsPayload(sessionToken *string, projectSlugInput *string) *plugins.ListPluginsPayload {
+func NewListPluginsPayload(sessionToken *string) *plugins.ListPluginsPayload {
 	v := &plugins.ListPluginsPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewGetPluginPayload builds a plugins service getPlugin endpoint payload.
-func NewGetPluginPayload(id string, sessionToken *string, projectSlugInput *string) *plugins.GetPluginPayload {
+func NewGetPluginPayload(id string, sessionToken *string) *plugins.GetPluginPayload {
 	v := &plugins.GetPluginPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewCreatePluginPayload builds a plugins service createPlugin endpoint
 // payload.
-func NewCreatePluginPayload(body *CreatePluginRequestBody, sessionToken *string, projectSlugInput *string) *plugins.CreatePluginPayload {
+func NewCreatePluginPayload(body *CreatePluginRequestBody, sessionToken *string) *plugins.CreatePluginPayload {
 	v := &plugins.CreatePluginPayload{
 		Name:        *body.Name,
 		Slug:        body.Slug,
 		Description: body.Description,
 	}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewUpdatePluginPayload builds a plugins service updatePlugin endpoint
 // payload.
-func NewUpdatePluginPayload(body *UpdatePluginRequestBody, sessionToken *string, projectSlugInput *string) *plugins.UpdatePluginPayload {
+func NewUpdatePluginPayload(body *UpdatePluginRequestBody, sessionToken *string) *plugins.UpdatePluginPayload {
 	v := &plugins.UpdatePluginPayload{
 		ID:          *body.ID,
 		Name:        *body.Name,
@@ -3718,25 +3715,23 @@ func NewUpdatePluginPayload(body *UpdatePluginRequestBody, sessionToken *string,
 		Description: body.Description,
 	}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewDeletePluginPayload builds a plugins service deletePlugin endpoint
 // payload.
-func NewDeletePluginPayload(id string, sessionToken *string, projectSlugInput *string) *plugins.DeletePluginPayload {
+func NewDeletePluginPayload(id string, sessionToken *string) *plugins.DeletePluginPayload {
 	v := &plugins.DeletePluginPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewAddPluginServerPayload builds a plugins service addPluginServer endpoint
 // payload.
-func NewAddPluginServerPayload(body *AddPluginServerRequestBody, sessionToken *string, projectSlugInput *string) *plugins.AddPluginServerPayload {
+func NewAddPluginServerPayload(body *AddPluginServerRequestBody, sessionToken *string) *plugins.AddPluginServerPayload {
 	v := &plugins.AddPluginServerPayload{
 		PluginID:    *body.PluginID,
 		ToolsetID:   *body.ToolsetID,
@@ -3755,14 +3750,13 @@ func NewAddPluginServerPayload(body *AddPluginServerRequestBody, sessionToken *s
 		v.SortOrder = 0
 	}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewUpdatePluginServerPayload builds a plugins service updatePluginServer
 // endpoint payload.
-func NewUpdatePluginServerPayload(body *UpdatePluginServerRequestBody, sessionToken *string, projectSlugInput *string) *plugins.UpdatePluginServerPayload {
+func NewUpdatePluginServerPayload(body *UpdatePluginServerRequestBody, sessionToken *string) *plugins.UpdatePluginServerPayload {
 	v := &plugins.UpdatePluginServerPayload{
 		ID:          *body.ID,
 		PluginID:    *body.PluginID,
@@ -3781,26 +3775,24 @@ func NewUpdatePluginServerPayload(body *UpdatePluginServerRequestBody, sessionTo
 		v.SortOrder = 0
 	}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewRemovePluginServerPayload builds a plugins service removePluginServer
 // endpoint payload.
-func NewRemovePluginServerPayload(id string, pluginID string, sessionToken *string, projectSlugInput *string) *plugins.RemovePluginServerPayload {
+func NewRemovePluginServerPayload(id string, pluginID string, sessionToken *string) *plugins.RemovePluginServerPayload {
 	v := &plugins.RemovePluginServerPayload{}
 	v.ID = id
 	v.PluginID = pluginID
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewSetPluginAssignmentsPayload builds a plugins service setPluginAssignments
 // endpoint payload.
-func NewSetPluginAssignmentsPayload(body *SetPluginAssignmentsRequestBody, sessionToken *string, projectSlugInput *string) *plugins.SetPluginAssignmentsPayload {
+func NewSetPluginAssignmentsPayload(body *SetPluginAssignmentsRequestBody, sessionToken *string) *plugins.SetPluginAssignmentsPayload {
 	v := &plugins.SetPluginAssignmentsPayload{
 		PluginID: *body.PluginID,
 	}
@@ -3809,19 +3801,17 @@ func NewSetPluginAssignmentsPayload(body *SetPluginAssignmentsRequestBody, sessi
 		v.PrincipalUrns[i] = val
 	}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewDownloadPluginPackagePayload builds a plugins service
 // downloadPluginPackage endpoint payload.
-func NewDownloadPluginPackagePayload(pluginID string, platform string, sessionToken *string, projectSlugInput *string) *plugins.DownloadPluginPackagePayload {
+func NewDownloadPluginPackagePayload(pluginID string, platform string, sessionToken *string) *plugins.DownloadPluginPackagePayload {
 	v := &plugins.DownloadPluginPackagePayload{}
 	v.PluginID = pluginID
 	v.Platform = platform
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }

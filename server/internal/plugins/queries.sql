@@ -1,7 +1,8 @@
--- Queries for managing plugins (project-scoped distributable MCP server bundles).
--- plugins is project-scoped; every query is scoped to project_id (and organization_id where needed).
+-- Queries for managing plugins (org-scoped distributable MCP server bundles).
 
 -- name: CreatePlugin :one
+-- NOTE: project_id is deprecated and will be dropped in a follow-up migration.
+-- It is still NOT NULL in the current schema so we must provide it.
 INSERT INTO plugins (organization_id, project_id, name, slug, description)
 VALUES (@organization_id, @project_id, @name, @slug, sqlc.narg('description'))
 RETURNING *;
@@ -11,7 +12,6 @@ SELECT *
 FROM plugins
 WHERE id = @id
   AND organization_id = @organization_id
-  AND project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: ListPlugins :many
@@ -21,7 +21,6 @@ SELECT
   (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id) AS assignment_count
 FROM plugins p
 WHERE p.organization_id = @organization_id
-  AND p.project_id = @project_id
   AND p.deleted IS FALSE
 ORDER BY p.created_at DESC;
 
@@ -33,12 +32,10 @@ SET name = @name,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
-  AND project_id = @project_id
   AND deleted IS FALSE
 RETURNING *;
 
 -- name: SoftDeletePluginServers :exec
--- Soft-deletes all servers belonging to a plugin.
 UPDATE plugin_servers
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
@@ -51,7 +48,6 @@ SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
-  AND project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: AddPluginServer :one
@@ -107,7 +103,7 @@ WHERE plugin_id = @plugin_id;
 DELETE FROM plugin_assignments
 WHERE plugin_id = @plugin_id;
 
--- name: ListPluginsWithServersForProject :many
+-- name: ListPluginsWithServersForOrg :many
 -- Used during plugin generation: returns all active plugin servers joined with
 -- their parent plugin and toolset mcp_slug for URL construction.
 SELECT
@@ -124,7 +120,7 @@ SELECT
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
-WHERE p.project_id = @project_id
+WHERE p.organization_id = @organization_id
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC;
 

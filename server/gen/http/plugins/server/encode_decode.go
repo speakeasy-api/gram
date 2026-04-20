@@ -37,30 +37,18 @@ func DecodeListPluginsRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 	return func(r *http.Request) (*plugins.ListPluginsPayload, error) {
 		var payload *plugins.ListPluginsPayload
 		var (
-			sessionToken     *string
-			projectSlugInput *string
+			sessionToken *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewListPluginsPayload(sessionToken, projectSlugInput)
+		payload = NewListPluginsPayload(sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -242,10 +230,9 @@ func DecodeGetPluginRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 	return func(r *http.Request) (*plugins.GetPluginPayload, error) {
 		var payload *plugins.GetPluginPayload
 		var (
-			id               string
-			sessionToken     *string
-			projectSlugInput *string
-			err              error
+			id           string
+			sessionToken *string
+			err          error
 		)
 		id = r.URL.Query().Get("id")
 		if id == "" {
@@ -256,26 +243,15 @@ func DecodeGetPluginRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetPluginPayload(id, sessionToken, projectSlugInput)
+		payload = NewGetPluginPayload(id, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -477,30 +453,18 @@ func DecodeCreatePluginRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		}
 
 		var (
-			sessionToken     *string
-			projectSlugInput *string
+			sessionToken *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewCreatePluginPayload(&body, sessionToken, projectSlugInput)
+		payload = NewCreatePluginPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -702,30 +666,18 @@ func DecodeUpdatePluginRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		}
 
 		var (
-			sessionToken     *string
-			projectSlugInput *string
+			sessionToken *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewUpdatePluginPayload(&body, sessionToken, projectSlugInput)
+		payload = NewUpdatePluginPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -904,10 +856,9 @@ func DecodeDeletePluginRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 	return func(r *http.Request) (*plugins.DeletePluginPayload, error) {
 		var payload *plugins.DeletePluginPayload
 		var (
-			id               string
-			sessionToken     *string
-			projectSlugInput *string
-			err              error
+			id           string
+			sessionToken *string
+			err          error
 		)
 		id = r.URL.Query().Get("id")
 		if id == "" {
@@ -918,26 +869,15 @@ func DecodeDeletePluginRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewDeletePluginPayload(id, sessionToken, projectSlugInput)
+		payload = NewDeletePluginPayload(id, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -1139,30 +1079,18 @@ func DecodeAddPluginServerRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		}
 
 		var (
-			sessionToken     *string
-			projectSlugInput *string
+			sessionToken *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewAddPluginServerPayload(&body, sessionToken, projectSlugInput)
+		payload = NewAddPluginServerPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -1364,30 +1292,18 @@ func DecodeUpdatePluginServerRequest(mux goahttp.Muxer, decoder func(*http.Reque
 		}
 
 		var (
-			sessionToken     *string
-			projectSlugInput *string
+			sessionToken *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewUpdatePluginServerPayload(&body, sessionToken, projectSlugInput)
+		payload = NewUpdatePluginServerPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -1566,11 +1482,10 @@ func DecodeRemovePluginServerRequest(mux goahttp.Muxer, decoder func(*http.Reque
 	return func(r *http.Request) (*plugins.RemovePluginServerPayload, error) {
 		var payload *plugins.RemovePluginServerPayload
 		var (
-			id               string
-			pluginID         string
-			sessionToken     *string
-			projectSlugInput *string
-			err              error
+			id           string
+			pluginID     string
+			sessionToken *string
+			err          error
 		)
 		qp := r.URL.Query()
 		id = qp.Get("id")
@@ -1587,26 +1502,15 @@ func DecodeRemovePluginServerRequest(mux goahttp.Muxer, decoder func(*http.Reque
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewRemovePluginServerPayload(id, pluginID, sessionToken, projectSlugInput)
+		payload = NewRemovePluginServerPayload(id, pluginID, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -1808,30 +1712,18 @@ func DecodeSetPluginAssignmentsRequest(mux goahttp.Muxer, decoder func(*http.Req
 		}
 
 		var (
-			sessionToken     *string
-			projectSlugInput *string
+			sessionToken *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewSetPluginAssignmentsPayload(&body, sessionToken, projectSlugInput)
+		payload = NewSetPluginAssignmentsPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -2013,11 +1905,10 @@ func DecodeDownloadPluginPackageRequest(mux goahttp.Muxer, decoder func(*http.Re
 	return func(r *http.Request) (*plugins.DownloadPluginPackagePayload, error) {
 		var payload *plugins.DownloadPluginPackagePayload
 		var (
-			pluginID         string
-			platform         string
-			sessionToken     *string
-			projectSlugInput *string
-			err              error
+			pluginID     string
+			platform     string
+			sessionToken *string
+			err          error
 		)
 		qp := r.URL.Query()
 		pluginID = qp.Get("plugin_id")
@@ -2036,26 +1927,15 @@ func DecodeDownloadPluginPackageRequest(mux goahttp.Muxer, decoder func(*http.Re
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewDownloadPluginPackagePayload(pluginID, platform, sessionToken, projectSlugInput)
+		payload = NewDownloadPluginPackagePayload(pluginID, platform, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 

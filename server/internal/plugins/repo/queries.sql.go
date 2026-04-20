@@ -99,8 +99,9 @@ type CreatePluginParams struct {
 	Description    pgtype.Text
 }
 
-// Queries for managing plugins (project-scoped distributable MCP server bundles).
-// plugins is project-scoped; every query is scoped to project_id (and organization_id where needed).
+// Queries for managing plugins (org-scoped distributable MCP server bundles).
+// NOTE: project_id is deprecated and will be dropped in a follow-up migration.
+// It is still NOT NULL in the current schema so we must provide it.
 func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plugin, error) {
 	row := q.db.QueryRow(ctx, createPlugin,
 		arg.OrganizationID,
@@ -131,18 +132,16 @@ SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = $1
   AND organization_id = $2
-  AND project_id = $3
   AND deleted IS FALSE
 `
 
 type DeletePluginParams struct {
 	ID             uuid.UUID
 	OrganizationID string
-	ProjectID      uuid.UUID
 }
 
 func (q *Queries) DeletePlugin(ctx context.Context, arg DeletePluginParams) error {
-	_, err := q.db.Exec(ctx, deletePlugin, arg.ID, arg.OrganizationID, arg.ProjectID)
+	_, err := q.db.Exec(ctx, deletePlugin, arg.ID, arg.OrganizationID)
 	return err
 }
 
@@ -162,18 +161,16 @@ SELECT id, organization_id, project_id, name, slug, description, created_at, upd
 FROM plugins
 WHERE id = $1
   AND organization_id = $2
-  AND project_id = $3
   AND deleted IS FALSE
 `
 
 type GetPluginParams struct {
 	ID             uuid.UUID
 	OrganizationID string
-	ProjectID      uuid.UUID
 }
 
 func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, error) {
-	row := q.db.QueryRow(ctx, getPlugin, arg.ID, arg.OrganizationID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getPlugin, arg.ID, arg.OrganizationID)
 	var i Plugin
 	err := row.Scan(
 		&i.ID,
@@ -269,15 +266,9 @@ SELECT
   (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id) AS assignment_count
 FROM plugins p
 WHERE p.organization_id = $1
-  AND p.project_id = $2
   AND p.deleted IS FALSE
 ORDER BY p.created_at DESC
 `
-
-type ListPluginsParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-}
 
 type ListPluginsRow struct {
 	ID              uuid.UUID
@@ -294,8 +285,8 @@ type ListPluginsRow struct {
 	AssignmentCount int64
 }
 
-func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]ListPluginsRow, error) {
-	rows, err := q.db.Query(ctx, listPlugins, arg.OrganizationID, arg.ProjectID)
+func (q *Queries) ListPlugins(ctx context.Context, organizationID string) ([]ListPluginsRow, error) {
+	rows, err := q.db.Query(ctx, listPlugins, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +318,7 @@ func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]Lis
 	return items, nil
 }
 
-const listPluginsWithServersForProject = `-- name: ListPluginsWithServersForProject :many
+const listPluginsWithServersForOrg = `-- name: ListPluginsWithServersForOrg :many
 SELECT
   p.id AS plugin_id,
   p.name AS plugin_name,
@@ -342,12 +333,12 @@ SELECT
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
-WHERE p.project_id = $1
+WHERE p.organization_id = $1
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC
 `
 
-type ListPluginsWithServersForProjectRow struct {
+type ListPluginsWithServersForOrgRow struct {
 	PluginID          uuid.UUID
 	PluginName        string
 	PluginSlug        string
@@ -362,15 +353,15 @@ type ListPluginsWithServersForProjectRow struct {
 
 // Used during plugin generation: returns all active plugin servers joined with
 // their parent plugin and toolset mcp_slug for URL construction.
-func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectID uuid.UUID) ([]ListPluginsWithServersForProjectRow, error) {
-	rows, err := q.db.Query(ctx, listPluginsWithServersForProject, projectID)
+func (q *Queries) ListPluginsWithServersForOrg(ctx context.Context, organizationID string) ([]ListPluginsWithServersForOrgRow, error) {
+	rows, err := q.db.Query(ctx, listPluginsWithServersForOrg, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListPluginsWithServersForProjectRow
+	var items []ListPluginsWithServersForOrgRow
 	for rows.Next() {
-		var i ListPluginsWithServersForProjectRow
+		var i ListPluginsWithServersForOrgRow
 		if err := rows.Scan(
 			&i.PluginID,
 			&i.PluginName,
@@ -433,7 +424,6 @@ WHERE plugin_id = $1
   AND deleted IS FALSE
 `
 
-// Soft-deletes all servers belonging to a plugin.
 func (q *Queries) SoftDeletePluginServers(ctx context.Context, pluginID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, softDeletePluginServers, pluginID)
 	return err
@@ -447,7 +437,6 @@ SET name = $1,
     updated_at = clock_timestamp()
 WHERE id = $4
   AND organization_id = $5
-  AND project_id = $6
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, name, slug, description, created_at, updated_at, deleted_at, deleted
 `
@@ -458,7 +447,6 @@ type UpdatePluginParams struct {
 	Description    pgtype.Text
 	ID             uuid.UUID
 	OrganizationID string
-	ProjectID      uuid.UUID
 }
 
 func (q *Queries) UpdatePlugin(ctx context.Context, arg UpdatePluginParams) (Plugin, error) {
@@ -468,7 +456,6 @@ func (q *Queries) UpdatePlugin(ctx context.Context, arg UpdatePluginParams) (Plu
 		arg.Description,
 		arg.ID,
 		arg.OrganizationID,
-		arg.ProjectID,
 	)
 	var i Plugin
 	err := row.Scan(
