@@ -116,6 +116,8 @@ type ChatMessage struct {
 	ToolUrn          urn.Tool
 	ToolOutcome      pgtype.Text
 	ToolOutcomeNotes pgtype.Text
+	ContentHash      []byte
+	Generation       int32
 	CreatedAt        pgtype.Timestamptz
 }
 
@@ -807,6 +809,39 @@ type RemoteMcpServerHeader struct {
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
 	Deleted                bool
+}
+
+type RiskPolicy struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Enabled        bool
+	Name           string
+	Sources        []string
+	Version        int64
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type RiskResult struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatMessageID     uuid.UUID
+	Source            string
+	Found             bool
+	RuleID            pgtype.Text
+	Description       pgtype.Text
+	Match             pgtype.Text
+	StartPos          pgtype.Int4
+	EndPos            pgtype.Int4
+	Confidence        pgtype.Float8
+	Tags              []string
+	CreatedAt         pgtype.Timestamptz
 }
 
 type SlackApp struct {
