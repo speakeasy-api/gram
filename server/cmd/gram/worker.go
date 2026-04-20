@@ -452,11 +452,14 @@ func newWorkerCommand() *cli.Command {
 			 * BEGIN -- MCP service setup for agent client
 			 */
 
+			captureStrategy, shutdown := chat.NewChatMessageCaptureStrategy(logger, db, assetStorage)
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
 				openRouter,
-				chat.NewChatMessageCaptureStrategy(logger, db, assetStorage),
+				captureStrategy,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},

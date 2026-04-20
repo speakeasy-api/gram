@@ -19,11 +19,13 @@ import (
 
 func newCaptureStrategy(t *testing.T, conn *pgxpool.Pool) *chat.ChatMessageCaptureStrategy {
 	t.Helper()
-	return chat.NewChatMessageCaptureStrategy(
+	strategy, shutdown := chat.NewChatMessageCaptureStrategy(
 		testenv.NewLogger(t),
 		conn,
 		assetstest.NewTestBlobStore(t),
 	)
+	t.Cleanup(func() { _ = shutdown(t.Context()) })
+	return strategy
 }
 
 func makeRequest(chatID, projectID uuid.UUID, orgID string, msgs ...or.ChatMessages) openrouter.CompletionRequest {

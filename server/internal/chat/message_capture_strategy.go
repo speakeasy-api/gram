@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // ChatMessageCaptureStrategy captures completion messages to the database.
@@ -31,6 +30,7 @@ type ChatMessageCaptureStrategy struct {
 	repo         *repo.Queries
 	assetStorage assets.BlobStore
 	observers    []MessageObserver
+	shutdownCtx  context.Context
 }
 
 var _ openrouter.MessageCaptureStrategy = (*ChatMessageCaptureStrategy)(nil)
@@ -52,14 +52,21 @@ func NewChatMessageCaptureStrategy(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	assetStorage assets.BlobStore,
-) *ChatMessageCaptureStrategy {
+) (strategy *ChatMessageCaptureStrategy, shutdown func(context.Context) error) {
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck // this context must be tied to the lifetime of the application
+	shutdown = func(_ context.Context) error {
+		cancel()
+		return nil
+	}
+
 	return &ChatMessageCaptureStrategy{
 		logger:       logger,
 		db:           db,
 		repo:         repo.New(db),
 		assetStorage: assetStorage,
 		observers:    nil,
-	}
+		shutdownCtx:  ctx,
+	}, shutdown
 }
 
 // AddObserver registers a MessageObserver to be notified when messages are stored.
@@ -68,16 +75,14 @@ func (s *ChatMessageCaptureStrategy) AddObserver(obs MessageObserver) {
 }
 
 func (s *ChatMessageCaptureStrategy) notifyObservers(ctx context.Context, projectID uuid.UUID) {
-	go func() { //nolint:gosec // intentionally detached from request context so observers survive request cancellation
-		bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second) //nolint:contextcheck // intentionally detached from request context
+	go func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
-
-		if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
-			bgCtx = trace.ContextWithSpanContext(bgCtx, span.SpanContext())
-		}
+		stop := context.AfterFunc(s.shutdownCtx, cancel)
+		defer stop()
 
 		for _, obs := range s.observers {
-			obs.OnMessagesStored(bgCtx, projectID)
+			obs.OnMessagesStored(ctx, projectID)
 		}
 	}()
 }

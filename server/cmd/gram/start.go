@@ -604,7 +604,9 @@ func newStartCommand() *cli.Command {
 				hooksCache = hooks.NewLocalSessionCache(hooksCache, db)
 			}
 
-			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, db, assetStorage)
+			captureStrategy, shutdown := chat.NewChatMessageCaptureStrategy(logger, db, assetStorage)
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
