@@ -7,10 +7,8 @@ import { useCallback, useState } from "react";
 import { EnvironmentSelector } from "@/pages/toolsets/EnvironmentSelector";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 import { useAttachedEnvironmentForm } from "./useAttachedEnvironmentForm";
-import {
-  EnvironmentEntriesFormFields,
-  useEnvironmentForm,
-} from "./EnvironmentEntriesFormFields";
+import { EnvironmentEntriesFormFields } from "./EnvironmentEntriesFormFields";
+import { useEnvironmentForm } from "./useEnvironmentForm";
 import {
   Collapsible,
   CollapsibleContent,

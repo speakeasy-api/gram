@@ -17,7 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { useRoutes } from "@/routes";
-import { useToolsets } from "@/pages/toolsets/Toolsets";
+import { useToolsets } from "@/pages/toolsets/useToolsets";
 import { StatusBadge } from "./SlackApp";
 import { buildDeepLinkUrl, buildInviteUrl } from "./slackManifest";
 

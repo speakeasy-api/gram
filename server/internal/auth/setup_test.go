@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -70,7 +71,7 @@ type MockOrganizationEntry struct {
 	ID                 string   `json:"id"`
 	Name               string   `json:"name"`
 	Slug               string   `json:"slug"`
-	SsoConnectionID    *string  `json:"sso_connection_id"`
+	WorkosID           *string  `json:"workos_id"`
 	UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 }
 
@@ -96,7 +97,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 				Name               string   `json:"name"`
 				Slug               string   `json:"slug"`
 				AccountType        string   `json:"account_type"`
-				SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+				WorkOSID           *string  `json:"workos_id,omitempty"`
 				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 			} `json:"organizations"`
 		}{
@@ -118,7 +119,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 				Name               string   `json:"name"`
 				Slug               string   `json:"slug"`
 				AccountType        string   `json:"account_type"`
-				SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+				WorkOSID           *string  `json:"workos_id,omitempty"`
 				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 			}{},
 		}
@@ -134,7 +135,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 			Name               string   `json:"name"`
 			Slug               string   `json:"slug"`
 			AccountType        string   `json:"account_type"`
-			SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+			WorkOSID           *string  `json:"workos_id,omitempty"`
 			UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 		}, len(userInfo.Organizations))
 
@@ -143,7 +144,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 			validateResp.Organizations[i].Name = org.Name
 			validateResp.Organizations[i].Slug = org.Slug
 			validateResp.Organizations[i].AccountType = "scale-up"
-			validateResp.Organizations[i].SSOConnectionID = org.SsoConnectionID
+			validateResp.Organizations[i].WorkOSID = org.WorkosID
 			validateResp.Organizations[i].UserWorkspaceSlugs = org.UserWorkspaceSlugs
 		}
 
@@ -162,7 +163,6 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 			ID:                 "new-org-123",
 			Name:               "New Organization",
 			Slug:               "new-org",
-			SsoConnectionID:    nil,
 			UserWorkspaceSlugs: []string{"new-workspace"},
 		}
 
@@ -184,7 +184,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 				Name               string   `json:"name"`
 				Slug               string   `json:"slug"`
 				AccountType        string   `json:"account_type"`
-				SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+				WorkOSID           *string  `json:"workos_id,omitempty"`
 				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 			} `json:"organizations"`
 		}{
@@ -206,7 +206,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 				Name               string   `json:"name"`
 				Slug               string   `json:"slug"`
 				AccountType        string   `json:"account_type"`
-				SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+				WorkOSID           *string  `json:"workos_id,omitempty"`
 				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 			}{},
 		}
@@ -222,7 +222,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 			Name               string   `json:"name"`
 			Slug               string   `json:"slug"`
 			AccountType        string   `json:"account_type"`
-			SSOConnectionID    *string  `json:"sso_connection_id,omitempty"`
+			WorkOSID           *string  `json:"workos_id,omitempty"`
 			UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 		}, len(updatedUserInfo.Organizations))
 
@@ -231,7 +231,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 			validateResp.Organizations[i].Name = org.Name
 			validateResp.Organizations[i].Slug = org.Slug
 			validateResp.Organizations[i].AccountType = "free"
-			validateResp.Organizations[i].SSOConnectionID = org.SsoConnectionID
+			validateResp.Organizations[i].WorkOSID = org.WorkosID
 			validateResp.Organizations[i].UserWorkspaceSlugs = org.UserWorkspaceSlugs
 		}
 
@@ -307,9 +307,52 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 		Environment:            "test",
 	}
 
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, nil, nil)
 
-	return ctx, &testInstance{
+	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
+}
+
+func newTestAuthServiceWithFilter(t *testing.T, userInfo *MockUserInfo, filterProjects auth.ProjectFilterFunc) (context.Context, *testInstance) {
+	t.Helper()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	conn, err := infra.CloneTestDatabase(t, "authtest")
+	require.NoError(t, err)
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	mockServer := createMockAuthServer(userInfo)
+	t.Cleanup(mockServer.Close)
+
+	pylon, err := pylon.NewPylon(logger, "")
+	require.NoError(t, err)
+
+	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
+
+	billingClient := billing.NewStubClient(logger, tracerProvider)
+
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient, nil)
+
+	authConfigs := auth.AuthConfigurations{
+		SpeakeasyServerAddress: mockServer.URL,
+		GramServerURL:          "http://localhost:8080",
+		SignInRedirectURL:      "http://localhost:3000/dashboard",
+		Environment:            "test",
+	}
+
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, nil, filterProjects)
+
+	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
+}
+
+func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Pool, sessionManager *sessions.Manager, mockServer *httptest.Server, authConfigs auth.AuthConfigurations) *testInstance {
+	return &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
@@ -330,7 +373,6 @@ func defaultMockUserInfo() *MockUserInfo {
 				ID:                 "org-123",
 				Name:               "Test Organization",
 				Slug:               "test-org",
-				SsoConnectionID:    nil,
 				UserWorkspaceSlugs: []string{"workspace1", "workspace2"},
 			},
 		},
@@ -349,14 +391,12 @@ func speakeasyMockUserInfo() *MockUserInfo {
 				ID:                 "speakeasy-team-123",
 				Name:               "Speakeasy Team",
 				Slug:               "speakeasy-team",
-				SsoConnectionID:    nil,
 				UserWorkspaceSlugs: []string{"speakeasy-workspace"},
 			},
 			{
 				ID:                 "other-org-123",
 				Name:               "Other Organization",
 				Slug:               "other-org",
-				SsoConnectionID:    nil,
 				UserWorkspaceSlugs: []string{"other-workspace"},
 			},
 		},
@@ -375,7 +415,6 @@ func adminMockUserInfo() *MockUserInfo {
 				ID:                 "admin-org-123",
 				Name:               "Admin Organization",
 				Slug:               "admin-org",
-				SsoConnectionID:    nil,
 				UserWorkspaceSlugs: []string{"admin-workspace"},
 			},
 		},
@@ -402,13 +441,27 @@ func (ti *testInstance) createTestUser(ctx context.Context, userInfo *MockUserIn
 func (ti *testInstance) createTestOrganization(ctx context.Context, org MockOrganizationEntry) error {
 	orgQueries := orgRepo.New(ti.conn)
 	_, err := orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              org.ID,
-		Name:            org.Name,
-		Slug:            org.Slug,
-		SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
+		ID:       org.ID,
+		Name:     org.Name,
+		Slug:     org.Slug,
+		WorkosID: conv.PtrToPGText(org.WorkosID),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to upsert organization metadata: %w", err)
 	}
 	return nil
+}
+
+// createTestProject creates a project record in the database for testing and returns its ID.
+func (ti *testInstance) createTestProject(ctx context.Context, orgID, name, slug string) (projectsRepo.Project, error) {
+	q := projectsRepo.New(ti.conn)
+	project, err := q.CreateProject(ctx, projectsRepo.CreateProjectParams{
+		OrganizationID: orgID,
+		Name:           name,
+		Slug:           slug,
+	})
+	if err != nil {
+		return project, fmt.Errorf("failed to create project: %w", err)
+	}
+	return project, nil
 }

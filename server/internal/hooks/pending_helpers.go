@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -152,6 +153,211 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	}
 
 	return attrs
+}
+
+// MetricDataPoint represents a single metric aggregated across all data points for a model+session
+type MetricDataPoint struct {
+	SessionID           string
+	Model               string
+	UserEmail           string
+	InputTokens         int64
+	OutputTokens        int64
+	CacheReadTokens     int64
+	CacheCreationTokens int64
+	Cost                float64
+	TimestampNano       int64
+}
+
+// writeMetricsToClickHouse writes Claude Code metrics to ClickHouse telemetry_logs
+func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.MetricsPayload, orgID string, projectID string) {
+	if s.telemetryLogger == nil {
+		return
+	}
+
+	parsedProjectID, err := uuid.Parse(projectID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "Invalid project ID for metrics", attr.SlogError(err))
+		return
+	}
+
+	// Extract metrics from payload
+	metrics, err := extractMetricsForClickHouse(payload)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "Failed to extract metrics", attr.SlogError(err))
+		return
+	}
+
+	// Write each metric data point as a separate log entry
+	for _, m := range metrics {
+		urn := "claude-code:usage:metrics"
+
+		attrs := map[attr.Key]any{
+			attr.LogBodyKey:        "Claude Code usage metrics",
+			attr.ProjectIDKey:      projectID,
+			attr.OrganizationIDKey: orgID,
+			attr.ResourceURNKey:    urn,
+		}
+
+		// Only include non-zero values
+		if m.InputTokens > 0 {
+			attrs[attr.GenAIUsageInputTokensKey] = m.InputTokens
+		}
+		if m.OutputTokens > 0 {
+			attrs[attr.GenAIUsageOutputTokensKey] = m.OutputTokens
+		}
+		if m.CacheReadTokens > 0 {
+			attrs[attr.GenAIUsageCacheReadInputTokensKey] = m.CacheReadTokens
+		}
+		if m.CacheCreationTokens > 0 {
+			attrs[attr.GenAIUsageCacheCreationInputTokensKey] = m.CacheCreationTokens
+		}
+		if m.Cost > 0 {
+			attrs[attr.GenAIUsageCostKey] = m.Cost
+		}
+		if m.Model != "" {
+			attrs[attr.GenAIResponseModelKey] = m.Model
+		}
+		if m.UserEmail != "" {
+			attrs[attr.UserEmailKey] = m.UserEmail
+		}
+		if m.SessionID != "" {
+			attrs[attr.GenAIConversationIDKey] = m.SessionID
+		}
+
+		toolInfo := telemetry.ToolInfo{
+			Name:           "claude-code",
+			OrganizationID: orgID,
+			ProjectID:      parsedProjectID.String(),
+			ID:             "",
+			URN:            urn,
+			DeploymentID:   "",
+			FunctionID:     nil,
+		}
+
+		s.telemetryLogger.Log(ctx, telemetry.LogParams{
+			Timestamp:  time.Unix(0, m.TimestampNano),
+			ToolInfo:   toolInfo,
+			Attributes: attrs,
+		})
+	}
+
+	s.logger.DebugContext(ctx, fmt.Sprintf("Wrote %d Claude Code metrics to ClickHouse", len(metrics)),
+		attr.SlogEvent("metrics_written"),
+	)
+}
+
+// extractMetricsForClickHouse converts OTEL metrics payload into aggregated metric data points
+// Groups by session ID and model, aggregating all token/cost values
+func extractMetricsForClickHouse(payload *gen.MetricsPayload) ([]MetricDataPoint, error) {
+	// Map key: sessionID + model
+	aggregated := make(map[string]*MetricDataPoint)
+
+	if payload.ResourceMetrics == nil {
+		return nil, nil
+	}
+
+	for _, resourceMetric := range payload.ResourceMetrics {
+		if resourceMetric == nil || resourceMetric.ScopeMetrics == nil {
+			continue
+		}
+
+		for _, scopeMetric := range resourceMetric.ScopeMetrics {
+			if scopeMetric == nil || scopeMetric.Metrics == nil {
+				continue
+			}
+
+			for _, metric := range scopeMetric.Metrics {
+				if metric == nil || metric.Name == nil || metric.Sum == nil {
+					continue
+				}
+
+				// Validate aggregation temporality is DELTA (1)
+				// DELTA = 1 means each data point represents change since last export
+				// CUMULATIVE = 2 would require different handling to avoid double-counting
+				if metric.Sum.AggregationTemporality == nil || *metric.Sum.AggregationTemporality != 1 {
+					temporality := "nil"
+					if metric.Sum.AggregationTemporality != nil {
+						temporality = fmt.Sprintf("%d", *metric.Sum.AggregationTemporality)
+					}
+					return nil, fmt.Errorf("unsupported aggregation temporality %s for metric %s (expected 1 for DELTA)", temporality, *metric.Name)
+				}
+
+				metricName := *metric.Name
+
+				for _, dataPoint := range metric.Sum.DataPoints {
+					if dataPoint == nil {
+						continue
+					}
+
+					// Extract attributes
+					sessionID := extractAttributeString(dataPoint.Attributes, "session.id")
+					model := extractAttributeString(dataPoint.Attributes, "model")
+					userEmail := extractAttributeString(dataPoint.Attributes, "user.email")
+					metricType := extractAttributeString(dataPoint.Attributes, "type")
+
+					// Create key for aggregation
+					key := sessionID + "|" + model
+
+					// Get or create aggregated entry
+					if aggregated[key] == nil {
+						aggregated[key] = &MetricDataPoint{
+							SessionID:           sessionID,
+							Model:               model,
+							UserEmail:           userEmail,
+							InputTokens:         0,
+							OutputTokens:        0,
+							CacheReadTokens:     0,
+							CacheCreationTokens: 0,
+							Cost:                0,
+							TimestampNano:       0,
+						}
+					}
+
+					entry := aggregated[key]
+
+					// Get the value
+					value := float64(0)
+					if dataPoint.AsDouble != nil {
+						value = *dataPoint.AsDouble
+					} else if dataPoint.AsInt != nil {
+						value = float64(*dataPoint.AsInt)
+					}
+
+					// Update timestamp to latest
+					if dataPoint.TimeUnixNano != nil {
+						if nano, err := strconv.ParseInt(*dataPoint.TimeUnixNano, 10, 64); err == nil && nano > entry.TimestampNano {
+							entry.TimestampNano = nano
+						}
+					}
+
+					// Aggregate based on metric name and type
+					switch metricName {
+					case "claude_code.cost.usage":
+						entry.Cost += value
+					case "claude_code.token.usage":
+						switch metricType {
+						case "input":
+							entry.InputTokens += int64(value)
+						case "output":
+							entry.OutputTokens += int64(value)
+						case "cacheRead":
+							entry.CacheReadTokens += int64(value)
+						case "cacheCreation":
+							entry.CacheCreationTokens += int64(value)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Convert map to slice
+	result := make([]MetricDataPoint, 0, len(aggregated))
+	for _, dp := range aggregated {
+		result = append(result, *dp)
+	}
+
+	return result, nil
 }
 
 // flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse.

@@ -2,6 +2,7 @@ package access
 
 import (
 	"errors"
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -25,10 +26,10 @@ func TestService_UpdateRole(t *testing.T) {
 	name := "Platform Builder"
 	description := "Updated description"
 
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
 	}, nil).Once()
-	ti.roles.On("UpdateRole", mock.Anything, "org_workos_test", "custom-builder", thirdpartyworkos.UpdateRoleOpts{
+	ti.roles.On("UpdateRole", mock.Anything, mockidp.MockOrgID, "custom-builder", thirdpartyworkos.UpdateRoleOpts{
 		Name:        &name,
 		Description: &description,
 	}).Return(&thirdpartyworkos.Role{
@@ -39,31 +40,31 @@ func TestService_UpdateRole(t *testing.T) {
 		CreatedAt:   mockRoleTimestamp,
 		UpdatedAt:   mockRoleTimestamp,
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
-		mockMember("org_workos_test", "membership_1", "user_1", "member"),
-		mockMember("org_workos_test", "membership_2", "user_2", "member"),
-		mockMember("org_workos_test", "membership_3", "user_3", "custom-builder"),
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "member"),
+		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "member"),
+		mockMember(mockidp.MockOrgID, "membership_3", "user_3", "custom-builder"),
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "custom-builder").Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
-		OrganizationID: "org_workos_test",
+		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       "custom-builder",
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", "custom-builder").Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
-		OrganizationID: "org_workos_test",
+		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       "custom-builder",
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
-		mockMember("org_workos_test", "membership_1", "user_1", "custom-builder"),
-		mockMember("org_workos_test", "membership_2", "user_2", "custom-builder"),
-		mockMember("org_workos_test", "membership_3", "user_3", "custom-builder"),
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
+		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"),
+		mockMember(mockidp.MockOrgID, "membership_3", "user_3", "custom-builder"),
 		// user_workos_only has never logged into Gram — should not be counted
-		mockMember("org_workos_test", "membership_workos_only", "user_workos_only", "custom-builder"),
+		mockMember(mockidp.MockOrgID, "membership_workos_only", "user_workos_only", "custom-builder"),
 	}, nil).Once()
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
@@ -98,7 +99,7 @@ func TestService_UpdateRole_NotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{}, nil).Once()
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{}, nil).Once()
 
 	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: "role_missing"})
 	require.Error(t, err)
@@ -109,11 +110,11 @@ func TestService_UpdateRole_WorkOSUpdateFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{}, nil).Once()
-	ti.roles.On("UpdateRole", mock.Anything, "org_workos_test", "custom-builder", thirdpartyworkos.UpdateRoleOpts{}).Return((*thirdpartyworkos.Role)(nil), errors.New("workos unavailable")).Once()
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{}, nil).Once()
+	ti.roles.On("UpdateRole", mock.Anything, mockidp.MockOrgID, "custom-builder", thirdpartyworkos.UpdateRoleOpts{}).Return((*thirdpartyworkos.Role)(nil), errors.New("workos unavailable")).Once()
 
 	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: "role_custom"})
 	require.Error(t, err)
@@ -132,13 +133,13 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 
 	name := "Audit Builder"
 	description := "After description"
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockRole("role_custom", "Before Builder", "custom-builder", "Before description"),
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
-		mockMember("org_workos_test", "membership_1", "user_1", "custom-builder"),
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
 	}, nil).Once()
-	ti.roles.On("UpdateRole", mock.Anything, "org_workos_test", "custom-builder", thirdpartyworkos.UpdateRoleOpts{
+	ti.roles.On("UpdateRole", mock.Anything, mockidp.MockOrgID, "custom-builder", thirdpartyworkos.UpdateRoleOpts{
 		Name:        &name,
 		Description: &description,
 	}).Return(&thirdpartyworkos.Role{
@@ -149,9 +150,9 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 		CreatedAt:   mockRoleTimestamp,
 		UpdatedAt:   mockRoleTimestamp,
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
-		mockMember("org_workos_test", "membership_1", "user_1", "custom-builder"),
-		mockMember("org_workos_test", "membership_2", "user_2", "custom-builder"),
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
+		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"),
 	}, nil).Once()
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")

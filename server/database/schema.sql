@@ -848,6 +848,18 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   tool_outcome TEXT,
   tool_outcome_notes TEXT,
 
+  -- Chained hash of (role, content, tool_call_id) linked to the parent message's
+  -- hash. Used to detect whether an incoming completion request has diverged
+  -- from the stored history (e.g., client-side conversation compaction).
+  -- Nullable because existing rows have no hash; backfilled lazily during the
+  -- next capture turn.
+  content_hash BYTEA,
+
+  -- Monotonic counter per chat. Bumped when the matcher detects divergence from
+  -- the stored content chain (compaction or edit). Messages belonging to the
+  -- same logical conversation view share a generation.
+  generation INTEGER NOT NULL DEFAULT 0,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
@@ -856,6 +868,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 );
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
 
 CREATE TABLE IF NOT EXISTS chat_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1782,3 +1795,65 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_project_id_key
   ON plugin_github_connections (project_id);
+
+
+-- Risk analysis policies for scanning chat messages against configurable rules.
+-- One workflow per policy drains unanalyzed messages and produces risk_results.
+CREATE TABLE IF NOT EXISTS risk_policies (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  name TEXT NOT NULL,
+  sources TEXT[] NOT NULL,
+  version BIGINT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT risk_policies_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_policies_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT risk_policies_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS risk_policies_project_id_idx
+ON risk_policies (project_id)
+WHERE deleted IS FALSE;
+
+-- Individual findings produced by scanning a chat message against a risk policy.
+-- No soft delete: results are regenerated when the policy version changes.
+CREATE TABLE IF NOT EXISTS risk_results (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  risk_policy_id uuid NOT NULL,
+  risk_policy_version BIGINT NOT NULL,
+  chat_message_id uuid NOT NULL,
+  source TEXT NOT NULL,
+
+  found BOOLEAN NOT NULL,
+  rule_id TEXT,
+  description TEXT,
+  match TEXT,
+  start_pos INT,
+  end_pos INT,
+  confidence DOUBLE PRECISION,
+  tags TEXT[],
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT risk_results_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_results_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT risk_results_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT risk_results_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE,
+  CONSTRAINT risk_results_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS risk_results_project_policy_version_message_idx
+ON risk_results (project_id, risk_policy_id, risk_policy_version, chat_message_id);
+
+CREATE INDEX IF NOT EXISTS risk_results_project_chat_message_idx
+ON risk_results (project_id, chat_message_id);

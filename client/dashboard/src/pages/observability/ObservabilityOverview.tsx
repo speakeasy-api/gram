@@ -1,8 +1,6 @@
 import { Page } from "@/components/page-layout";
-import {
-  InsightsConfig,
-  useInsightsState,
-} from "@/components/insights-sidebar";
+import { InsightsConfig } from "@/components/insights-sidebar";
+import { useInsightsState } from "@/components/insights-context";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";

@@ -1,22 +1,14 @@
-import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar";
 import { handleError } from "@/lib/errors";
-import { getServerURL } from "@/lib/utils";
-import { datadogRum } from "@datadog/browser-rum";
 import { Gram } from "@gram/client";
-import { HTTPClient } from "@gram/client/lib/http.js";
-import { buildLatestDeploymentQuery } from "@gram/client/react-query/latestDeployment.core.js";
-import { buildListToolsetsQuery } from "@gram/client/react-query/listToolsets.core.js";
-import { GramProvider } from "@gram/client/react-query/index.js";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useMemo, useRef } from "react";
+import { QueryClient } from "@tanstack/react-query";
+import { createContext, useContext } from "react";
 import { useLocation, useParams } from "react-router";
-import { useTelemetry } from "./Telemetry";
 
 // SdkProvider cannot call useIsAdmin() directly because it wraps AuthProvider
 // (AuthProvider needs QueryClientProvider which SdkProvider supplies). Instead,
 // SdkProvider owns a ref and exposes it via context so AuthHandler can write isAdmin
 // into it, making the current value available to the fetcher on every request.
-const IsAdminContext = createContext<React.MutableRefObject<boolean>>({
+export const IsAdminContext = createContext<React.MutableRefObject<boolean>>({
   current: false,
 });
 export const useIsAdminRef = () => useContext(IsAdminContext);
@@ -59,97 +51,12 @@ const createQueryClient = () =>
   });
 
 // In development, preserve queryClient across HMR
-const queryClient: QueryClient =
+export const queryClient: QueryClient =
   (import.meta.hot?.data?.queryClient as QueryClient) ?? createQueryClient();
 
 if (import.meta.hot) {
   import.meta.hot.data.queryClient = queryClient;
 }
-
-export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
-  const { projectSlug } = useSlugs();
-  const telemetry = useTelemetry();
-
-  const isAdminRef = useRef(false);
-  const previousProjectSlug = useRef(projectSlug);
-
-  // Memoize the httpClient and gram instances
-  const gram = useMemo(() => {
-    const httpClient = new HTTPClient({
-      fetcher: (request) => {
-        const newRequest = new Request(request, {
-          credentials: "include",
-        });
-
-        if (projectSlug && !newRequest.headers.get("gram-project")) {
-          newRequest.headers.set("gram-project", projectSlug);
-        }
-
-        const scopeOverride = getRBACScopeOverrideHeader(
-          import.meta.env.DEV || isAdminRef.current,
-        );
-        if (scopeOverride) {
-          newRequest.headers.set("X-Gram-Scope-Override", scopeOverride);
-        }
-
-        return fetch(newRequest);
-      },
-    });
-
-    httpClient.addHook("response", (res, request) => {
-      if (!res.ok) {
-        return;
-      }
-
-      const u = new URL(request.url);
-      if (u.pathname !== "/rpc/auth.logout") {
-        return;
-      }
-
-      datadogRum.stopSession();
-      datadogRum.clearUser();
-      telemetry.reset();
-      if (typeof localStorage !== "undefined") {
-        localStorage.clear();
-      }
-      if (typeof sessionStorage !== "undefined") {
-        sessionStorage?.clear();
-      }
-    });
-
-    const gram = new Gram({
-      serverURL: getServerURL(),
-      httpClient,
-    });
-
-    // Prefetch key queries immediately so they run in parallel with auth.info
-    // instead of waiting for auth to resolve before components mount and fire them.
-    if (projectSlug) {
-      queryClient.prefetchQuery(buildLatestDeploymentQuery(gram));
-      queryClient.prefetchQuery(buildListToolsetsQuery(gram));
-    }
-
-    return gram;
-  }, [projectSlug]);
-
-  // Invalidate all queries when projectSlug changes
-  useEffect(() => {
-    if (previousProjectSlug.current !== projectSlug) {
-      queryClient.invalidateQueries();
-      previousProjectSlug.current = projectSlug;
-    }
-  }, [projectSlug, queryClient]);
-
-  return (
-    <IsAdminContext.Provider value={isAdminRef}>
-      <QueryClientProvider client={queryClient}>
-        <GramProvider client={gram}>
-          <SdkContext.Provider value={gram}>{children}</SdkContext.Provider>
-        </GramProvider>
-      </QueryClientProvider>
-    </IsAdminContext.Provider>
-  );
-};
 
 export const useSlugs = () => {
   let { orgSlug, projectSlug } = useParams();

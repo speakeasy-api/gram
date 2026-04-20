@@ -8,51 +8,51 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-func GetRole(msg or.Message) string {
+func GetRole(msg or.ChatMessages) string {
 	switch msg.Type {
-	case or.MessageTypeAssistant:
-		return msg.AssistantMessage.GetRole()
-	case or.MessageTypeDeveloper:
-		return msg.MessageDeveloper.GetRole()
-	case or.MessageTypeSystem:
-		return msg.SystemMessage.GetRole()
-	case or.MessageTypeTool:
-		return msg.ToolResponseMessage.GetRole()
-	case or.MessageTypeUser:
-		return msg.UserMessage.GetRole()
+	case or.ChatMessagesTypeAssistant:
+		return string(msg.ChatAssistantMessage.GetRole())
+	case or.ChatMessagesTypeDeveloper:
+		return string(msg.ChatDeveloperMessage.GetRole())
+	case or.ChatMessagesTypeSystem:
+		return string(msg.ChatSystemMessage.GetRole())
+	case or.ChatMessagesTypeTool:
+		return string(msg.ChatToolMessage.GetRole())
+	case or.ChatMessagesTypeUser:
+		return string(msg.ChatUserMessage.GetRole())
 	default:
 		return ""
 	}
 }
 
-func GetContentJSON(msg or.Message) ([]byte, error) {
+func GetContentJSON(msg or.ChatMessages) ([]byte, error) {
 	switch msg.Type {
-	case or.MessageTypeAssistant:
-		bs, err := json.Marshal(msg.AssistantMessage.Content)
+	case or.ChatMessagesTypeAssistant:
+		bs, err := json.Marshal(msg.ChatAssistantMessage.Content)
 		if err != nil {
 			return nil, fmt.Errorf("marshal assistant message: %w", err)
 		}
 		return bs, nil
-	case or.MessageTypeDeveloper:
-		bs, err := json.Marshal(msg.MessageDeveloper.Content)
+	case or.ChatMessagesTypeDeveloper:
+		bs, err := json.Marshal(msg.ChatDeveloperMessage.Content)
 		if err != nil {
 			return nil, fmt.Errorf("marshal developer message: %w", err)
 		}
 		return bs, nil
-	case or.MessageTypeSystem:
-		bs, err := json.Marshal(msg.SystemMessage.Content)
+	case or.ChatMessagesTypeSystem:
+		bs, err := json.Marshal(msg.ChatSystemMessage.Content)
 		if err != nil {
 			return nil, fmt.Errorf("marshal system message: %w", err)
 		}
 		return bs, nil
-	case or.MessageTypeTool:
-		bs, err := json.Marshal(msg.ToolResponseMessage.Content)
+	case or.ChatMessagesTypeTool:
+		bs, err := json.Marshal(msg.ChatToolMessage.Content)
 		if err != nil {
 			return nil, fmt.Errorf("marshal tool response message: %w", err)
 		}
 		return bs, nil
-	case or.MessageTypeUser:
-		bs, err := json.Marshal(msg.UserMessage.Content)
+	case or.ChatMessagesTypeUser:
+		bs, err := json.Marshal(msg.ChatUserMessage.Content)
 		if err != nil {
 			return nil, fmt.Errorf("marshal user message: %w", err)
 		}
@@ -62,87 +62,87 @@ func GetContentJSON(msg or.Message) ([]byte, error) {
 	}
 }
 
-func GetText(msg or.Message) string {
+func GetText(msg or.ChatMessages) string {
 	switch msg.Type {
-	case or.MessageTypeAssistant:
-		content, ok := msg.AssistantMessage.Content.GetOrZero()
+	case or.ChatMessagesTypeAssistant:
+		content, ok := msg.ChatAssistantMessage.Content.GetOrZero()
 		if !ok {
 			return ""
 		}
 
 		switch content.Type {
-		case or.AssistantMessageContentTypeArrayOfChatMessageContentItem:
-			arr := content.ArrayOfChatMessageContentItem
+		case or.ChatAssistantMessageContentTypeArrayOfChatContentItems:
+			arr := content.ArrayOfChatContentItems
 			txt := ""
 			for _, item := range arr {
-				if item.Type == or.ChatMessageContentItemTypeText {
-					txt = item.ChatMessageContentItemText.Text
+				if item.Type == or.ChatContentItemsTypeText {
+					txt = item.ChatContentText.Text
 					break
 				}
 			}
 			return txt
-		case or.AssistantMessageContentTypeStr:
+		case or.ChatAssistantMessageContentTypeStr:
 			return conv.PtrValOr(content.Str, "")
 		default:
 			return ""
 		}
-	case or.MessageTypeDeveloper:
-		switch msg.MessageDeveloper.Content.Type {
-		case or.MessageContentTypeArrayOfChatMessageContentItemText:
-			arr := msg.MessageDeveloper.Content.ArrayOfChatMessageContentItemText
+	case or.ChatMessagesTypeDeveloper:
+		switch msg.ChatDeveloperMessage.Content.Type {
+		case or.ChatDeveloperMessageContentTypeArrayOfChatContentText:
+			arr := msg.ChatDeveloperMessage.Content.ArrayOfChatContentText
 			if len(arr) == 0 {
 				return ""
 			}
 			return arr[0].Text
-		case or.MessageContentTypeStr:
-			return conv.PtrValOr(msg.MessageDeveloper.Content.Str, "")
+		case or.ChatDeveloperMessageContentTypeStr:
+			return conv.PtrValOr(msg.ChatDeveloperMessage.Content.Str, "")
 		default:
 			return ""
 		}
-	case or.MessageTypeSystem:
-		switch msg.SystemMessage.Content.Type {
-		case or.SystemMessageContentTypeArrayOfChatMessageContentItemText:
-			arr := msg.SystemMessage.Content.ArrayOfChatMessageContentItemText
+	case or.ChatMessagesTypeSystem:
+		switch msg.ChatSystemMessage.Content.Type {
+		case or.ChatSystemMessageContentTypeArrayOfChatContentText:
+			arr := msg.ChatSystemMessage.Content.ArrayOfChatContentText
 			if len(arr) == 0 {
 				return ""
 			}
 			return arr[0].Text
-		case or.SystemMessageContentTypeStr:
-			return conv.PtrValOr(msg.SystemMessage.Content.Str, "")
+		case or.ChatSystemMessageContentTypeStr:
+			return conv.PtrValOr(msg.ChatSystemMessage.Content.Str, "")
 		default:
 			return ""
 		}
-	case or.MessageTypeTool:
-		switch msg.ToolResponseMessage.Content.Type {
-		case or.ToolResponseMessageContentTypeArrayOfChatMessageContentItem:
-			arr := msg.ToolResponseMessage.Content.ArrayOfChatMessageContentItem
+	case or.ChatMessagesTypeTool:
+		switch msg.ChatToolMessage.Content.Type {
+		case or.ChatToolMessageContentTypeArrayOfChatContentItems:
+			arr := msg.ChatToolMessage.Content.ArrayOfChatContentItems
 			txt := ""
 			for _, item := range arr {
-				if item.Type == or.ChatMessageContentItemTypeText {
-					txt = item.ChatMessageContentItemText.Text
+				if item.Type == or.ChatContentItemsTypeText {
+					txt = item.ChatContentText.Text
 					break
 				}
 			}
 			return txt
-		case or.ToolResponseMessageContentTypeStr:
-			return conv.PtrValOr(msg.ToolResponseMessage.Content.Str, "")
+		case or.ChatToolMessageContentTypeStr:
+			return conv.PtrValOr(msg.ChatToolMessage.Content.Str, "")
 		default:
 			return ""
 		}
-	case or.MessageTypeUser:
-		switch msg.UserMessage.Content.Type {
-		case or.UserMessageContentTypeArrayOfChatMessageContentItem:
-			arr := msg.UserMessage.Content.ArrayOfChatMessageContentItem
+	case or.ChatMessagesTypeUser:
+		switch msg.ChatUserMessage.Content.Type {
+		case or.ChatUserMessageContentTypeArrayOfChatContentItems:
+			arr := msg.ChatUserMessage.Content.ArrayOfChatContentItems
 			txt := ""
 			for _, item := range arr {
-				if item.Type == or.ChatMessageContentItemTypeText {
-					txt = item.ChatMessageContentItemText.Text
+				if item.Type == or.ChatContentItemsTypeText {
+					txt = item.ChatContentText.Text
 					break
 				}
 			}
 			return txt
-		case or.UserMessageContentTypeStr:
-			return conv.PtrValOr(msg.UserMessage.Content.Str, "")
+		case or.ChatUserMessageContentTypeStr:
+			return conv.PtrValOr(msg.ChatUserMessage.Content.Str, "")
 		default:
 			return ""
 		}
@@ -152,10 +152,10 @@ func GetText(msg or.Message) string {
 	}
 }
 
-func GetToolCallID(msg or.Message) *string {
+func GetToolCallID(msg or.ChatMessages) *string {
 	switch msg.Type {
-	case or.MessageTypeTool:
-		return &msg.ToolResponseMessage.ToolCallID
+	case or.ChatMessagesTypeTool:
+		return &msg.ChatToolMessage.ToolCallID
 	default:
 		return nil
 	}
@@ -164,7 +164,7 @@ func GetToolCallID(msg or.Message) *string {
 // OpenAIChatRequest represents the request structure for OpenAI chat completions
 type OpenAIChatRequest struct {
 	Model          string             `json:"model"`
-	Messages       []or.Message       `json:"messages"`
+	Messages       []or.ChatMessages  `json:"messages"`
 	Stream         bool               `json:"stream"`
 	Tools          []Tool             `json:"tools,omitempty"`
 	Temperature    float32            `json:"temperature,omitempty"`
@@ -236,8 +236,8 @@ type OpenAIChatResponse struct {
 	Created int64  `json:"created"`
 	Model   string `json:"model"`
 	Choices []struct {
-		Message      or.Message `json:"message"`
-		FinishReason string     `json:"finish_reason"`
+		Message      or.ChatMessages `json:"message"`
+		FinishReason string          `json:"finish_reason"`
 	} `json:"choices"`
 	Usage *Usage `json:"usage,omitempty"`
 }

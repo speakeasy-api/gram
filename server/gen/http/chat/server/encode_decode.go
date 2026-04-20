@@ -1659,6 +1659,10 @@ func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *Ch
 		Source:               v.Source,
 		CreatedAt:            v.CreatedAt,
 		UpdatedAt:            v.UpdatedAt,
+		TotalInputTokens:     v.TotalInputTokens,
+		TotalOutputTokens:    v.TotalOutputTokens,
+		TotalTokens:          v.TotalTokens,
+		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: v.LastMessageTimestamp,
 	}
 
@@ -1679,6 +1683,7 @@ func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatM
 		UserID:         v.UserID,
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      v.CreatedAt,
+		Generation:     v.Generation,
 	}
 
 	return res
@@ -1697,6 +1702,10 @@ func marshalChatChatOverviewWithResolutionsToChatOverviewWithResolutionsResponse
 		Source:               v.Source,
 		CreatedAt:            v.CreatedAt,
 		UpdatedAt:            v.UpdatedAt,
+		TotalInputTokens:     v.TotalInputTokens,
+		TotalOutputTokens:    v.TotalOutputTokens,
+		TotalTokens:          v.TotalTokens,
+		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: v.LastMessageTimestamp,
 	}
 	if v.Resolutions != nil {

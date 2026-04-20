@@ -2,59 +2,14 @@ import type { ElementsConfig } from "@gram-ai/elements";
 import { Chat, GramElementsProvider } from "@gram-ai/elements";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Wand2, ChevronRight, Sparkles, Terminal } from "lucide-react";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
+import { InsightsContext, useInsightsState } from "./insights-context";
+import type { InsightsConfigOptions } from "./insights-context";
 
-/**
- * Per-page overrides for the global AI Insights panel. Pages mount
- * <InsightsConfig {...} /> to register custom title/subtitle/suggestions
- * /context/mcpConfig; on unmount, the global defaults take over again.
- */
-export interface InsightsConfigOptions {
-  mcpConfig?: Omit<ElementsConfig, "variant" | "welcome" | "theme">;
-  title?: string;
-  subtitle?: string;
-  suggestions?: Array<{
-    title: string;
-    label: string;
-    prompt: string;
-  }>;
-  contextInfo?: string;
-  /** Hide the trigger button (e.g., when logs are disabled on this page). */
-  hideTrigger?: boolean;
-}
-
-interface InsightsContextValue {
-  available: boolean;
-  isExpanded: boolean;
-  setIsExpanded: (expanded: boolean) => void;
-  /** Pages call this to register a per-page config override. Pass null to
-   *  clear (typically on unmount of <InsightsConfig />). */
-  setOverride: (override: InsightsConfigOptions | null) => void;
-}
-
-const InsightsContext = createContext<InsightsContextValue>({
-  available: false,
-  isExpanded: false,
-  setIsExpanded: () => {},
-  setOverride: () => {},
-});
-
-/**
- * Hook to access the insights sidebar state. `available` is false when no
- * InsightsProvider ancestor exists.
- */
-export function useInsightsState() {
-  return useContext(InsightsContext);
-}
+// Types-only re-export (erased at compile time, won't break Fast Refresh)
+export type { InsightsConfigOptions } from "./insights-context";
 
 /**
  * Header-bar trigger for opening the AI Insights sidebar. Renders only
@@ -192,7 +147,7 @@ When the user asks about "current period", "selected period", "this timeframe", 
     [],
   );
 
-  const contextValue = useMemo<InsightsContextValue>(
+  const contextValue = useMemo(
     () => ({
       available: !hideTrigger,
       isExpanded,

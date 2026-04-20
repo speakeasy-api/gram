@@ -107,6 +107,27 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 	return nil
 }
 
+// Metrics handles authenticated OTEL metrics data from Claude Code
+func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+	}
+
+	s.logger.InfoContext(ctx, "Received Claude token metrics",
+		attr.SlogEvent("claude_metrics"),
+		attr.SlogValueAny(map[string]any{
+			"organization_id": authCtx.ActiveOrganizationID,
+			"project_id":      authCtx.ProjectID.String(),
+		}),
+	)
+
+	// Write metrics to ClickHouse
+	s.writeMetricsToClickHouse(ctx, payload, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	return nil
+}
+
 type claudeLogMetadata struct {
 	SessionID   string
 	ServiceName string
@@ -315,4 +336,19 @@ func extractLogData(logRecord *gen.OTELLogRecord) OTELLogData {
 	}
 
 	return data
+}
+
+// extractAttributeString extracts a string attribute value by key
+func extractAttributeString(attributes []*gen.OTELAttribute, key string) string {
+	if attributes == nil {
+		return ""
+	}
+
+	for _, attr := range attributes {
+		if attr.Key == key && attr.Value != nil && attr.Value.StringValue != nil {
+			return *attr.Value.StringValue
+		}
+	}
+
+	return ""
 }

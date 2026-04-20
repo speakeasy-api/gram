@@ -10,19 +10,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/rbactest"
 )
 
 func TestEnvironments_RBAC_ReadOps_DeniedWithNoGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestEnvironmentService(t)
-	ctx = withExactAccessGrants(t, ctx, ti.conn)
+	ctx = rbactest.WithExactAccessGrants(t, ctx)
 
 	_, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestEnvironments_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
@@ -34,7 +37,7 @@ func TestEnvironments_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
@@ -52,7 +55,7 @@ func TestEnvironments_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
@@ -65,20 +68,22 @@ func TestEnvironments_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestEnvironmentService(t)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: uuid.NewString()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildRead, Resource: uuid.NewString()})
 
 	_, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestEnvironments_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestEnvironmentService(t)
-	ctx = withExactAccessGrants(t, ctx, ti.conn)
+	ctx = rbactest.WithExactAccessGrants(t, ctx)
 
 	_, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
 		SessionToken:     nil,
@@ -88,7 +93,9 @@ func TestEnvironments_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
 		Description:      nil,
 		Entries:          []*gen.EnvironmentEntryInput{},
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestEnvironments_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
@@ -100,7 +107,7 @@ func TestEnvironments_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
 		SessionToken:     nil,
@@ -110,7 +117,9 @@ func TestEnvironments_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 		Description:      nil,
 		Entries:          []*gen.EnvironmentEntryInput{},
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestEnvironments_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
@@ -122,7 +131,7 @@ func TestEnvironments_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
 		SessionToken:     nil,

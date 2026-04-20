@@ -102,7 +102,7 @@ func (m *Manager) getScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
 }
 
 func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
-	if grants, ok := GrantsFromContext(ctx); ok && grants != nil {
+	if _, ok := GrantsFromContext(ctx); ok {
 		return ctx, nil
 	}
 
@@ -112,8 +112,7 @@ func (m *Manager) PrepareContext(ctx context.Context) (context.Context, error) {
 	}
 
 	if overrides, ok := m.getScopeOverrides(ctx); ok {
-		grants := grantsFromOverrides(overrides)
-		return GrantsToContext(ctx, grants), nil
+		return GrantsToContext(ctx, grantsFromOverrides(overrides)), nil
 	}
 
 	if authCtx.AccountType != "enterprise" {
@@ -250,7 +249,7 @@ func (m *Manager) Require(ctx context.Context, checks ...Check) error {
 	}
 
 	grants, ok := GrantsFromContext(ctx)
-	if !ok || grants == nil {
+	if !ok {
 		return m.mapError(ctx, ErrMissingGrants)
 	}
 
@@ -259,7 +258,7 @@ func (m *Manager) Require(ctx context.Context, checks ...Check) error {
 			return m.mapError(ctx, err)
 		}
 
-		if !grants.satisfies(check.expand()) {
+		if !grantsSatisfy(grants, check.expand()) {
 			return m.mapError(ctx, Denied(check.Scope, check.ResourceID))
 		}
 	}
@@ -280,7 +279,7 @@ func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
 	}
 
 	grants, ok := GrantsFromContext(ctx)
-	if !ok || grants == nil {
+	if !ok {
 		return m.mapError(ctx, ErrMissingGrants)
 	}
 
@@ -290,7 +289,7 @@ func (m *Manager) RequireAny(ctx context.Context, checks ...Check) error {
 		}
 	}
 
-	if slices.ContainsFunc(checks, func(c Check) bool { return grants.satisfies(c.expand()) }) {
+	if slices.ContainsFunc(checks, func(c Check) bool { return grantsSatisfy(grants, c.expand()) }) {
 		return nil
 	}
 
@@ -307,7 +306,7 @@ func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string)
 	}
 
 	grants, ok := GrantsFromContext(ctx)
-	if !ok || grants == nil {
+	if !ok {
 		return nil, m.mapError(ctx, ErrMissingGrants)
 	}
 
@@ -317,7 +316,7 @@ func (m *Manager) Filter(ctx context.Context, scope Scope, resourceIDs []string)
 			return nil, m.mapError(ctx, err)
 		}
 
-		if grants.satisfies(Check{Scope: scope, ResourceID: resourceID}.expand()) {
+		if grantsSatisfy(grants, Check{Scope: scope, ResourceID: resourceID}.expand()) {
 			allowed = append(allowed, resourceID)
 		}
 	}

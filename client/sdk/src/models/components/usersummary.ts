@@ -18,6 +18,14 @@ export type UserSummary = {
    */
   avgTokensPerRequest: number;
   /**
+   * Sum of cache creation input tokens
+   */
+  cacheCreationInputTokens: number;
+  /**
+   * Sum of cache read input tokens
+   */
+  cacheReadInputTokens: number;
+  /**
    * Earliest activity timestamp in Unix nanoseconds
    */
   firstSeenUnixNano: string;
@@ -46,6 +54,10 @@ export type UserSummary = {
    */
   totalChats: number;
   /**
+   * Total cost of all requests
+   */
+  totalCost: number;
+  /**
    * Sum of input tokens used
    */
   totalInputTokens: number;
@@ -72,6 +84,8 @@ export const UserSummary$inboundSchema: z.ZodMiniType<UserSummary, unknown> = z
   .pipe(
     z.object({
       avg_tokens_per_request: z.number(),
+      cache_creation_input_tokens: z.int(),
+      cache_read_input_tokens: z.int(),
       first_seen_unix_nano: z.string(),
       last_seen_unix_nano: z.string(),
       tool_call_failure: z.int(),
@@ -79,6 +93,7 @@ export const UserSummary$inboundSchema: z.ZodMiniType<UserSummary, unknown> = z
       tools: z.array(ToolUsage$inboundSchema),
       total_chat_requests: z.int(),
       total_chats: z.int(),
+      total_cost: z.number(),
       total_input_tokens: z.int(),
       total_output_tokens: z.int(),
       total_tokens: z.int(),
@@ -88,12 +103,15 @@ export const UserSummary$inboundSchema: z.ZodMiniType<UserSummary, unknown> = z
     z.transform((v) => {
       return remap$(v, {
         "avg_tokens_per_request": "avgTokensPerRequest",
+        "cache_creation_input_tokens": "cacheCreationInputTokens",
+        "cache_read_input_tokens": "cacheReadInputTokens",
         "first_seen_unix_nano": "firstSeenUnixNano",
         "last_seen_unix_nano": "lastSeenUnixNano",
         "tool_call_failure": "toolCallFailure",
         "tool_call_success": "toolCallSuccess",
         "total_chat_requests": "totalChatRequests",
         "total_chats": "totalChats",
+        "total_cost": "totalCost",
         "total_input_tokens": "totalInputTokens",
         "total_output_tokens": "totalOutputTokens",
         "total_tokens": "totalTokens",

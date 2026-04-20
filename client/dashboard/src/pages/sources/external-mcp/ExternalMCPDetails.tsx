@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { RemoveSourceDialogContent } from "@/components/sources/RemoveSourceDialogContent";
 import { ExternalMCPIllustration } from "@/components/sources/SourceCardIllustrations";
-import { useCatalogIconMap } from "@/components/sources/Sources";
+import { useCatalogIconMap } from "@/components/sources/sources-hooks";
 import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";

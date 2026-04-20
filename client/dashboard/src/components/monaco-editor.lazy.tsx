@@ -1,7 +1,9 @@
 import React from "react";
 
-export default React.lazy(() =>
+const MonacoEditorLazy = React.lazy(() =>
   import("@/components/monaco-editor").then((mod) => ({
     default: mod.MonacoEditor,
   })),
 );
+
+export default MonacoEditorLazy;

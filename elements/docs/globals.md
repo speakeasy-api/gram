@@ -1,8 +1,8 @@
-[**@gram-ai/elements v1.27.6**](README.md)
+[**@gram-ai/elements v1.28.0**](README.md)
 
 ***
 
-# @gram-ai/elements v1.27.6
+# @gram-ai/elements v1.28.0
 
 ## Interfaces
 
@@ -55,6 +55,7 @@
 
 ## Variables
 
+- [ToolFallback](variables/ToolFallback.md)
 - [PRESETS](variables/PRESETS.md)
 - [MODELS](variables/MODELS.md)
 

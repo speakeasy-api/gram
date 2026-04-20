@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/pgx-contrib/pgxotel"
 	polargo "github.com/polarsource/polar-go"
+	"github.com/polarsource/polar-go/retry"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 	"github.com/superfly/fly-go/tokens"
@@ -253,29 +254,33 @@ func newAssetStorage(ctx context.Context, logger *slog.Logger, opts assetStorage
 type redisClientOptions struct {
 	redisAddr     string
 	redisPassword string
+	enableTracing bool
 }
 
 func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
 	db := 0
 	redisClient := redis.NewClient(&redis.Options{
-		Addr:         opts.redisAddr,
-		Password:     opts.redisPassword,
-		DB:           db,
-		DialTimeout:  1 * time.Second,
-		ReadTimeout:  300 * time.Millisecond,
-		WriteTimeout: 1 * time.Second,
+		Addr:            opts.redisAddr,
+		Password:        opts.redisPassword,
+		DB:              db,
+		DialTimeout:     1 * time.Second,
+		ReadTimeout:     300 * time.Millisecond,
+		WriteTimeout:    1 * time.Second,
+		DisableIdentity: true,
 	})
 
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("redis connection failed: %w", err)
 	}
 
-	attrs := redisotel.WithAttributes(
-		semconv.DBSystemRedis,
-		semconv.DBRedisDBIndex(db),
-	)
-	if err := redisotel.InstrumentTracing(redisClient, redisotel.WithDBStatement(false), attrs); err != nil {
-		return nil, fmt.Errorf("failed to instrument redis client: %w", err)
+	if opts.enableTracing {
+		attrs := redisotel.WithAttributes(
+			semconv.DBSystemRedis,
+			semconv.DBRedisDBIndex(db),
+		)
+		if err := redisotel.InstrumentTracing(redisClient, redisotel.WithDBStatement(false), attrs); err != nil {
+			return nil, fmt.Errorf("failed to instrument redis client: %w", err)
+		}
 	}
 
 	return redisClient, nil
@@ -417,8 +422,23 @@ func newBillingProvider(
 		if err := catalog.Validate(); err != nil {
 			return nil, nil, fmt.Errorf("invalid polar catalog configuration: %w", err)
 		}
+
+		retries := guardian.DefaultRetryConfig()
+		retries.WaitMax = 10 * time.Second
+		retries.MaxAttempts = 2
+		sdkHTTPClient := guardianPolicy.PooledClient(guardian.WithRetryConfig(retries))
+		sdkHTTPClient.Timeout = 30 * time.Second
 		polarAPIKey := c.String("polar-api-key")
-		polarsdk := polargo.New(polargo.WithSecurity(polarAPIKey), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
+		polarsdk := polargo.New(
+			polargo.WithSecurity(polarAPIKey),
+			polargo.WithClient(sdkHTTPClient),
+			polargo.WithRetryConfig(retry.Config{
+				Strategy:              "none", // The HTTP client handles retries already
+				Backoff:               nil,
+				RetryConnectionErrors: false,
+			}),
+		)
+
 		pclient := polar.NewClient(guardianPolicy, polarsdk, polarAPIKey, logger, tracerProvider, redisClient, catalog, c.String("polar-webhook-secret"))
 		tracker := tracking.New(pclient, posthogClient, logger)
 		return pclient, tracker, nil

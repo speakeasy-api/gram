@@ -59,6 +59,14 @@ type LoadChatResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the chat was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Total input tokens used in this chat
+	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`
+	// Total output tokens used in this chat
+	TotalOutputTokens *int64 `form:"total_output_tokens,omitempty" json:"total_output_tokens,omitempty" xml:"total_output_tokens,omitempty"`
+	// Total tokens (input + output) used in this chat
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Total cost in USD for this chat
+	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp *string `form:"last_message_timestamp,omitempty" json:"last_message_timestamp,omitempty" xml:"last_message_timestamp,omitempty"`
 }
@@ -1389,6 +1397,14 @@ type ChatOverviewResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the chat was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Total input tokens used in this chat
+	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`
+	// Total output tokens used in this chat
+	TotalOutputTokens *int64 `form:"total_output_tokens,omitempty" json:"total_output_tokens,omitempty" xml:"total_output_tokens,omitempty"`
+	// Total tokens (input + output) used in this chat
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Total cost in USD for this chat
+	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp *string `form:"last_message_timestamp,omitempty" json:"last_message_timestamp,omitempty" xml:"last_message_timestamp,omitempty"`
 }
@@ -1415,6 +1431,8 @@ type ChatMessageResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// When the message was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// Conversation generation — bumps on compaction or edit divergence
+	Generation *int `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
 }
 
 // ChatOverviewWithResolutionsResponseBody is used to define fields on response
@@ -1439,6 +1457,14 @@ type ChatOverviewWithResolutionsResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the chat was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Total input tokens used in this chat
+	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`
+	// Total output tokens used in this chat
+	TotalOutputTokens *int64 `form:"total_output_tokens,omitempty" json:"total_output_tokens,omitempty" xml:"total_output_tokens,omitempty"`
+	// Total tokens (input + output) used in this chat
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Total cost in USD for this chat
+	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp *string `form:"last_message_timestamp,omitempty" json:"last_message_timestamp,omitempty" xml:"last_message_timestamp,omitempty"`
 }
@@ -1656,6 +1682,10 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		Source:               body.Source,
 		CreatedAt:            *body.CreatedAt,
 		UpdatedAt:            *body.UpdatedAt,
+		TotalInputTokens:     body.TotalInputTokens,
+		TotalOutputTokens:    body.TotalOutputTokens,
+		TotalTokens:          body.TotalTokens,
+		TotalCost:            body.TotalCost,
 		LastMessageTimestamp: *body.LastMessageTimestamp,
 	}
 	v.Messages = make([]*chat.ChatMessage, len(body.Messages))
@@ -4451,6 +4481,9 @@ func ValidateChatMessageResponseBody(body *ChatMessageResponseBody) (err error) 
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.Generation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

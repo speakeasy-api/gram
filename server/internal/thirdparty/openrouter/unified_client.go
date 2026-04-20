@@ -79,16 +79,20 @@ func NewUnifiedClient(
 }
 
 type initializeRequestResult struct {
-	apiKey      string
-	requestBody OpenAIChatRequest
+	apiKey         string
+	requestBody    OpenAIChatRequest
+	captureSession CaptureSession
 }
 
 // initializeRequest creates the OpenAI-compatible request body with defaults applied.
 func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionRequest) (*initializeRequestResult, error) {
+	var captureSession CaptureSession
 	if c.messageCaptureStrategy != nil {
-		if err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req); err != nil {
-			return nil, fmt.Errorf("failed to start or resume chat: %w", err)
+		sess, err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("start or resume chat: %w", err)
 		}
+		captureSession = sess
 	}
 
 	// Provision API key
@@ -124,7 +128,8 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 
 	// Add JSON schema if provided
 	if req.JSONSchema != nil {
-		jsonSchemaConfig := or.ResponseFormatJSONSchema{
+		jsonSchemaConfig := or.ChatFormatJSONSchemaConfig{
+			Type:       or.ChatFormatJSONSchemaConfigTypeJSONSchema,
 			JSONSchema: *req.JSONSchema,
 		}
 		responseFormat := or.CreateResponseFormatJSONSchema(jsonSchemaConfig)
@@ -132,8 +137,9 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 	}
 
 	return &initializeRequestResult{
-		apiKey:      apiKey,
-		requestBody: reqBody,
+		apiKey:         apiKey,
+		requestBody:    reqBody,
+		captureSession: captureSession,
 	}, nil
 }
 
@@ -173,10 +179,10 @@ func (c *ChatClient) makeHTTPRequest(ctx context.Context, apiKey string, reqBody
 }
 
 // onMessageComplete applies message capture and usage tracking strategies.
-func (c *ChatClient) onMessageComplete(ctx context.Context, req CompletionRequest, response CompletionResponse) {
+func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSession, req CompletionRequest, response CompletionResponse) {
 	// Apply message capture strategy
 	if c.messageCaptureStrategy != nil {
-		if err := c.messageCaptureStrategy.CaptureMessage(ctx, req, response); err != nil {
+		if err := c.messageCaptureStrategy.CaptureMessage(ctx, session, req, response); err != nil {
 			// Log error but don't fail the request
 			c.logger.ErrorContext(ctx, "failed to capture message", attr.SlogError(err))
 		}
@@ -300,13 +306,13 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 
 	// Extract tool calls
 	var toolCalls []ToolCall
-	if message.Type == or.MessageTypeAssistant {
-		if assistantMsg := message.AssistantMessage; assistantMsg != nil {
+	if message.Type == or.ChatMessagesTypeAssistant {
+		if assistantMsg := message.ChatAssistantMessage; assistantMsg != nil {
 			for idx, tc := range assistantMsg.ToolCalls {
 				toolCalls = append(toolCalls, ToolCall{
 					Index: idx,
 					ID:    tc.ID,
-					Type:  tc.GetType(),
+					Type:  string(tc.GetType()),
 					Function: ToolCallFunction{
 						Name:      tc.Function.Name,
 						Arguments: tc.Function.Arguments,
@@ -331,7 +337,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	}
 
 	// Apply message capture and usage tracking strategies
-	c.onMessageComplete(context.WithoutCancel(ctx), req, *response)
+	c.onMessageComplete(context.WithoutCancel(ctx), initResult.captureSession, req, *response)
 
 	return response, nil
 }
@@ -368,6 +374,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		ctx:                  ctx,
 		body:                 httpResp.Body,
 		request:              req,
+		captureSession:       initResult.captureSession,
 		logger:               c.logger,
 		client:               c,
 		telemetryService:     c.telemetryLogger,
@@ -387,19 +394,21 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 }
 
 func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompletionRequest) (*CompletionResponse, error) {
-	var messages []or.Message
+	var messages []or.ChatMessages
 
 	// Optional system prompt
 	if req.SystemPrompt != "" {
-		messages = append(messages, or.CreateMessageSystem(or.SystemMessage{
-			Content: or.CreateSystemMessageContentStr(req.SystemPrompt),
+		messages = append(messages, or.CreateChatMessagesSystem(or.ChatSystemMessage{
+			Role:    or.ChatSystemMessageRoleSystem,
+			Content: or.CreateChatSystemMessageContentStr(req.SystemPrompt),
 			Name:    nil,
 		}))
 	}
 
 	// User message
-	messages = append(messages, or.CreateMessageUser(or.UserMessage{
-		Content: or.CreateUserMessageContentStr(req.Prompt),
+	messages = append(messages, or.CreateChatMessagesUser(or.ChatUserMessage{
+		Role:    or.ChatUserMessageRoleUser,
+		Content: or.CreateChatUserMessageContentStr(req.Prompt),
 		Name:    nil,
 	}))
 
@@ -430,6 +439,7 @@ type streamingResponseReader struct {
 	ctx              context.Context //nolint:containedctx // Context needed for telemetry and async operations
 	body             io.ReadCloser
 	request          CompletionRequest
+	captureSession   CaptureSession
 	logger           *slog.Logger
 	client           *ChatClient
 	telemetryService TelemetryLogger
@@ -492,7 +502,7 @@ func (r *streamingResponseReader) Close() error {
 		}
 
 		// Use WithoutCancel to ensure message capture completes even if the stream was killed
-		r.client.onMessageComplete(context.WithoutCancel(r.ctx), r.request, response)
+		r.client.onMessageComplete(context.WithoutCancel(r.ctx), r.captureSession, r.request, response)
 	}
 
 	return err
@@ -687,8 +697,8 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 	}
 
 	// Truncate inputs that exceed token limits
-	// Embedding models have 8192 token limit, using ~4 chars/token as conservative estimate
-	const maxChars = 30_000
+	// Embedding models have 8192 token limit, using ~3 chars/token as conservative estimate
+	const maxChars = 24_000
 	truncatedInputs := make([]string, len(inputs))
 	for i, input := range inputs {
 		if len(input) > maxChars {

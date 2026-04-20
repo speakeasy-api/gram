@@ -2,6 +2,7 @@ import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import {
   invalidateAllPlugin,
@@ -28,7 +29,8 @@ export default function PluginDetail() {
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
 
   const { fetch: authFetch } = useFetcher();
-  const { data: toolsetsData } = useListToolsetsForOrg();
+  const { data: toolsetsData, isLoading: isLoadingToolsets } =
+    useListToolsetsForOrg();
   const toolsets = toolsetsData?.toolsets ?? [];
 
   const invalidateAll = async () => {
@@ -230,7 +232,6 @@ export default function PluginDetail() {
           </Button>
         </div>
 
-
         {/* Edit Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
           <Dialog.Content>
@@ -283,7 +284,9 @@ export default function PluginDetail() {
             <form onSubmit={handleAddServer} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">Toolset</label>
-                {toolsets.length > 0 ? (
+                {isLoadingToolsets ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : toolsets.length > 0 ? (
                   <select
                     name="toolsetId"
                     className="bg-background rounded-md border px-3 py-2 text-sm"
@@ -313,7 +316,9 @@ export default function PluginDetail() {
                 <Button
                   type="submit"
                   disabled={
-                    addServerMutation.isPending || toolsets.length === 0
+                    addServerMutation.isPending ||
+                    isLoadingToolsets ||
+                    toolsets.length === 0
                   }
                 >
                   Add

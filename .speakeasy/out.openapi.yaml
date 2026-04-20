@@ -7413,6 +7413,95 @@ paths:
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
+  /rpc/hooks.otel/v1/metrics:
+    post:
+      tags:
+        - hooks
+      summary: metrics hooks
+      description: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.
+      operationId: hooks#metrics
+      parameters:
+        - name: Gram-Key
+          in: header
+          description: API Key header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: API Key header
+        - name: Gram-Project
+          in: header
+          description: project header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: project header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTELMetricsPayload'
+      responses:
+        "202":
+          description: Accepted response.
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
   /rpc/hooks.upsertServerNameOverride:
     post:
       tags:
@@ -12057,6 +12146,525 @@ paths:
       x-speakeasy-name-override: upsertAllowedOrigin
       x-speakeasy-react-hook:
         name: UpsertAllowedOrigin
+  /rpc/remoteMcp.createServer:
+    post:
+      description: Create a new remote MCP server
+      operationId: createRemoteMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateServerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteMcpServer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createServer remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: createServer
+      x-speakeasy-react-hook:
+        name: CreateRemoteMcpServer
+  /rpc/remoteMcp.deleteServer:
+    delete:
+      description: Delete a remote MCP server
+      operationId: deleteRemoteMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the remote MCP server to delete
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the remote MCP server to delete
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: deleteServer remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: deleteServer
+      x-speakeasy-react-hook:
+        name: DeleteRemoteMcpServer
+  /rpc/remoteMcp.getServer:
+    get:
+      description: Get a remote MCP server by ID
+      operationId: getRemoteMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the remote MCP server
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the remote MCP server
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteMcpServer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getServer remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: getServer
+      x-speakeasy-react-hook:
+        name: GetRemoteMcpServer
+  /rpc/remoteMcp.listServers:
+    get:
+      description: List all remote MCP servers for a project
+      operationId: listRemoteMcpServers
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListServersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listServers remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: listServers
+      x-speakeasy-react-hook:
+        name: RemoteMcpServers
+  /rpc/remoteMcp.updateServer:
+    post:
+      description: Update a remote MCP server
+      operationId: updateRemoteMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateServerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteMcpServer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateServer remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: updateServer
+      x-speakeasy-react-hook:
+        name: UpdateRemoteMcpServer
   /rpc/resources.list:
     get:
       description: List all resources for a project
@@ -12882,7 +13490,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetProjectMetricsSummaryPayload'
+              $ref: '#/components/schemas/GetHooksSummaryPayload'
         required: true
       responses:
         "200":
@@ -18244,6 +18852,22 @@ components:
         title:
           type: string
           description: The title of the chat
+        total_cost:
+          type: number
+          description: Total cost in USD for this chat
+          format: double
+        total_input_tokens:
+          type: integer
+          description: Total input tokens used in this chat
+          format: int64
+        total_output_tokens:
+          type: integer
+          description: Total output tokens used in this chat
+          format: int64
+        total_tokens:
+          type: integer
+          description: Total tokens (input + output) used in this chat
+          format: int64
         updated_at:
           type: string
           description: When the chat was last updated.
@@ -18275,6 +18899,10 @@ components:
         finish_reason:
           type: string
           description: The finish reason of the message
+        generation:
+          type: integer
+          description: Conversation generation — bumps on compaction or edit divergence
+          format: int64
         id:
           type: string
           description: The ID of the message
@@ -18298,6 +18926,7 @@ components:
         - role
         - model
         - created_at
+        - generation
     ChatOverview:
       type: object
       properties:
@@ -18325,6 +18954,22 @@ components:
         title:
           type: string
           description: The title of the chat
+        total_cost:
+          type: number
+          description: Total cost in USD for this chat
+          format: double
+        total_input_tokens:
+          type: integer
+          description: Total input tokens used in this chat
+          format: int64
+        total_output_tokens:
+          type: integer
+          description: Total output tokens used in this chat
+          format: int64
+        total_tokens:
+          type: integer
+          description: Total tokens (input + output) used in this chat
+          format: int64
         updated_at:
           type: string
           description: When the chat was last updated.
@@ -18371,6 +19016,22 @@ components:
         title:
           type: string
           description: The title of the chat
+        total_cost:
+          type: number
+          description: Total cost in USD for this chat
+          format: double
+        total_input_tokens:
+          type: integer
+          description: Total input tokens used in this chat
+          format: int64
+        total_output_tokens:
+          type: integer
+          description: Total output tokens used in this chat
+          format: int64
+        total_tokens:
+          type: integer
+          description: Total tokens (input + output) used in this chat
+          format: int64
         updated_at:
           type: string
           description: When the chat was last updated.
@@ -18994,6 +19655,26 @@ components:
         - name
         - description
         - grants
+    CreateServerForm:
+      type: object
+      properties:
+        headers:
+          type: array
+          items:
+            $ref: '#/components/schemas/HeaderInput'
+          description: Headers to send when proxying requests to the remote server
+        transport_type:
+          type: string
+          description: The transport type for the remote MCP server (e.g. streamable-http)
+        url:
+          type: string
+          description: The URL of the remote MCP server
+          format: uri
+      description: Form for creating a new remote MCP server
+      required:
+        - url
+        - transport_type
+        - headers
     CreateSignedChatAttachmentURLForm:
       type: object
       properties:
@@ -20386,6 +21067,11 @@ components:
     GetHooksSummaryPayload:
       type: object
       properties:
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogFilter'
+          description: Filter conditions (same as listHooksTraces)
         from:
           type: string
           description: Start time in ISO 8601 format
@@ -20396,6 +21082,18 @@ components:
           description: End time in ISO 8601 format
           example: "2025-12-19T11:00:00Z"
           format: date-time
+        types_to_include:
+          type: array
+          items:
+            type: string
+            enum:
+              - mcp
+              - local
+              - skill
+          description: Hook types to include (mcp, local, skill). If empty, includes all types.
+          example:
+            - mcp
+            - skill
       description: Payload for getting aggregated hooks metrics
       required:
         - from
@@ -20403,6 +21101,11 @@ components:
     GetHooksSummaryResult:
       type: object
       properties:
+        breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/HooksBreakdownRow'
+          description: 'Cross-dimensional pivot: (user, server, source, tool) x counts'
         servers:
           type: array
           items:
@@ -20413,6 +21116,11 @@ components:
           items:
             $ref: '#/components/schemas/SkillSummary'
           description: Aggregated metrics grouped by skill
+        time_series:
+          type: array
+          items:
+            $ref: '#/components/schemas/HooksTimeSeriesPoint'
+          description: Time-bucketed event counts by server and user
         total_events:
           type: integer
           description: Total number of hook events
@@ -20433,6 +21141,8 @@ components:
         - skills
         - total_events
         - total_sessions
+        - breakdown
+        - time_series
     GetInstanceForm:
       type: object
       properties:
@@ -20840,6 +21550,30 @@ components:
         - tool_urn
         - created_at
         - updated_at
+    HeaderInput:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Description of the header
+        is_required:
+          type: boolean
+          description: Whether the header is required
+        is_secret:
+          type: boolean
+          description: Whether the header value is a secret
+        name:
+          type: string
+          description: The header name
+        value:
+          type: string
+          description: Static header value (mutually exclusive with value_from_request_header)
+        value_from_request_header:
+          type: string
+          description: Name of the inbound request header to pass through (mutually exclusive with value)
+      description: Input for a remote MCP server header
+      required:
+        - name
     HookTraceSummary:
       type: object
       properties:
@@ -20888,6 +21622,37 @@ components:
         - start_time_unix_nano
         - log_count
         - gram_urn
+    HooksBreakdownRow:
+      type: object
+      properties:
+        event_count:
+          type: integer
+          description: Total events for this combination
+          format: int64
+        failure_count:
+          type: integer
+          description: Number of failures for this combination
+          format: int64
+        hook_source:
+          type: string
+          description: Hook source (e.g. claude-desktop, cursor)
+        server_name:
+          type: string
+          description: Server name ('local' for non-MCP tools)
+        tool_name:
+          type: string
+          description: Tool name
+        user_email:
+          type: string
+          description: User email address
+      description: 'Cross-dimensional aggregation row: one entry per unique (user, server, hook_source, tool) combination'
+      required:
+        - user_email
+        - server_name
+        - hook_source
+        - tool_name
+        - event_count
+        - failure_count
     HooksServerSummary:
       type: object
       properties:
@@ -20922,6 +21687,28 @@ components:
         - success_count
         - failure_count
         - failure_rate
+    HooksTimeSeriesPoint:
+      type: object
+      properties:
+        bucket_start_ns:
+          type: string
+          description: Bucket start time in Unix nanoseconds (string for JS int64 precision)
+        event_count:
+          type: integer
+          description: Number of events in this bucket
+          format: int64
+        server_name:
+          type: string
+          description: Server name
+        user_email:
+          type: string
+          description: User email address
+      description: A single time-series bucket for hooks activity
+      required:
+        - bucket_start_ns
+        - server_name
+        - user_email
+        - event_count
     HooksUserSummary:
       type: object
       properties:
@@ -21573,6 +22360,9 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
+            - remote-mcp:read
+            - remote-mcp:write
+            - remote-mcp:connect
         sub_scopes:
           type: array
           items:
@@ -21585,6 +22375,9 @@ components:
               - mcp:read
               - mcp:write
               - mcp:connect
+              - remote-mcp:read
+              - remote-mcp:write
+              - remote-mcp:connect
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -21618,6 +22411,16 @@ components:
           description: List of available MCP servers
       required:
         - servers
+    ListServersResult:
+      type: object
+      properties:
+        remote_mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteMcpServer'
+      description: Result type for listing remote MCP servers
+      required:
+        - remote_mcp_servers
     ListSlackAppsResult:
       type: object
       properties:
@@ -22238,6 +23041,55 @@ components:
       description: OTEL logs export payload
       required:
         - resourceLogs
+    OTELMetric:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Metric description
+        name:
+          type: string
+          description: Metric name
+        sum:
+          $ref: '#/components/schemas/OTELSum'
+        unit:
+          type: string
+          description: Metric unit
+      description: OTEL metric
+    OTELMetricsPayload:
+      type: object
+      properties:
+        resourceMetrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELResourceMetrics'
+          description: Array of resource metrics
+      description: OTEL metrics export payload
+      required:
+        - resourceMetrics
+    OTELNumberDataPoint:
+      type: object
+      properties:
+        asDouble:
+          type: number
+          description: Value as double
+          format: double
+        asInt:
+          type: integer
+          description: Value as integer
+          format: int64
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELAttribute'
+          description: Data point attributes
+        startTimeUnixNano:
+          type: string
+          description: Start timestamp in nanoseconds
+        timeUnixNano:
+          type: string
+          description: Timestamp in nanoseconds
+      description: OTEL number data point
     OTELResource:
       type: object
       properties:
@@ -22276,6 +23128,17 @@ components:
       description: OTEL resource logs container
       required:
         - scopeLogs
+    OTELResourceMetrics:
+      type: object
+      properties:
+        resource:
+          $ref: '#/components/schemas/OTELResource'
+        scopeMetrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELScopeMetrics'
+          description: Array of scope metrics
+      description: OTEL resource metrics container
     OTELScope:
       type: object
       properties:
@@ -22299,6 +23162,33 @@ components:
       description: OTEL scope logs container
       required:
         - logRecords
+    OTELScopeMetrics:
+      type: object
+      properties:
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELMetric'
+          description: Array of metrics
+        scope:
+          $ref: '#/components/schemas/OTELScope'
+      description: OTEL scope metrics container
+    OTELSum:
+      type: object
+      properties:
+        aggregationTemporality:
+          type: integer
+          description: Aggregation temporality
+          format: int64
+        dataPoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/OTELNumberDataPoint'
+          description: Data points
+        isMonotonic:
+          type: boolean
+          description: Whether the sum is monotonic
+      description: OTEL sum metric
     ObservabilitySummary:
       type: object
       properties:
@@ -22314,6 +23204,14 @@ components:
           type: number
           description: Average session duration in milliseconds
           format: double
+        cache_creation_input_tokens:
+          type: integer
+          description: Sum of cache creation input tokens
+          format: int64
+        cache_read_input_tokens:
+          type: integer
+          description: Sum of cache read input tokens
+          format: int64
         failed_chats:
           type: integer
           description: Number of failed chat sessions
@@ -22330,6 +23228,22 @@ components:
           type: integer
           description: Total number of chat sessions
           format: int64
+        total_cost:
+          type: number
+          description: Total cost of all requests
+          format: double
+        total_input_tokens:
+          type: integer
+          description: Sum of input tokens used
+          format: int64
+        total_output_tokens:
+          type: integer
+          description: Sum of output tokens used
+          format: int64
+        total_tokens:
+          type: integer
+          description: Sum of all tokens used
+          format: int64
         total_tool_calls:
           type: integer
           description: Total number of tool calls
@@ -22341,6 +23255,12 @@ components:
         - failed_chats
         - avg_session_duration_ms
         - avg_resolution_time_ms
+        - total_input_tokens
+        - total_output_tokens
+        - total_tokens
+        - cache_read_input_tokens
+        - cache_creation_input_tokens
+        - total_cost
         - total_tool_calls
         - failed_tool_calls
         - avg_latency_ms
@@ -22378,8 +23298,6 @@ components:
           items:
             $ref: '#/components/schemas/ProjectEntry'
         slug:
-          type: string
-        sso_connection_id:
           type: string
         user_workspace_slugs:
           type: array
@@ -22927,6 +23845,14 @@ components:
           type: number
           description: Average tool call duration in milliseconds
           format: double
+        cache_creation_input_tokens:
+          type: integer
+          description: Sum of cache creation input tokens
+          format: int64
+        cache_read_input_tokens:
+          type: integer
+          description: Sum of cache read input tokens
+          format: int64
         chat_resolution_abandoned:
           type: integer
           description: Chats abandoned by user
@@ -22991,6 +23917,10 @@ components:
           type: integer
           description: Number of unique chat sessions (project scope only)
           format: int64
+        total_cost:
+          type: number
+          description: Total cost of all requests
+          format: double
         total_input_tokens:
           type: integer
           description: Sum of input tokens used
@@ -23014,6 +23944,9 @@ components:
         - total_input_tokens
         - total_output_tokens
         - total_tokens
+        - cache_read_input_tokens
+        - cache_creation_input_tokens
+        - total_cost
         - avg_tokens_per_request
         - total_chat_requests
         - avg_chat_duration_ms
@@ -23239,6 +24172,87 @@ components:
           description: The name of the org to register
       required:
         - org_name
+    RemoteMcpServer:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the remote MCP server was created
+          format: date-time
+        headers:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteMcpServerHeader'
+          description: Headers configured for this remote MCP server
+        id:
+          type: string
+          description: The ID of the remote MCP server
+          format: uuid
+        project_id:
+          type: string
+          description: The project ID this remote MCP server belongs to
+          format: uuid
+        transport_type:
+          type: string
+          description: The transport type for the remote MCP server
+        updated_at:
+          type: string
+          description: When the remote MCP server was last updated
+          format: date-time
+        url:
+          type: string
+          description: The URL of the remote MCP server
+          format: uri
+      description: A remote MCP server configuration
+      required:
+        - id
+        - project_id
+        - url
+        - transport_type
+        - headers
+        - created_at
+        - updated_at
+    RemoteMcpServerHeader:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the header was created
+          format: date-time
+        description:
+          type: string
+          description: Description of the header
+        id:
+          type: string
+          description: The ID of the header
+          format: uuid
+        is_required:
+          type: boolean
+          description: Whether the header is required
+        is_secret:
+          type: boolean
+          description: Whether the header value is a secret
+        name:
+          type: string
+          description: The header name
+        updated_at:
+          type: string
+          description: When the header was last updated
+          format: date-time
+        value:
+          type: string
+          description: The header value (redacted if secret)
+        value_from_request_header:
+          type: string
+          description: Name of the inbound request header to pass through
+      description: A header configured for a remote MCP server
+      required:
+        - id
+        - name
+        - is_required
+        - is_secret
+        - created_at
+        - updated_at
     RenderTemplateByIDRequestBody:
       type: object
       properties:
@@ -23392,6 +24406,9 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
+            - remote-mcp:read
+            - remote-mcp:write
+            - remote-mcp:connect
       required:
         - scope
     ScopeDefinition:
@@ -23407,6 +24424,7 @@ components:
             - org
             - project
             - mcp
+            - remote-mcp
         slug:
           type: string
           description: Unique scope identifier.
@@ -23418,6 +24436,9 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
+            - remote-mcp:read
+            - remote-mcp:write
+            - remote-mcp:connect
       required:
         - slug
         - description
@@ -24367,6 +25388,14 @@ components:
         bucket_time_unix_nano:
           type: string
           description: Bucket start time in Unix nanoseconds (string for JS precision)
+        cache_creation_input_tokens:
+          type: integer
+          description: Sum of cache creation input tokens in this bucket
+          format: int64
+        cache_read_input_tokens:
+          type: integer
+          description: Sum of cache read input tokens in this bucket
+          format: int64
         failed_chats:
           type: integer
           description: Failed chat sessions in this bucket
@@ -24387,6 +25416,22 @@ components:
           type: integer
           description: Total chat sessions in this bucket
           format: int64
+        total_cost:
+          type: number
+          description: Total cost in this bucket
+          format: double
+        total_input_tokens:
+          type: integer
+          description: Sum of input tokens in this bucket
+          format: int64
+        total_output_tokens:
+          type: integer
+          description: Sum of output tokens in this bucket
+          format: int64
+        total_tokens:
+          type: integer
+          description: Sum of all tokens in this bucket
+          format: int64
         total_tool_calls:
           type: integer
           description: Total tool calls in this bucket
@@ -24399,6 +25444,12 @@ components:
         - failed_chats
         - partial_chats
         - abandoned_chats
+        - total_input_tokens
+        - total_output_tokens
+        - total_tokens
+        - cache_read_input_tokens
+        - cache_creation_input_tokens
+        - total_cost
         - total_tool_calls
         - failed_tool_calls
         - avg_tool_latency_ms
@@ -25312,6 +26363,27 @@ components:
         - toolset_slug
         - security_key
         - display_name
+    UpdateServerForm:
+      type: object
+      properties:
+        headers:
+          type: array
+          items:
+            $ref: '#/components/schemas/HeaderInput'
+          description: The complete desired set of headers. Omit to leave headers unchanged. Provide an empty array to remove all headers.
+        id:
+          type: string
+          description: The ID of the remote MCP server to update
+        transport_type:
+          type: string
+          description: The transport type for the remote MCP server
+        url:
+          type: string
+          description: The URL of the remote MCP server
+          format: uri
+      description: Form for updating a remote MCP server. When headers is provided, it represents the complete desired set of headers — any existing headers not in the list will be removed.
+      required:
+        - id
     UpdateSlackAppRequestBody:
       type: object
       properties:
@@ -25691,6 +26763,14 @@ components:
           type: number
           description: Average tokens per chat request
           format: double
+        cache_creation_input_tokens:
+          type: integer
+          description: Sum of cache creation input tokens
+          format: int64
+        cache_read_input_tokens:
+          type: integer
+          description: Sum of cache read input tokens
+          format: int64
         first_seen_unix_nano:
           type: string
           description: Earliest activity timestamp in Unix nanoseconds
@@ -25718,6 +26798,10 @@ components:
           type: integer
           description: Number of unique chat sessions
           format: int64
+        total_cost:
+          type: number
+          description: Total cost of all requests
+          format: double
         total_input_tokens:
           type: integer
           description: Sum of input tokens used
@@ -25747,6 +26831,9 @@ components:
         - total_input_tokens
         - total_output_tokens
         - total_tokens
+        - cache_read_input_tokens
+        - cache_creation_input_tokens
+        - total_cost
         - avg_tokens_per_request
         - total_tool_calls
         - tool_call_success
@@ -25879,6 +26966,8 @@ tags:
     description: Manage product level feature controls.
   - name: projects
     description: Manages projects in Gram.
+  - name: remoteMcp
+    description: Managing remote MCP servers.
   - name: resources
     description: Dashboard API for interacting with resources.
   - name: slack

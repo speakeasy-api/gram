@@ -29,6 +29,14 @@ export type TimeSeriesBucket = {
    */
   bucketTimeUnixNano: string;
   /**
+   * Sum of cache creation input tokens in this bucket
+   */
+  cacheCreationInputTokens: number;
+  /**
+   * Sum of cache read input tokens in this bucket
+   */
+  cacheReadInputTokens: number;
+  /**
    * Failed chat sessions in this bucket
    */
   failedChats: number;
@@ -49,6 +57,22 @@ export type TimeSeriesBucket = {
    */
   totalChats: number;
   /**
+   * Total cost in this bucket
+   */
+  totalCost: number;
+  /**
+   * Sum of input tokens in this bucket
+   */
+  totalInputTokens: number;
+  /**
+   * Sum of output tokens in this bucket
+   */
+  totalOutputTokens: number;
+  /**
+   * Sum of all tokens in this bucket
+   */
+  totalTokens: number;
+  /**
    * Total tool calls in this bucket
    */
   totalToolCalls: number;
@@ -64,11 +88,17 @@ export const TimeSeriesBucket$inboundSchema: z.ZodMiniType<
     avg_session_duration_ms: z.number(),
     avg_tool_latency_ms: z.number(),
     bucket_time_unix_nano: z.string(),
+    cache_creation_input_tokens: z.int(),
+    cache_read_input_tokens: z.int(),
     failed_chats: z.int(),
     failed_tool_calls: z.int(),
     partial_chats: z.int(),
     resolved_chats: z.int(),
     total_chats: z.int(),
+    total_cost: z.number(),
+    total_input_tokens: z.int(),
+    total_output_tokens: z.int(),
+    total_tokens: z.int(),
     total_tool_calls: z.int(),
   }),
   z.transform((v) => {
@@ -77,11 +107,17 @@ export const TimeSeriesBucket$inboundSchema: z.ZodMiniType<
       "avg_session_duration_ms": "avgSessionDurationMs",
       "avg_tool_latency_ms": "avgToolLatencyMs",
       "bucket_time_unix_nano": "bucketTimeUnixNano",
+      "cache_creation_input_tokens": "cacheCreationInputTokens",
+      "cache_read_input_tokens": "cacheReadInputTokens",
       "failed_chats": "failedChats",
       "failed_tool_calls": "failedToolCalls",
       "partial_chats": "partialChats",
       "resolved_chats": "resolvedChats",
       "total_chats": "totalChats",
+      "total_cost": "totalCost",
+      "total_input_tokens": "totalInputTokens",
+      "total_output_tokens": "totalOutputTokens",
+      "total_tokens": "totalTokens",
       "total_tool_calls": "totalToolCalls",
     });
   }),

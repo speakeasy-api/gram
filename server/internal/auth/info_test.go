@@ -1,8 +1,11 @@
 package auth_test
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
@@ -86,7 +89,7 @@ func TestService_Info(t *testing.T) {
 			ID:                 "other-org-456",
 			Name:               "Other Organization",
 			Slug:               "other-org",
-			SsoConnectionID:    nil,
+			WorkosID:           nil,
 			UserWorkspaceSlugs: []string{"other-workspace"},
 		})
 		ctx, instance := newTestAuthService(t, userInfo)
@@ -312,7 +315,7 @@ func TestService_Info_AdminOrgRelationshipUpserted(t *testing.T) {
 				ID:                 "speakeasy-team-org-id",
 				Name:               "Speakeasy Team",
 				Slug:               "speakeasy-team",
-				SsoConnectionID:    nil,
+				WorkosID:           nil,
 				UserWorkspaceSlugs: []string{"speakeasy-workspace"},
 			},
 		},
@@ -368,6 +371,184 @@ func TestService_Info_AdminOrgRelationshipUpserted(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, exists, "expected org-user relationship to be upserted by Info call")
+}
+
+// TestService_Info_ProjectFilter verifies that the ProjectFilterFunc is applied
+// to the projects returned in the Info response, matching the behaviour of
+// projects.List which uses access.Filter.
+func TestService_Info_ProjectFilter(t *testing.T) {
+	t.Parallel()
+
+	// setupInfoCtx is a small helper that creates the user, org, session and
+	// auth context needed to call Info. It returns the ready-to-use context.
+	setupInfoCtx := func(t *testing.T, instance *testInstance, userInfo *MockUserInfo) context.Context {
+		t.Helper()
+		ctx := t.Context()
+
+		err := instance.createTestUser(ctx, userInfo)
+		require.NoError(t, err)
+		err = instance.createTestOrganization(ctx, userInfo.Organizations[0])
+		require.NoError(t, err)
+
+		session := sessions.Session{
+			SessionID:            "filter-test-session",
+			UserID:               userInfo.UserID,
+			ActiveOrganizationID: userInfo.Organizations[0].ID,
+		}
+		err = instance.sessionManager.StoreSession(ctx, session)
+		require.NoError(t, err)
+
+		return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+			SessionID:            &session.SessionID,
+			UserID:               session.UserID,
+			ActiveOrganizationID: session.ActiveOrganizationID,
+			AccountType:          "test",
+			Email:                &userInfo.Email,
+		})
+	}
+
+	t.Run("filter removes disallowed projects", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+
+		// Filter that only allows the first project ID it sees.
+		var seen []string
+		filter := func(_ context.Context, ids []string) ([]string, error) {
+			seen = ids
+			if len(ids) > 0 {
+				return ids[:1], nil
+			}
+			return nil, nil
+		}
+
+		_, instance := newTestAuthServiceWithFilter(t, userInfo, filter)
+		ctx := setupInfoCtx(t, instance, userInfo)
+
+		orgID := userInfo.Organizations[0].ID
+		p1, err := instance.createTestProject(ctx, orgID, "ProjectA", "project-a")
+		require.NoError(t, err)
+		p2, err := instance.createTestProject(ctx, orgID, "ProjectB", "project-b")
+		require.NoError(t, err)
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+		require.Len(t, result.Organizations, 1)
+
+		// The filter was called with both project IDs.
+		assert.Len(t, seen, 2)
+
+		// Only the first project (by UUID order) should survive.
+		// We cannot assume p1 sorts before p2 since UUIDs are random.
+		require.Len(t, result.Organizations[0].Projects, 1)
+		assert.Equal(t, seen[0], result.Organizations[0].Projects[0].ID)
+
+		// The surviving project must be one of the two we created.
+		validIDs := []string{p1.ID.String(), p2.ID.String()}
+		assert.Contains(t, validIDs, result.Organizations[0].Projects[0].ID)
+	})
+
+	t.Run("filter allows all projects", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.UserID = "filter-all-user"
+		userInfo.Email = "filterall@example.com"
+		userInfo.Organizations[0].ID = "filter-all-org"
+
+		// Pass-through filter.
+		filter := func(_ context.Context, ids []string) ([]string, error) {
+			return ids, nil
+		}
+
+		_, instance := newTestAuthServiceWithFilter(t, userInfo, filter)
+		ctx := setupInfoCtx(t, instance, userInfo)
+
+		orgID := userInfo.Organizations[0].ID
+		_, err := instance.createTestProject(ctx, orgID, "ProjX", "proj-x")
+		require.NoError(t, err)
+		_, err = instance.createTestProject(ctx, orgID, "ProjY", "proj-y")
+		require.NoError(t, err)
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+
+		assert.Len(t, result.Organizations[0].Projects, 2)
+	})
+
+	t.Run("filter removes all projects", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.UserID = "filter-none-user"
+		userInfo.Email = "filternone@example.com"
+		userInfo.Organizations[0].ID = "filter-none-org"
+
+		// Deny-all filter.
+		filter := func(_ context.Context, _ []string) ([]string, error) {
+			return nil, nil
+		}
+
+		_, instance := newTestAuthServiceWithFilter(t, userInfo, filter)
+		ctx := setupInfoCtx(t, instance, userInfo)
+
+		orgID := userInfo.Organizations[0].ID
+		_, err := instance.createTestProject(ctx, orgID, "Hidden", "hidden")
+		require.NoError(t, err)
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+
+		assert.Empty(t, result.Organizations[0].Projects)
+	})
+
+	t.Run("filter error propagates", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.UserID = "filter-err-user"
+		userInfo.Email = "filtererr@example.com"
+		userInfo.Organizations[0].ID = "filter-err-org"
+
+		filterErr := fmt.Errorf("access denied")
+		filter := func(_ context.Context, _ []string) ([]string, error) {
+			return nil, filterErr
+		}
+
+		_, instance := newTestAuthServiceWithFilter(t, userInfo, filter)
+		ctx := setupInfoCtx(t, instance, userInfo)
+
+		orgID := userInfo.Organizations[0].ID
+		_, err := instance.createTestProject(ctx, orgID, "Proj", "proj")
+		require.NoError(t, err)
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.ErrorIs(t, err, filterErr)
+		require.Nil(t, result)
+	})
+
+	t.Run("nil filter returns all projects", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.UserID = "nil-filter-user"
+		userInfo.Email = "nilfilter@example.com"
+		userInfo.Organizations[0].ID = "nil-filter-org"
+
+		// Use the standard constructor (nil filter).
+		_, instance := newTestAuthService(t, userInfo)
+		ctx := setupInfoCtx(t, instance, userInfo)
+
+		orgID := userInfo.Organizations[0].ID
+		_, err := instance.createTestProject(ctx, orgID, "Visible", "visible")
+		require.NoError(t, err)
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+
+		assert.Len(t, result.Organizations[0].Projects, 1)
+		assert.Equal(t, "Visible", result.Organizations[0].Projects[0].Name)
+	})
 }
 
 // TestService_Info_AdminVisitingCustomerOrgDoesNotUpsertRelationship verifies that

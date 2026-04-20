@@ -1,6 +1,6 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useEnvironments } from "@/pages/environments/Environments";
+import { useEnvironments } from "@/pages/environments/useEnvironments";
 import {
   Environment,
   ToolsetEnvironmentLink,

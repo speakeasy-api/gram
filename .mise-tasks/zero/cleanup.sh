@@ -10,7 +10,7 @@ set -e
 if docker compose ps gram-temporal --status running -q 2>/dev/null | grep -q .; then
     echo "Restarting Temporal container..."
     docker compose restart gram-temporal
-    until docker compose exec gram-temporal temporal operator cluster health 2>/dev/null; do
+    until docker compose exec -T gram-temporal temporal operator cluster health 2>/dev/null; do
         echo "Waiting for Temporal to be healthy..."
         sleep 2
     done

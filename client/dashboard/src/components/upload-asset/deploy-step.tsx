@@ -18,8 +18,8 @@ import { ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
 import React from "react";
 import { Spinner } from "../ui/spinner";
 import { Type } from "../ui/type";
-import { useStep } from "./step";
-import { useStepper } from "./stepper";
+import { useStep } from "./step/use-step";
+import { useStepper } from "./stepper/use-stepper";
 
 export default function DeployStep() {
   const stepper = useStepper();

@@ -9,7 +9,7 @@ import (
 )
 
 // LoadGrants loads and normalizes grants for the given organization and principals.
-func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, principals []urn.Principal) (*Grants, error) {
+func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, principals []urn.Principal) ([]Grant, error) {
 	if organizationID == "" {
 		return nil, fmt.Errorf("organization id is required")
 	}
@@ -35,11 +35,7 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 		})
 	}
 
-	if len(grantRows) == 0 {
-		return &Grants{rows: nil}, nil
-	}
-
-	return &Grants{rows: grantRows}, nil
+	return grantRows, nil
 }
 
 func parsePrincipalURNs(principals []urn.Principal) ([]string, error) {

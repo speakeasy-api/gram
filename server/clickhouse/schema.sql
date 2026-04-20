@@ -162,6 +162,11 @@ CREATE TABLE IF NOT EXISTS metrics_summaries (
     total_input_tokens AggregateFunction(sumIf, Int64, UInt8),
     total_output_tokens AggregateFunction(sumIf, Int64, UInt8),
     total_tokens AggregateFunction(sumIf, Int64, UInt8),
+    cache_read_input_tokens AggregateFunction(sumIf, Int64, UInt8),
+    cache_creation_input_tokens AggregateFunction(sumIf, Int64, UInt8),
+
+    -- Cost
+    total_cost AggregateFunction(sumIf, Float64, UInt8),
 
     -- Avg tokens per request
     avg_tokens_per_request AggregateFunction(avgIf, Float64, UInt8),
@@ -223,18 +228,23 @@ SELECT
     uniqExactIfState(toString(attributes.gen_ai.provider.name), toString(attributes.gen_ai.provider.name) != '') AS distinct_providers,
 
     -- Token sums
-    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_input_tokens,
-    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_output_tokens,
-    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens,
+
+    -- Cost
+    sumIfState(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost,
 
     -- Avg tokens per request
-    avgIfState(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_tokens_per_request,
+    avgIfState(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.conversation.id) != '') AS avg_tokens_per_request,
 
     -- Chat request count
-    countIfState(toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_chat_requests,
+    countIfState(toString(attributes.gen_ai.conversation.id) != '') AS total_chat_requests,
 
     -- Avg chat duration
-    avgIfState(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_chat_duration_ms,
+    avgIfState(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gen_ai.conversation.id) != '') AS avg_chat_duration_ms,
 
     -- Finish reasons
     countIfState(position(toString(attributes.gen_ai.response.finish_reasons), 'stop') > 0) AS finish_reason_stop,
@@ -260,7 +270,7 @@ SELECT
     avgIfState(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') AS avg_resolution_time_ms,
 
     -- Model breakdown
-    sumMapIfState(map(toString(attributes.gen_ai.response.model), toUInt64(1)), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND toString(attributes.gen_ai.response.model) != '') AS models,
+    sumMapIfState(map(toString(attributes.gen_ai.response.model), toUInt64(1)), toString(attributes.gen_ai.conversation.id) != '' AND toString(attributes.gen_ai.response.model) != '') AS models,
 
     -- Tool breakdowns
     sumMapIfState(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:')) AS tool_counts,

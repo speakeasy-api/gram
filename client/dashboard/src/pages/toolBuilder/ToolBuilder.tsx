@@ -47,10 +47,11 @@ import { useParams } from "react-router";
 import { toast } from "sonner";
 import { v7 as uuidv7 } from "uuid";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
-import { ChatProvider, useChatContext } from "../playground/ChatContext";
+import { ChatProvider } from "../playground/ChatContext";
+import { useChatContext } from "../playground/useChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
-import { useToolifyContext } from "./Toolify";
+import { useToolifyContext } from "./useToolifyContext";
 
 type Input = {
   name: string;

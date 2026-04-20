@@ -1480,10 +1480,9 @@ func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 // *OrganizationEntryResponseBody.
 func unmarshalOrganizationEntryResponseBodyToAuthOrganizationEntry(v *OrganizationEntryResponseBody) *auth.OrganizationEntry {
 	res := &auth.OrganizationEntry{
-		ID:              *v.ID,
-		Name:            *v.Name,
-		Slug:            *v.Slug,
-		SsoConnectionID: v.SsoConnectionID,
+		ID:   *v.ID,
+		Name: *v.Name,
+		Slug: *v.Slug,
 	}
 	res.Projects = make([]*auth.ProjectEntry, len(v.Projects))
 	for i, val := range v.Projects {

@@ -51,7 +51,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOrgRoutes } from "@/routes";
 import { Link, useSearchParams } from "react-router";
-import type { ActiveLogFilter } from "./log-filter-types";
+import { type ActiveLogFilter, applyFilterAdd } from "./log-filter-types";
 import { parseFilters, serializeFilters } from "./log-filter-url";
 import { LogDetailSheet } from "./LogDetailSheet";
 import { LogFilterBar } from "./LogFilterBar";
@@ -681,6 +681,13 @@ function LogsInnerContent({
 }) {
   const orgRoutes = useOrgRoutes();
 
+  const handleAddFilterFromLog = useCallback(
+    (path: string, op: Operator, value: string) => {
+      onLogFiltersChange(applyFilterAdd(logFilters, { path, op, value }));
+    },
+    [logFilters, onLogFiltersChange],
+  );
+
   // Enforce a minimum visible duration for the refresh button's in-flight
   // state. Instant or cached refetches would otherwise flash the spinner for
   // a few ms and feel uncommunicative.
@@ -860,6 +867,7 @@ function LogsInnerContent({
         log={selectedLog}
         open={!!selectedLog}
         onOpenChange={(open) => !open && setSelectedLog(null)}
+        onAddFilter={handleAddFilterFromLog}
       />
     </>
   );

@@ -1,9 +1,10 @@
 import { Page } from "@/components/page-layout";
 import { DotTable } from "@/components/ui/dot-table";
-import { useViewMode, ViewToggle } from "@/components/ui/view-toggle";
+import { ViewToggle } from "@/components/ui/view-toggle";
+import { useViewMode } from "@/components/ui/use-view-mode";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
+import { useCatalogIconMap, useDeploymentIsEmpty } from "./sources-hooks";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
@@ -61,37 +62,6 @@ const useDialogStore = create<DialogStore>((set) => ({
   openViewAsset: (asset) => set({ dialogState: { type: "view-asset", asset } }),
   closeDialog: () => set({ dialogState: { type: "closed" } }),
 }));
-
-export function useDeploymentIsEmpty() {
-  const { data: deploymentResult, isLoading } = useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
-
-  if (isLoading) {
-    return false;
-  }
-
-  return (
-    !deployment ||
-    (deployment.openapiv3Assets.length === 0 &&
-      (deployment.functionsAssets?.length ?? 0) === 0 &&
-      deployment.packages.length === 0 &&
-      (deployment.externalMcps?.length ?? 0) === 0)
-  );
-}
-
-export const useCatalogIconMap = () => {
-  const { data: catalogData } = useInfiniteListMCPCatalog();
-  return useMemo(() => {
-    if (!catalogData?.pages) {
-      return new Map<string, string>();
-    }
-    return new Map(
-      catalogData.pages.flatMap((page) =>
-        page.servers.map((s) => [s.registrySpecifier, s.iconUrl!]),
-      ),
-    );
-  }, [catalogData]);
-};
 
 export default function Sources() {
   const client = useSdkClient();

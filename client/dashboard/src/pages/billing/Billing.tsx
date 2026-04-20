@@ -1,8 +1,6 @@
 import { Page } from "@/components/page-layout";
-import {
-  ProductTierBadge,
-  productTierColors,
-} from "@/components/product-tier-badge";
+import { ProductTierBadge } from "@/components/product-tier-badge";
+import { productTierColors } from "@/components/product-tier-utils";
 import { Card, Cards, CardSkeleton } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
