@@ -31,7 +31,7 @@ function ScopeGatedNavItem({
 }) {
   return (
     <SidebarMenuItem>
-      <RequireScope scope={scope} level="component" className="w-full">
+      <RequireScope scope={scope} level="section">
         <NavButton
           title={item.title}
           href={item.href()}
