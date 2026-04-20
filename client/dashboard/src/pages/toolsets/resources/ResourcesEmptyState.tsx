@@ -1,4 +1,5 @@
 import { EmptyState } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Button } from "@speakeasy-api/moonshine";
 import { ToolsetsGraphic } from "../ToolsetsEmptyState";
 
@@ -8,9 +9,11 @@ export function ResourcesEmptyState({
   onAddResources: () => void;
 }) {
   const cta = (
-    <Button size="sm" onClick={onAddResources}>
-      ADD RESOURCES
-    </Button>
+    <RequireScope scope="mcp:write" level="section">
+      <Button size="sm" onClick={onAddResources}>
+        ADD RESOURCES
+      </Button>
+    </RequireScope>
   );
 
   return (
