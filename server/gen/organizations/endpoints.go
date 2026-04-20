@@ -21,6 +21,8 @@ type Endpoints struct {
 	ListInvites      goa.Endpoint
 	GetInviteByToken goa.Endpoint
 	ListUsers        goa.Endpoint
+	SetAccountType   goa.Endpoint
+	ListAll          goa.Endpoint
 	RemoveUser       goa.Endpoint
 }
 
@@ -34,6 +36,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ListInvites:      NewListInvitesEndpoint(s, a.APIKeyAuth),
 		GetInviteByToken: NewGetInviteByTokenEndpoint(s),
 		ListUsers:        NewListUsersEndpoint(s, a.APIKeyAuth),
+		SetAccountType:   NewSetAccountTypeEndpoint(s, a.APIKeyAuth),
+		ListAll:          NewListAllEndpoint(s, a.APIKeyAuth),
 		RemoveUser:       NewRemoveUserEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -46,6 +50,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListInvites = m(e.ListInvites)
 	e.GetInviteByToken = m(e.GetInviteByToken)
 	e.ListUsers = m(e.ListUsers)
+	e.SetAccountType = m(e.SetAccountType)
+	e.ListAll = m(e.ListAll)
 	e.RemoveUser = m(e.RemoveUser)
 }
 
@@ -147,6 +153,52 @@ func NewListUsersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 			return nil, err
 		}
 		return s.ListUsers(ctx, p)
+	}
+}
+
+// NewSetAccountTypeEndpoint returns an endpoint function that calls the method
+// "setAccountType" of service "organizations".
+func NewSetAccountTypeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetAccountTypePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.SetAccountType(ctx, p)
+	}
+}
+
+// NewListAllEndpoint returns an endpoint function that calls the method
+// "listAll" of service "organizations".
+func NewListAllEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAllPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAll(ctx, p)
 	}
 }
 

@@ -74,6 +74,34 @@ var ListUsersResult = Type("ListUsersResult", func() {
 	Attribute("users", ArrayOf(OrganizationUser), "Users linked to the organization in Gram.")
 })
 
+// OrganizationSummary is the admin-facing view used to enumerate every Gram
+// organization and manage licensing (account type, whitelist status).
+var OrganizationSummary = Type("OrganizationSummary", func() {
+	Attribute("id", String, "Gram organization ID.")
+	Attribute("slug", String, "Organization slug.")
+	Attribute("name", String, "Organization display name.")
+	Attribute("gram_account_type", String, "Gram account tier.", func() {
+		Enum("free", "pro", "enterprise")
+	})
+	Attribute("workos_id", String, "WorkOS organization ID, when linked.")
+	Attribute("whitelisted", Boolean, "Whether the organization is whitelisted.")
+	Attribute("disabled_at", String, "When the organization was disabled, if applicable.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Required("id", "slug", "name", "gram_account_type", "whitelisted", "created_at", "updated_at")
+})
+
+var ListAllOrganizationsResult = Type("ListAllOrganizationsResult", func() {
+	Required("organizations")
+	Attribute("organizations", ArrayOf(OrganizationSummary), "All Gram organizations.")
+})
+
 var _ = Service("organizations", func() {
 	Description("Organization membership, invitations, and directory.")
 	Security(security.Session)
@@ -184,6 +212,57 @@ var _ = Service("organizations", func() {
 		Meta("openapi:operationId", "listOrganizationUsers")
 		Meta("openapi:extension:x-speakeasy-name-override", "listUsers")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListOrganizationUsers"}`)
+	})
+
+	Method("setAccountType", func() {
+		Description("Set a Gram organization's account tier (admin only - requires speakeasy-team API key).")
+
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+
+		Payload(func() {
+			Required("organization_id", "gram_account_type")
+			Attribute("organization_id", String, "The Gram organization ID to update.")
+			Attribute("gram_account_type", String, "The new account tier.", func() {
+				Enum("free", "pro", "enterprise")
+			})
+			security.ByKeyPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/organizations.setAccountType")
+			security.ByKeyHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "setAccountType")
+		Meta("openapi:extension:x-speakeasy-name-override", "setAccountType")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetAccountType"}`)
+	})
+
+	Method("listAll", func() {
+		Description("List every Gram organization (admin only - requires speakeasy-team API key).")
+
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+		})
+
+		Result(ListAllOrganizationsResult)
+
+		HTTP(func() {
+			GET("/rpc/organizations.listAll")
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAllOrganizations")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAll")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAllOrganizations"}`)
 	})
 
 	Method("removeUser", func() {

@@ -1161,6 +1161,457 @@ func DecodeListUsersResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildSetAccountTypeRequest instantiates a HTTP request object with method
+// and path set to call the "organizations" service "setAccountType" endpoint
+func (c *Client) BuildSetAccountTypeRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetAccountTypeOrganizationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "setAccountType", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetAccountTypeRequest returns an encoder for requests sent to the
+// organizations setAccountType server.
+func EncodeSetAccountTypeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.SetAccountTypePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "setAccountType", "*organizations.SetAccountTypePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		body := NewSetAccountTypeRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizations", "setAccountType", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetAccountTypeResponse returns a decoder for responses returned by the
+// organizations setAccountType endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSetAccountTypeResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetAccountTypeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetAccountTypeUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setAccountType", err)
+			}
+			err = ValidateSetAccountTypeUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setAccountType", err)
+			}
+			return nil, NewSetAccountTypeUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetAccountTypeForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setAccountType", err)
+			}
+			err = ValidateSetAccountTypeForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setAccountType", err)
+			}
+			return nil, NewSetAccountTypeForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetAccountTypeBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setAccountType", err)
+			}
+			err = ValidateSetAccountTypeBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setAccountType", err)
+			}
+			return nil, NewSetAccountTypeBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetAccountTypeNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setAccountType", err)
+			}
+			err = ValidateSetAccountTypeNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setAccountType", err)
+			}
+			return nil, NewSetAccountTypeNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetAccountTypeConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setAccountType", err)
+			}
+			err = ValidateSetAccountTypeConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setAccountType", err)
+			}
+			return nil, NewSetAccountTypeConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetAccountTypeUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setAccountType", err)
+			}
+			err = ValidateSetAccountTypeUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setAccountType", err)
+			}
+			return nil, NewSetAccountTypeUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetAccountTypeInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setAccountType", err)
+			}
+			err = ValidateSetAccountTypeInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setAccountType", err)
+			}
+			return nil, NewSetAccountTypeInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetAccountTypeInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "setAccountType", err)
+				}
+				err = ValidateSetAccountTypeInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "setAccountType", err)
+				}
+				return nil, NewSetAccountTypeInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetAccountTypeUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "setAccountType", err)
+				}
+				err = ValidateSetAccountTypeUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "setAccountType", err)
+				}
+				return nil, NewSetAccountTypeUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "setAccountType", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetAccountTypeGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setAccountType", err)
+			}
+			err = ValidateSetAccountTypeGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setAccountType", err)
+			}
+			return nil, NewSetAccountTypeGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "setAccountType", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListAllRequest instantiates a HTTP request object with method and path
+// set to call the "organizations" service "listAll" endpoint
+func (c *Client) BuildListAllRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListAllOrganizationsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "listAll", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListAllRequest returns an encoder for requests sent to the
+// organizations listAll server.
+func EncodeListAllRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.ListAllPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "listAll", "*organizations.ListAllPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListAllResponse returns a decoder for responses returned by the
+// organizations listAll endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeListAllResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListAllResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListAllResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listAll", err)
+			}
+			err = ValidateListAllResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listAll", err)
+			}
+			res := NewListAllOrganizationsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListAllUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listAll", err)
+			}
+			err = ValidateListAllUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listAll", err)
+			}
+			return nil, NewListAllUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListAllForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listAll", err)
+			}
+			err = ValidateListAllForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listAll", err)
+			}
+			return nil, NewListAllForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListAllBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listAll", err)
+			}
+			err = ValidateListAllBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listAll", err)
+			}
+			return nil, NewListAllBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListAllNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listAll", err)
+			}
+			err = ValidateListAllNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listAll", err)
+			}
+			return nil, NewListAllNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListAllConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listAll", err)
+			}
+			err = ValidateListAllConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listAll", err)
+			}
+			return nil, NewListAllConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListAllUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listAll", err)
+			}
+			err = ValidateListAllUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listAll", err)
+			}
+			return nil, NewListAllUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListAllInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listAll", err)
+			}
+			err = ValidateListAllInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listAll", err)
+			}
+			return nil, NewListAllInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListAllInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "listAll", err)
+				}
+				err = ValidateListAllInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "listAll", err)
+				}
+				return nil, NewListAllInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListAllUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "listAll", err)
+				}
+				err = ValidateListAllUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "listAll", err)
+				}
+				return nil, NewListAllUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "listAll", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListAllGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listAll", err)
+			}
+			err = ValidateListAllGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listAll", err)
+			}
+			return nil, NewListAllGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "listAll", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRemoveUserRequest instantiates a HTTP request object with method and
 // path set to call the "organizations" service "removeUser" endpoint
 func (c *Client) BuildRemoveUserRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1414,6 +1865,25 @@ func unmarshalOrganizationUserResponseBodyToOrganizationsOrganizationUser(v *Org
 		WorkosMembershipID: v.WorkosMembershipID,
 		CreatedAt:          *v.CreatedAt,
 		UpdatedAt:          *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalOrganizationSummaryResponseBodyToOrganizationsOrganizationSummary
+// builds a value of type *organizations.OrganizationSummary from a value of
+// type *OrganizationSummaryResponseBody.
+func unmarshalOrganizationSummaryResponseBodyToOrganizationsOrganizationSummary(v *OrganizationSummaryResponseBody) *organizations.OrganizationSummary {
+	res := &organizations.OrganizationSummary{
+		ID:              *v.ID,
+		Slug:            *v.Slug,
+		Name:            *v.Name,
+		GramAccountType: *v.GramAccountType,
+		WorkosID:        v.WorkosID,
+		Whitelisted:     *v.Whitelisted,
+		DisabledAt:      v.DisabledAt,
+		CreatedAt:       *v.CreatedAt,
+		UpdatedAt:       *v.UpdatedAt,
 	}
 
 	return res

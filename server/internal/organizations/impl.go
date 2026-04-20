@@ -263,6 +263,68 @@ func (s *Service) GetInviteByToken(ctx context.Context, payload *gen.GetInviteBy
 	return invitationToGenAccept(invite, orgName), nil
 }
 
+// speakeasyTeamSlug gates admin-only endpoints. Same pattern as
+// projects.SetOrganizationWhitelist.
+const speakeasyTeamSlug = "speakeasy-team"
+
+func (s *Service) requireSpeakeasyTeam(ctx context.Context, action string) (*contextvalues.AuthContext, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if ac.OrganizationSlug != speakeasyTeamSlug {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can %s", action).Log(ctx, s.logger, attr.SlogOrganizationID(ac.ActiveOrganizationID))
+	}
+	return ac, nil
+}
+
+func (s *Service) SetAccountType(ctx context.Context, payload *gen.SetAccountTypePayload) error {
+	if _, err := s.requireSpeakeasyTeam(ctx, "set organization account type"); err != nil {
+		return err
+	}
+
+	if err := orgrepo.New(s.db).SetAccountType(ctx, orgrepo.SetAccountTypeParams{
+		ID:              payload.OrganizationID,
+		GramAccountType: payload.GramAccountType,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "set account type").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
+	}
+
+	return nil
+}
+
+func (s *Service) ListAll(ctx context.Context, _ *gen.ListAllPayload) (*gen.ListAllOrganizationsResult, error) {
+	if _, err := s.requireSpeakeasyTeam(ctx, "list all organizations"); err != nil {
+		return nil, err
+	}
+
+	rows, err := orgrepo.New(s.db).ListAllOrganizations(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organizations").Log(ctx, s.logger)
+	}
+
+	orgs := make([]*gen.OrganizationSummary, 0, len(rows))
+	for _, r := range rows {
+		summary := &gen.OrganizationSummary{
+			ID:              r.ID,
+			Slug:            r.Slug,
+			Name:            r.Name,
+			GramAccountType: r.GramAccountType,
+			WorkosID:        conv.FromPGText[string](r.WorkosID),
+			Whitelisted:     r.Whitelisted,
+			CreatedAt:       r.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:       r.UpdatedAt.Time.Format(time.RFC3339),
+		}
+		if r.DisabledAt.Valid {
+			disabledAt := r.DisabledAt.Time.Format(time.RFC3339)
+			summary.DisabledAt = &disabledAt
+		}
+		orgs = append(orgs, summary)
+	}
+
+	return &gen.ListAllOrganizationsResult{Organizations: orgs}, nil
+}
+
 // ListUsers returns Gram organization members from organization_user_relationships.
 // That table is the in-app source of truth for roster and RemoveUser; WorkOS owns
 // invite/membership lifecycle but the dashboard "team" list should match what Gram authorizes.
