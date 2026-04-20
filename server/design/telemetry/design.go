@@ -1344,6 +1344,12 @@ var HookTraceSummary = Type("HookTraceSummary", func() {
 	Attribute("user_email", String, "User email (from attributes.user.email)")
 	Attribute("hook_source", String, "Hook source (from attributes.gram.hook.source)")
 	Attribute("skill_name", String, "Skill name (from materialized column, only for Skill tool)")
+	Attribute("skill_scope", String, "Skill scope (from materialized column)")
+	Attribute("skill_discovery_root", String, "Skill discovery root (from materialized column)")
+	Attribute("skill_source_type", String, "Skill source type (from materialized column)")
+	Attribute("skill_id", String, "Skill ID (from materialized column)")
+	Attribute("skill_version_id", String, "Skill version ID (from materialized column)")
+	Attribute("skill_resolution_status", String, "Skill resolution status (from materialized column)")
 
 	Required(
 		"trace_id",

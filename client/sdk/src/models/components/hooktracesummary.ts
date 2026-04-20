@@ -47,9 +47,33 @@ export type HookTraceSummary = {
    */
   logCount: number;
   /**
+   * Skill discovery root (from materialized column)
+   */
+  skillDiscoveryRoot?: string | undefined;
+  /**
+   * Skill ID (from materialized column)
+   */
+  skillId?: string | undefined;
+  /**
    * Skill name (from materialized column, only for Skill tool)
    */
   skillName?: string | undefined;
+  /**
+   * Skill resolution status (from materialized column)
+   */
+  skillResolutionStatus?: string | undefined;
+  /**
+   * Skill scope (from materialized column)
+   */
+  skillScope?: string | undefined;
+  /**
+   * Skill source type (from materialized column)
+   */
+  skillSourceType?: string | undefined;
+  /**
+   * Skill version ID (from materialized column)
+   */
+  skillVersionId?: string | undefined;
   /**
    * Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
    */
@@ -87,7 +111,13 @@ export const HookTraceSummary$inboundSchema: z.ZodMiniType<
     hook_source: z.optional(z.string()),
     hook_status: z.optional(HookStatus$inboundSchema),
     log_count: z.int(),
+    skill_discovery_root: z.optional(z.string()),
+    skill_id: z.optional(z.string()),
     skill_name: z.optional(z.string()),
+    skill_resolution_status: z.optional(z.string()),
+    skill_scope: z.optional(z.string()),
+    skill_source_type: z.optional(z.string()),
+    skill_version_id: z.optional(z.string()),
     start_time_unix_nano: z.string(),
     tool_name: z.optional(z.string()),
     tool_source: z.optional(z.string()),
@@ -101,7 +131,13 @@ export const HookTraceSummary$inboundSchema: z.ZodMiniType<
       "hook_source": "hookSource",
       "hook_status": "hookStatus",
       "log_count": "logCount",
+      "skill_discovery_root": "skillDiscoveryRoot",
+      "skill_id": "skillId",
       "skill_name": "skillName",
+      "skill_resolution_status": "skillResolutionStatus",
+      "skill_scope": "skillScope",
+      "skill_source_type": "skillSourceType",
+      "skill_version_id": "skillVersionId",
       "start_time_unix_nano": "startTimeUnixNano",
       "tool_name": "toolName",
       "tool_source": "toolSource",

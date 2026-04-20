@@ -17,9 +17,39 @@ import (
 
 // Client lists the skills service endpoint HTTP clients.
 type Client struct {
+	// Get Doer is the HTTP client used to make requests to the get endpoint.
+	GetDoer goahttp.Doer
+
+	// List Doer is the HTTP client used to make requests to the list endpoint.
+	ListDoer goahttp.Doer
+
+	// GetSettings Doer is the HTTP client used to make requests to the getSettings
+	// endpoint.
+	GetSettingsDoer goahttp.Doer
+
+	// SetSettings Doer is the HTTP client used to make requests to the setSettings
+	// endpoint.
+	SetSettingsDoer goahttp.Doer
+
 	// Capture Doer is the HTTP client used to make requests to the capture
 	// endpoint.
 	CaptureDoer goahttp.Doer
+
+	// ListVersions Doer is the HTTP client used to make requests to the
+	// listVersions endpoint.
+	ListVersionsDoer goahttp.Doer
+
+	// ListPending Doer is the HTTP client used to make requests to the listPending
+	// endpoint.
+	ListPendingDoer goahttp.Doer
+
+	// ApproveVersion Doer is the HTTP client used to make requests to the
+	// approveVersion endpoint.
+	ApproveVersionDoer goahttp.Doer
+
+	// SupersedeVersion Doer is the HTTP client used to make requests to the
+	// supersedeVersion endpoint.
+	SupersedeVersionDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -41,12 +71,116 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CaptureDoer:         doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		GetDoer:              doer,
+		ListDoer:             doer,
+		GetSettingsDoer:      doer,
+		SetSettingsDoer:      doer,
+		CaptureDoer:          doer,
+		ListVersionsDoer:     doer,
+		ListPendingDoer:      doer,
+		ApproveVersionDoer:   doer,
+		SupersedeVersionDoer: doer,
+		RestoreResponseBody:  restoreBody,
+		scheme:               scheme,
+		host:                 host,
+		decoder:              dec,
+		encoder:              enc,
+	}
+}
+
+// Get returns an endpoint that makes HTTP requests to the skills service get
+// server.
+func (c *Client) Get() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRequest(c.encoder)
+		decodeResponse = DecodeGetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "get", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// List returns an endpoint that makes HTTP requests to the skills service list
+// server.
+func (c *Client) List() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRequest(c.encoder)
+		decodeResponse = DecodeListResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "list", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSettings returns an endpoint that makes HTTP requests to the skills
+// service getSettings server.
+func (c *Client) GetSettings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSettingsRequest(c.encoder)
+		decodeResponse = DecodeGetSettingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSettingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSettingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "getSettings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetSettings returns an endpoint that makes HTTP requests to the skills
+// service setSettings server.
+func (c *Client) SetSettings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetSettingsRequest(c.encoder)
+		decodeResponse = DecodeSetSettingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetSettingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetSettingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "setSettings", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 
@@ -69,6 +203,102 @@ func (c *Client) Capture() goa.Endpoint {
 		resp, err := c.CaptureDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "capture", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListVersions returns an endpoint that makes HTTP requests to the skills
+// service listVersions server.
+func (c *Client) ListVersions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListVersionsRequest(c.encoder)
+		decodeResponse = DecodeListVersionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListVersionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListVersionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "listVersions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPending returns an endpoint that makes HTTP requests to the skills
+// service listPending server.
+func (c *Client) ListPending() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPendingRequest(c.encoder)
+		decodeResponse = DecodeListPendingResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPendingRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPendingDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "listPending", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ApproveVersion returns an endpoint that makes HTTP requests to the skills
+// service approveVersion server.
+func (c *Client) ApproveVersion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeApproveVersionRequest(c.encoder)
+		decodeResponse = DecodeApproveVersionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildApproveVersionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ApproveVersionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "approveVersion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SupersedeVersion returns an endpoint that makes HTTP requests to the skills
+// service supersedeVersion server.
+func (c *Client) SupersedeVersion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSupersedeVersionRequest(c.encoder)
+		decodeResponse = DecodeSupersedeVersionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSupersedeVersionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SupersedeVersionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "supersedeVersion", err)
 		}
 		return decodeResponse(resp)
 	}

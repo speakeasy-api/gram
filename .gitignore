@@ -56,3 +56,6 @@ package-lock.json
 .worktrees
 .granary/
 .claude/hooks/*
+.agentlink/
+/plans
+.mcp.json

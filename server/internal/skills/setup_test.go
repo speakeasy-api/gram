@@ -18,8 +18,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/skills"
+	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -34,6 +38,7 @@ type testInstance struct {
 	storage        assets.BlobStore
 	sessionManager *sessions.Manager
 	repo           *assetsrepo.Queries
+	skillsRepo     *skillsrepo.Queries
 }
 
 func TestMain(m *testing.M) {
@@ -58,6 +63,19 @@ func TestMain(m *testing.M) {
 func newTestSkillsService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
+	defaultMode := "project_and_user"
+	return newTestSkillsServiceWithCaptureModeAndFeature(t, &defaultMode, true)
+}
+
+func newTestSkillsServiceWithCaptureMode(t *testing.T, mode *string) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestSkillsServiceWithCaptureModeAndFeature(t, mode, true)
+}
+
+func newTestSkillsServiceWithCaptureModeAndFeature(t *testing.T, mode *string, featureEnabled bool) (context.Context, *testInstance) {
+	t.Helper()
+
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
@@ -76,16 +94,47 @@ func newTestSkillsService(t *testing.T) (context.Context, *testInstance) {
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	storage := assetstest.NewTestBlobStore(t)
-	svc := skills.NewService(logger, tracerProvider, conn, sessionManager, storage, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache))
+	featureRedisDB := 12
+	if !featureEnabled {
+		featureRedisDB = 13
+	}
+	featureRedisClient, err := infra.NewRedisClient(t, featureRedisDB)
+	require.NoError(t, err)
 
-	return ctx, &testInstance{
+	storage := assetstest.NewTestBlobStore(t)
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	featuresClient := productfeatures.NewClient(logger, tracerProvider, conn, featureRedisClient)
+	svc := skills.NewService(logger, tracerProvider, conn, sessionManager, storage, accessManager, featuresClient)
+
+	ti := &testInstance{
 		service:        svc,
 		conn:           conn,
 		storage:        storage,
 		sessionManager: sessionManager,
 		repo:           assetsrepo.New(conn),
+		skillsRepo:     skillsrepo.New(conn),
 	}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	if featureEnabled {
+		_, err = productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			FeatureName:    string(productfeatures.FeatureSkillsCapture),
+		})
+		require.NoError(t, err)
+	}
+
+	if mode != nil {
+		_, err = ti.skillsRepo.UpsertOrganizationCapturePolicy(ctx, skillsrepo.UpsertOrganizationCapturePolicyParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Mode:           *mode,
+		})
+		require.NoError(t, err)
+	}
+
+	return ctx, ti
 }
 
 func newCapturePayload(contentType string, contentLength int64, contentSHA256 string) *gen.CaptureSkillForm {

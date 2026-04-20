@@ -31,6 +31,8 @@ type GetProductFeaturesResponseBody struct {
 	ToolIoLogsEnabled *bool `form:"tool_io_logs_enabled,omitempty" json:"tool_io_logs_enabled,omitempty" xml:"tool_io_logs_enabled,omitempty"`
 	// Whether Claude Code session capture is enabled
 	SessionCaptureEnabled *bool `form:"session_capture_enabled,omitempty" json:"session_capture_enabled,omitempty" xml:"session_capture_enabled,omitempty"`
+	// Whether skills capture and registry features are enabled
+	SkillsCaptureEnabled *bool `form:"skills_capture_enabled,omitempty" json:"skills_capture_enabled,omitempty" xml:"skills_capture_enabled,omitempty"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -423,6 +425,7 @@ func NewGetProductFeaturesGramProductFeaturesOK(body *GetProductFeaturesResponse
 		LogsEnabled:           body.LogsEnabled,
 		ToolIoLogsEnabled:     body.ToolIoLogsEnabled,
 		SessionCaptureEnabled: body.SessionCaptureEnabled,
+		SkillsCaptureEnabled:  body.SkillsCaptureEnabled,
 	}
 
 	return v
