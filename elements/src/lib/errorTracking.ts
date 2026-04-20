@@ -44,7 +44,7 @@ export function initErrorTracking(config: ErrorTrackingConfig = {}): void {
       clientToken: DATADOG_CONFIG.clientToken,
       site: DATADOG_CONFIG.site,
       service: DATADOG_CONFIG.service,
-      env: process.env.NODE_ENV || "production",
+      env: DATADOG_CONFIG.env,
       sessionSampleRate: 100,
       sessionReplaySampleRate: 100,
       trackUserInteractions: true,

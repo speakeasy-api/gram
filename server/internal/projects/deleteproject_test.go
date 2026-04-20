@@ -93,7 +93,7 @@ func TestProjectsService_DeleteProject_SkipsRBACWhenDisabled(t *testing.T) {
 
 	ctx, ti := newTestProjectsService(t, false)
 	project := createProjectForDeletion(t, ctx, ti, "rbac-disabled-"+uuid.NewString()[:8])
-	ctx = access.GrantsToContext(ctx, &access.Grants{})
+	ctx = access.GrantsToContext(ctx, nil)
 
 	err := ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
 		ID: project.ID.String(),

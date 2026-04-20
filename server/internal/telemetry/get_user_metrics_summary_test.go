@@ -363,6 +363,7 @@ func insertChatCompletionLogWithUser(t *testing.T, ctx context.Context, projectI
 		"gen_ai.conversation.id":         chatID,
 		"gen_ai.conversation.duration":   durationSec,
 		"gen_ai.response.finish_reasons": "['" + finishReason + "']",
+		"gen_ai.response.id":             uuid.New().String(),
 		"gen_ai.usage.input_tokens":      inputTokens,
 		"gen_ai.usage.output_tokens":     outputTokens,
 		"gen_ai.usage.total_tokens":      totalTokens,

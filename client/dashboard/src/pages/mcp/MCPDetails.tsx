@@ -1,13 +1,14 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { DetailHero } from "@/components/detail-hero";
+import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
 import {
-  InstallPageConfigForm,
   useMcpMetadataMetadataForm,
   type UseMcpMetadataMetadataFormResult,
-} from "@/components/mcp_install_page/config_form";
+} from "@/components/mcp_install_page/useMcpMetadataForm";
 import { Textarea } from "@/components/moon/textarea";
 import { Page } from "@/components/page-layout";
+import { PublicMcpWarningDialog } from "@/components/public-mcp-warning-dialog";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
 import { ToolList } from "@/components/tool-list";
 import { Dialog } from "@/components/ui/dialog";
@@ -30,13 +31,12 @@ import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useListTools, useToolset } from "@/hooks/toolTypes";
+import { useToolset } from "@/hooks/toolTypes";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useProductTier } from "@/hooks/useProductTier";
-import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
-import { isHttpTool, Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
+import { Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import {
   useAttachServer,
@@ -93,8 +93,11 @@ import { toast } from "sonner";
 import { useModel } from "../playground/Openrouter";
 import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
+import { getSystemProvidedVariables } from "./environmentVariableUtils";
+import { useMcpConfigs, useMcpSlugValidation } from "./mcp-details-utils";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 import { MCPPerformanceTab } from "./MCPPerformanceTab";
+import { useEnvironmentVariables } from "./useEnvironmentVariables";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -405,9 +408,50 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   const queryClient = useQueryClient();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<ServerStatus | null>(null);
+  const [publicWarningPending, setPublicWarningPending] = useState<{
+    target: ServerStatus;
+    sourceStatus: ServerStatus;
+  } | null>(null);
   const [isMaxServersModalOpen, setIsMaxServersModalOpen] = useState(false);
   const updateToolsetMutation = useUpdateToolsetMutation();
   const telemetry = useTelemetry();
+
+  // Fetch data needed to detect system-provided vars on the attached env.
+  const { data: environmentsData } = useListEnvironments();
+  const environments = environmentsData?.environments ?? [];
+  const { data: mcpMetadataData, isLoading: mcpMetadataLoading } =
+    useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
+      throwOnError: false,
+      retry: false,
+    });
+  const mcpMetadata = mcpMetadataData?.metadata;
+
+  const attachedEnvironment = mcpMetadata?.defaultEnvironmentId
+    ? (environments.find((e) => e.id === mcpMetadata.defaultEnvironmentId) ??
+      null)
+    : null;
+
+  const envVars = useEnvironmentVariables(toolset, environments, mcpMetadata);
+  const systemVarNames = useMemo(
+    () =>
+      attachedEnvironment
+        ? getSystemProvidedVariables(envVars, attachedEnvironment.slug)
+        : [],
+    [envVars, attachedEnvironment],
+  );
+
+  // While either the metadata or the environments query is still loading we
+  // can't resolve the attached env → can't know whether system vars exist →
+  // disable the "Public" option to prevent a silent bypass of the warning
+  // dialog. Covers the race where metadata resolves first and `environments`
+  // is still `[]`, which would otherwise make `attachedEnvironment` null and
+  // `systemVarNames` empty even when there are system vars on an attached env.
+  // We intentionally do NOT fail-closed on query errors: the metadata endpoint
+  // returns 404 when no metadata row exists for a toolset (a common, safe
+  // state meaning "no attached env"), and `retry: false` would otherwise lock
+  // the option permanently on that 404. Other call sites (MCPAuthenticationTab,
+  // MCPEnvironmentSettings) treat missing metadata the same way.
+  const publicOptionUnavailable = mcpMetadataLoading || !environmentsData;
 
   const currentStatus: ServerStatus = !toolset.mcpEnabled
     ? "disabled"
@@ -440,6 +484,8 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
                   ? "mcp_made_public"
                   : "mcp_made_private",
             slug: toolset.slug,
+            system_vars_warned:
+              status === "public" ? systemVarNames.length > 0 : undefined,
           });
           const label =
             status === "disabled"
@@ -469,13 +515,41 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
 
   const handleSelect = (status: ServerStatus) => {
     if (status === currentStatus) return;
-    const needsConfirm = status === "disabled" || currentStatus === "disabled";
     setDropdownOpen(false);
-    if (needsConfirm) {
-      // Defer until after the dropdown has fully closed to avoid Radix focus-trap conflicts
-      setTimeout(() => setPendingStatus(status), 0);
+
+    const goingPublic = status === "public";
+    const needsEnableDialog =
+      status === "disabled" || currentStatus === "disabled";
+    const needsPublicWarning = goingPublic && systemVarNames.length > 0;
+
+    // Defer state changes until after the dropdown has fully closed to avoid
+    // Radix focus-trap conflicts (same pattern as before).
+    setTimeout(() => {
+      if (needsPublicWarning) {
+        // Show the system-vars warning first. If the user confirms, we chain to
+        // ServerEnableDialog when the transition also requires enablement.
+        setPublicWarningPending({
+          target: status,
+          sourceStatus: currentStatus,
+        });
+      } else if (needsEnableDialog) {
+        setPendingStatus(status);
+      } else {
+        applyStatus(status);
+      }
+    }, 0);
+  };
+
+  const handlePublicWarningConfirm = () => {
+    const pending = publicWarningPending;
+    setPublicWarningPending(null);
+    if (!pending) return;
+    // Use the source status captured when the dialog opened, not the live
+    // currentStatus — the toolset query may have revalidated in the meantime.
+    if (pending.sourceStatus === "disabled") {
+      setPendingStatus(pending.target);
     } else {
-      applyStatus(status);
+      applyStatus(pending.target);
     }
   };
 
@@ -502,7 +576,10 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
             <DropdownMenuItem
               key={option.value}
               onSelect={() => handleSelect(option.value)}
-              disabled={option.value === currentStatus}
+              disabled={
+                option.value === currentStatus ||
+                (option.value === "public" && publicOptionUnavailable)
+              }
               className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
             >
               <span
@@ -518,13 +595,23 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
                   {option.label}
                 </span>
                 <span className="text-muted-foreground text-xs">
-                  {option.description}
+                  {option.value === "public" && publicOptionUnavailable
+                    ? "Loading environment data…"
+                    : option.description}
                 </span>
               </div>
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+      <PublicMcpWarningDialog
+        isOpen={publicWarningPending !== null}
+        onClose={() => setPublicWarningPending(null)}
+        onConfirm={handlePublicWarningConfirm}
+        isLoading={updateToolsetMutation.isPending}
+        environmentSlug={attachedEnvironment?.slug ?? ""}
+        variableNames={systemVarNames}
+      />
       <ServerEnableDialog
         isOpen={pendingStatus !== null}
         onClose={() => setPendingStatus(null)}
@@ -1721,147 +1808,6 @@ export function MCPJson({
     </Grid>
   );
 }
-
-export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
-  const { url: mcpUrl } = useMcpUrl(toolset);
-  const { data: tools } = useListTools();
-
-  const toolsetTools = toolset
-    ? tools?.tools.filter((tool) => toolset.tools.some((t) => t.id === tool.id))
-    : undefined;
-
-  const requiresServerURL =
-    toolsetTools?.some((tool) => isHttpTool(tool) && !tool.defaultServerUrl) ??
-    false;
-
-  // Get env headers using the existing hook for fallback
-  const envHeaders = useToolsetEnvVars(toolset, requiresServerURL).filter(
-    (header) => !header.toLowerCase().includes("token_url"),
-  );
-
-  if (!toolset) return { public: "", internal: "" };
-
-  // Build header names using display names when available
-  // Display names make the config more user-friendly (e.g., "API-Key" instead of "X-RAPIDAPI-KEY")
-  const getHeaderNameForMcp = (envVar: string): string => {
-    // Find the security variable that has this env var
-    const secVar = toolset.securityVariables?.find((sv) =>
-      sv.envVariables.some((ev) => ev.toLowerCase() === envVar.toLowerCase()),
-    );
-
-    if (secVar?.displayName) {
-      // Use display name, normalized for header format
-      return secVar.displayName.replace(/\s+/g, "-").replace(/_/g, "-");
-    }
-
-    // Fall back to the env var format
-    return envVar.replace(/_/g, "-");
-  };
-
-  // Build the args array for public MCP config
-  const mcpJsonPublicArgs = [
-    "mcp-remote@0.1.25",
-    mcpUrl,
-    ...envHeaders.flatMap((header) => [
-      "--header",
-      `MCP-${getHeaderNameForMcp(header)}:${"${VALUE}"}`,
-    ]),
-  ];
-
-  if (!toolset.mcpIsPublic) {
-    mcpJsonPublicArgs.push("--header", "Authorization:${GRAM_KEY}");
-  }
-
-  // Indent each line of the header args array by 8 spaces for alignment
-  const INDENT = " ".repeat(8);
-  const argsStringIndented = JSON.stringify(mcpJsonPublicArgs, null, 2)
-    .split("\n")
-    .map((line, idx) => (idx === 0 ? line : INDENT + line))
-    .join("\n");
-
-  const mcpJsonPublic = `{
-  "mcpServers": {
-    "Gram${toolset.slug.replace(/-/g, "").replace(/^./, (c) => c.toUpperCase())}": {
-      "command": "npx",
-      "args": ${argsStringIndented}${
-        !toolset.mcpIsPublic
-          ? `,
-      "env": {
-        "GRAM_KEY": "Bearer <your-key-here>"
-      }`
-          : ""
-      }
-    }
-  }
-}`;
-
-  const mcpJsonInternal = `{
-  "mcpServers": {
-    "Gram${toolset.slug.replace(/-/g, "").replace(/^./, (c) => c.toUpperCase())}": {
-      "command": "npx",
-      "args": [
-        "mcp-remote@0.1.25",
-        "${mcpUrl}",
-        "--header",
-        "Gram-Environment:${toolset.defaultEnvironmentSlug}",
-        "--header",
-        "Authorization:\${GRAM_KEY}"
-      ],
-      "env": {
-        "GRAM_KEY": "Bearer <your-key-here>"
-      }
-    }
-  }
-}`;
-
-  return { public: mcpJsonPublic, internal: mcpJsonInternal };
-};
-
-export function useMcpSlugValidation(
-  mcpSlug: string | undefined,
-  currentSlug?: string,
-) {
-  const [slugError, setSlugError] = useState<string | null>(null);
-  const client = useSdkClient();
-
-  function validateMcpSlug(slug: string) {
-    if (!slug) return "MCP Slug is required";
-    if (slug.length > 40) return "Must be 40 characters or fewer";
-    if (!/^[a-z0-9_-]+$/.test(slug))
-      return "Lowercase letters, numbers, _ or - only";
-    return null;
-  }
-
-  useEffect(() => {
-    setSlugError(null);
-
-    if (mcpSlug && mcpSlug !== currentSlug) {
-      const validationError = validateMcpSlug(mcpSlug);
-      if (validationError) {
-        setSlugError(validationError);
-        return;
-      }
-      client.toolsets
-        .checkMCPSlugAvailability({ slug: mcpSlug })
-        .then((res) => {
-          if (res) {
-            setSlugError("This slug is already taken");
-          }
-        });
-    }
-  }, [mcpSlug]);
-
-  return slugError;
-}
-
-export const randSlug = () => {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  let rand = "";
-  for (let i = 0; i < 5; i++) {
-    rand += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return rand;
-};
 
 export function OAuthDetailsModal({
   isOpen,

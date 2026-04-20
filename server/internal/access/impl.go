@@ -522,6 +522,9 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{Slug: string(ScopeMCPRead), Description: "View MCP servers and configuration.", ResourceType: "mcp"},
 		{Slug: string(ScopeMCPWrite), Description: "Create and modify MCP servers and configuration.", ResourceType: "mcp"},
 		{Slug: string(ScopeMCPConnect), Description: "Connect to and use MCP servers.", ResourceType: "mcp"},
+		{Slug: string(ScopeRemoteMCPRead), Description: "View remote MCP servers and configuration.", ResourceType: "remote-mcp"},
+		{Slug: string(ScopeRemoteMCPWrite), Description: "Create and modify remote MCP servers and configuration.", ResourceType: "remote-mcp"},
+		{Slug: string(ScopeRemoteMCPConnect), Description: "Connect to and use remote MCP servers.", ResourceType: "remote-mcp"},
 	}}, nil
 }
 
@@ -609,7 +612,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	// Return override scopes when active so the frontend sees the same restricted
 	// set as the enforcement layer.
 	if overrides, ok := s.access.getScopeOverrides(ctx); ok {
-		return &gen.ListUserGrantsResult{Grants: grantsFromRows(grantsFromOverrides(overrides).rows)}, nil
+		return &gen.ListUserGrantsResult{Grants: grantsFromRows(grantsFromOverrides(overrides))}, nil
 	}
 
 	enforce, err := s.access.shouldEnforce(ctx)
@@ -661,7 +664,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return nil, oops.E(oops.CodeUnexpected, err, "load effective user grants").Log(ctx, logger)
 	}
 
-	return &gen.ListUserGrantsResult{Grants: grantsFromRows(grants.rows)}, nil
+	return &gen.ListUserGrantsResult{Grants: grantsFromRows(grants)}, nil
 }
 
 // UpdateMemberRole is intentionally stricter than member listing: it only
@@ -970,6 +973,9 @@ func fullAccessGrantPayloads() []*gen.ListRoleGrant {
 		{Scope: string(ScopeMCPRead), Resources: nil},
 		{Scope: string(ScopeMCPWrite), Resources: nil},
 		{Scope: string(ScopeMCPConnect), Resources: nil},
+		{Scope: string(ScopeRemoteMCPRead), Resources: nil},
+		{Scope: string(ScopeRemoteMCPWrite), Resources: nil},
+		{Scope: string(ScopeRemoteMCPConnect), Resources: nil},
 	}
 }
 

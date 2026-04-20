@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@gram-ai/functions",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "description": "",
   "author": "Georges Haidar <georges@speakeasyapi.dev>",
   "main": "dist/index.js",
@@ -17,7 +17,7 @@
     "directory": "ts-framework/functions"
   },
   "bin": {
-    "gf": "./dist/bin/cli.js"
+    "gf": "./src/bin/cli.ts"
   },
   "scripts": {
     "test": "vitest run",

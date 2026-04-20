@@ -42,11 +42,11 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
 import { ChatComposerWrapper } from "./ChatComposerWrapper";
-import { useChatContext } from "./ChatContext";
+import { useChatContext } from "./useChatContext";
 import { useChatHistory } from "./ChatHistory";
 import { MessageHistoryIndicator } from "./MessageHistoryIndicator";
 import { useModel } from "./Openrouter";
-import { Tool as MentionTool, parseMentionedTools } from "./ToolMentions";
+import { Tool as MentionTool, parseMentionedTools } from "./tool-mention-utils";
 import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
 
 type CoreTool = {

@@ -2921,8 +2921,14 @@ type UserSummaryResponseBody struct {
 	TotalOutputTokens *int64 `form:"total_output_tokens,omitempty" json:"total_output_tokens,omitempty" xml:"total_output_tokens,omitempty"`
 	// Sum of all tokens used
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Sum of cache read input tokens
+	CacheReadInputTokens *int64 `form:"cache_read_input_tokens,omitempty" json:"cache_read_input_tokens,omitempty" xml:"cache_read_input_tokens,omitempty"`
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens *int64 `form:"cache_creation_input_tokens,omitempty" json:"cache_creation_input_tokens,omitempty" xml:"cache_creation_input_tokens,omitempty"`
 	// Average tokens per chat request
 	AvgTokensPerRequest *float64 `form:"avg_tokens_per_request,omitempty" json:"avg_tokens_per_request,omitempty" xml:"avg_tokens_per_request,omitempty"`
+	// Total cost of all requests
+	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// Total number of tool calls
 	TotalToolCalls *int64 `form:"total_tool_calls,omitempty" json:"total_tool_calls,omitempty" xml:"total_tool_calls,omitempty"`
 	// Successful tool calls (2xx status)
@@ -2957,8 +2963,14 @@ type ProjectSummaryResponseBody struct {
 	TotalOutputTokens *int64 `form:"total_output_tokens,omitempty" json:"total_output_tokens,omitempty" xml:"total_output_tokens,omitempty"`
 	// Sum of all tokens used
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Sum of cache read input tokens
+	CacheReadInputTokens *int64 `form:"cache_read_input_tokens,omitempty" json:"cache_read_input_tokens,omitempty" xml:"cache_read_input_tokens,omitempty"`
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens *int64 `form:"cache_creation_input_tokens,omitempty" json:"cache_creation_input_tokens,omitempty" xml:"cache_creation_input_tokens,omitempty"`
 	// Average tokens per chat request
 	AvgTokensPerRequest *float64 `form:"avg_tokens_per_request,omitempty" json:"avg_tokens_per_request,omitempty" xml:"avg_tokens_per_request,omitempty"`
+	// Total cost of all requests
+	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// Total number of chat requests
 	TotalChatRequests *int64 `form:"total_chat_requests,omitempty" json:"total_chat_requests,omitempty" xml:"total_chat_requests,omitempty"`
 	// Average chat request duration in milliseconds
@@ -3018,6 +3030,18 @@ type ObservabilitySummaryResponseBody struct {
 	AvgSessionDurationMs *float64 `form:"avg_session_duration_ms,omitempty" json:"avg_session_duration_ms,omitempty" xml:"avg_session_duration_ms,omitempty"`
 	// Average time to resolution in milliseconds
 	AvgResolutionTimeMs *float64 `form:"avg_resolution_time_ms,omitempty" json:"avg_resolution_time_ms,omitempty" xml:"avg_resolution_time_ms,omitempty"`
+	// Sum of input tokens used
+	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`
+	// Sum of output tokens used
+	TotalOutputTokens *int64 `form:"total_output_tokens,omitempty" json:"total_output_tokens,omitempty" xml:"total_output_tokens,omitempty"`
+	// Sum of all tokens used
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Sum of cache read input tokens
+	CacheReadInputTokens *int64 `form:"cache_read_input_tokens,omitempty" json:"cache_read_input_tokens,omitempty" xml:"cache_read_input_tokens,omitempty"`
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens *int64 `form:"cache_creation_input_tokens,omitempty" json:"cache_creation_input_tokens,omitempty" xml:"cache_creation_input_tokens,omitempty"`
+	// Total cost of all requests
+	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// Total number of tool calls
 	TotalToolCalls *int64 `form:"total_tool_calls,omitempty" json:"total_tool_calls,omitempty" xml:"total_tool_calls,omitempty"`
 	// Number of failed tool calls
@@ -3040,6 +3064,18 @@ type TimeSeriesBucketResponseBody struct {
 	PartialChats *int64 `form:"partial_chats,omitempty" json:"partial_chats,omitempty" xml:"partial_chats,omitempty"`
 	// Abandoned chat sessions in this bucket
 	AbandonedChats *int64 `form:"abandoned_chats,omitempty" json:"abandoned_chats,omitempty" xml:"abandoned_chats,omitempty"`
+	// Sum of input tokens in this bucket
+	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`
+	// Sum of output tokens in this bucket
+	TotalOutputTokens *int64 `form:"total_output_tokens,omitempty" json:"total_output_tokens,omitempty" xml:"total_output_tokens,omitempty"`
+	// Sum of all tokens in this bucket
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Sum of cache read input tokens in this bucket
+	CacheReadInputTokens *int64 `form:"cache_read_input_tokens,omitempty" json:"cache_read_input_tokens,omitempty" xml:"cache_read_input_tokens,omitempty"`
+	// Sum of cache creation input tokens in this bucket
+	CacheCreationInputTokens *int64 `form:"cache_creation_input_tokens,omitempty" json:"cache_creation_input_tokens,omitempty" xml:"cache_creation_input_tokens,omitempty"`
+	// Total cost in this bucket
+	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// Total tool calls in this bucket
 	TotalToolCalls *int64 `form:"total_tool_calls,omitempty" json:"total_tool_calls,omitempty" xml:"total_tool_calls,omitempty"`
 	// Failed tool calls in this bucket
@@ -9355,6 +9391,15 @@ func ValidateUserSummaryResponseBody(body *UserSummaryResponseBody) (err error) 
 	if body.TotalTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
 	}
+	if body.CacheReadInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_input_tokens", "body"))
+	}
+	if body.CacheCreationInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_creation_input_tokens", "body"))
+	}
+	if body.TotalCost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_cost", "body"))
+	}
 	if body.AvgTokensPerRequest == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("avg_tokens_per_request", "body"))
 	}
@@ -9415,6 +9460,15 @@ func ValidateProjectSummaryResponseBody(body *ProjectSummaryResponseBody) (err e
 	}
 	if body.TotalTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.CacheReadInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_input_tokens", "body"))
+	}
+	if body.CacheCreationInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_creation_input_tokens", "body"))
+	}
+	if body.TotalCost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_cost", "body"))
 	}
 	if body.AvgTokensPerRequest == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("avg_tokens_per_request", "body"))
@@ -9520,6 +9574,24 @@ func ValidateObservabilitySummaryResponseBody(body *ObservabilitySummaryResponse
 	if body.AvgResolutionTimeMs == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("avg_resolution_time_ms", "body"))
 	}
+	if body.TotalInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_input_tokens", "body"))
+	}
+	if body.TotalOutputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_output_tokens", "body"))
+	}
+	if body.TotalTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.CacheReadInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_input_tokens", "body"))
+	}
+	if body.CacheCreationInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_creation_input_tokens", "body"))
+	}
+	if body.TotalCost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_cost", "body"))
+	}
 	if body.TotalToolCalls == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tool_calls", "body"))
 	}
@@ -9552,6 +9624,24 @@ func ValidateTimeSeriesBucketResponseBody(body *TimeSeriesBucketResponseBody) (e
 	}
 	if body.AbandonedChats == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("abandoned_chats", "body"))
+	}
+	if body.TotalInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_input_tokens", "body"))
+	}
+	if body.TotalOutputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_output_tokens", "body"))
+	}
+	if body.TotalTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.CacheReadInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_input_tokens", "body"))
+	}
+	if body.CacheCreationInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_creation_input_tokens", "body"))
+	}
+	if body.TotalCost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_cost", "body"))
 	}
 	if body.TotalToolCalls == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tool_calls", "body"))

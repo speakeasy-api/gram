@@ -80,3 +80,53 @@ var OTELLogsPayload = Type("OTELLogsPayload", func() {
 	Required("resourceLogs")
 	Attribute("resourceLogs", ArrayOf(OTELResourceLog), "Array of resource logs")
 })
+
+// OTEL metrics types
+
+// OTEL number data point
+var OTELNumberDataPoint = Type("OTELNumberDataPoint", func() {
+	Description("OTEL number data point")
+	Attribute("attributes", ArrayOf(OTELAttribute), "Data point attributes")
+	Attribute("startTimeUnixNano", String, "Start timestamp in nanoseconds")
+	Attribute("timeUnixNano", String, "Timestamp in nanoseconds")
+	Attribute("asDouble", Float64, "Value as double")
+	Attribute("asInt", Int64, "Value as integer")
+})
+
+// OTEL sum metric
+var OTELSum = Type("OTELSum", func() {
+	Description("OTEL sum metric")
+	Attribute("aggregationTemporality", Int, "Aggregation temporality")
+	Attribute("isMonotonic", Boolean, "Whether the sum is monotonic")
+	Attribute("dataPoints", ArrayOf(OTELNumberDataPoint), "Data points")
+})
+
+// OTEL metric
+var OTELMetric = Type("OTELMetric", func() {
+	Description("OTEL metric")
+	Attribute("name", String, "Metric name")
+	Attribute("description", String, "Metric description")
+	Attribute("unit", String, "Metric unit")
+	Attribute("sum", OTELSum, "Sum metric data")
+})
+
+// OTEL scope metrics
+var OTELScopeMetrics = Type("OTELScopeMetrics", func() {
+	Description("OTEL scope metrics container")
+	Attribute("scope", OTELScope, "Instrumentation scope information")
+	Attribute("metrics", ArrayOf(OTELMetric), "Array of metrics")
+})
+
+// OTEL resource metrics
+var OTELResourceMetrics = Type("OTELResourceMetrics", func() {
+	Description("OTEL resource metrics container")
+	Attribute("resource", OTELResource, "Resource information")
+	Attribute("scopeMetrics", ArrayOf(OTELScopeMetrics), "Array of scope metrics")
+})
+
+// OTEL metrics payload
+var OTELMetricsPayload = Type("OTELMetricsPayload", func() {
+	Description("OTEL metrics export payload")
+	Required("resourceMetrics")
+	Attribute("resourceMetrics", ArrayOf(OTELResourceMetrics), "Array of resource metrics")
+})

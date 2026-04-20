@@ -1,6 +1,6 @@
 import { useTelemetry } from "@/contexts/Telemetry.tsx";
 import { cn } from "@/lib/utils.ts";
-import { useIsProjectEmpty } from "@/pages/onboarding/UploadOpenAPI.tsx";
+import { useIsProjectEmpty } from "@/pages/onboarding/upload-openapi-utils";
 import { InitialChoiceStep } from "@/pages/onboarding/Wizard.tsx";
 import { useRoutes } from "@/routes.tsx";
 import { Button, Stack } from "@speakeasy-api/moonshine";

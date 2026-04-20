@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/openapi/pointer"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,8 +30,8 @@ func TestListHooksTraces_IncludesSkillMetadataFields(t *testing.T) {
 		gramURN:      "tools:hooks:skill",
 		severity:     "INFO",
 		serviceName:  "test-service",
-		toolName:     pointer.From("Skill"),
-		eventSource:  pointer.From("hook"),
+		toolName:     new("Skill"),
+		eventSource:  new("hook"),
 		customAttrs: map[string]any{
 			"gram.skill.scope":             "project",
 			"gram.skill.discovery_root":    "project_agents",
@@ -94,8 +93,8 @@ func TestListHooksTraces_OmitsEmptyOptionalFields(t *testing.T) {
 		gramURN:      "tools:hooks:skill",
 		severity:     "INFO",
 		serviceName:  "test-service",
-		toolName:     pointer.From("Skill"),
-		eventSource:  pointer.From("hook"),
+		toolName:     new("Skill"),
+		eventSource:  new("hook"),
 		customAttrs: map[string]any{
 			"gram.skill.scope":             "project",
 			"gram.skill.discovery_root":    "project_agents",
@@ -116,7 +115,7 @@ func TestListHooksTraces_OmitsEmptyOptionalFields(t *testing.T) {
 		gramURN:      "tools:hooks:local",
 		severity:     "INFO",
 		serviceName:  "test-service",
-		eventSource:  pointer.From("hook"),
+		eventSource:  new("hook"),
 		customAttrs: map[string]any{
 			"gram.hook.event": "PostToolUse",
 		},

@@ -2,9 +2,11 @@ import {
   APP_LOADING_NAV_META,
   APP_NAV_GROUPS,
 } from "@/components/app-navigation";
-import { FullPageError } from "@/components/full-page-error";
-import { GramLogo } from "@/components/gram-logo";
-import { PageHeader } from "@/components/page-header";
+import {
+  InfoResponseBody,
+  OrganizationEntry,
+  ProjectEntry,
+} from "@gram/client/models/components";
 import {
   Sidebar,
   SidebarContent,
@@ -17,35 +19,16 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
+import { createContext, useContext, useEffect } from "react";
+
+import BookDemo from "@/pages/demo/BookDemo";
+import { FullPageError } from "@/components/full-page-error";
+import { GramLogo } from "@/components/gram-logo";
+import { PageHeader } from "@/components/page-header";
+import { SessionInfoResponse } from "@gram/client/models/operations";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
-import BookDemo from "@/pages/demo/BookDemo";
-import {
-  InfoResponseBody,
-  OrganizationEntry,
-  ProjectEntry,
-} from "@gram/client/models/components";
-import { SessionInfoResponse } from "@gram/client/models/operations";
 import { useSessionInfo } from "@gram/client/react-query";
-import { Icon } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
-import { useIsAdminRef } from "@/contexts/Sdk";
-import { createContext, useContext, useEffect, useState } from "react";
-import { ErrorBoundary } from "react-error-boundary";
-import {
-  Navigate,
-  useLocation,
-  useNavigate,
-  useSearchParams,
-} from "react-router";
-import { ORG_ROUTE_STRUCTURE } from "@/routes";
-import { useSlugs } from "./Sdk";
-import {
-  useCaptureUserAuthorizationEvent,
-  useIdentifyUserForTelemetry,
-  useRegisterProjectForTelemetry,
-} from "./Telemetry";
 
 // We don't include accountType here because it is actively confusing. See useProductTier
 type Session = Omit<
@@ -76,7 +59,7 @@ const emptyOrganization: OrganizationEntry = {
   projects: [],
 };
 
-const emptySession: Session = {
+export const emptySession: Session = {
   user: {
     id: "",
     email: "",
@@ -92,21 +75,20 @@ const emptySession: Session = {
   refetch: () => Promise.resolve(emptySession),
 };
 
-const PREFERRED_PROJECT_KEY = "preferredProject";
-
-const SessionContext = createContext<Session>(emptySession);
-
-export const useSession = () => {
-  return useContext(SessionContext);
-};
-
-const emptyProject = {
+export const emptyProject = {
   id: "",
   name: "",
   slug: "",
   switchProject: () => {},
 };
-const ProjectContext = createContext<
+
+export const SessionContext = createContext<Session>(emptySession);
+
+export const useSession = () => {
+  return useContext(SessionContext);
+};
+
+export const ProjectContext = createContext<
   ProjectEntry & {
     switchProject: (slug: string) => void;
   }
@@ -114,80 +96,6 @@ const ProjectContext = createContext<
 
 export const useProject = () => {
   return useContext(ProjectContext);
-};
-
-export const ProjectProvider = ({
-  children,
-}: {
-  children: React.ReactNode;
-}) => {
-  const organization = useOrganization();
-  const user = useUser();
-  const navigate = useNavigate();
-  const client = useQueryClient();
-
-  const { projectSlug } = useSlugs();
-  const [project, setProject] = useState<ProjectEntry | null>(null);
-
-  // Fall back to the user's most recently used project, then to the first project
-  const preferredSlug = localStorage.getItem(PREFERRED_PROJECT_KEY);
-  const preferredProject = preferredSlug
-    ? organization.projects.find((p) => p.slug === preferredSlug)
-    : undefined;
-  const defaultProject = preferredProject ?? organization.projects[0];
-
-  const currentProject =
-    organization.projects.find((p) => p.slug === projectSlug) ?? defaultProject;
-
-  useRegisterProjectForTelemetry({
-    projectId: currentProject?.id ?? "",
-    projectSlug: currentProject?.slug ?? "",
-    organizationSlug: organization.slug,
-  });
-
-  useCaptureUserAuthorizationEvent({
-    projectId: currentProject?.id ?? "",
-    projectSlug: currentProject?.slug ?? "",
-    organizationSlug: organization.slug,
-    email: user.email,
-  });
-
-  // Store the last project the user visited so we can redirect to it
-  useEffect(() => {
-    if (currentProject) {
-      localStorage.setItem(PREFERRED_PROJECT_KEY, currentProject.slug);
-    }
-  }, [currentProject]);
-
-  // Update project state when current project changes
-  useEffect(() => {
-    if (!project || project.slug !== currentProject?.slug) {
-      setProject(currentProject ?? null);
-    }
-  }, [currentProject, project]);
-
-  // Not logged in
-  if (!currentProject) {
-    return (
-      <ProjectContext.Provider value={emptyProject}>
-        {children}
-      </ProjectContext.Provider>
-    );
-  }
-
-  const switchProject = async (slug: string) => {
-    client.clear();
-    navigate(`/${organization.slug}/projects/${slug}`);
-  };
-
-  const value = Object.assign(currentProject, {
-    organizationId: organization.id,
-    switchProject,
-  });
-
-  return (
-    <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>
-  );
 };
 
 export const useOrganization = (): OrganizationEntry & {
@@ -206,155 +114,6 @@ export const useOrganization = (): OrganizationEntry & {
   return Object.assign(organization, {
     refetch: orgRefetch,
   });
-};
-
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  return (
-    <ErrorBoundary FallbackComponent={FullPageError}>
-      <AuthHandler>{children}</AuthHandler>
-    </ErrorBoundary>
-  );
-};
-
-// Paths that don't require authentication — skip the loading shell on these
-// to avoid a brief flash of the authenticated skeleton (e.g. after logout).
-const UNAUTHENTICATED_PATHS = ["/login", "/register", "/invite", "/book-demo"];
-
-// Paths that are authenticated but don't require org/project slug context.
-const SLUG_EXEMPT_PATHS = ["/slack/register"];
-
-const AuthHandler = ({ children }: { children: React.ReactNode }) => {
-  const { orgSlug, projectSlug } = useSlugs();
-  const [searchParams] = useSearchParams();
-  const location = useLocation();
-  const { session, error, status } = useSessionData();
-  const isAdminRef = useIsAdminRef();
-
-  const isLoading = status === "pending";
-
-  useIdentifyUserForTelemetry(session?.user);
-  usePylonInAppChat(session?.user);
-
-  // Sync isAdmin into the SDK fetcher so it can attach X-Gram-Scope-Override in production.
-  isAdminRef.current = session?.user.isAdmin ?? false;
-
-  // you need something like this so you don't redirect with empty session too soon
-  // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading
-  // !! Very important that auth.info returns an error if there's no session
-  if (isLoading || (!session && !error)) {
-    // Don't show the authenticated app skeleton on routes that always redirect
-    // (root "/" and unauthenticated pages like /login). This avoids a jarring
-    // skeleton flash for logged-out users before the redirect to /login fires.
-    if (
-      location.pathname === "/" ||
-      UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p))
-    ) {
-      return null;
-    }
-    return <AppLoadingShell />;
-  }
-
-  if (error || !session || !session.session) {
-    return (
-      <SessionContext.Provider value={emptySession}>
-        {children}
-      </SessionContext.Provider>
-    );
-  }
-
-  // Show book demo page if organization is not whitelisted
-  // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
-  if (session.activeOrganizationId && !session.whitelisted) {
-    return <BookDemo />;
-  }
-
-  if (!session.activeOrganizationId) {
-    return (
-      <SessionContext.Provider value={session}>
-        {children}
-      </SessionContext.Provider>
-    );
-  }
-
-  // Skip all slug-based redirect logic for exempt paths
-  const isSlugExempt = SLUG_EXEMPT_PATHS.some((p) =>
-    location.pathname.startsWith(p),
-  );
-
-  const pathParts = location.pathname.split("/").filter(Boolean);
-
-  // Backwards-compat: redirect old /:orgSlug/:projectSlug/... URLs to /:orgSlug/projects/:projectSlug/...
-  // If the second segment is a known project slug (and not "projects" or an org-level route),
-  // redirect to the new URL structure.
-  // Derived from ORG_ROUTE_STRUCTURE so new org routes are automatically excluded from project slug redirects
-  const ORG_ROUTE_PATHS = [
-    "projects",
-    ...Object.values(ORG_ROUTE_STRUCTURE)
-      .map((r) => r.url)
-      .filter(Boolean),
-  ];
-  const isProjectSlug = session.organization?.projects.some(
-    (p) => p.slug === pathParts[1],
-  );
-  const isOrgRoutePath = ORG_ROUTE_PATHS.includes(pathParts[1]);
-  // Redirect if: (1) it's a project slug and not an org route, OR
-  // (2) it's both a project slug and an org route but has sub-paths (org routes don't have sub-paths)
-  // Never redirect if pathParts[1] is "projects" to avoid infinite redirect loops
-  if (
-    !isSlugExempt &&
-    pathParts.length >= 2 &&
-    pathParts[0] === session.organization?.slug &&
-    pathParts[1] !== "projects" &&
-    isProjectSlug &&
-    (!isOrgRoutePath || pathParts.length >= 3)
-  ) {
-    const rest = pathParts.slice(2).join("/");
-    const newPath = `/${pathParts[0]}/projects/${pathParts[1]}${rest ? `/${rest}` : ""}`;
-    return <Navigate to={newPath + location.search + location.hash} replace />;
-  }
-
-  // Handle initial navigation
-  const redirectParam = searchParams.get("redirect");
-  if (redirectParam) {
-    return <Navigate to={redirectParam} replace />;
-  } else if (isSlugExempt) {
-    // Fall through to render children
-  } else if (session.organization && !projectSlug) {
-    // On an org-level page or bare URL with no project context — that's fine,
-    // unless we're at the root "/" with no org slug either
-    if (!orgSlug || orgSlug !== session.organization.slug) {
-      // If the user has a preferred project, redirect to it instead of org home
-      const preferredSlug = localStorage.getItem(PREFERRED_PROJECT_KEY);
-      const preferredProject = preferredSlug
-        ? session.organization.projects.find((p) => p.slug === preferredSlug)
-        : undefined;
-      if (preferredProject) {
-        return (
-          <Navigate
-            to={`/${session.organization.slug}/projects/${preferredProject.slug}`}
-            replace
-          />
-        );
-      }
-      // Redirect to org home
-      return <Navigate to={`/${session.organization.slug}`} replace />;
-    }
-    // Otherwise we're on a valid org-level path, fall through
-  } else if (session.organization.slug !== orgSlug) {
-    // make sure we don't direct to an org we aren't authenticated with
-    return (
-      <Navigate
-        to={`/${session.organization.slug}/projects/${projectSlug}`}
-        replace
-      />
-    );
-  }
-
-  return (
-    <SessionContext.Provider value={session}>
-      {children}
-    </SessionContext.Provider>
-  );
 };
 
 export const useSessionData = () => {

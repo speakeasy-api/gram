@@ -619,7 +619,7 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 // triggers traffic deprioritization so the proxy can spread load before hitting
 // the hard cap.
 func concurrencyLimits(memoryMB int) (softLimit, hardLimit int) {
-	hardLimit = max(memoryMB/64, 4)
+	hardLimit = max(memoryMB/48, 4)
 	softLimit = max(hardLimit*3/4, 2)
 	return softLimit, hardLimit
 }
@@ -628,7 +628,7 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 	machineMeta := maps.Clone(baseMetadata)
 	machineMeta[fly.MachineConfigMetadataKeyFlyProcessGroup] = "gram_functions_runner"
 
-	memoryMB := 2048
+	memoryMB := 4096
 	softLimit, hardLimit := concurrencyLimits(memoryMB)
 
 	return &fly.MachineConfig{

@@ -78,6 +78,14 @@ type Chat struct {
 	CreatedAt string
 	// When the chat was last updated.
 	UpdatedAt string
+	// Total input tokens used in this chat
+	TotalInputTokens *int64
+	// Total output tokens used in this chat
+	TotalOutputTokens *int64
+	// Total tokens (input + output) used in this chat
+	TotalTokens *int64
+	// Total cost in USD for this chat
+	TotalCost *float64
 	// When the last message in the chat was created.
 	LastMessageTimestamp string
 }
@@ -103,6 +111,8 @@ type ChatMessage struct {
 	ExternalUserID *string
 	// When the message was created.
 	CreatedAt string
+	// Conversation generation — bumps on compaction or edit divergence
+	Generation int
 }
 
 type ChatOverview struct {
@@ -123,6 +133,14 @@ type ChatOverview struct {
 	CreatedAt string
 	// When the chat was last updated.
 	UpdatedAt string
+	// Total input tokens used in this chat
+	TotalInputTokens *int64
+	// Total output tokens used in this chat
+	TotalOutputTokens *int64
+	// Total tokens (input + output) used in this chat
+	TotalTokens *int64
+	// Total cost in USD for this chat
+	TotalCost *float64
 	// When the last message in the chat was created.
 	LastMessageTimestamp string
 }
@@ -148,6 +166,14 @@ type ChatOverviewWithResolutions struct {
 	CreatedAt string
 	// When the chat was last updated.
 	UpdatedAt string
+	// Total input tokens used in this chat
+	TotalInputTokens *int64
+	// Total output tokens used in this chat
+	TotalOutputTokens *int64
+	// Total tokens (input + output) used in this chat
+	TotalTokens *int64
+	// Total cost in USD for this chat
+	TotalCost *float64
 	// When the last message in the chat was created.
 	LastMessageTimestamp string
 }

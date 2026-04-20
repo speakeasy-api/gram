@@ -8,57 +8,29 @@ import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { generateObject } from "ai";
-import { createContext, useContext, useState } from "react";
+import { useState } from "react";
 import { z } from "zod";
 import { useMiniModel } from "../playground/Openrouter";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
-
-const SuggestionSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  inputs: z.array(
-    z.object({
-      name: z.string(),
-      description: z.string(),
-    }),
-  ),
-  steps: z.array(
-    z.object({
-      tool: z.string(),
-      instructions: z.string(),
-    }),
-  ),
-});
-
-type ToolifyContextType = {
-  toolset: ToolsetEntry;
-  purpose: string;
-  suggestion: z.infer<typeof SuggestionSchema>;
-};
-
-//eslint-disable-next-line @typescript-eslint/no-explicit-any
-const emptyCtx: ToolifyContextType = {} as any;
-
-const ToolifyContext = createContext<
-  ToolifyContextType & { set: (t: ToolifyContextType) => void }
->({ ...emptyCtx, set: () => {} });
+import {
+  SuggestionSchema,
+  ToolifyContext,
+  emptyCtx,
+  useToolifyContext,
+} from "./useToolifyContext";
 
 export const ToolifyProvider = ({
   children,
 }: {
   children: React.ReactNode;
 }) => {
-  const [state, setState] = useState<ToolifyContextType>(emptyCtx);
+  const [state, setState] = useState(emptyCtx);
 
   return (
     <ToolifyContext.Provider value={{ ...state, set: setState }}>
       {children}
     </ToolifyContext.Provider>
   );
-};
-
-export const useToolifyContext = () => {
-  return useContext(ToolifyContext);
 };
 
 export const ToolifyDialog = ({

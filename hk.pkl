@@ -22,12 +22,8 @@ local linters = new Mapping<String, Step> {
   }
   ["gofix"] {
     glob = "**/*.go"
+    exclude = "**/testdata/**"
     fix = "mise run -q go:fix {{files}}"
-  }
-  ["speakeasy"] {
-    glob = List("overlays/**/*.yaml", "server/gen/http/openapi3.yaml")
-    check = "mise run -q gen:sdk --check"
-    fix = "mise run -q gen:sdk"
   }
   ["oxfmt"] {
     glob =

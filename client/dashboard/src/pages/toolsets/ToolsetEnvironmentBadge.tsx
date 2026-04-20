@@ -12,7 +12,7 @@ import {
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
-import { useEnvironments } from "../environments/Environments";
+import { useEnvironments } from "../environments/useEnvironments";
 import { useState } from "react";
 import { isHttpTool, Toolset } from "@/lib/toolTypes";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";

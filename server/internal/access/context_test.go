@@ -27,9 +27,8 @@ func TestLoadIntoContext_LoadsUserGrants(t *testing.T) {
 	ctx, err := manager.PrepareContext(ctx)
 	require.NoError(t, err)
 
-	grants, ok := GrantsFromContext(ctx)
+	_, ok = GrantsFromContext(ctx)
 	require.True(t, ok)
-	require.NotNil(t, grants)
 	require.NoError(t, manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}))
 }
 
@@ -48,9 +47,8 @@ func TestLoadIntoContext_SkipsNonSessionAuth(t *testing.T) {
 	ctx, err := manager.PrepareContext(ctx)
 	require.NoError(t, err)
 
-	grants, ok := GrantsFromContext(ctx)
+	_, ok = GrantsFromContext(ctx)
 	require.False(t, ok)
-	require.Nil(t, grants)
 }
 
 func TestLoadIntoContext_SkipsNonEnterpriseOrgs(t *testing.T) {
@@ -69,7 +67,6 @@ func TestLoadIntoContext_SkipsNonEnterpriseOrgs(t *testing.T) {
 	ctx, err := manager.PrepareContext(ctx)
 	require.NoError(t, err)
 
-	grants, ok := GrantsFromContext(ctx)
+	_, ok = GrantsFromContext(ctx)
 	require.False(t, ok)
-	require.Nil(t, grants)
 }

@@ -66,6 +66,7 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -180,16 +181,6 @@ func newStartCommand() *cli.Command {
 			Usage:    "The location of the assets backend to connect to",
 			EnvVars:  []string{"GRAM_ASSETS_URI"},
 			Required: true,
-		},
-		&cli.StringFlag{
-			Name:    "redis-cache-addr",
-			Usage:   "Address of the redis cache server",
-			EnvVars: []string{"GRAM_REDIS_CACHE_ADDR"},
-		},
-		&cli.StringFlag{
-			Name:    "redis-cache-password",
-			Usage:   "Password for the redis cache server",
-			EnvVars: []string{"GRAM_REDIS_CACHE_PASSWORD"},
 		},
 		&cli.StringFlag{
 			Name:     "encryption-key",
@@ -365,6 +356,7 @@ func newStartCommand() *cli.Command {
 		},
 	}
 
+	flags = append(flags, redisFlags...)
 	flags = append(flags, clickHouseFlags...)
 	flags = append(flags, functionsFlags...)
 	flags = append(flags, pulseMCPFlags...)
@@ -444,6 +436,7 @@ func newStartCommand() *cli.Command {
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
+				enableTracing: c.Bool("redis-enable-tracing"),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
@@ -724,6 +717,10 @@ func newStartCommand() *cli.Command {
 					SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("site-url")),
 					Environment:            c.String("environment"),
 				},
+				accessManager,
+				func(ctx context.Context, projectIDs []string) ([]string, error) {
+					return accessManager.Filter(ctx, access.ScopeBuildRead, projectIDs)
+				},
 			))
 			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, accessManager))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, accessManager))
@@ -746,6 +743,7 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), accessManager))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, accessManager))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, accessManager))
+			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, accessManager))
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, accessManager, triggerApp))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, accessManager))

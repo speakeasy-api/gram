@@ -156,7 +156,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	}
 
 	if err := s.ensureDefaultRegistryCollection(ctx, authCtx.ActiveOrganizationID, orgSlug); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error ensuring default registry collection").Log(ctx, s.logger)
+		s.logger.WarnContext(ctx, "failed to ensure default registry collection", attr.SlogError(err), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
 	collections, err := s.repo.ListOrganizationMcpCollections(ctx, authCtx.ActiveOrganizationID)

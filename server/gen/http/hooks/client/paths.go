@@ -21,3 +21,8 @@ func CursorHooksPath() string {
 func LogsHooksPath() string {
 	return "/rpc/hooks.otel/v1/logs"
 }
+
+// MetricsHooksPath returns the URL path to the hooks service metrics HTTP endpoint.
+func MetricsHooksPath() string {
+	return "/rpc/hooks.otel/v1/metrics"
+}

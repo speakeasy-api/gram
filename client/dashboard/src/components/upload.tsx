@@ -1,36 +1,11 @@
-import { useFetcher } from "@/contexts/Fetcher";
 import { cn } from "@/lib/utils";
-import { Asset, UploadImageResult } from "@gram/client/models/components";
+import { useAssetImageUploadHandler } from "@/components/useAssetImageUploadHandler";
+import { Asset } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Loader2, UploadIcon } from "lucide-react";
 import { useState } from "react";
 import { AssetImage } from "./asset-image";
 import { Type } from "./ui/type";
-
-export function useAssetImageUploadHandler(
-  onSuccess: (res: UploadImageResult) => void,
-) {
-  const { fetch } = useFetcher();
-
-  return async (file: File) => {
-    const res = await fetch("/rpc/assets.uploadImage", {
-      method: "POST",
-      body: file,
-      headers: {
-        "content-type": file.type,
-        "content-length": file.size.toString(),
-      },
-    });
-
-    if (!res.ok) {
-      throw new Error("Upload failed");
-    }
-
-    const assetResult: UploadImageResult = await res.json();
-
-    onSuccess(assetResult);
-  };
-}
 
 export function ImageUpload({
   onUpload,
