@@ -32,6 +32,16 @@ func ListUsersOrganizationsPath() string {
 	return "/rpc/organizations.listUsers"
 }
 
+// SetAccountTypeOrganizationsPath returns the URL path to the organizations service setAccountType HTTP endpoint.
+func SetAccountTypeOrganizationsPath() string {
+	return "/rpc/organizations.setAccountType"
+}
+
+// ListAllOrganizationsPath returns the URL path to the organizations service listAll HTTP endpoint.
+func ListAllOrganizationsPath() string {
+	return "/rpc/organizations.listAll"
+}
+
 // RemoveUserOrganizationsPath returns the URL path to the organizations service removeUser HTTP endpoint.
 func RemoveUserOrganizationsPath() string {
 	return "/rpc/organizations.removeUser"
