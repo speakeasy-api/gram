@@ -52,7 +52,10 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*Fe
 	}
 
 	if !policy.Enabled {
-		// Policy is disabled — clear all existing results.
+		// Side-effect: when a policy is disabled, we purge all its results here
+		// rather than in a separate activity. This is the only place that runs
+		// per-cycle for a disabled policy, and leaving stale results would be
+		// misleading in the dashboard (showing findings for a policy that's off).
 		if err := a.repo.DeleteStaleRiskResults(ctx, repo.DeleteStaleRiskResultsParams{
 			RiskPolicyID:      args.RiskPolicyID,
 			ProjectID:         args.ProjectID,

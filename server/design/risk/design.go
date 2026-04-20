@@ -8,6 +8,7 @@ import (
 
 var _ = Service("risk", func() {
 	Description("Manage risk analysis policies and view scan results.")
+	Meta("openapi:extension:x-speakeasy-group", "risks")
 
 	Security(security.ByKey, security.ProjectSlug, func() { Scope("producer") })
 	Security(security.Session, security.ProjectSlug)
@@ -38,6 +39,7 @@ var _ = Service("risk", func() {
 
 		Meta("openapi:operationId", "createRiskPolicy")
 		Meta("openapi:extension:x-speakeasy-name-override", "createPolicy")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreatePolicy", "type": "mutation"}`)
 	})
 
 	Method("listRiskPolicies", func() {

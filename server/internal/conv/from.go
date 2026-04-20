@@ -230,3 +230,16 @@ func Ternary[T any](condition bool, trueVal, falseVal T) T {
 	}
 	return falseVal
 }
+
+// SafeInt32 converts int to int32, clamping at boundaries.
+func SafeInt32(v int) int32 {
+	const maxInt32 = 1<<31 - 1
+	const minInt32 = -(1 << 31)
+	if v > maxInt32 {
+		return maxInt32
+	}
+	if v < minInt32 {
+		return minInt32
+	}
+	return int32(v)
+}

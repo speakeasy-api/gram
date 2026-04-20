@@ -35,7 +35,7 @@ func TestConcurrentScanBatchParallel(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			_, err := risk_analysis.ScanBatchParallel(messages)
+			_, err := risk_analysis.NewScanner().ScanBatchParallel(messages)
 			errs[idx] = err
 		}(i)
 	}

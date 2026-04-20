@@ -10,12 +10,6 @@ import (
 	"github.com/zricethezav/gitleaks/v8/report"
 )
 
-// detectorInitMu serializes calls to NewDetectorDefaultConfig because
-// gitleaks uses viper internally which has global state that races on
-// concurrent initialization. Scanning (DetectString) is safe for
-// concurrent use on separate detector instances.
-var detectorInitMu sync.Mutex
-
 // Finding represents a single secret or sensitive data match found in a message.
 type Finding struct {
 	RuleID      string
@@ -26,10 +20,24 @@ type Finding struct {
 	Tags        []string
 }
 
-// newDetector creates a gitleaks detector, serialized by detectorInitMu.
-func newDetector() (*detect.Detector, error) {
-	detectorInitMu.Lock()
-	defer detectorInitMu.Unlock()
+// Scanner wraps the gitleaks detector for secret scanning. It serializes
+// detector creation because gitleaks uses viper internally which has global
+// state that races on concurrent initialization. Scanning (DetectString) is
+// safe for concurrent use on separate detector instances, but NOT on the same
+// instance — each goroutine must use its own detector.
+type Scanner struct {
+	initMu sync.Mutex
+}
+
+// NewScanner creates a new Scanner.
+func NewScanner() *Scanner {
+	return &Scanner{initMu: sync.Mutex{}}
+}
+
+// newDetector creates a gitleaks detector, serialized by initMu.
+func (s *Scanner) newDetector() (*detect.Detector, error) {
+	s.initMu.Lock()
+	defer s.initMu.Unlock()
 	detector, err := detect.NewDetectorDefaultConfig()
 	if err != nil {
 		return nil, fmt.Errorf("create gitleaks detector: %w", err)
@@ -39,7 +47,9 @@ func newDetector() (*detect.Detector, error) {
 
 // ScanBatchParallel scans multiple messages concurrently. Creates NumCPU
 // detectors (serialized to avoid viper race), then fans out scanning.
-func ScanBatchParallel(messages []string) ([][]Finding, error) {
+// Each goroutine gets its own detector because DetectString is not safe
+// for concurrent use on a single instance.
+func (s *Scanner) ScanBatchParallel(messages []string) ([][]Finding, error) {
 	n := len(messages)
 	if n == 0 {
 		return nil, nil
@@ -47,10 +57,9 @@ func ScanBatchParallel(messages []string) ([][]Finding, error) {
 
 	workers := min(runtime.NumCPU(), n)
 
-	// Create detectors one at a time (serialized by mutex).
 	detectors := make([]*detect.Detector, workers)
 	for i := range workers {
-		d, err := newDetector()
+		d, err := s.newDetector()
 		if err != nil {
 			return nil, fmt.Errorf("create gitleaks detector %d: %w", i, err)
 		}
@@ -80,9 +89,9 @@ func ScanBatchParallel(messages []string) ([][]Finding, error) {
 	return results, nil
 }
 
-// ScanWithGitleaks scans a single message. Safe for tests and low-throughput use.
-func ScanWithGitleaks(content string) ([]Finding, error) {
-	d, err := newDetector()
+// Scan scans a single message. Safe for tests and low-throughput use.
+func (s *Scanner) Scan(content string) ([]Finding, error) {
+	d, err := s.newDetector()
 	if err != nil {
 		return nil, fmt.Errorf("create gitleaks detector: %w", err)
 	}
@@ -90,11 +99,15 @@ func ScanWithGitleaks(content string) ([]Finding, error) {
 	return convertFindings(content, findings), nil
 }
 
+// ScanWithGitleaks is a package-level convenience for scanning a single message.
+func ScanWithGitleaks(content string) ([]Finding, error) {
+	return NewScanner().Scan(content)
+}
+
 func convertFindings(content string, raw []report.Finding) []Finding {
 	out := make([]Finding, 0, len(raw))
 	for _, f := range raw {
 		tags := parseTags(f.Tags)
-		// Calculate byte positions from line/column
 		startPos := lineColToBytePos(content, f.StartLine, f.StartColumn)
 		endPos := min(lineColToBytePos(content, f.EndLine, f.EndColumn)+1, len(content))
 		out = append(out, Finding{

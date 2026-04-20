@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.temporal.io/sdk/activity"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -33,16 +35,18 @@ const (
 // AnalyzeBatch scans a batch of messages against enabled detection sources
 // and writes the results back to the database.
 type AnalyzeBatch struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	repo   *repo.Queries
+	logger  *slog.Logger
+	db      *pgxpool.Pool
+	repo    *repo.Queries
+	scanner *Scanner
 }
 
 func NewAnalyzeBatch(logger *slog.Logger, db *pgxpool.Pool) *AnalyzeBatch {
 	return &AnalyzeBatch{
-		logger: logger,
-		db:     db,
-		repo:   repo.New(db),
+		logger:  logger,
+		db:      db,
+		repo:    repo.New(db),
+		scanner: NewScanner(),
 	}
 }
 
@@ -88,7 +92,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 	scanStart := time.Now()
 	activity.RecordHeartbeat(ctx, 0)
 
-	batchFindings, err := ScanBatchParallel(contents)
+	batchFindings, err := a.scanner.ScanBatchParallel(contents)
 	if err != nil {
 		return nil, fmt.Errorf("scan batch: %w", err)
 	}
@@ -127,8 +131,8 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 				RuleID:            pgtype.Text{String: f.RuleID, Valid: true},
 				Description:       pgtype.Text{String: f.Description, Valid: true},
 				Match:             pgtype.Text{String: f.Match, Valid: true},
-				StartPos:          pgtype.Int4{Int32: safeInt32(f.StartPos), Valid: true},
-				EndPos:            pgtype.Int4{Int32: safeInt32(f.EndPos), Valid: true},
+				StartPos:          pgtype.Int4{Int32: conv.SafeInt32(f.StartPos), Valid: true},
+				EndPos:            pgtype.Int4{Int32: conv.SafeInt32(f.EndPos), Valid: true},
 				Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
 				Tags:              f.Tags,
 			})
@@ -142,7 +146,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck // rollback is a no-op after commit
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	txRepo := a.repo.WithTx(tx)
 
@@ -199,17 +203,4 @@ func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) re
 		Confidence:        pgtype.Float8{Float64: 0, Valid: false},
 		Tags:              nil,
 	}
-}
-
-// safeInt32 converts int to int32, clamping at boundaries.
-func safeInt32(v int) int32 {
-	const maxInt32 = 1<<31 - 1
-	const minInt32 = -(1 << 31)
-	if v > maxInt32 {
-		return maxInt32
-	}
-	if v < minInt32 {
-		return minInt32
-	}
-	return int32(v)
 }
