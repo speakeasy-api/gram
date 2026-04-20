@@ -1001,11 +1001,13 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
         >
           <Heading variant="h3">Tools</Heading>
           <Stack direction="horizontal" gap={2}>
-            <routes.customTools.Link>
-              <Button variant="secondary" size="sm">
-                <Button.Text>Custom Tools</Button.Text>
-              </Button>
-            </routes.customTools.Link>
+            {canWrite && (
+              <routes.customTools.Link>
+                <Button variant="secondary" size="sm">
+                  <Button.Text>Custom Tools</Button.Text>
+                </Button>
+              </routes.customTools.Link>
+            )}
             {canWrite && (
               <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
                 <Button.LeftIcon>
