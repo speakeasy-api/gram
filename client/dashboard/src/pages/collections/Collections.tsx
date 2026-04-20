@@ -88,14 +88,12 @@ function CollectionGrid({
 
   if (collections.length === 0) {
     return (
-      <div className="space-y-8 pt-6">
+      <div className="space-y-4">
         {searchQuery ? (
-          <Type muted className="text-center">
-            No collections matching &ldquo;{searchQuery}&rdquo;
-          </Type>
+          <Type muted>No collections matching &ldquo;{searchQuery}&rdquo;</Type>
         ) : null}
-        <div className="flex justify-center">
-          <div className="w-full max-w-md">{createCard}</div>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          {createCard}
         </div>
       </div>
     );
