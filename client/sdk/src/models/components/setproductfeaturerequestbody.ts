@@ -13,6 +13,7 @@ export const FeatureName = {
   Logs: "logs",
   ToolIoLogs: "tool_io_logs",
   SessionCapture: "session_capture",
+  SkillsCapture: "skills_capture",
 } as const;
 /**
  * Name of the feature to update

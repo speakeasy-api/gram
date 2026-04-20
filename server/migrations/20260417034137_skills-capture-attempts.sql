@@ -1,0 +1,45 @@
+-- Create "skills_capture_attempts" table
+CREATE TABLE "skills_capture_attempts" (
+  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
+  "organization_id" text NOT NULL,
+  "project_id" uuid NOT NULL,
+  "captured_by_user_id" text NOT NULL,
+  "skill_name" text NULL,
+  "skill_slug" text NULL,
+  "scope" text NOT NULL,
+  "discovery_root" text NOT NULL,
+  "source_type" text NOT NULL,
+  "resolution_status" text NOT NULL,
+  "content_sha256" text NULL,
+  "asset_format" text NULL,
+  "content_length" bigint NULL,
+  "outcome" text NOT NULL,
+  "reason" text NOT NULL,
+  "skill_id" uuid NULL,
+  "skill_version_id" uuid NULL,
+  "asset_id" uuid NULL,
+  "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "deleted_at" timestamptz NULL,
+  "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+  PRIMARY KEY ("id"),
+  CONSTRAINT "skills_capture_attempts_asset_id_fkey" FOREIGN KEY ("asset_id") REFERENCES "assets" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "skills_capture_attempts_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "skills_capture_attempts_skill_id_fkey" FOREIGN KEY ("skill_id") REFERENCES "skills" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "skills_capture_attempts_skill_version_id_fkey" FOREIGN KEY ("skill_version_id") REFERENCES "skill_versions" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "skills_capture_attempts_asset_format_check" CHECK (asset_format = 'zip'::text),
+  CONSTRAINT "skills_capture_attempts_content_length_check" CHECK (content_length >= 0),
+  CONSTRAINT "skills_capture_attempts_content_sha256_check" CHECK (content_sha256 ~ '^[a-fA-F0-9]{64}$'::text),
+  CONSTRAINT "skills_capture_attempts_discovery_root_check" CHECK ((discovery_root <> ''::text) AND (char_length(discovery_root) <= 60)),
+  CONSTRAINT "skills_capture_attempts_outcome_check" CHECK (outcome = ANY (ARRAY['accepted'::text, 'duplicate'::text, 'rejected'::text])),
+  CONSTRAINT "skills_capture_attempts_reason_check" CHECK ((reason <> ''::text) AND (char_length(reason) <= 100)),
+  CONSTRAINT "skills_capture_attempts_resolution_status_check" CHECK ((resolution_status <> ''::text) AND (char_length(resolution_status) <= 60)),
+  CONSTRAINT "skills_capture_attempts_scope_check" CHECK (scope = ANY (ARRAY['project'::text, 'user'::text])),
+  CONSTRAINT "skills_capture_attempts_skill_name_check" CHECK ((skill_name <> ''::text) AND (char_length(skill_name) <= 100)),
+  CONSTRAINT "skills_capture_attempts_skill_slug_check" CHECK ((skill_slug <> ''::text) AND (char_length(skill_slug) <= 100)),
+  CONSTRAINT "skills_capture_attempts_source_type_check" CHECK ((source_type <> ''::text) AND (char_length(source_type) <= 60))
+);
+-- Create index "skills_capture_attempts_project_id_created_at_idx" to table: "skills_capture_attempts"
+CREATE INDEX "skills_capture_attempts_project_id_created_at_idx" ON "skills_capture_attempts" ("project_id", "created_at" DESC) WHERE (deleted IS FALSE);
+-- Create index "skills_capture_attempts_project_id_skill_slug_created_at_idx" to table: "skills_capture_attempts"
+CREATE INDEX "skills_capture_attempts_project_id_skill_slug_created_at_idx" ON "skills_capture_attempts" ("project_id", "skill_slug", "created_at" DESC) WHERE ((deleted IS FALSE) AND (skill_slug IS NOT NULL));

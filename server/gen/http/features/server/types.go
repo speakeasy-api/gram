@@ -33,6 +33,8 @@ type GetProductFeaturesResponseBody struct {
 	ToolIoLogsEnabled bool `form:"tool_io_logs_enabled" json:"tool_io_logs_enabled" xml:"tool_io_logs_enabled"`
 	// Whether Claude Code session capture is enabled
 	SessionCaptureEnabled bool `form:"session_capture_enabled" json:"session_capture_enabled" xml:"session_capture_enabled"`
+	// Whether skills capture and registry features are enabled
+	SkillsCaptureEnabled bool `form:"skills_capture_enabled" json:"skills_capture_enabled" xml:"skills_capture_enabled"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -415,6 +417,7 @@ func NewGetProductFeaturesResponseBody(res *featuresviews.GramProductFeaturesVie
 		LogsEnabled:           *res.LogsEnabled,
 		ToolIoLogsEnabled:     *res.ToolIoLogsEnabled,
 		SessionCaptureEnabled: *res.SessionCaptureEnabled,
+		SkillsCaptureEnabled:  *res.SkillsCaptureEnabled,
 	}
 	return body
 }
@@ -743,8 +746,8 @@ func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (e
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "skills_capture") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "skills_capture"}))
 		}
 	}
 	if body.FeatureName != nil {

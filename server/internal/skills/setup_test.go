@@ -20,6 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -62,10 +64,16 @@ func newTestSkillsService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
 	defaultMode := "project_and_user"
-	return newTestSkillsServiceWithCaptureMode(t, &defaultMode)
+	return newTestSkillsServiceWithCaptureModeAndFeature(t, &defaultMode, true)
 }
 
 func newTestSkillsServiceWithCaptureMode(t *testing.T, mode *string) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestSkillsServiceWithCaptureModeAndFeature(t, mode, true)
+}
+
+func newTestSkillsServiceWithCaptureModeAndFeature(t *testing.T, mode *string, featureEnabled bool) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -86,8 +94,17 @@ func newTestSkillsServiceWithCaptureMode(t *testing.T, mode *string) (context.Co
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
+	featureRedisDB := 12
+	if !featureEnabled {
+		featureRedisDB = 13
+	}
+	featureRedisClient, err := infra.NewRedisClient(t, featureRedisDB)
+	require.NoError(t, err)
+
 	storage := assetstest.NewTestBlobStore(t)
-	svc := skills.NewService(logger, tracerProvider, conn, sessionManager, storage, access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache))
+	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	featuresClient := productfeatures.NewClient(logger, tracerProvider, conn, featureRedisClient)
+	svc := skills.NewService(logger, tracerProvider, conn, sessionManager, storage, accessManager, featuresClient)
 
 	ti := &testInstance{
 		service:        svc,
@@ -98,10 +115,18 @@ func newTestSkillsServiceWithCaptureMode(t *testing.T, mode *string) (context.Co
 		skillsRepo:     skillsrepo.New(conn),
 	}
 
-	if mode != nil {
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		require.True(t, ok)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 
+	if featureEnabled {
+		_, err = productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			FeatureName:    string(productfeatures.FeatureSkillsCapture),
+		})
+		require.NoError(t, err)
+	}
+
+	if mode != nil {
 		_, err = ti.skillsRepo.UpsertOrganizationCapturePolicy(ctx, skillsrepo.UpsertOrganizationCapturePolicyParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			Mode:           *mode,

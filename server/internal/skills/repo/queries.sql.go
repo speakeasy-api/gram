@@ -49,6 +49,43 @@ func (q *Queries) ArchiveSkill(ctx context.Context, arg ArchiveSkillParams) (Ski
 	return i, err
 }
 
+const clearSkillActiveVersion = `-- name: ClearSkillActiveVersion :one
+UPDATE skills
+SET
+    active_version_id = NULL
+  , updated_at = clock_timestamp()
+WHERE skills.project_id = $1
+  AND skills.id = $2
+  AND skills.deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+`
+
+type ClearSkillActiveVersionParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) ClearSkillActiveVersion(ctx context.Context, arg ClearSkillActiveVersionParams) (Skill, error) {
+	row := q.db.QueryRow(ctx, clearSkillActiveVersion, arg.ProjectID, arg.ID)
+	var i Skill
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.SkillUuid,
+		&i.ActiveVersionID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createSkill = `-- name: CreateSkill :one
 INSERT INTO skills (
     organization_id
@@ -206,6 +243,116 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 	return i, err
 }
 
+const createSkillsCaptureAttempt = `-- name: CreateSkillsCaptureAttempt :one
+INSERT INTO skills_capture_attempts (
+    organization_id
+  , project_id
+  , captured_by_user_id
+  , skill_name
+  , skill_slug
+  , scope
+  , discovery_root
+  , source_type
+  , resolution_status
+  , content_sha256
+  , asset_format
+  , content_length
+  , outcome
+  , reason
+  , skill_id
+  , skill_version_id
+  , asset_id
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+  , $12
+  , $13
+  , $14
+  , $15
+  , $16
+  , $17
+)
+RETURNING id, organization_id, project_id, captured_by_user_id, skill_name, skill_slug, scope, discovery_root, source_type, resolution_status, content_sha256, asset_format, content_length, outcome, reason, skill_id, skill_version_id, asset_id, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateSkillsCaptureAttemptParams struct {
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	CapturedByUserID string
+	SkillName        pgtype.Text
+	SkillSlug        pgtype.Text
+	Scope            string
+	DiscoveryRoot    string
+	SourceType       string
+	ResolutionStatus string
+	ContentSha256    pgtype.Text
+	AssetFormat      pgtype.Text
+	ContentLength    pgtype.Int8
+	Outcome          string
+	Reason           string
+	SkillID          uuid.NullUUID
+	SkillVersionID   uuid.NullUUID
+	AssetID          uuid.NullUUID
+}
+
+func (q *Queries) CreateSkillsCaptureAttempt(ctx context.Context, arg CreateSkillsCaptureAttemptParams) (SkillsCaptureAttempt, error) {
+	row := q.db.QueryRow(ctx, createSkillsCaptureAttempt,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.CapturedByUserID,
+		arg.SkillName,
+		arg.SkillSlug,
+		arg.Scope,
+		arg.DiscoveryRoot,
+		arg.SourceType,
+		arg.ResolutionStatus,
+		arg.ContentSha256,
+		arg.AssetFormat,
+		arg.ContentLength,
+		arg.Outcome,
+		arg.Reason,
+		arg.SkillID,
+		arg.SkillVersionID,
+		arg.AssetID,
+	)
+	var i SkillsCaptureAttempt
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CapturedByUserID,
+		&i.SkillName,
+		&i.SkillSlug,
+		&i.Scope,
+		&i.DiscoveryRoot,
+		&i.SourceType,
+		&i.ResolutionStatus,
+		&i.ContentSha256,
+		&i.AssetFormat,
+		&i.ContentLength,
+		&i.Outcome,
+		&i.Reason,
+		&i.SkillID,
+		&i.SkillVersionID,
+		&i.AssetID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const deleteProjectCapturePolicyOverride = `-- name: DeleteProjectCapturePolicyOverride :one
 UPDATE skills_capture_policies
 SET
@@ -235,6 +382,51 @@ func (q *Queries) DeleteProjectCapturePolicyOverride(ctx context.Context, arg De
 		&i.DeletedAt,
 		&i.Deleted,
 	)
+	return i, err
+}
+
+const getCaptureSettings = `-- name: GetCaptureSettings :one
+WITH project_override AS (
+  SELECT scp.mode
+  FROM skills_capture_policies scp
+  WHERE scp.organization_id = $1
+    AND scp.project_id = $2
+    AND scp.deleted IS FALSE
+  LIMIT 1
+),
+org_default AS (
+  SELECT scp.mode
+  FROM skills_capture_policies scp
+  WHERE scp.organization_id = $1
+    AND scp.project_id IS NULL
+    AND scp.deleted IS FALSE
+  LIMIT 1
+)
+SELECT
+  coalesce((SELECT mode FROM org_default), '')::text AS org_default_mode,
+  coalesce((SELECT mode FROM project_override), '')::text AS project_override_mode,
+  coalesce(
+    (SELECT mode FROM project_override),
+    (SELECT mode FROM org_default),
+    'disabled'
+  )::text AS effective_mode
+`
+
+type GetCaptureSettingsParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+type GetCaptureSettingsRow struct {
+	OrgDefaultMode      string
+	ProjectOverrideMode string
+	EffectiveMode       string
+}
+
+func (q *Queries) GetCaptureSettings(ctx context.Context, arg GetCaptureSettingsParams) (GetCaptureSettingsRow, error) {
+	row := q.db.QueryRow(ctx, getCaptureSettings, arg.OrganizationID, arg.ProjectID)
+	var i GetCaptureSettingsRow
+	err := row.Scan(&i.OrgDefaultMode, &i.ProjectOverrideMode, &i.EffectiveMode)
 	return i, err
 }
 
@@ -451,6 +643,72 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 	return i, err
 }
 
+const listPendingSkillVersions = `-- name: ListPendingSkillVersions :many
+SELECT
+  s.id, s.organization_id, s.project_id, s.name, s.slug, s.description, s.skill_uuid, s.active_version_id, s.created_by_user_id, s.created_at, s.updated_at, s.deleted_at, s.deleted,
+  sv.id, sv.skill_id, sv.asset_id, sv.content_sha256, sv.asset_format, sv.size_bytes, sv.skill_bytes, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.first_seen_at, sv.created_at, sv.updated_at
+FROM skill_versions sv
+INNER JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $1
+  AND s.deleted IS FALSE
+  AND sv.state = 'pending_review'
+ORDER BY s.created_at DESC, sv.created_at DESC
+`
+
+type ListPendingSkillVersionsRow struct {
+	Skill        Skill
+	SkillVersion SkillVersion
+}
+
+func (q *Queries) ListPendingSkillVersions(ctx context.Context, projectID uuid.UUID) ([]ListPendingSkillVersionsRow, error) {
+	rows, err := q.db.Query(ctx, listPendingSkillVersions, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingSkillVersionsRow
+	for rows.Next() {
+		var i ListPendingSkillVersionsRow
+		if err := rows.Scan(
+			&i.Skill.ID,
+			&i.Skill.OrganizationID,
+			&i.Skill.ProjectID,
+			&i.Skill.Name,
+			&i.Skill.Slug,
+			&i.Skill.Description,
+			&i.Skill.SkillUuid,
+			&i.Skill.ActiveVersionID,
+			&i.Skill.CreatedByUserID,
+			&i.Skill.CreatedAt,
+			&i.Skill.UpdatedAt,
+			&i.Skill.DeletedAt,
+			&i.Skill.Deleted,
+			&i.SkillVersion.ID,
+			&i.SkillVersion.SkillID,
+			&i.SkillVersion.AssetID,
+			&i.SkillVersion.ContentSha256,
+			&i.SkillVersion.AssetFormat,
+			&i.SkillVersion.SizeBytes,
+			&i.SkillVersion.SkillBytes,
+			&i.SkillVersion.State,
+			&i.SkillVersion.CapturedByUserID,
+			&i.SkillVersion.AuthorName,
+			&i.SkillVersion.FirstSeenTraceID,
+			&i.SkillVersion.FirstSeenSessionID,
+			&i.SkillVersion.FirstSeenAt,
+			&i.SkillVersion.CreatedAt,
+			&i.SkillVersion.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSkillVersions = `-- name: ListSkillVersions :many
 SELECT sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
 FROM skill_versions sv
@@ -543,6 +801,196 @@ func (q *Queries) ListSkills(ctx context.Context, projectID uuid.UUID) ([]Skill,
 	return items, nil
 }
 
+const listSkillsCaptureAttempts = `-- name: ListSkillsCaptureAttempts :many
+SELECT id, organization_id, project_id, captured_by_user_id, skill_name, skill_slug, scope, discovery_root, source_type, resolution_status, content_sha256, asset_format, content_length, outcome, reason, skill_id, skill_version_id, asset_id, created_at, updated_at, deleted_at, deleted
+FROM skills_capture_attempts
+WHERE project_id = $1
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListSkillsCaptureAttempts(ctx context.Context, projectID uuid.UUID) ([]SkillsCaptureAttempt, error) {
+	rows, err := q.db.Query(ctx, listSkillsCaptureAttempts, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillsCaptureAttempt
+	for rows.Next() {
+		var i SkillsCaptureAttempt
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.CapturedByUserID,
+			&i.SkillName,
+			&i.SkillSlug,
+			&i.Scope,
+			&i.DiscoveryRoot,
+			&i.SourceType,
+			&i.ResolutionStatus,
+			&i.ContentSha256,
+			&i.AssetFormat,
+			&i.ContentLength,
+			&i.Outcome,
+			&i.Reason,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.AssetID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSkillsCaptureAttemptsBySlug = `-- name: ListSkillsCaptureAttemptsBySlug :many
+SELECT id, organization_id, project_id, captured_by_user_id, skill_name, skill_slug, scope, discovery_root, source_type, resolution_status, content_sha256, asset_format, content_length, outcome, reason, skill_id, skill_version_id, asset_id, created_at, updated_at, deleted_at, deleted
+FROM skills_capture_attempts
+WHERE project_id = $1
+  AND skill_slug = $2
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+`
+
+type ListSkillsCaptureAttemptsBySlugParams struct {
+	ProjectID uuid.UUID
+	SkillSlug pgtype.Text
+}
+
+func (q *Queries) ListSkillsCaptureAttemptsBySlug(ctx context.Context, arg ListSkillsCaptureAttemptsBySlugParams) ([]SkillsCaptureAttempt, error) {
+	rows, err := q.db.Query(ctx, listSkillsCaptureAttemptsBySlug, arg.ProjectID, arg.SkillSlug)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillsCaptureAttempt
+	for rows.Next() {
+		var i SkillsCaptureAttempt
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.CapturedByUserID,
+			&i.SkillName,
+			&i.SkillSlug,
+			&i.Scope,
+			&i.DiscoveryRoot,
+			&i.SourceType,
+			&i.ResolutionStatus,
+			&i.ContentSha256,
+			&i.AssetFormat,
+			&i.ContentLength,
+			&i.Outcome,
+			&i.Reason,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.AssetID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSkillsWithActiveVersion = `-- name: ListSkillsWithActiveVersion :many
+WITH version_counts AS (
+  SELECT
+    skill_versions.skill_id,
+    COUNT(*)::bigint AS version_count
+  FROM skill_versions
+  GROUP BY skill_versions.skill_id
+)
+SELECT
+  skills.id, skills.organization_id, skills.project_id, skills.name, skills.slug, skills.description, skills.skill_uuid, skills.active_version_id, skills.created_by_user_id, skills.created_at, skills.updated_at, skills.deleted_at, skills.deleted,
+  active_version.id AS active_version_id,
+  active_version.content_sha256 AS active_version_content_sha256,
+  active_version.asset_format AS active_version_asset_format,
+  active_version.size_bytes AS active_version_size_bytes,
+  active_version.author_name AS active_version_author_name,
+  active_version.created_at AS active_version_created_at,
+  active_version.first_seen_at AS active_version_first_seen_at,
+  coalesce(version_counts.version_count, 0)::bigint AS version_count
+FROM skills
+LEFT JOIN skill_versions AS active_version
+  ON active_version.id = skills.active_version_id
+LEFT JOIN version_counts
+  ON version_counts.skill_id = skills.id
+WHERE skills.project_id = $1
+  AND skills.deleted IS FALSE
+ORDER BY skills.created_at DESC
+`
+
+type ListSkillsWithActiveVersionRow struct {
+	Skill                      Skill
+	ActiveVersionID            uuid.NullUUID
+	ActiveVersionContentSha256 pgtype.Text
+	ActiveVersionAssetFormat   pgtype.Text
+	ActiveVersionSizeBytes     pgtype.Int8
+	ActiveVersionAuthorName    pgtype.Text
+	ActiveVersionCreatedAt     pgtype.Timestamptz
+	ActiveVersionFirstSeenAt   pgtype.Timestamptz
+	VersionCount               int64
+}
+
+func (q *Queries) ListSkillsWithActiveVersion(ctx context.Context, projectID uuid.UUID) ([]ListSkillsWithActiveVersionRow, error) {
+	rows, err := q.db.Query(ctx, listSkillsWithActiveVersion, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSkillsWithActiveVersionRow
+	for rows.Next() {
+		var i ListSkillsWithActiveVersionRow
+		if err := rows.Scan(
+			&i.Skill.ID,
+			&i.Skill.OrganizationID,
+			&i.Skill.ProjectID,
+			&i.Skill.Name,
+			&i.Skill.Slug,
+			&i.Skill.Description,
+			&i.Skill.SkillUuid,
+			&i.Skill.ActiveVersionID,
+			&i.Skill.CreatedByUserID,
+			&i.Skill.CreatedAt,
+			&i.Skill.UpdatedAt,
+			&i.Skill.DeletedAt,
+			&i.Skill.Deleted,
+			&i.ActiveVersionID,
+			&i.ActiveVersionContentSha256,
+			&i.ActiveVersionAssetFormat,
+			&i.ActiveVersionSizeBytes,
+			&i.ActiveVersionAuthorName,
+			&i.ActiveVersionCreatedAt,
+			&i.ActiveVersionFirstSeenAt,
+			&i.VersionCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setSkillActiveVersion = `-- name: SetSkillActiveVersion :one
 UPDATE skills
 SET
@@ -582,6 +1030,51 @@ func (q *Queries) SetSkillActiveVersion(ctx context.Context, arg SetSkillActiveV
 		&i.ID,
 		&i.ActiveVersionID,
 		&i.ProjectID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const setSkillActiveVersionIfNull = `-- name: SetSkillActiveVersionIfNull :one
+UPDATE skills
+SET
+    active_version_id = $1
+  , updated_at = clock_timestamp()
+WHERE skills.project_id = $2
+  AND skills.id = $3
+  AND skills.deleted IS FALSE
+  AND skills.active_version_id IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM skill_versions sv
+    WHERE sv.id = $1
+      AND sv.skill_id = skills.id
+  )
+RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+`
+
+type SetSkillActiveVersionIfNullParams struct {
+	ActiveVersionID uuid.NullUUID
+	ProjectID       uuid.UUID
+	ID              uuid.UUID
+}
+
+func (q *Queries) SetSkillActiveVersionIfNull(ctx context.Context, arg SetSkillActiveVersionIfNullParams) (Skill, error) {
+	row := q.db.QueryRow(ctx, setSkillActiveVersionIfNull, arg.ActiveVersionID, arg.ProjectID, arg.ID)
+	var i Skill
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.SkillUuid,
+		&i.ActiveVersionID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
 		&i.Deleted,
 	)
 	return i, err
