@@ -6,32 +6,35 @@ import (
 )
 
 // entry tracks per-key throttle state.
-type entry struct {
-	mu      sync.Mutex
+type entry[V any] struct {
 	pending bool
+	latest  V
 	timer   *time.Timer
 }
 
 // Throttle provides per-key leading-edge throttling with a trailing fire.
 // The first call for a key executes immediately (Do returns true). Subsequent
 // calls within the cooldown window are suppressed. When the window expires,
-// if any calls were suppressed, the onTrailing callback fires once.
+// if any calls were suppressed, the onTrailing callback fires once with the
+// most recent value.
 type Throttle[K comparable, V any] struct {
 	Cooldown   time.Duration
 	keyFn      func(V) K
 	onTrailing func(V) error
-	entries    sync.Map // K → *entry
+
+	mu      sync.Mutex
+	entries map[K]*entry[V]
 }
 
 // New creates a throttle. keyFn extracts the throttle key from the value.
-// onTrailing is called (in a goroutine) when the cooldown expires and calls
-// were suppressed during the window.
+// onTrailing is called when the cooldown expires and calls were suppressed
+// during the window.
 func New[K comparable, V any](cooldown time.Duration, keyFn func(V) K, onTrailing func(V) error) *Throttle[K, V] {
 	return &Throttle[K, V]{
 		Cooldown:   cooldown,
 		keyFn:      keyFn,
 		onTrailing: onTrailing,
-		entries:    sync.Map{},
+		entries:    make(map[K]*entry[V]),
 	}
 }
 
@@ -41,42 +44,45 @@ func New[K comparable, V any](cooldown time.Duration, keyFn func(V) K, onTrailin
 func (t *Throttle[K, V]) Do(v V) bool {
 	key := t.keyFn(v)
 
-	val, _ := t.entries.LoadOrStore(key, &entry{mu: sync.Mutex{}, pending: false, timer: nil})
-	e, _ := val.(*entry)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	e, ok := t.entries[key]
+	if !ok {
+		e = &entry[V]{}
+		t.entries[key] = e
+	}
 
 	if e.timer == nil {
 		e.pending = false
 		e.timer = time.AfterFunc(t.Cooldown, func() {
-			t.onExpired(key, v)
+			t.onExpired(key)
 		})
 		return true
 	}
 
 	e.pending = true
+	e.latest = v
 	return false
 }
 
-func (t *Throttle[K, V]) onExpired(key K, v V) {
-	val, ok := t.entries.Load(key)
+func (t *Throttle[K, V]) onExpired(key K) {
+	t.mu.Lock()
+	e, ok := t.entries[key]
 	if !ok {
+		t.mu.Unlock()
 		return
 	}
-	e, _ := val.(*entry)
 
-	e.mu.Lock()
-	pending := e.pending
-	e.pending = false
-	if pending {
+	if e.pending {
+		latest := e.latest
+		e.pending = false
 		e.timer.Reset(t.Cooldown)
+		t.mu.Unlock()
+		_ = t.onTrailing(latest)
 	} else {
 		e.timer = nil
-	}
-	e.mu.Unlock()
-
-	if pending {
-		_ = t.onTrailing(v)
+		delete(t.entries, key)
+		t.mu.Unlock()
 	}
 }
