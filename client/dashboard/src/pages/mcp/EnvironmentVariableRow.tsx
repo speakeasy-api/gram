@@ -271,7 +271,10 @@ export function EnvironmentVariableRow({
                 value={editingValue}
                 onChange={(value) => onValueChange(envVar.id, value)}
                 placeholder="Enter value..."
-                className="placeholder:text-muted-foreground h-full w-full border-0 bg-transparent px-3 pr-9 font-mono text-sm shadow-none focus:outline-none focus-visible:ring-0"
+                className={cn(
+                  "placeholder:text-muted-foreground h-full w-full border-0 bg-transparent px-3 pr-9 font-mono text-sm shadow-none focus:outline-none focus-visible:ring-0",
+                  readOnly && "cursor-not-allowed opacity-50",
+                )}
                 disabled={readOnly}
               />
             )}
