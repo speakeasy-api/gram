@@ -7,6 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
 export type SetPluginAssignmentsSecurity = {
+  projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
@@ -15,11 +16,16 @@ export type SetPluginAssignmentsRequest = {
    * Session header
    */
   gramSession?: string | undefined;
+  /**
+   * project header
+   */
+  gramProject?: string | undefined;
   setPluginAssignmentsForm: components.SetPluginAssignmentsForm;
 };
 
 /** @internal */
 export type SetPluginAssignmentsSecurity$Outbound = {
+  "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -29,10 +35,12 @@ export const SetPluginAssignmentsSecurity$outboundSchema: z.ZodMiniType<
   SetPluginAssignmentsSecurity
 > = z.pipe(
   z.object({
+    projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -51,6 +59,7 @@ export function setPluginAssignmentsSecurityToJSON(
 /** @internal */
 export type SetPluginAssignmentsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
+  "Gram-Project"?: string | undefined;
   SetPluginAssignmentsForm: components.SetPluginAssignmentsForm$Outbound;
 };
 
@@ -61,12 +70,14 @@ export const SetPluginAssignmentsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
+    gramProject: z.optional(z.string()),
     setPluginAssignmentsForm:
       components.SetPluginAssignmentsForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
       setPluginAssignmentsForm: "SetPluginAssignmentsForm",
     });
   }),

@@ -56,7 +56,7 @@ export type PublishStatusQueryError =
  * getPublishStatus plugins
  *
  * @remarks
- * Check whether GitHub publishing is configured and connected for this organization.
+ * Check whether GitHub publishing is configured and connected for this project.
  */
 export function usePublishStatus(
   request?: operations.GetPublishStatusRequest | undefined,
@@ -79,7 +79,7 @@ export function usePublishStatus(
  * getPublishStatus plugins
  *
  * @remarks
- * Check whether GitHub publishing is configured and connected for this organization.
+ * Check whether GitHub publishing is configured and connected for this project.
  */
 export function usePublishStatusSuspense(
   request?: operations.GetPublishStatusRequest | undefined,
@@ -103,7 +103,12 @@ export function usePublishStatusSuspense(
 
 export function setPublishStatusData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
+  queryKeyBase: [
+    parameters: {
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    },
+  ],
   data: PublishStatusQueryData,
 ): PublishStatusQueryData | undefined {
   const key = queryKeyPublishStatus(...queryKeyBase);
@@ -114,7 +119,10 @@ export function setPublishStatusData(
 export function invalidatePublishStatus(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
+    [parameters: {
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

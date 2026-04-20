@@ -43,7 +43,10 @@ export function buildPluginsQuery(
   queryFn: (context: QueryFunctionContext) => Promise<PluginsQueryData>;
 } {
   return {
-    queryKey: queryKeyPlugins({ gramSession: request?.gramSession }),
+    queryKey: queryKeyPlugins({
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
     queryFn: async function pluginsQueryFn(ctx): Promise<PluginsQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -67,7 +70,10 @@ export function buildPluginsQuery(
 }
 
 export function queryKeyPlugins(
-  parameters: { gramSession?: string | undefined },
+  parameters: {
+    gramSession?: string | undefined;
+    gramProject?: string | undefined;
+  },
 ): QueryKey {
   return ["@gram/client", "plugins", "listPlugins", parameters];
 }

@@ -7,6 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
 export type UpdatePluginSecurity = {
+  projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
@@ -15,11 +16,16 @@ export type UpdatePluginRequest = {
    * Session header
    */
   gramSession?: string | undefined;
+  /**
+   * project header
+   */
+  gramProject?: string | undefined;
   updatePluginForm: components.UpdatePluginForm;
 };
 
 /** @internal */
 export type UpdatePluginSecurity$Outbound = {
+  "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -29,10 +35,12 @@ export const UpdatePluginSecurity$outboundSchema: z.ZodMiniType<
   UpdatePluginSecurity
 > = z.pipe(
   z.object({
+    projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -49,6 +57,7 @@ export function updatePluginSecurityToJSON(
 /** @internal */
 export type UpdatePluginRequest$Outbound = {
   "Gram-Session"?: string | undefined;
+  "Gram-Project"?: string | undefined;
   UpdatePluginForm: components.UpdatePluginForm$Outbound;
 };
 
@@ -59,11 +68,13 @@ export const UpdatePluginRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
+    gramProject: z.optional(z.string()),
     updatePluginForm: components.UpdatePluginForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
       updatePluginForm: "UpdatePluginForm",
     });
   }),

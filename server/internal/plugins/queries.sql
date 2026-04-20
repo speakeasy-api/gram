@@ -1,8 +1,9 @@
--- Queries for managing plugins (org-scoped distributable MCP server bundles).
+-- Queries for managing plugins (project-scoped distributable MCP server bundles).
+-- plugins is project-scoped; every query is scoped to project_id (and organization_id where needed).
 
 -- name: CreatePlugin :one
-INSERT INTO plugins (organization_id, name, slug, description)
-VALUES (@organization_id, @name, @slug, sqlc.narg('description'))
+INSERT INTO plugins (organization_id, project_id, name, slug, description)
+VALUES (@organization_id, @project_id, @name, @slug, sqlc.narg('description'))
 RETURNING *;
 
 -- name: GetPlugin :one
@@ -10,6 +11,7 @@ SELECT *
 FROM plugins
 WHERE id = @id
   AND organization_id = @organization_id
+  AND project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: ListPlugins :many
@@ -19,6 +21,7 @@ SELECT
   (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id) AS assignment_count
 FROM plugins p
 WHERE p.organization_id = @organization_id
+  AND p.project_id = @project_id
   AND p.deleted IS FALSE
 ORDER BY p.created_at DESC;
 
@@ -30,10 +33,12 @@ SET name = @name,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
+  AND project_id = @project_id
   AND deleted IS FALSE
 RETURNING *;
 
 -- name: SoftDeletePluginServers :exec
+-- Soft-deletes all servers belonging to a plugin.
 UPDATE plugin_servers
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
@@ -46,6 +51,7 @@ SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
+  AND project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: AddPluginServer :one
@@ -101,7 +107,7 @@ WHERE plugin_id = @plugin_id;
 DELETE FROM plugin_assignments
 WHERE plugin_id = @plugin_id;
 
--- name: ListPluginsWithServersForOrg :many
+-- name: ListPluginsWithServersForProject :many
 -- Used during plugin generation: returns all active plugin servers joined with
 -- their parent plugin and toolset mcp_slug for URL construction.
 SELECT
@@ -118,7 +124,7 @@ SELECT
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
-WHERE p.organization_id = @organization_id
+WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC;
 
@@ -128,12 +134,12 @@ SELECT name FROM organization_metadata WHERE id = @id;
 -- name: GetGitHubConnection :one
 SELECT *
 FROM plugin_github_connections
-WHERE organization_id = @organization_id;
+WHERE project_id = @project_id;
 
 -- name: UpsertGitHubConnection :one
-INSERT INTO plugin_github_connections (organization_id, installation_id, repo_owner, repo_name)
-VALUES (@organization_id, @installation_id, @repo_owner, @repo_name)
-ON CONFLICT (organization_id) DO UPDATE
+INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name)
+VALUES (@project_id, @installation_id, @repo_owner, @repo_name)
+ON CONFLICT (project_id) DO UPDATE
   SET installation_id = EXCLUDED.installation_id,
       repo_owner = EXCLUDED.repo_owner,
       repo_name = EXCLUDED.repo_name,

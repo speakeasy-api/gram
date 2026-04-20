@@ -119,7 +119,7 @@ export class Plugins extends ClientSDK {
    * getPublishStatus plugins
    *
    * @remarks
-   * Check whether GitHub publishing is configured and connected for this organization.
+   * Check whether GitHub publishing is configured and connected for this project.
    */
   async getPublishStatus(
     request?: operations.GetPublishStatusRequest | undefined,
@@ -138,7 +138,7 @@ export class Plugins extends ClientSDK {
    * listPlugins plugins
    *
    * @remarks
-   * List all plugins for the current organization.
+   * List all plugins for the current project.
    */
   async listPlugins(
     request?: operations.ListPluginsRequest | undefined,

@@ -46,6 +46,7 @@ export function buildPluginQuery(
     queryKey: queryKeyPlugin({
       id: request.id,
       gramSession: request.gramSession,
+      gramProject: request.gramProject,
     }),
     queryFn: async function pluginQueryFn(ctx): Promise<PluginQueryData> {
       const sig = combineSignals(
@@ -70,7 +71,11 @@ export function buildPluginQuery(
 }
 
 export function queryKeyPlugin(
-  parameters: { id: string; gramSession?: string | undefined },
+  parameters: {
+    id: string;
+    gramSession?: string | undefined;
+    gramProject?: string | undefined;
+  },
 ): QueryKey {
   return ["@gram/client", "plugins", "getPlugin", parameters];
 }

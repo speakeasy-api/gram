@@ -11,14 +11,15 @@ import (
 
 var _ = Service("plugins", func() {
 	Description("Manage distributable plugin bundles of MCP servers and hooks.")
-	Security(security.Session)
+	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 
 	Method("listPlugins", func() {
-		Description("List all plugins for the current organization.")
+		Description("List all plugins for the current project.")
 
 		Payload(func() {
 			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(ListPluginsResult)
@@ -26,6 +27,7 @@ var _ = Service("plugins", func() {
 		HTTP(func() {
 			GET("/rpc/plugins.listPlugins")
 			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -43,6 +45,7 @@ var _ = Service("plugins", func() {
 			})
 			Required("id")
 			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(PluginModel)
@@ -51,6 +54,7 @@ var _ = Service("plugins", func() {
 			GET("/rpc/plugins.getPlugin")
 			Param("id")
 			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -65,6 +69,7 @@ var _ = Service("plugins", func() {
 		Payload(func() {
 			Extend(CreatePluginForm)
 			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(PluginModel)
@@ -72,6 +77,7 @@ var _ = Service("plugins", func() {
 		HTTP(func() {
 			POST("/rpc/plugins.createPlugin")
 			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusCreated)
 		})
 
@@ -86,6 +92,7 @@ var _ = Service("plugins", func() {
 		Payload(func() {
 			Extend(UpdatePluginForm)
 			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(PluginModel)
@@ -93,6 +100,7 @@ var _ = Service("plugins", func() {
 		HTTP(func() {
 			PUT("/rpc/plugins.updatePlugin")
 			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -110,12 +118,14 @@ var _ = Service("plugins", func() {
 			})
 			Required("id")
 			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		HTTP(func() {
 			DELETE("/rpc/plugins.deletePlugin")
 			Param("id")
 			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusNoContent)
 		})
 
@@ -130,6 +140,7 @@ var _ = Service("plugins", func() {
 		Payload(func() {
 			Extend(AddPluginServerForm)
 			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(PluginServerModel)
@@ -137,6 +148,7 @@ var _ = Service("plugins", func() {
 		HTTP(func() {
 			POST("/rpc/plugins.addPluginServer")
 			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusCreated)
 		})
 
@@ -151,6 +163,7 @@ var _ = Service("plugins", func() {
 		Payload(func() {
 			Extend(UpdatePluginServerForm)
 			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(PluginServerModel)
@@ -158,6 +171,7 @@ var _ = Service("plugins", func() {
 		HTTP(func() {
 			PUT("/rpc/plugins.updatePluginServer")
 			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -179,6 +193,7 @@ var _ = Service("plugins", func() {
 			})
 			Required("id", "plugin_id")
 			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		HTTP(func() {
@@ -186,6 +201,7 @@ var _ = Service("plugins", func() {
 			Param("id")
 			Param("plugin_id")
 			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusNoContent)
 		})
 
@@ -200,6 +216,7 @@ var _ = Service("plugins", func() {
 		Payload(func() {
 			Extend(SetPluginAssignmentsForm)
 			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(func() {
@@ -210,6 +227,7 @@ var _ = Service("plugins", func() {
 		HTTP(func() {
 			PUT("/rpc/plugins.setPluginAssignments")
 			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -232,6 +250,7 @@ var _ = Service("plugins", func() {
 			})
 			Required("plugin_id", "platform")
 			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(func() {
@@ -245,6 +264,7 @@ var _ = Service("plugins", func() {
 			Param("plugin_id")
 			Param("platform")
 			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK, func() {
 				Header("content_type:Content-Type")
 				Header("content_disposition:Content-Disposition")
@@ -257,10 +277,11 @@ var _ = Service("plugins", func() {
 	})
 
 	Method("getPublishStatus", func() {
-		Description("Check whether GitHub publishing is configured and connected for this organization.")
+		Description("Check whether GitHub publishing is configured and connected for this project.")
 
 		Payload(func() {
 			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(PublishStatusResult)
@@ -268,6 +289,7 @@ var _ = Service("plugins", func() {
 		HTTP(func() {
 			GET("/rpc/plugins.getPublishStatus")
 			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -281,6 +303,7 @@ var _ = Service("plugins", func() {
 
 		Payload(func() {
 			security.SessionPayload()
+			security.ProjectPayload()
 		})
 
 		Result(PublishPluginsResult)
@@ -288,6 +311,7 @@ var _ = Service("plugins", func() {
 		HTTP(func() {
 			POST("/rpc/plugins.publishPlugins")
 			security.SessionHeader()
+			security.ProjectHeader()
 			Response(StatusOK)
 		})
 

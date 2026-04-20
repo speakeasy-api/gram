@@ -46,6 +46,10 @@ func EncodeListPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
 		return nil
 	}
 }
@@ -275,6 +279,10 @@ func EncodeGetPluginRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
@@ -508,6 +516,10 @@ func EncodeCreatePluginRequest(encoder func(*http.Request) goahttp.Encoder) func
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
 		}
 		body := NewCreatePluginRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -743,6 +755,10 @@ func EncodeUpdatePluginRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
 		body := NewUpdatePluginRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("plugins", "updatePlugin", err)
@@ -977,6 +993,10 @@ func EncodeDeletePluginRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
 		req.URL.RawQuery = values.Encode()
@@ -1196,6 +1216,10 @@ func EncodeAddPluginServerRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
 		}
 		body := NewAddPluginServerRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -1432,6 +1456,10 @@ func EncodeUpdatePluginServerRequest(encoder func(*http.Request) goahttp.Encoder
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
 		body := NewUpdatePluginServerRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("plugins", "updatePluginServer", err)
@@ -1667,6 +1695,10 @@ func EncodeRemovePluginServerRequest(encoder func(*http.Request) goahttp.Encoder
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
 		values.Add("plugin_id", p.PluginID)
@@ -1888,6 +1920,10 @@ func EncodeSetPluginAssignmentsRequest(encoder func(*http.Request) goahttp.Encod
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
 		}
 		body := NewSetPluginAssignmentsRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -2123,6 +2159,10 @@ func EncodeDownloadPluginPackageRequest(encoder func(*http.Request) goahttp.Enco
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
 		values.Add("plugin_id", p.PluginID)
@@ -2362,6 +2402,10 @@ func EncodeGetPublishStatusRequest(encoder func(*http.Request) goahttp.Encoder) 
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
 		return nil
 	}
 }
@@ -2591,6 +2635,10 @@ func EncodePublishPluginsRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
 		}
 		return nil
 	}

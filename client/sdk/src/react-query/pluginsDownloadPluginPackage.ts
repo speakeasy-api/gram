@@ -117,6 +117,7 @@ export function setPluginsDownloadPluginPackageData(
       pluginId: string;
       platform: operations.Platform;
       gramSession?: string | undefined;
+      gramProject?: string | undefined;
     },
   ],
   data: PluginsDownloadPluginPackageQueryData,
@@ -133,6 +134,7 @@ export function invalidatePluginsDownloadPluginPackage(
       pluginId: string;
       platform: operations.Platform;
       gramSession?: string | undefined;
+      gramProject?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
