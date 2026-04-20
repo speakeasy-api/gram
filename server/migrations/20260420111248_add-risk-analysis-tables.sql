@@ -12,8 +12,8 @@ CREATE TABLE "risk_policies" (
   "deleted_at" timestamptz NULL,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
-  CONSTRAINT "risk_policies_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION,
-  CONSTRAINT "risk_policies_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION
+  CONSTRAINT "risk_policies_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "risk_policies_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Create index "risk_policies_project_id_idx" to table: "risk_policies"
 CREATE INDEX "risk_policies_project_id_idx" ON "risk_policies" ("project_id") WHERE (deleted IS FALSE);
@@ -36,8 +36,10 @@ CREATE TABLE "risk_results" (
   "tags" text[] NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "risk_results_chat_message_id_fkey" FOREIGN KEY ("chat_message_id") REFERENCES "chat_messages" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION,
-  CONSTRAINT "risk_results_risk_policy_id_fkey" FOREIGN KEY ("risk_policy_id") REFERENCES "risk_policies" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION
+  CONSTRAINT "risk_results_chat_message_id_fkey" FOREIGN KEY ("chat_message_id") REFERENCES "chat_messages" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "risk_results_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "risk_results_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "risk_results_risk_policy_id_fkey" FOREIGN KEY ("risk_policy_id") REFERENCES "risk_policies" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Create index "risk_results_chat_message_id_idx" to table: "risk_results"
 CREATE INDEX "risk_results_chat_message_id_idx" ON "risk_results" ("chat_message_id");
