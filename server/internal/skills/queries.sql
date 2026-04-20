@@ -49,6 +49,33 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
+-- name: ListSkillsWithActiveVersion :many
+WITH version_counts AS (
+  SELECT
+    skill_versions.skill_id,
+    COUNT(*)::bigint AS version_count
+  FROM skill_versions
+  GROUP BY skill_versions.skill_id
+)
+SELECT
+  sqlc.embed(skills),
+  active_version.id AS active_version_id,
+  active_version.content_sha256 AS active_version_content_sha256,
+  active_version.asset_format AS active_version_asset_format,
+  active_version.size_bytes AS active_version_size_bytes,
+  active_version.author_name AS active_version_author_name,
+  active_version.created_at AS active_version_created_at,
+  active_version.first_seen_at AS active_version_first_seen_at,
+  coalesce(version_counts.version_count, 0)::bigint AS version_count
+FROM skills
+LEFT JOIN skill_versions AS active_version
+  ON active_version.id = skills.active_version_id
+LEFT JOIN version_counts
+  ON version_counts.skill_id = skills.id
+WHERE skills.project_id = @project_id
+  AND skills.deleted IS FALSE
+ORDER BY skills.created_at DESC;
+
 -- name: UpdateSkill :one
 UPDATE skills
 SET
@@ -134,6 +161,17 @@ WHERE s.project_id = @project_id
   AND sv.skill_id = @skill_id
 ORDER BY sv.created_at DESC;
 
+-- name: ListPendingSkillVersions :many
+SELECT
+  sqlc.embed(s),
+  sqlc.embed(sv)
+FROM skill_versions sv
+INNER JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.deleted IS FALSE
+  AND sv.state = 'pending_review'
+ORDER BY s.created_at DESC, sv.created_at DESC;
+
 -- name: UpdateSkillVersionState :one
 UPDATE skill_versions sv
 SET
@@ -160,6 +198,89 @@ WHERE skills.project_id = @project_id
       AND sv.skill_id = skills.id
   )
 RETURNING *;
+
+-- name: ClearSkillActiveVersion :one
+UPDATE skills
+SET
+    active_version_id = NULL
+  , updated_at = clock_timestamp()
+WHERE skills.project_id = @project_id
+  AND skills.id = @id
+  AND skills.deleted IS FALSE
+RETURNING *;
+
+-- name: SetSkillActiveVersionIfNull :one
+UPDATE skills
+SET
+    active_version_id = @active_version_id
+  , updated_at = clock_timestamp()
+WHERE skills.project_id = @project_id
+  AND skills.id = @id
+  AND skills.deleted IS FALSE
+  AND skills.active_version_id IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM skill_versions sv
+    WHERE sv.id = @active_version_id
+      AND sv.skill_id = skills.id
+  )
+RETURNING *;
+
+-- name: CreateSkillsCaptureAttempt :one
+INSERT INTO skills_capture_attempts (
+    organization_id
+  , project_id
+  , captured_by_user_id
+  , skill_name
+  , skill_slug
+  , scope
+  , discovery_root
+  , source_type
+  , resolution_status
+  , content_sha256
+  , asset_format
+  , content_length
+  , outcome
+  , reason
+  , skill_id
+  , skill_version_id
+  , asset_id
+)
+VALUES (
+    @organization_id
+  , @project_id
+  , @captured_by_user_id
+  , sqlc.narg(skill_name)
+  , sqlc.narg(skill_slug)
+  , @scope
+  , @discovery_root
+  , @source_type
+  , @resolution_status
+  , sqlc.narg(content_sha256)
+  , sqlc.narg(asset_format)
+  , sqlc.narg(content_length)
+  , @outcome
+  , @reason
+  , sqlc.narg(skill_id)
+  , sqlc.narg(skill_version_id)
+  , sqlc.narg(asset_id)
+)
+RETURNING *;
+
+-- name: ListSkillsCaptureAttempts :many
+SELECT *
+FROM skills_capture_attempts
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
+
+-- name: ListSkillsCaptureAttemptsBySlug :many
+SELECT *
+FROM skills_capture_attempts
+WHERE project_id = @project_id
+  AND skill_slug = @skill_slug
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
 
 -- name: UpsertOrganizationCapturePolicy :one
 INSERT INTO skills_capture_policies (
@@ -232,3 +353,29 @@ SELECT
     (SELECT mode FROM org_default),
     'disabled'
   )::text AS mode;
+
+-- name: GetCaptureSettings :one
+WITH project_override AS (
+  SELECT scp.mode
+  FROM skills_capture_policies scp
+  WHERE scp.organization_id = @organization_id
+    AND scp.project_id = @project_id
+    AND scp.deleted IS FALSE
+  LIMIT 1
+),
+org_default AS (
+  SELECT scp.mode
+  FROM skills_capture_policies scp
+  WHERE scp.organization_id = @organization_id
+    AND scp.project_id IS NULL
+    AND scp.deleted IS FALSE
+  LIMIT 1
+)
+SELECT
+  coalesce((SELECT mode FROM org_default), '')::text AS org_default_mode,
+  coalesce((SELECT mode FROM project_override), '')::text AS project_override_mode,
+  coalesce(
+    (SELECT mode FROM project_override),
+    (SELECT mode FROM org_default),
+    'disabled'
+  )::text AS effective_mode;

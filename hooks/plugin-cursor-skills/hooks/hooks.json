@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "node ./../shared-producer/send-hook.mts --agent=cursor",
+        "timeout": 10
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "command": "node ./../shared-producer/send-hook.mts --agent=cursor",
+        "timeout": 10
+      }
+    ],
+    "afterAgentThought": [
+      {
+        "command": "node ./../shared-producer/send-hook.mts --agent=cursor",
+        "timeout": 10
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "node ./../shared-producer/send-hook.mts --agent=cursor",
+        "timeout": 10
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "node ./../shared-producer/send-hook.mts --agent=cursor",
+        "timeout": 10
+      }
+    ],
+    "postToolUseFailure": [
+      {
+        "command": "node ./../shared-producer/send-hook.mts --agent=cursor",
+        "timeout": 10
+      }
+    ]
+  }
+}

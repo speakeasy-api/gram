@@ -7,7 +7,47 @@
 
 package client
 
+// GetSkillsPath returns the URL path to the skills service get HTTP endpoint.
+func GetSkillsPath() string {
+	return "/rpc/skills.get"
+}
+
+// ListSkillsPath returns the URL path to the skills service list HTTP endpoint.
+func ListSkillsPath() string {
+	return "/rpc/skills.list"
+}
+
+// GetSettingsSkillsPath returns the URL path to the skills service getSettings HTTP endpoint.
+func GetSettingsSkillsPath() string {
+	return "/rpc/skills.getSettings"
+}
+
+// SetSettingsSkillsPath returns the URL path to the skills service setSettings HTTP endpoint.
+func SetSettingsSkillsPath() string {
+	return "/rpc/skills.setSettings"
+}
+
 // CaptureSkillsPath returns the URL path to the skills service capture HTTP endpoint.
 func CaptureSkillsPath() string {
 	return "/rpc/skills.capture"
+}
+
+// ListVersionsSkillsPath returns the URL path to the skills service listVersions HTTP endpoint.
+func ListVersionsSkillsPath() string {
+	return "/rpc/skills.versions"
+}
+
+// ListPendingSkillsPath returns the URL path to the skills service listPending HTTP endpoint.
+func ListPendingSkillsPath() string {
+	return "/rpc/skills.pending"
+}
+
+// ApproveVersionSkillsPath returns the URL path to the skills service approveVersion HTTP endpoint.
+func ApproveVersionSkillsPath() string {
+	return "/rpc/skills.approveVersion"
+}
+
+// SupersedeVersionSkillsPath returns the URL path to the skills service supersedeVersion HTTP endpoint.
+func SupersedeVersionSkillsPath() string {
+	return "/rpc/skills.supersedeVersion"
 }

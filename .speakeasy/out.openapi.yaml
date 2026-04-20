@@ -20577,6 +20577,9 @@ components:
         session_capture_enabled:
           type: boolean
           description: Whether Claude Code session capture is enabled
+        skills_capture_enabled:
+          type: boolean
+          description: Whether skills capture and registry features are enabled
         tool_io_logs_enabled:
           type: boolean
           description: Whether tool I/O logging is enabled
@@ -20585,6 +20588,7 @@ components:
         - logs_enabled
         - tool_io_logs_enabled
         - session_capture_enabled
+        - skills_capture_enabled
     HTTPToolDefinition:
       type: object
       properties:
@@ -23941,6 +23945,7 @@ components:
             - logs
             - tool_io_logs
             - session_capture
+            - skills_capture
           maxLength: 60
       required:
         - feature_name
