@@ -848,10 +848,11 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   tool_outcome TEXT,
   tool_outcome_notes TEXT,
 
-  -- Canonical hash of (role, content, tool_calls, tool_call_id) used to detect
-  -- whether an incoming completion request has diverged from the stored history
-  -- (e.g., client-side conversation compaction). Nullable because existing rows
-  -- have no hash; backfilled lazily during the next capture turn.
+  -- Chained hash of (role, content, tool_call_id) linked to the parent message's
+  -- hash. Used to detect whether an incoming completion request has diverged
+  -- from the stored history (e.g., client-side conversation compaction).
+  -- Nullable because existing rows have no hash; backfilled lazily during the
+  -- next capture turn.
   content_hash BYTEA,
 
   -- Monotonic counter per chat. Bumped when the matcher detects divergence from

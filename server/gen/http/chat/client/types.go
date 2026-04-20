@@ -1431,6 +1431,8 @@ type ChatMessageResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// When the message was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// Conversation generation — bumps on compaction or edit divergence
+	Generation *int `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
 }
 
 // ChatOverviewWithResolutionsResponseBody is used to define fields on response
@@ -4479,6 +4481,9 @@ func ValidateChatMessageResponseBody(body *ChatMessageResponseBody) (err error) 
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.Generation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

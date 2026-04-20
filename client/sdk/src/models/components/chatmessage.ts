@@ -26,6 +26,10 @@ export type ChatMessage = {
    */
   finishReason?: string | undefined;
   /**
+   * Conversation generation — bumps on compaction or edit divergence
+   */
+  generation: number;
+  /**
    * The ID of the message
    */
   id: string;
@@ -62,6 +66,7 @@ export const ChatMessage$inboundSchema: z.ZodMiniType<ChatMessage, unknown> = z
       ),
       external_user_id: z.optional(z.string()),
       finish_reason: z.optional(z.string()),
+      generation: z.int(),
       id: z.string(),
       model: z.string(),
       role: z.string(),

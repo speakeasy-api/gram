@@ -28,6 +28,20 @@ func (q *Queries) AddUserFeedbackChatResolution(ctx context.Context, arg AddUser
 	return err
 }
 
+const backfillChatMessageHash = `-- name: BackfillChatMessageHash :exec
+UPDATE chat_messages SET content_hash = $1 WHERE id = $2 AND content_hash IS NULL
+`
+
+type BackfillChatMessageHashParams struct {
+	ContentHash []byte
+	ID          uuid.UUID
+}
+
+func (q *Queries) BackfillChatMessageHash(ctx context.Context, arg BackfillChatMessageHashParams) error {
+	_, err := q.db.Exec(ctx, backfillChatMessageHash, arg.ContentHash, arg.ID)
+	return err
+}
+
 const countChatMessages = `-- name: CountChatMessages :one
 SELECT COUNT(*) FROM chat_messages WHERE chat_id = $1
 `
@@ -113,6 +127,8 @@ type CreateChatMessageParams struct {
 	UserAgent        pgtype.Text
 	IpAddress        pgtype.Text
 	Source           pgtype.Text
+	ContentHash      []byte
+	Generation       int32
 }
 
 const deleteChatResolutions = `-- name: DeleteChatResolutions :exec
@@ -193,6 +209,25 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 		&i.DeletedAt,
 		&i.Deleted,
 	)
+	return i, err
+}
+
+const getChatChainTip = `-- name: GetChatChainTip :one
+SELECT generation, content_hash FROM chat_messages
+WHERE chat_id = $1
+ORDER BY seq DESC
+LIMIT 1
+`
+
+type GetChatChainTipRow struct {
+	Generation  int32
+	ContentHash []byte
+}
+
+func (q *Queries) GetChatChainTip(ctx context.Context, chatID uuid.UUID) (GetChatChainTipRow, error) {
+	row := q.db.QueryRow(ctx, getChatChainTip, chatID)
+	var i GetChatChainTipRow
+	err := row.Scan(&i.Generation, &i.ContentHash)
 	return i, err
 }
 
@@ -405,6 +440,17 @@ func (q *Queries) GetLLMClientBreakdownByMessages(ctx context.Context, arg GetLL
 		return nil, err
 	}
 	return items, nil
+}
+
+const getMaxGenerationForChat = `-- name: GetMaxGenerationForChat :one
+SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = $1
+`
+
+func (q *Queries) GetMaxGenerationForChat(ctx context.Context, chatID uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, getMaxGenerationForChat, chatID)
+	var generation int32
+	err := row.Scan(&generation)
+	return generation, err
 }
 
 const getToolCallMessages = `-- name: GetToolCallMessages :many
@@ -747,6 +793,52 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 			&i.ContentHash,
 			&i.Generation,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatMessagesForMatch = `-- name: ListChatMessagesForMatch :many
+SELECT id, role, content, tool_call_id, content_hash
+FROM chat_messages
+WHERE chat_id = $1 AND generation = $2
+ORDER BY seq ASC
+`
+
+type ListChatMessagesForMatchParams struct {
+	ChatID     uuid.UUID
+	Generation int32
+}
+
+type ListChatMessagesForMatchRow struct {
+	ID          uuid.UUID
+	Role        string
+	Content     string
+	ToolCallID  pgtype.Text
+	ContentHash []byte
+}
+
+func (q *Queries) ListChatMessagesForMatch(ctx context.Context, arg ListChatMessagesForMatchParams) ([]ListChatMessagesForMatchRow, error) {
+	rows, err := q.db.Query(ctx, listChatMessagesForMatch, arg.ChatID, arg.Generation)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatMessagesForMatchRow
+	for rows.Next() {
+		var i ListChatMessagesForMatchRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Role,
+			&i.Content,
+			&i.ToolCallID,
+			&i.ContentHash,
 		); err != nil {
 			return nil, err
 		}

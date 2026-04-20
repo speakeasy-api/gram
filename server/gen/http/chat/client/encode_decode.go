@@ -1732,6 +1732,7 @@ func unmarshalChatMessageResponseBodyToChatChatMessage(v *ChatMessageResponseBod
 		UserID:         v.UserID,
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      *v.CreatedAt,
+		Generation:     *v.Generation,
 	}
 
 	return res

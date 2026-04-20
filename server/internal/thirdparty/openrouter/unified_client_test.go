@@ -58,14 +58,14 @@ type mockMessageCaptureStrategy struct {
 	capturedResponse     *CompletionResponse
 }
 
-func (m *mockMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request CompletionRequest) error {
+func (m *mockMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request CompletionRequest) (CaptureSession, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.startOrResumeCalled = true
-	return m.startOrResumeError
+	return nil, m.startOrResumeError
 }
 
-func (m *mockMessageCaptureStrategy) CaptureMessage(ctx context.Context, request CompletionRequest, response CompletionResponse) error {
+func (m *mockMessageCaptureStrategy) CaptureMessage(ctx context.Context, session CaptureSession, request CompletionRequest, response CompletionResponse) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.captureMessageCalled = true
@@ -523,7 +523,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 		{
 			name:               "start or resume error",
 			startOrResumeError: fmt.Errorf("failed to start chat"),
-			expectedError:      "failed to start or resume chat",
+			expectedError:      "start or resume chat",
 		},
 	}
 
@@ -708,13 +708,13 @@ func newTrackingCaptureStrategy() *trackingCaptureStrategy {
 	}
 }
 
-func (t *trackingCaptureStrategy) StartOrResumeChat(ctx context.Context, request CompletionRequest) error {
+func (t *trackingCaptureStrategy) StartOrResumeChat(ctx context.Context, request CompletionRequest) (CaptureSession, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	chatID := request.ChatID
 	if chatID == uuid.Nil {
-		return nil
+		return nil, nil
 	}
 
 	currentCount := t.messageCount[chatID]
@@ -729,10 +729,10 @@ func (t *trackingCaptureStrategy) StartOrResumeChat(ctx context.Context, request
 			t.messageCount[chatID]++
 		}
 	}
-	return nil
+	return nil, nil
 }
 
-func (t *trackingCaptureStrategy) CaptureMessage(ctx context.Context, request CompletionRequest, response CompletionResponse) error {
+func (t *trackingCaptureStrategy) CaptureMessage(ctx context.Context, session CaptureSession, request CompletionRequest, response CompletionResponse) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
