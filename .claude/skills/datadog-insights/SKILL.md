@@ -456,7 +456,10 @@ Replace `NOTEBOOK_URL` with the actual notebook URL from Step 5.
 Write and run this Python script via Bash. Post to `#gram-datadog-insights` by default, unless a different channel was specified in the prompt.
 
 ```python
-import json, urllib.request, os
+import json, urllib.request, os, datetime
+
+now_utc = datetime.datetime.utcnow()
+digest_date = now_utc.strftime("%a %b %-d")  # e.g. "Mon Apr 20"
 
 env_path = os.path.expanduser("~/.config/gram/.env")
 token = None
@@ -470,7 +473,7 @@ if not token:
 
 channel = "C0AKLE930BX"  # #gram-datadog-insights — override with channel name if specified in prompt
 
-blocks = []  # replace with actual Block Kit blocks from Step 7
+blocks = []  # replace with actual Block Kit blocks from Step 7 — use f"Gram Health Digest — {digest_date}" in the header block
 
 def slack_post(payload):
     data = json.dumps(payload).encode()
