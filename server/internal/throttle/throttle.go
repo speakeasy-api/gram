@@ -34,6 +34,7 @@ func New[K comparable, V any](cooldown time.Duration, keyFn func(V) K, onTrailin
 		Cooldown:   cooldown,
 		keyFn:      keyFn,
 		onTrailing: onTrailing,
+		mu:         sync.Mutex{},
 		entries:    make(map[K]*entry[V]),
 	}
 }
@@ -49,7 +50,8 @@ func (t *Throttle[K, V]) Do(v V) bool {
 
 	e, ok := t.entries[key]
 	if !ok {
-		e = &entry[V]{}
+		var zero V
+		e = &entry[V]{pending: false, latest: zero, timer: nil}
 		t.entries[key] = e
 	}
 
