@@ -229,9 +229,7 @@ export default function Plugins() {
                   >
                     <Button.LeftIcon>
                       <Icon
-                        name={
-                          publishStatus.connected ? "refresh-cw" : "upload"
-                        }
+                        name={publishStatus.connected ? "refresh-cw" : "upload"}
                         className="h-4 w-4"
                       />
                     </Button.LeftIcon>
@@ -328,6 +326,10 @@ export default function Plugins() {
                 Publish all plugins to a GitHub repository. Optionally add a
                 collaborator who will receive read access to the repo.
               </Dialog.Description>
+              <Dialog.Description>
+                At least one user in your organization will need to be given
+                access to connect the generated repository with Claude/Cusor.
+              </Dialog.Description>
             </Dialog.Header>
             <form
               onSubmit={(e) => {
@@ -344,7 +346,7 @@ export default function Plugins() {
               className="flex flex-col gap-4"
             >
               <InputField
-                label="GitHub Username (optional)"
+                label="GitHub Username"
                 name="githubUsername"
                 placeholder="e.g. octocat"
               />
