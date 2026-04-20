@@ -282,6 +282,7 @@ func (s *Service) requireSpeakeasyTeam(ctx context.Context, action string) (*con
 const (
 	defaultListAllLimit = 100
 	maxListAllLimit     = 500
+	maxListAllOffset    = 1_000_000
 )
 
 func (s *Service) SetAccountType(ctx context.Context, payload *gen.SetAccountTypePayload) error {
@@ -310,15 +311,19 @@ func (s *Service) ListAll(ctx context.Context, payload *gen.ListAllPayload) (*ge
 
 	limit := int32(defaultListAllLimit)
 	if payload.Limit != nil && *payload.Limit > 0 {
-		if *payload.Limit > maxListAllLimit {
-			limit = maxListAllLimit
-		} else {
-			limit = int32(*payload.Limit)
+		v := *payload.Limit
+		if v > maxListAllLimit {
+			v = maxListAllLimit
 		}
+		limit = int32(v) //nolint:gosec // bounded by maxListAllLimit above
 	}
 	var offset int32
 	if payload.Offset != nil && *payload.Offset > 0 {
-		offset = int32(*payload.Offset)
+		v := *payload.Offset
+		if v > maxListAllOffset {
+			v = maxListAllOffset
+		}
+		offset = int32(v) //nolint:gosec // bounded by maxListAllOffset above
 	}
 
 	repo := orgrepo.New(s.db)
@@ -337,21 +342,22 @@ func (s *Service) ListAll(ctx context.Context, payload *gen.ListAllPayload) (*ge
 
 	orgs := make([]*gen.OrganizationSummary, 0, len(rows))
 	for _, r := range rows {
-		summary := &gen.OrganizationSummary{
+		var disabledAt *string
+		if r.DisabledAt.Valid {
+			s := r.DisabledAt.Time.Format(time.RFC3339)
+			disabledAt = &s
+		}
+		orgs = append(orgs, &gen.OrganizationSummary{
 			ID:              r.ID,
 			Slug:            r.Slug,
 			Name:            r.Name,
 			GramAccountType: r.GramAccountType,
 			WorkosID:        conv.FromPGText[string](r.WorkosID),
 			Whitelisted:     r.Whitelisted,
+			DisabledAt:      disabledAt,
 			CreatedAt:       r.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:       r.UpdatedAt.Time.Format(time.RFC3339),
-		}
-		if r.DisabledAt.Valid {
-			disabledAt := r.DisabledAt.Time.Format(time.RFC3339)
-			summary.DisabledAt = &disabledAt
-		}
-		orgs = append(orgs, summary)
+		})
 	}
 
 	return &gen.ListAllOrganizationsResult{

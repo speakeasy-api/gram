@@ -9095,6 +9095,107 @@ paths:
       x-speakeasy-name-override: getInviteByToken
       x-speakeasy-react-hook:
         name: GetInviteByToken
+  /rpc/organizations.listAll:
+    get:
+      description: List every Gram organization (admin only - requires speakeasy-team API key).
+      operationId: listAllOrganizations
+      parameters:
+        - allowEmptyValue: true
+          description: Maximum organizations to return (default 100, max 500).
+          in: query
+          name: limit
+          schema:
+            description: Maximum organizations to return (default 100, max 500).
+            format: int64
+            maximum: 500
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Number of organizations to skip.
+          in: query
+          name: offset
+          schema:
+            description: Number of organizations to skip.
+            format: int64
+            minimum: 0
+            type: integer
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAllOrganizationsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: listAll organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: listAll
+      x-speakeasy-react-hook:
+        name: ListAllOrganizations
   /rpc/organizations.listInvites:
     get:
       description: List pending WorkOS invitations for the active organization.
@@ -9519,6 +9620,90 @@ paths:
       x-speakeasy-name-override: sendInvite
       x-speakeasy-react-hook:
         name: SendInvite
+  /rpc/organizations.setAccountType:
+    post:
+      description: Set a Gram organization's account tier (admin only - requires speakeasy-team API key).
+      operationId: setAccountType
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAccountTypeRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: setAccountType organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: setAccountType
+      x-speakeasy-react-hook:
+        name: SetAccountType
   /rpc/packages.create:
     post:
       description: Create a new package for a project.
@@ -21195,6 +21380,31 @@ components:
       required:
         - client_name
         - activity_count
+    ListAllOrganizationsResult:
+      type: object
+      properties:
+        limit:
+          type: integer
+          description: Maximum number of organizations returned in this response.
+          format: int64
+        offset:
+          type: integer
+          description: Number of organizations skipped before this page.
+          format: int64
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationSummary'
+          description: Gram organizations for this page.
+        total:
+          type: integer
+          description: Total number of Gram organizations (ignores limit/offset).
+          format: int64
+      required:
+        - organizations
+        - total
+        - limit
+        - offset
     ListAllowedOriginsResult:
       type: object
       properties:
@@ -22613,6 +22823,49 @@ components:
         - state
         - organization_name
         - accept_invitation_url
+    OrganizationSummary:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        disabled_at:
+          type: string
+          description: When the organization was disabled, if applicable.
+          format: date-time
+        gram_account_type:
+          type: string
+          description: Gram account tier.
+          enum:
+            - free
+            - pro
+            - enterprise
+        id:
+          type: string
+          description: Gram organization ID.
+        name:
+          type: string
+          description: Organization display name.
+        slug:
+          type: string
+          description: Organization slug.
+        updated_at:
+          type: string
+          format: date-time
+        whitelisted:
+          type: boolean
+          description: Whether the organization is whitelisted.
+        workos_id:
+          type: string
+          description: WorkOS organization ID, when linked.
+      required:
+        - id
+        - slug
+        - name
+        - gram_account_type
+        - whitelisted
+        - created_at
+        - updated_at
     OrganizationUser:
       type: object
       properties:
@@ -24124,6 +24377,22 @@ components:
       description: Service information
       required:
         - name
+    SetAccountTypeRequestBody:
+      type: object
+      properties:
+        gram_account_type:
+          type: string
+          description: The new account tier.
+          enum:
+            - free
+            - pro
+            - enterprise
+        organization_id:
+          type: string
+          description: The Gram organization ID to update.
+      required:
+        - organization_id
+        - gram_account_type
     SetMcpMetadataRequestBody:
       type: object
       properties:

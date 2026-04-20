@@ -281,11 +281,13 @@ run();
 ### [Organizations](docs/sdks/organizations/README.md)
 
 * [getInviteByToken](docs/sdks/organizations/README.md#getinvitebytoken) - getInviteByToken organizations
+* [listAll](docs/sdks/organizations/README.md#listall) - listAll organizations
 * [listInvites](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 * [listUsers](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 * [removeUser](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 * [revokeInvite](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
 * [sendInvite](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
+* [setAccountType](docs/sdks/organizations/README.md#setaccounttype) - setAccountType organizations
 
 ### [Packages](docs/sdks/packages/README.md)
 
@@ -512,11 +514,13 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpRegistriesListCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 - [`mcpRegistriesListRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
 - [`organizationsGetInviteByToken`](docs/sdks/organizations/README.md#getinvitebytoken) - getInviteByToken organizations
+- [`organizationsListAll`](docs/sdks/organizations/README.md#listall) - listAll organizations
 - [`organizationsListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`organizationsListUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 - [`organizationsRemoveUser`](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 - [`organizationsRevokeInvite`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
 - [`organizationsSendInvite`](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
+- [`organizationsSetAccountType`](docs/sdks/organizations/README.md#setaccounttype) - setAccountType organizations
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`packagesList`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`packagesListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
@@ -702,6 +706,7 @@ To learn about this feature and how to get started, check
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`useIntegrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`useLatestDeployment`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
+- [`useListAllOrganizations`](docs/sdks/organizations/README.md#listall) - listAll organizations
 - [`useListAllowedOrigins`](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`useListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
@@ -765,6 +770,7 @@ To learn about this feature and how to get started, check
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
+- [`useSetAccountTypeMutation`](docs/sdks/organizations/README.md#setaccounttype) - setAccountType organizations
 - [`useSetPluginAssignmentsMutation`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
 - [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments

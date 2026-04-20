@@ -3,11 +3,13 @@
  */
 
 import { organizationsGetInviteByToken } from "../funcs/organizationsGetInviteByToken.js";
+import { organizationsListAll } from "../funcs/organizationsListAll.js";
 import { organizationsListInvites } from "../funcs/organizationsListInvites.js";
 import { organizationsListUsers } from "../funcs/organizationsListUsers.js";
 import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
 import { organizationsRevokeInvite } from "../funcs/organizationsRevokeInvite.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
+import { organizationsSetAccountType } from "../funcs/organizationsSetAccountType.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -27,6 +29,25 @@ export class Organizations extends ClientSDK {
     return unwrapAsync(organizationsGetInviteByToken(
       this,
       request,
+      options,
+    ));
+  }
+
+  /**
+   * listAll organizations
+   *
+   * @remarks
+   * List every Gram organization (admin only - requires speakeasy-team API key).
+   */
+  async listAll(
+    request?: operations.ListAllOrganizationsRequest | undefined,
+    security?: operations.ListAllOrganizationsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListAllOrganizationsResult> {
+    return unwrapAsync(organizationsListAll(
+      this,
+      request,
+      security,
       options,
     ));
   }
@@ -119,6 +140,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.OrganizationInvitation> {
     return unwrapAsync(organizationsSendInvite(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setAccountType organizations
+   *
+   * @remarks
+   * Set a Gram organization's account tier (admin only - requires speakeasy-team API key).
+   */
+  async setAccountType(
+    request: operations.SetAccountTypeRequest,
+    security?: operations.SetAccountTypeSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(organizationsSetAccountType(
       this,
       request,
       security,
