@@ -3,6 +3,7 @@ package organizations
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -263,22 +264,6 @@ func (s *Service) GetInviteByToken(ctx context.Context, payload *gen.GetInviteBy
 	return invitationToGenAccept(invite, orgName), nil
 }
 
-// speakeasyTeamOrgID gates admin-only endpoints. Same pattern as
-// projects.SetOrganizationWhitelist — org ID, not slug, because slugs are
-// not DB-unique.
-const speakeasyTeamOrgID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
-
-func (s *Service) requireSpeakeasyTeam(ctx context.Context, action string) (*contextvalues.AuthContext, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if ac.ActiveOrganizationID != speakeasyTeamOrgID {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can %s", action).Log(ctx, s.logger, attr.SlogOrganizationID(ac.ActiveOrganizationID))
-	}
-	return ac, nil
-}
-
 const (
 	defaultListAllLimit = 100
 	maxListAllLimit     = 500
@@ -286,8 +271,8 @@ const (
 )
 
 func (s *Service) SetAccountType(ctx context.Context, payload *gen.SetAccountTypePayload) error {
-	if _, err := s.requireSpeakeasyTeam(ctx, "set organization account type"); err != nil {
-		return err
+	if _, err := auth.RequireSpeakeasyTeam(ctx, s.logger, "set organization account type"); err != nil {
+		return fmt.Errorf("require speakeasy-team: %w", err)
 	}
 
 	n, err := orgrepo.New(s.db).SetAccountType(ctx, orgrepo.SetAccountTypeParams{
@@ -305,8 +290,8 @@ func (s *Service) SetAccountType(ctx context.Context, payload *gen.SetAccountTyp
 }
 
 func (s *Service) ListAll(ctx context.Context, payload *gen.ListAllPayload) (*gen.ListAllOrganizationsResult, error) {
-	if _, err := s.requireSpeakeasyTeam(ctx, "list all organizations"); err != nil {
-		return nil, err
+	if _, err := auth.RequireSpeakeasyTeam(ctx, s.logger, "list all organizations"); err != nil {
+		return nil, fmt.Errorf("require speakeasy-team: %w", err)
 	}
 
 	limit := int32(defaultListAllLimit)

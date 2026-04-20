@@ -480,15 +480,8 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 }
 
 func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.SetOrganizationWhitelistPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	// Check that the API key is from the speakeasy-team organization
-	const speakeasyTeamOrgID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
-	if authCtx.ActiveOrganizationID != speakeasyTeamOrgID {
-		return oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can set organization whitelist status").Log(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	if _, err := auth.RequireSpeakeasyTeam(ctx, s.logger, "set organization whitelist status"); err != nil {
+		return fmt.Errorf("require speakeasy-team: %w", err)
 	}
 
 	err := s.repo.SetOrganizationWhitelist(ctx, repo.SetOrganizationWhitelistParams{
