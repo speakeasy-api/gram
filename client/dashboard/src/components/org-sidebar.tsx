@@ -67,7 +67,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenu>
               <ScopeGatedNavItem
                 item={orgRoutes.home}
-                scope={["build:read", "org:admin"]}
+                scope={["org:read", "build:read", "org:admin"]}
               />
             </SidebarMenu>
           </SidebarGroupContent>
