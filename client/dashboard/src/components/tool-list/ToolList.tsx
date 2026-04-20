@@ -620,6 +620,7 @@ function ToolGroupHeader({
   isFirstGroup = false,
   allSelected,
   onSelectAll,
+  readOnly,
 }: {
   group: ToolGroup;
   isExpanded: boolean;
@@ -627,6 +628,7 @@ function ToolGroupHeader({
   isFirstGroup?: boolean;
   allSelected: boolean;
   onSelectAll: () => void;
+  readOnly?: boolean;
 }) {
   const Icon = getIcon(group.icon);
 
@@ -648,25 +650,27 @@ function ToolGroupHeader({
           <Icon
             className={cn(
               "absolute inset-0 size-4 transition-opacity",
-              "group-hover/header:opacity-0",
+              !readOnly && "group-hover/header:opacity-0",
             )}
             strokeWidth={1.5}
           />
-          <SimpleTooltip
-            tooltip={`${allSelected ? "Deselect" : "Select"} ${group.tools.length} tools`}
-          >
-            <Checkbox
-              checked={allSelected}
-              onCheckedChange={onSelectAll}
-              onClick={(e) => {
-                e.stopPropagation();
-              }}
-              className={cn(
-                "absolute inset-0 opacity-0 transition-opacity",
-                "group-hover/header:opacity-100",
-              )}
-            />
-          </SimpleTooltip>
+          {!readOnly && (
+            <SimpleTooltip
+              tooltip={`${allSelected ? "Deselect" : "Select"} ${group.tools.length} tools`}
+            >
+              <Checkbox
+                checked={allSelected}
+                onCheckedChange={onSelectAll}
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+                className={cn(
+                  "absolute inset-0 opacity-0 transition-opacity",
+                  "group-hover/header:opacity-100",
+                )}
+              />
+            </SimpleTooltip>
+          )}
         </div>
         <p className="text-foreground text-sm leading-6">{group.title}</p>
       </button>
@@ -1016,6 +1020,7 @@ export function ToolList({
                 isFirstGroup={index === 0}
                 allSelected={allSelected}
                 onSelectAll={() => handleSelectAllInGroup(group)}
+                readOnly={readOnly}
               />
               {expandedGroups.has(index) && (
                 <div className="w-full">
