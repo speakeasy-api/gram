@@ -434,6 +434,7 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   const { data: mcpMetadataData, isLoading: mcpMetadataLoading } =
     useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
       retry: false,
+      throwOnError: false, // Expected 404 when no metadata exists
     });
   const mcpMetadata = mcpMetadataData?.metadata;
 
