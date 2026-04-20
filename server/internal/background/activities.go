@@ -119,8 +119,8 @@ func NewActivities(
 		deleteChatResolutions:         resolution_activities.NewDeleteChatResolutions(db),
 		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
-		fetchUnanalyzedMessages:       risk_analysis.NewFetchUnanalyzed(logger, db),
-		analyzeBatch:                  risk_analysis.NewAnalyzeBatch(logger, db),
+		fetchUnanalyzedMessages:       risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
+		analyzeBatch:                  risk_analysis.NewAnalyzeBatch(logger, tracerProvider, db),
 	}
 }
 

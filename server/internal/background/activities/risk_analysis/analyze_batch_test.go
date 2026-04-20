@@ -11,7 +11,7 @@ import (
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	activity := risk_analysis.NewAnalyzeBatch(testLogger, nil)
+	activity := risk_analysis.NewAnalyzeBatch(testLogger, testTracerProvider, nil)
 	require.NotNil(t, activity)
 
 	result, err := activity.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{

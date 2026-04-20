@@ -13,7 +13,7 @@ func TestFetchUnanalyzed(t *testing.T) {
 	t.Skip("requires database test environment")
 
 	ctx := t.Context()
-	activity := risk_analysis.NewFetchUnanalyzed(testLogger, nil)
+	activity := risk_analysis.NewFetchUnanalyzed(testLogger, testTracerProvider, nil)
 	require.NotNil(t, activity)
 
 	result, err := activity.Do(ctx, risk_analysis.FetchUnanalyzedArgs{

@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
@@ -16,12 +18,14 @@ import (
 // analyzed for a given risk policy at its current version.
 type FetchUnanalyzed struct {
 	logger *slog.Logger
+	tracer trace.Tracer
 	repo   *repo.Queries
 }
 
-func NewFetchUnanalyzed(logger *slog.Logger, db *pgxpool.Pool) *FetchUnanalyzed {
+func NewFetchUnanalyzed(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *FetchUnanalyzed {
 	return &FetchUnanalyzed{
 		logger: logger,
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
 		repo:   repo.New(db),
 	}
 }
@@ -39,8 +43,17 @@ type FetchUnanalyzedResult struct {
 	Sources        []string
 }
 
-func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*FetchUnanalyzedResult, error) {
-	start := time.Now()
+func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *FetchUnanalyzedResult, err error) {
+	ctx, span := a.tracer.Start(ctx, "risk.fetchUnanalyzed", trace.WithAttributes(
+		attribute.String("risk.project_id", args.ProjectID.String()),
+		attribute.String("risk.policy_id", args.RiskPolicyID.String()),
+	))
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
 
 	// Always read the current policy to get the latest version and sources.
 	policy, err := a.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
@@ -50,6 +63,8 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*Fe
 	if err != nil {
 		return nil, fmt.Errorf("get risk policy: %w", err)
 	}
+
+	span.SetAttributes(attribute.Int64("risk.policy_version", policy.Version))
 
 	if !policy.Enabled {
 		// Side-effect: when a policy is disabled, we purge all its results here
@@ -64,6 +79,8 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*Fe
 			return nil, fmt.Errorf("delete results for disabled policy: %w", err)
 		}
 
+		span.SetAttributes(attribute.Bool("risk.policy_disabled", true))
+
 		return &FetchUnanalyzedResult{
 			MessageIDs:     nil,
 			OrganizationID: policy.OrganizationID,
@@ -72,7 +89,6 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*Fe
 		}, nil
 	}
 
-	queryStart := time.Now()
 	ids, err := a.repo.FetchUnanalyzedMessageIDs(ctx, repo.FetchUnanalyzedMessageIDsParams{
 		ProjectID:         uuid.NullUUID{UUID: args.ProjectID, Valid: true},
 		RiskPolicyID:      args.RiskPolicyID,
@@ -83,12 +99,7 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*Fe
 		return nil, fmt.Errorf("fetch unanalyzed message IDs: %w", err)
 	}
 
-	a.logger.InfoContext(ctx, "fetched unanalyzed message IDs",
-		slog.Int(logKeyCount, len(ids)),
-		slog.Int64(logKeyPolicyVersion, policy.Version),
-		slog.Duration(logKeyQueryDur, time.Since(queryStart)),
-		slog.Duration(logKeyTotalDur, time.Since(start)),
-	)
+	span.SetAttributes(attribute.Int("risk.unanalyzed_count", len(ids)))
 
 	return &FetchUnanalyzedResult{
 		MessageIDs:     ids,

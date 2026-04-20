@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -18,17 +20,7 @@ import (
 
 // Log key constants to satisfy sloglint no-raw-keys.
 const (
-	logKeyMessages      = "risk.messages"
-	logKeyFindings      = "risk.findings"
-	logKeyRowsWritten   = "risk.rows_written"
-	logKeyFetchContent  = "risk.fetch_content_duration"
-	logKeyScan          = "risk.scan_duration"
-	logKeyDBWrite       = "risk.db_write_duration"
-	logKeyTotal         = "risk.total_duration"
 	logKeyCount         = "risk.count"
-	logKeyBatchSize     = "risk.batch_size"
-	logKeyQueryDur      = "risk.query_duration"
-	logKeyTotalDur      = "risk.total_duration_fetch"
 	logKeyPolicyVersion = "risk.policy_version"
 )
 
@@ -36,14 +28,16 @@ const (
 // and writes the results back to the database.
 type AnalyzeBatch struct {
 	logger  *slog.Logger
+	tracer  trace.Tracer
 	db      *pgxpool.Pool
 	repo    *repo.Queries
 	scanner *Scanner
 }
 
-func NewAnalyzeBatch(logger *slog.Logger, db *pgxpool.Pool) *AnalyzeBatch {
+func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *AnalyzeBatch {
 	return &AnalyzeBatch{
 		logger:  logger,
+		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
 		db:      db,
 		repo:    repo.New(db),
 		scanner: NewScanner(),
@@ -64,23 +58,34 @@ type AnalyzeBatchResult struct {
 	Findings  int
 }
 
-func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeBatchResult, error) {
+func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *AnalyzeBatchResult, err error) {
 	if len(args.MessageIDs) == 0 {
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
 
-	start := time.Now()
+	ctx, span := a.tracer.Start(ctx, "risk.analyzeBatch", trace.WithAttributes(
+		attribute.String("risk.project_id", args.ProjectID.String()),
+		attribute.String("risk.policy_id", args.RiskPolicyID.String()),
+		attribute.Int64("risk.policy_version", args.PolicyVersion),
+		attribute.Int("risk.batch_size", len(args.MessageIDs)),
+	))
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
 
 	// Fetch message content for the batch.
-	fetchStart := time.Now()
+	ctx, fetchSpan := a.tracer.Start(ctx, "risk.fetchContent")
 	messages, err := a.repo.GetMessageContentBatch(ctx, repo.GetMessageContentBatchParams{
 		Ids:       args.MessageIDs,
 		ProjectID: uuid.NullUUID{UUID: args.ProjectID, Valid: true},
 	})
+	fetchSpan.End()
 	if err != nil {
 		return nil, fmt.Errorf("get message content batch: %w", err)
 	}
-	fetchDuration := time.Since(fetchStart)
 
 	// Build content slice for parallel scanning.
 	contents := make([]string, len(messages))
@@ -89,10 +94,11 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 	}
 
 	// Scan all messages in parallel using a goroutine worker pool.
-	scanStart := time.Now()
+	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	activity.RecordHeartbeat(ctx, 0)
 
 	batchFindings, err := a.scanner.ScanBatchParallel(contents)
+	scanSpan.End()
 	if err != nil {
 		return nil, fmt.Errorf("scan batch: %w", err)
 	}
@@ -138,12 +144,11 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 			})
 		}
 	}
-	scanDuration := time.Since(scanStart)
-
 	// Atomically delete old results (any version) and insert new ones.
-	writeStart := time.Now()
+	ctx, writeSpan := a.tracer.Start(ctx, "risk.writeResults")
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
+		writeSpan.End()
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
@@ -155,28 +160,27 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 		ProjectID:    args.ProjectID,
 		MessageIds:   args.MessageIDs,
 	}); err != nil {
+		writeSpan.End()
 		return nil, fmt.Errorf("delete old results: %w", err)
 	}
 
 	if len(rows) > 0 {
 		if _, err := txRepo.InsertRiskResults(ctx, rows); err != nil {
+			writeSpan.End()
 			return nil, fmt.Errorf("insert risk results: %w", err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
+		writeSpan.End()
 		return nil, fmt.Errorf("commit results: %w", err)
 	}
-	writeDuration := time.Since(writeStart)
+	writeSpan.End()
 
-	a.logger.InfoContext(ctx, "analyzed message batch",
-		slog.Int(logKeyMessages, len(messages)),
-		slog.Int(logKeyFindings, findingsCount),
-		slog.Int(logKeyRowsWritten, len(rows)),
-		slog.Duration(logKeyFetchContent, fetchDuration),
-		slog.Duration(logKeyScan, scanDuration),
-		slog.Duration(logKeyDBWrite, writeDuration),
-		slog.Duration(logKeyTotal, time.Since(start)),
+	span.SetAttributes(
+		attribute.Int("risk.messages_processed", len(messages)),
+		attribute.Int("risk.findings_count", findingsCount),
+		attribute.Int("risk.rows_written", len(rows)),
 	)
 
 	return &AnalyzeBatchResult{
