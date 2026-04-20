@@ -205,16 +205,16 @@ type Message struct {
     Body    string
 }
 
-type client struct {
-    vendor *vendor.Client
+type Service struct {
+    client Client
 }
 
-func NewClient(vendorClient *vendor.Client) Client {
-    return &client{vendor: vendorClient}
+func NewService(client Client) *Service {
+    return &Service{client: client}
 }
 ```
 
-Wire the real or stub implementation in `deps.go` so the rest of the code always receives a valid `Client` and never has to branch on `nil`.
+Wire the real or stub implementation in `deps.go` so the service always receives a valid `Client`, and keep vendor-specific types inside the wrapper implementation.
 
 </good-example>
 
@@ -345,7 +345,7 @@ This is bad because it doesn't use the attributes from the convention package.
 import "github.com/speakeasy-api/gram/functions/internal/attr"
 
 func Example() {
-  logger.Error("failed to create user", attr.SlogError("error", err))
+  logger.Error("failed to create user", attr.SlogError(err))
 }
 ```
 
@@ -359,7 +359,7 @@ This is bad because it uses `logger.Error` instead of `logger.ErrorContext`.
 import "github.com/speakeasy-api/gram/functions/internal/attr"
 
 func Example(ctx context.Context) {
-  logger.ErrorContext(ctx, "failed to create user", attr.SlogError("error", err))
+  logger.ErrorContext(ctx, "failed to create user", attr.SlogError(err))
 }
 ```
 
