@@ -18,12 +18,16 @@ import (
 
 // Server lists the skills service endpoint HTTP handlers.
 type Server struct {
-	Mounts      []*MountPoint
-	Get         http.Handler
-	List        http.Handler
-	GetSettings http.Handler
-	SetSettings http.Handler
-	Capture     http.Handler
+	Mounts           []*MountPoint
+	Get              http.Handler
+	List             http.Handler
+	GetSettings      http.Handler
+	SetSettings      http.Handler
+	Capture          http.Handler
+	ListVersions     http.Handler
+	ListPending      http.Handler
+	ApproveVersion   http.Handler
+	SupersedeVersion http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -58,12 +62,20 @@ func New(
 			{"GetSettings", "GET", "/rpc/skills.getSettings"},
 			{"SetSettings", "POST", "/rpc/skills.setSettings"},
 			{"Capture", "POST", "/rpc/skills.capture"},
+			{"ListVersions", "GET", "/rpc/skills.versions"},
+			{"ListPending", "GET", "/rpc/skills.pending"},
+			{"ApproveVersion", "POST", "/rpc/skills.approveVersion"},
+			{"SupersedeVersion", "POST", "/rpc/skills.supersedeVersion"},
 		},
-		Get:         NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
-		List:        NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
-		GetSettings: NewGetSettingsHandler(e.GetSettings, mux, decoder, encoder, errhandler, formatter),
-		SetSettings: NewSetSettingsHandler(e.SetSettings, mux, decoder, encoder, errhandler, formatter),
-		Capture:     NewCaptureHandler(e.Capture, mux, decoder, encoder, errhandler, formatter),
+		Get:              NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
+		List:             NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
+		GetSettings:      NewGetSettingsHandler(e.GetSettings, mux, decoder, encoder, errhandler, formatter),
+		SetSettings:      NewSetSettingsHandler(e.SetSettings, mux, decoder, encoder, errhandler, formatter),
+		Capture:          NewCaptureHandler(e.Capture, mux, decoder, encoder, errhandler, formatter),
+		ListVersions:     NewListVersionsHandler(e.ListVersions, mux, decoder, encoder, errhandler, formatter),
+		ListPending:      NewListPendingHandler(e.ListPending, mux, decoder, encoder, errhandler, formatter),
+		ApproveVersion:   NewApproveVersionHandler(e.ApproveVersion, mux, decoder, encoder, errhandler, formatter),
+		SupersedeVersion: NewSupersedeVersionHandler(e.SupersedeVersion, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -77,6 +89,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetSettings = m(s.GetSettings)
 	s.SetSettings = m(s.SetSettings)
 	s.Capture = m(s.Capture)
+	s.ListVersions = m(s.ListVersions)
+	s.ListPending = m(s.ListPending)
+	s.ApproveVersion = m(s.ApproveVersion)
+	s.SupersedeVersion = m(s.SupersedeVersion)
 }
 
 // MethodNames returns the methods served.
@@ -89,6 +105,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetSettingsHandler(mux, h.GetSettings)
 	MountSetSettingsHandler(mux, h.SetSettings)
 	MountCaptureHandler(mux, h.Capture)
+	MountListVersionsHandler(mux, h.ListVersions)
+	MountListPendingHandler(mux, h.ListPending)
+	MountApproveVersionHandler(mux, h.ApproveVersion)
+	MountSupersedeVersionHandler(mux, h.SupersedeVersion)
 }
 
 // Mount configures the mux to serve the skills endpoints.
@@ -348,6 +368,218 @@ func NewCaptureHandler(
 		}
 		data := &skills.CaptureRequestData{Payload: payload, Body: r.Body}
 		res, err := endpoint(ctx, data)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListVersionsHandler configures the mux to serve the "skills" service
+// "listVersions" endpoint.
+func MountListVersionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/skills.versions", f)
+}
+
+// NewListVersionsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "skills" service "listVersions" endpoint.
+func NewListVersionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListVersionsRequest(mux, decoder)
+		encodeResponse = EncodeListVersionsResponse(encoder)
+		encodeError    = EncodeListVersionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listVersions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListPendingHandler configures the mux to serve the "skills" service
+// "listPending" endpoint.
+func MountListPendingHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/skills.pending", f)
+}
+
+// NewListPendingHandler creates a HTTP handler which loads the HTTP request
+// and calls the "skills" service "listPending" endpoint.
+func NewListPendingHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListPendingRequest(mux, decoder)
+		encodeResponse = EncodeListPendingResponse(encoder)
+		encodeError    = EncodeListPendingError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listPending")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountApproveVersionHandler configures the mux to serve the "skills" service
+// "approveVersion" endpoint.
+func MountApproveVersionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.approveVersion", f)
+}
+
+// NewApproveVersionHandler creates a HTTP handler which loads the HTTP request
+// and calls the "skills" service "approveVersion" endpoint.
+func NewApproveVersionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeApproveVersionRequest(mux, decoder)
+		encodeResponse = EncodeApproveVersionResponse(encoder)
+		encodeError    = EncodeApproveVersionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "approveVersion")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSupersedeVersionHandler configures the mux to serve the "skills"
+// service "supersedeVersion" endpoint.
+func MountSupersedeVersionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.supersedeVersion", f)
+}
+
+// NewSupersedeVersionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "skills" service "supersedeVersion" endpoint.
+func NewSupersedeVersionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSupersedeVersionRequest(mux, decoder)
+		encodeResponse = EncodeSupersedeVersionResponse(encoder)
+		encodeError    = EncodeSupersedeVersionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "supersedeVersion")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
 				errhandler(ctx, w, err)

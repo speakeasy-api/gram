@@ -6,11 +6,11 @@ Current status: additive only. Hook installer commands are not switched yet.
 
 ## Module layout
 
-- `producer-cli.mts`
-  - command entrypoint
-  - reads hook payload JSON (stdin or file)
-  - resolves runtime options
-  - prints enriched payload JSON to stdout
+- `send-hook.mts`
+  - production hook entrypoint for Claude/Cursor hook config
+  - reads hook payload JSON from stdin
+  - enriches payload via shared producer core
+  - posts enriched payload to hooks endpoint
   - optionally spawns detached upload worker (best-effort)
 - `producer-core.mts`
   - orchestration/facade module
@@ -94,33 +94,35 @@ For Skill tool invocations, payload enrichment adds `additional_data.skills[0]` 
 }
 ```
 
-CLI compatibility:
+Hook runtime behavior:
 
-- CLI prints only `result.payload` JSON to stdout.
+- hook entrypoint enriches payload and posts to hooks endpoint.
 - upload execution is optional and controlled by env flag (`GRAM_SKILLS_UPLOAD_ENABLED=true`).
-- upload failures never block payload emission.
+- upload failures never block hook flow (fail-open).
 - detached worker failures are fail-open and do not break hook flow.
 - recent identical uploads are suppressed by a user-local cache.
 
-## CLI usage
+## Hook command usage
 
 ```bash
-# stdin mode
-cat hook-payload.json | node hooks/shared-producer/producer-cli.mts --agent=claude
+# Claude example
+cat hook-payload.json | node hooks/shared-producer/send-hook.mts --agent=claude
 
-# file mode
-node hooks/shared-producer/producer-cli.mts --agent=cursor --payload-file ./hook-payload.json
+# Cursor example
+cat hook-payload.json | node hooks/shared-producer/send-hook.mts --agent=cursor
 ```
 
 ## Environment fallbacks
 
 - `GRAM_HOOK_AGENT` when `--agent` is not provided
-- `GRAM_HOOK_PAYLOAD_FILE` when `--payload-file` is not provided
+
 - `GRAM_SKILLS_RESOLUTION_STATUS` to override `resolution_status` only when compatible with discovery (it will not force unresolved skills to `resolved`)
 - `GRAM_HOOKS_SERVER_URL`, `GRAM_API_KEY`, `GRAM_PROJECT_SLUG` for upload request shaping
-- `GRAM_SKILLS_UPLOAD_ENABLED=true` to enable detached upload worker execution from CLI
+- `GRAM_SKILLS_UPLOAD_ENABLED=true` to enable detached upload worker execution from hook entrypoint
 - `GRAM_SKILLS_UPLOAD_ENABLED` defaults to disabled unless explicitly set to `true`
 - `GRAM_SKILLS_UPLOAD_CACHE_TTL_MS` optional TTL override for recent-seen suppression (default 900000 ms / 15 min)
+- `GRAM_HOOKS_DEBUG=true` to enable JSONL debug logs written to `~/.gram/hooks-debug.log`
+- `GRAM_HOOKS_DEBUG_LOG_PATH` optional explicit path override for the debug log file
 
 ## Notes
 

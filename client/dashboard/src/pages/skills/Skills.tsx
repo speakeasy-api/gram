@@ -3,7 +3,7 @@ import { Outlet, Link, Navigate, useParams } from "react-router";
 import { Page } from "@/components/page-layout";
 import { PageTabsTrigger, Tabs, TabsList } from "@/components/ui/tabs";
 import { useRoutes } from "@/routes";
-import { useListSkills } from "@gram/client/react-query";
+import { useFeaturesGet, useListSkills } from "@gram/client/react-query";
 
 export function SkillsIndexRedirect() {
   return <Navigate to="registry" replace />;
@@ -12,9 +12,16 @@ export function SkillsIndexRedirect() {
 export function SkillsRoot() {
   const routes = useRoutes();
   const { skillSlug } = useParams();
+  const { data: featuresData } = useFeaturesGet(undefined, undefined, {
+    throwOnError: false,
+  });
   const { data } = useListSkills(undefined, undefined, {
     enabled: Boolean(skillSlug),
   });
+
+  if (!featuresData?.skillsCaptureEnabled) {
+    return <Navigate to=".." replace />;
+  }
 
   const selectedSkill =
     data?.skills.find((skill) => skill.slug === skillSlug) ?? null;

@@ -1,0 +1,21 @@
+{
+  "name": "gram-hooks-skills",
+  "description": "Forward Claude Code hooks to Gram with Node-based skills capture enabled",
+  "version": "0.0.1",
+  "author": {
+    "name": "Gram",
+    "url": "https://getgram.ai"
+  },
+  "homepage": "https://getgram.ai",
+  "repository": "https://github.com/gram-ai/gram",
+  "license": "MIT",
+  "keywords": [
+    "gram",
+    "hooks",
+    "mcp",
+    "analytics",
+    "monitoring",
+    "telemetry",
+    "skills"
+  ]
+}

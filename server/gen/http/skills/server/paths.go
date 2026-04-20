@@ -31,3 +31,23 @@ func SetSettingsSkillsPath() string {
 func CaptureSkillsPath() string {
 	return "/rpc/skills.capture"
 }
+
+// ListVersionsSkillsPath returns the URL path to the skills service listVersions HTTP endpoint.
+func ListVersionsSkillsPath() string {
+	return "/rpc/skills.versions"
+}
+
+// ListPendingSkillsPath returns the URL path to the skills service listPending HTTP endpoint.
+func ListPendingSkillsPath() string {
+	return "/rpc/skills.pending"
+}
+
+// ApproveVersionSkillsPath returns the URL path to the skills service approveVersion HTTP endpoint.
+func ApproveVersionSkillsPath() string {
+	return "/rpc/skills.approveVersion"
+}
+
+// SupersedeVersionSkillsPath returns the URL path to the skills service supersedeVersion HTTP endpoint.
+func SupersedeVersionSkillsPath() string {
+	return "/rpc/skills.supersedeVersion"
+}

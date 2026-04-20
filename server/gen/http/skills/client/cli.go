@@ -258,3 +258,116 @@ func BuildCapturePayload(skillsCaptureName string, skillsCaptureScope string, sk
 
 	return v, nil
 }
+
+// BuildListVersionsPayload builds the payload for the skills listVersions
+// endpoint from CLI flags.
+func BuildListVersionsPayload(skillsListVersionsSkillID string, skillsListVersionsSessionToken string, skillsListVersionsProjectSlugInput string) (*skills.ListVersionsPayload, error) {
+	var skillID string
+	{
+		skillID = skillsListVersionsSkillID
+	}
+	var sessionToken *string
+	{
+		if skillsListVersionsSessionToken != "" {
+			sessionToken = &skillsListVersionsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsListVersionsProjectSlugInput != "" {
+			projectSlugInput = &skillsListVersionsProjectSlugInput
+		}
+	}
+	v := &skills.ListVersionsPayload{}
+	v.SkillID = skillID
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListPendingPayload builds the payload for the skills listPending
+// endpoint from CLI flags.
+func BuildListPendingPayload(skillsListPendingSessionToken string, skillsListPendingProjectSlugInput string) (*skills.ListPendingPayload, error) {
+	var sessionToken *string
+	{
+		if skillsListPendingSessionToken != "" {
+			sessionToken = &skillsListPendingSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsListPendingProjectSlugInput != "" {
+			projectSlugInput = &skillsListPendingProjectSlugInput
+		}
+	}
+	v := &skills.ListPendingPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildApproveVersionPayload builds the payload for the skills approveVersion
+// endpoint from CLI flags.
+func BuildApproveVersionPayload(skillsApproveVersionBody string, skillsApproveVersionSessionToken string, skillsApproveVersionProjectSlugInput string) (*skills.ApproveVersionPayload, error) {
+	var err error
+	var body ApproveVersionRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsApproveVersionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"version_id\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsApproveVersionSessionToken != "" {
+			sessionToken = &skillsApproveVersionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsApproveVersionProjectSlugInput != "" {
+			projectSlugInput = &skillsApproveVersionProjectSlugInput
+		}
+	}
+	v := &skills.ApproveVersionPayload{
+		VersionID: body.VersionID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSupersedeVersionPayload builds the payload for the skills
+// supersedeVersion endpoint from CLI flags.
+func BuildSupersedeVersionPayload(skillsSupersedeVersionBody string, skillsSupersedeVersionSessionToken string, skillsSupersedeVersionProjectSlugInput string) (*skills.SupersedeVersionPayload, error) {
+	var err error
+	var body SupersedeVersionRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsSupersedeVersionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"version_id\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsSupersedeVersionSessionToken != "" {
+			sessionToken = &skillsSupersedeVersionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsSupersedeVersionProjectSlugInput != "" {
+			projectSlugInput = &skillsSupersedeVersionProjectSlugInput
+		}
+	}
+	v := &skills.SupersedeVersionPayload{
+		VersionID: body.VersionID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
