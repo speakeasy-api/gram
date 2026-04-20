@@ -20,24 +20,26 @@ type Finding struct {
 	Tags        []string
 }
 
-// Scanner wraps the gitleaks detector for secret scanning. It serializes
-// detector creation because gitleaks uses viper internally which has global
-// state that races on concurrent initialization. Scanning (DetectString) is
-// safe for concurrent use on separate detector instances, but NOT on the same
-// instance — each goroutine must use its own detector.
-type Scanner struct {
-	initMu sync.Mutex
-}
+// detectorInitMu serializes gitleaks detector creation process-wide.
+// Gitleaks uses viper internally which has global state that races on
+// concurrent initialization. Must be package-level because multiple Scanner
+// instances may exist in the same process.
+var detectorInitMu sync.Mutex
+
+// Scanner wraps the gitleaks detector for secret scanning. Scanning
+// (DetectString) is safe for concurrent use on separate detector instances,
+// but NOT on the same instance — each goroutine must use its own detector.
+type Scanner struct{}
 
 // NewScanner creates a new Scanner.
 func NewScanner() *Scanner {
-	return &Scanner{initMu: sync.Mutex{}}
+	return &Scanner{}
 }
 
-// newDetector creates a gitleaks detector, serialized by initMu.
+// newDetector creates a gitleaks detector, serialized by detectorInitMu.
 func (s *Scanner) newDetector() (*detect.Detector, error) {
-	s.initMu.Lock()
-	defer s.initMu.Unlock()
+	detectorInitMu.Lock()
+	defer detectorInitMu.Unlock()
 	detector, err := detect.NewDetectorDefaultConfig()
 	if err != nil {
 		return nil, fmt.Errorf("create gitleaks detector: %w", err)
