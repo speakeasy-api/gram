@@ -109,14 +109,14 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 		return workflow.NewContinueAsNewError(ctx, DrainRiskAnalysisWorkflow, params)
 	}
 
-	// ── Sleep until signaled ────────────────────────────────────────────
+	// ── Complete ───────────────────────────────────────────────────────
+	// If signals arrived while we were draining, ContinueAsNew to process them.
+	// Otherwise just complete — SignalWithStart will start a new run when needed.
 	if drainSignals(signalCh) {
 		return workflow.NewContinueAsNewError(ctx, DrainRiskAnalysisWorkflow, params)
 	}
 
-	signalCh.Receive(ctx, nil)
-	drainSignals(signalCh)
-	return workflow.NewContinueAsNewError(ctx, DrainRiskAnalysisWorkflow, params)
+	return nil
 }
 
 // drainSignals consumes all queued signals. Returns true if at least one was consumed.
