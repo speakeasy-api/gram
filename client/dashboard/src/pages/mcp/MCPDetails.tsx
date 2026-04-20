@@ -1328,19 +1328,21 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     domain && canAccessCustomDomain && !toolset.customDomainId ? (
       linkDomainButton
     ) : (
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => {
-          if (!canAccessCustomDomain) {
-            setIsCustomDomainModalOpen(true);
-          } else {
-            routes.settings.goTo();
-          }
-        }}
-      >
-        Configure
-      </Button>
+      <RequireScope scope="build:write" level="component">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            if (!canAccessCustomDomain) {
+              setIsCustomDomainModalOpen(true);
+            } else {
+              routes.settings.goTo();
+            }
+          }}
+        >
+          Configure
+        </Button>
+      </RequireScope>
     );
 
   const anyChanges = mcpSlug !== toolset.mcpSlug;
