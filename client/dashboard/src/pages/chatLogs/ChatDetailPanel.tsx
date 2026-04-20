@@ -6,11 +6,18 @@ import type {
   TelemetryLogRecord,
 } from "@gram/client/models/components";
 import { useLoadChat, useSearchLogsMutation } from "@gram/client/react-query";
+import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Button } from "@speakeasy-api/moonshine";
+import type { RiskResult } from "@gram/client/models/components";
 import { CircularProgress } from "./CircularProgress";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 
@@ -271,6 +278,65 @@ function ToolCallsTab({
   );
 }
 
+function RiskBadgePopover({ results }: { results: RiskResult[] }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" className="cursor-pointer">
+          <Badge variant="destructive" className="text-xs">
+            <Icon name="shield-alert" className="mr-1 size-3" />
+            {results.length} {results.length === 1 ? "Risk" : "Risks"}
+          </Badge>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80">
+        <div className="space-y-3">
+          <div className="text-sm font-semibold">Risk Findings</div>
+          <div className="divide-border max-h-60 divide-y overflow-y-auto">
+            {results.map((r) => (
+              <div key={r.id} className="py-2 first:pt-0 last:pb-0">
+                <div className="flex items-center gap-2">
+                  <Badge variant="destructive" className="shrink-0 text-[10px]">
+                    {r.source}
+                  </Badge>
+                  {r.ruleId && (
+                    <span className="text-muted-foreground truncate font-mono text-xs">
+                      {r.ruleId}
+                    </span>
+                  )}
+                </div>
+                {r.description && (
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    {r.description}
+                  </p>
+                )}
+                {r.match && (
+                  <code className="bg-destructive/10 text-destructive mt-1 inline-block rounded px-1.5 py-0.5 font-mono text-xs break-all">
+                    {r.match}
+                  </code>
+                )}
+                {r.tags && r.tags.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {r.tags.map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="neutral"
+                        className="text-[10px]"
+                      >
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function ChatDetailPanel({
   chatId,
   resolutions,
@@ -308,6 +374,21 @@ export function ChatDetailPanel({
 
   const logs = logsData?.logs || [];
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
+
+  // Fetch risk findings for this chat
+  const { data: riskData } = useRiskListResults({ chatId });
+  const riskResultsByMessage = useMemo(() => {
+    const map = new Map<string, RiskResult[]>();
+    for (const r of riskData?.results ?? []) {
+      const existing = map.get(r.chatMessageId);
+      if (existing) {
+        existing.push(r);
+      } else {
+        map.set(r.chatMessageId, [r]);
+      }
+    }
+    return map;
+  }, [riskData]);
 
   if (chatLoading) {
     return <div className="p-8">Loading chat details...</div>;
@@ -713,6 +794,11 @@ export function ChatDetailPanel({
                               {message.createdAt &&
                                 format(new Date(message.createdAt), "HH:mm:ss")}
                             </span>
+                            {riskResultsByMessage.has(message.id) && (
+                              <RiskBadgePopover
+                                results={riskResultsByMessage.get(message.id)!}
+                              />
+                            )}
                           </div>
                           <div
                             className={cn(

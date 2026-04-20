@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ChatMessageCaptureStrategy captures completion messages to the database.
@@ -23,6 +25,7 @@ type ChatMessageCaptureStrategy struct {
 	db           *pgxpool.Pool
 	repo         *repo.Queries
 	assetStorage assets.BlobStore
+	observers    []MessageObserver
 }
 
 var _ openrouter.MessageCaptureStrategy = (*ChatMessageCaptureStrategy)(nil)
@@ -38,6 +41,33 @@ func NewChatMessageCaptureStrategy(
 		db:           db,
 		repo:         repo.New(db),
 		assetStorage: assetStorage,
+		observers:    nil,
+	}
+}
+
+// AddObserver registers a MessageObserver to be notified when messages are stored.
+func (s *ChatMessageCaptureStrategy) AddObserver(obs MessageObserver) {
+	s.observers = append(s.observers, obs)
+}
+
+func (s *ChatMessageCaptureStrategy) notifyObservers(ctx context.Context, projectID uuid.UUID) {
+	// Dispatch observer notifications asynchronously to avoid blocking the chat hot path
+	// Each observer gets its own goroutine to ensure one slow observer doesn't block others
+	for _, obs := range s.observers {
+		observer := obs // Capture loop variable
+		go func() {     //nolint:gosec // intentionally detached from request context so observers survive request cancellation
+			// Use a detached context with timeout to prevent indefinite hanging
+			// This ensures observers can complete even if the request context is canceled
+			bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second) //nolint:contextcheck // intentionally detached from request context
+			defer cancel()
+
+			// Copy trace information for observability
+			if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+				bgCtx = trace.ContextWithSpanContext(bgCtx, span.SpanContext())
+			}
+
+			observer.OnMessagesStored(bgCtx, projectID)
+		}()
 	}
 }
 
@@ -125,6 +155,8 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		}
 		if err := storeMessages(ctx, s.logger, s.db, s.assetStorage, rows); err != nil {
 			s.logger.ErrorContext(ctx, "failed to store chat messages", attr.SlogError(err))
+		} else {
+			s.notifyObservers(ctx, projectID)
 		}
 	}
 
@@ -196,6 +228,8 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 		s.logger.ErrorContext(ctx, "failed to store chat message", attr.SlogError(err))
 		return fmt.Errorf("store chat message: %w", err)
 	}
+
+	s.notifyObservers(ctx, projectID)
 
 	return nil
 }
