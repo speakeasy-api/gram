@@ -152,9 +152,7 @@ export default function PluginDetail() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs
-          substitutions={{ [pluginId!]: plugin.name }}
-        />
+        <Page.Header.Breadcrumbs substitutions={{ [pluginId!]: plugin.name }} />
       </Page.Header>
       <Page.Body>
         {/* Plugin metadata */}
