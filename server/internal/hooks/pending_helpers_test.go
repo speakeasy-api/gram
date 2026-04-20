@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 )
 
@@ -321,4 +322,183 @@ func TestListRange_CorrectDeserialization(t *testing.T) {
 	assert.Equal(t, "PostToolUse", retrieved[1].HookEventName)
 	assert.Equal(t, "tool1", *retrieved[0].ToolName)
 	assert.Equal(t, "tool2", *retrieved[1].ToolName)
+}
+
+func TestBuildTelemetryAttributesWithMetadata_SkillsMetadata(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	skillID := uuid.NewString()
+	skillVersionID := uuid.NewString()
+	toolName := "Task"
+	sessionID := uuid.NewString()
+
+	metadata := &SessionMetadata{
+		UserEmail:   "dev@example.com",
+		ProjectID:   uuid.NewString(),
+		GramOrgID:   uuid.NewString(),
+		ServiceName: "claude",
+	}
+
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudeHookPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		AdditionalData: map[string]any{
+			"skills": []any{
+				map[string]any{
+					"name":              "golang",
+					"scope":             "project",
+					"discovery_root":    "project_agents",
+					"source_type":       "local_filesystem",
+					"skill_id":          skillID,
+					"skill_version_id":  skillVersionID,
+					"resolution_status": "resolved",
+				},
+			},
+		},
+	}, metadata)
+
+	require.Equal(t, "golang", attrs[attr.SkillNameKey])
+	require.Equal(t, "project", attrs[attr.SkillScopeKey])
+	require.Equal(t, "project_agents", attrs[attr.SkillDiscoveryRootKey])
+	require.Equal(t, "local_filesystem", attrs[attr.SkillSourceTypeKey])
+	require.Equal(t, skillID, attrs[attr.SkillIDKey])
+	require.Equal(t, skillVersionID, attrs[attr.SkillVersionIDKey])
+	require.Equal(t, "resolved", attrs[attr.SkillResolutionStatusKey])
+}
+
+func TestBuildTelemetryAttributesWithMetadata_InvalidSkillsMetadataIgnored(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	metadata := &SessionMetadata{
+		UserEmail:   "dev@example.com",
+		ProjectID:   uuid.NewString(),
+		GramOrgID:   uuid.NewString(),
+		ServiceName: "claude",
+	}
+
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudeHookPayload{
+		HookEventName: "PreToolUse",
+		AdditionalData: map[string]any{
+			"skills": "invalid",
+		},
+	}, metadata)
+
+	_, hasSkillName := attrs[attr.SkillNameKey]
+	_, hasSkillScope := attrs[attr.SkillScopeKey]
+	_, hasSkillResolutionStatus := attrs[attr.SkillResolutionStatusKey]
+	require.False(t, hasSkillName)
+	require.False(t, hasSkillScope)
+	require.False(t, hasSkillResolutionStatus)
+}
+
+func TestBuildTelemetryAttributesWithMetadata_NullSkillsIgnored(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	metadata := &SessionMetadata{
+		UserEmail:   "dev@example.com",
+		ProjectID:   uuid.NewString(),
+		GramOrgID:   uuid.NewString(),
+		ServiceName: "claude",
+	}
+
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudeHookPayload{
+		HookEventName: "PreToolUse",
+		AdditionalData: map[string]any{
+			"skills": nil,
+		},
+	}, metadata)
+
+	_, hasSkillName := attrs[attr.SkillNameKey]
+	_, hasSkillScope := attrs[attr.SkillScopeKey]
+	require.False(t, hasSkillName)
+	require.False(t, hasSkillScope)
+}
+
+func TestBuildTelemetryAttributesWithMetadata_EmptySkillsSliceIgnored(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	metadata := &SessionMetadata{
+		UserEmail:   "dev@example.com",
+		ProjectID:   uuid.NewString(),
+		GramOrgID:   uuid.NewString(),
+		ServiceName: "claude",
+	}
+
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudeHookPayload{
+		HookEventName: "PreToolUse",
+		AdditionalData: map[string]any{
+			"skills": []any{},
+		},
+	}, metadata)
+
+	_, hasSkillName := attrs[attr.SkillNameKey]
+	require.False(t, hasSkillName)
+}
+
+func TestBuildTelemetryAttributesWithMetadata_SkillsMixedInvalidAndValid(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	metadata := &SessionMetadata{
+		UserEmail:   "dev@example.com",
+		ProjectID:   uuid.NewString(),
+		GramOrgID:   uuid.NewString(),
+		ServiceName: "claude",
+	}
+
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudeHookPayload{
+		HookEventName: "PreToolUse",
+		AdditionalData: map[string]any{
+			"skills": []any{
+				"notamap",
+				map[string]any{
+					"name": "golang",
+				},
+			},
+		},
+	}, metadata)
+
+	require.Equal(t, "golang", attrs[attr.SkillNameKey])
+}
+
+func TestBuildTelemetryAttributesWithMetadata_SkillsPartialFields(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	metadata := &SessionMetadata{
+		UserEmail:   "dev@example.com",
+		ProjectID:   uuid.NewString(),
+		GramOrgID:   uuid.NewString(),
+		ServiceName: "claude",
+	}
+
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudeHookPayload{
+		HookEventName: "PreToolUse",
+		AdditionalData: map[string]any{
+			"skills": []any{
+				map[string]any{
+					"name": "golang",
+				},
+			},
+		},
+	}, metadata)
+
+	require.Equal(t, "golang", attrs[attr.SkillNameKey])
+	_, hasScope := attrs[attr.SkillScopeKey]
+	_, hasDiscoveryRoot := attrs[attr.SkillDiscoveryRootKey]
+	_, hasSourceType := attrs[attr.SkillSourceTypeKey]
+	_, hasSkillID := attrs[attr.SkillIDKey]
+	_, hasSkillVersionID := attrs[attr.SkillVersionIDKey]
+	_, hasResolutionStatus := attrs[attr.SkillResolutionStatusKey]
+	require.False(t, hasScope)
+	require.False(t, hasDiscoveryRoot)
+	require.False(t, hasSourceType)
+	require.False(t, hasSkillID)
+	require.False(t, hasSkillVersionID)
+	require.False(t, hasResolutionStatus)
 }

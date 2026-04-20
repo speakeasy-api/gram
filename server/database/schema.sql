@@ -278,6 +278,78 @@ FOREIGN KEY (active_version_id)
 REFERENCES skill_versions (id)
 ON DELETE SET NULL;
 
+CREATE TABLE IF NOT EXISTS skills_capture_attempts (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  captured_by_user_id TEXT NOT NULL,
+
+  skill_name TEXT CHECK (skill_name <> '' AND CHAR_LENGTH(skill_name) <= 100),
+  skill_slug TEXT CHECK (skill_slug <> '' AND CHAR_LENGTH(skill_slug) <= 100),
+  scope TEXT NOT NULL CHECK (scope IN ('project', 'user')),
+  discovery_root TEXT NOT NULL CHECK (discovery_root <> '' AND CHAR_LENGTH(discovery_root) <= 60),
+  source_type TEXT NOT NULL CHECK (source_type <> '' AND CHAR_LENGTH(source_type) <= 60),
+  resolution_status TEXT NOT NULL CHECK (resolution_status <> '' AND CHAR_LENGTH(resolution_status) <= 60),
+  content_sha256 TEXT CHECK (content_sha256 ~ '^[a-fA-F0-9]{64}$'),
+  asset_format TEXT CHECK (asset_format IN ('zip')),
+  content_length BIGINT CHECK (content_length >= 0),
+
+  outcome TEXT NOT NULL CHECK (outcome IN ('accepted', 'duplicate', 'rejected')),
+  reason TEXT NOT NULL CHECK (reason <> '' AND CHAR_LENGTH(reason) <= 100),
+
+  skill_id uuid,
+  skill_version_id uuid,
+  asset_id uuid,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT skills_capture_attempts_pkey PRIMARY KEY (id),
+  CONSTRAINT skills_capture_attempts_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skills_capture_attempts_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE SET NULL,
+  CONSTRAINT skills_capture_attempts_skill_version_id_fkey FOREIGN KEY (skill_version_id) REFERENCES skill_versions (id) ON DELETE SET NULL,
+  CONSTRAINT skills_capture_attempts_asset_id_fkey FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS skills_capture_attempts_project_id_created_at_idx
+ON skills_capture_attempts (project_id, created_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS skills_capture_attempts_project_id_skill_slug_created_at_idx
+ON skills_capture_attempts (project_id, skill_slug, created_at DESC)
+WHERE deleted IS FALSE AND skill_slug IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS skills_capture_policies (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  project_id uuid,
+  mode TEXT NOT NULL CHECK (mode IN ('disabled', 'project_only', 'user_only', 'project_and_user')),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT skills_capture_policies_pkey PRIMARY KEY (id),
+  CONSTRAINT skills_capture_policies_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skills_capture_policies_scope_check CHECK (
+    (project_id IS NULL AND organization_id <> '')
+    OR
+    (project_id IS NOT NULL AND organization_id <> '')
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skills_capture_policies_org_default_key
+ON skills_capture_policies (organization_id)
+WHERE project_id IS NULL AND deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS skills_capture_policies_project_override_key
+ON skills_capture_policies (organization_id, project_id)
+WHERE project_id IS NOT NULL AND deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS api_keys (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 

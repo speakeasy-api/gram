@@ -21,6 +21,10 @@ export type GramProductFeatures = {
    */
   sessionCaptureEnabled: boolean;
   /**
+   * Whether skills capture and registry features are enabled
+   */
+  skillsCaptureEnabled: boolean;
+  /**
    * Whether tool I/O logging is enabled
    */
   toolIoLogsEnabled: boolean;
@@ -34,12 +38,14 @@ export const GramProductFeatures$inboundSchema: z.ZodMiniType<
   z.object({
     logs_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
+    skills_capture_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "logs_enabled": "logsEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
+      "skills_capture_enabled": "skillsCaptureEnabled",
       "tool_io_logs_enabled": "toolIoLogsEnabled",
     });
   }),

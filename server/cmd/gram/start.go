@@ -67,6 +67,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/resources"
+	"github.com/speakeasy-api/gram/server/internal/skills"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -740,6 +741,7 @@ func newStartCommand() *cli.Command {
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, accessManager))
 			assets.Attach(mux, assets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, chatSessionsManager, assetStorage, c.String("jwt-signing-key"), accessManager))
+			skills.Attach(mux, skills.NewService(logger, tracerProvider, db, sessionManager, assetStorage, accessManager, productFeatures))
 			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, accessManager))
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), accessManager))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, accessManager))
