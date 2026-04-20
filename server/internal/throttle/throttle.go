@@ -31,6 +31,7 @@ func New[K comparable, V any](cooldown time.Duration, keyFn func(V) K, onTrailin
 		Cooldown:   cooldown,
 		keyFn:      keyFn,
 		onTrailing: onTrailing,
+		entries:    sync.Map{},
 	}
 }
 
@@ -40,8 +41,8 @@ func New[K comparable, V any](cooldown time.Duration, keyFn func(V) K, onTrailin
 func (t *Throttle[K, V]) Do(v V) bool {
 	key := t.keyFn(v)
 
-	val, _ := t.entries.LoadOrStore(key, &entry{})
-	e := val.(*entry)
+	val, _ := t.entries.LoadOrStore(key, &entry{mu: sync.Mutex{}, pending: false, timer: nil})
+	e, _ := val.(*entry)
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -63,7 +64,7 @@ func (t *Throttle[K, V]) onExpired(key K, v V) {
 	if !ok {
 		return
 	}
-	e := val.(*entry)
+	e, _ := val.(*entry)
 
 	e.mu.Lock()
 	pending := e.pending

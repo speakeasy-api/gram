@@ -207,12 +207,12 @@ type UserSummary struct {
 // TimeSeriesBucket represents a single time bucket for time series metrics.
 // Used for plotting metrics over time in the observability overview.
 type TimeSeriesBucket struct {
-	BucketTimeUnixNano int64  `ch:"bucket_time_unix_nano"`
-	TotalChats         uint64 `ch:"total_chats"`
-	ResolvedChats      uint64 `ch:"resolved_chats"`
-	FailedChats        uint64 `ch:"failed_chats"`
-	PartialChats       uint64 `ch:"partial_chats"`
-	AbandonedChats     uint64 `ch:"abandoned_chats"`
+	BucketTimeUnixNano   int64   `ch:"bucket_time_unix_nano"`
+	TotalChats           uint64  `ch:"total_chats"`
+	ResolvedChats        uint64  `ch:"resolved_chats"`
+	FailedChats          uint64  `ch:"failed_chats"`
+	PartialChats         uint64  `ch:"partial_chats"`
+	AbandonedChats       uint64  `ch:"abandoned_chats"`
 
 	// Token metrics
 	TotalInputTokens         int64 `ch:"total_input_tokens"`

@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/throttle"
@@ -203,7 +204,7 @@ func NewThrottledSignaler(inner RiskAnalysisSignaler, cooldown time.Duration, lo
 			return params.RiskPolicyID
 		}, func(params DrainRiskAnalysisParams) error {
 			if err := inner.SignalNewMessages(context.Background(), params); err != nil {
-				logger.Error("throttled trailing signal failed", "error", err.Error())
+				logger.ErrorContext(context.Background(), "throttled trailing signal failed", attr.SlogError(err))
 			}
 			return nil
 		}),
@@ -212,10 +213,15 @@ func NewThrottledSignaler(inner RiskAnalysisSignaler, cooldown time.Duration, lo
 
 func (t *ThrottledSignaler) SignalNewMessages(ctx context.Context, params DrainRiskAnalysisParams) error {
 	if t.throttle.Cooldown <= 0 {
-		return t.inner.SignalNewMessages(ctx, params)
+		if err := t.inner.SignalNewMessages(ctx, params); err != nil {
+			return fmt.Errorf("signal new messages: %w", err)
+		}
+		return nil
 	}
 	if t.throttle.Do(params) {
-		return t.inner.SignalNewMessages(ctx, params)
+		if err := t.inner.SignalNewMessages(ctx, params); err != nil {
+			return fmt.Errorf("signal new messages: %w", err)
+		}
 	}
 	return nil
 }
