@@ -154,3 +154,114 @@ func TestThrottledSignaler_RecoversAfterCooldown(t *testing.T) {
 	_ = throttled.SignalNewMessages(context.Background(), params)
 	assert.Equal(t, 2, inner.callCount(), "should fire immediately after cooldown expires")
 }
+
+func TestThrottledSignaler_ConcurrentCallers(t *testing.T) {
+	t.Parallel()
+
+	inner := &countingSignaler{}
+	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, slog.Default())
+
+	params := DrainRiskAnalysisParams{
+		ProjectID:    uuid.New(),
+		RiskPolicyID: uuid.New(),
+	}
+
+	// Launch 100 concurrent callers.
+	var wg sync.WaitGroup
+	for range 100 {
+		wg.Go(func() {
+			_ = throttled.SignalNewMessages(context.Background(), params)
+		})
+	}
+	wg.Wait()
+
+	// Exactly 1 immediate signal.
+	assert.Equal(t, 1, inner.callCount(), "concurrent callers should result in exactly one immediate signal")
+
+	// Wait for trailing.
+	time.Sleep(200 * time.Millisecond)
+	assert.Equal(t, 2, inner.callCount(), "one trailing signal after concurrent burst")
+}
+
+func TestThrottledSignaler_MultipleBursts(t *testing.T) {
+	t.Parallel()
+
+	inner := &countingSignaler{}
+	throttled := NewThrottledSignaler(inner, 50*time.Millisecond, slog.Default())
+
+	params := DrainRiskAnalysisParams{
+		ProjectID:    uuid.New(),
+		RiskPolicyID: uuid.New(),
+	}
+
+	// Burst 1: immediate + suppressed.
+	_ = throttled.SignalNewMessages(context.Background(), params)
+	_ = throttled.SignalNewMessages(context.Background(), params)
+	assert.Equal(t, 1, inner.callCount())
+
+	// Wait for trailing from burst 1.
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, 2, inner.callCount(), "trailing from burst 1")
+
+	// Wait for cooldown to fully expire.
+	time.Sleep(100 * time.Millisecond)
+
+	// Burst 2: should fire immediately again + trailing.
+	_ = throttled.SignalNewMessages(context.Background(), params)
+	_ = throttled.SignalNewMessages(context.Background(), params)
+	assert.Equal(t, 3, inner.callCount(), "immediate from burst 2")
+
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, 4, inner.callCount(), "trailing from burst 2")
+}
+
+func TestThrottledSignaler_FirstCallErrorPropagates(t *testing.T) {
+	t.Parallel()
+
+	inner := &countingSignaler{err: assert.AnError}
+	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, slog.Default())
+
+	params := DrainRiskAnalysisParams{
+		ProjectID:    uuid.New(),
+		RiskPolicyID: uuid.New(),
+	}
+
+	err := throttled.SignalNewMessages(context.Background(), params)
+	require.ErrorIs(t, err, assert.AnError, "first call error should propagate")
+}
+
+func TestThrottledSignaler_SuppressedCallsReturnNil(t *testing.T) {
+	t.Parallel()
+
+	inner := &countingSignaler{}
+	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, slog.Default())
+
+	params := DrainRiskAnalysisParams{
+		ProjectID:    uuid.New(),
+		RiskPolicyID: uuid.New(),
+	}
+
+	_ = throttled.SignalNewMessages(context.Background(), params)
+
+	// Suppressed calls should return nil, not an error.
+	err := throttled.SignalNewMessages(context.Background(), params)
+	require.NoError(t, err, "suppressed calls should return nil")
+}
+
+func TestThrottledSignaler_NegativeCooldownDisablesThrottling(t *testing.T) {
+	t.Parallel()
+
+	inner := &countingSignaler{}
+	throttled := NewThrottledSignaler(inner, -1*time.Second, slog.Default())
+
+	params := DrainRiskAnalysisParams{
+		ProjectID:    uuid.New(),
+		RiskPolicyID: uuid.New(),
+	}
+
+	for range 5 {
+		_ = throttled.SignalNewMessages(context.Background(), params)
+	}
+
+	assert.Equal(t, 5, inner.callCount(), "negative cooldown should pass through all calls")
+}
