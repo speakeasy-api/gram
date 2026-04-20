@@ -14,7 +14,8 @@ var ProductFeaturesResult = ResultType("application/vnd.gram.product-features", 
 		Attribute("logs_enabled", Boolean, "Whether logging is enabled")
 		Attribute("tool_io_logs_enabled", Boolean, "Whether tool I/O logging is enabled")
 		Attribute("session_capture_enabled", Boolean, "Whether Claude Code session capture is enabled")
-		Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled")
+		Attribute("skills_capture_enabled", Boolean, "Whether skills capture and registry features are enabled")
+		Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "skills_capture_enabled")
 	})
 })
 
@@ -49,7 +50,7 @@ var _ = Service("features", func() {
 		Payload(func() {
 			Attribute("feature_name", String, "Name of the feature to update", func() {
 				MaxLength(60)
-				Enum("logs", "tool_io_logs", "session_capture")
+				Enum("logs", "tool_io_logs", "session_capture", "skills_capture")
 			})
 			Attribute("enabled", Boolean, "Whether the feature should be enabled")
 			Required("feature_name", "enabled")

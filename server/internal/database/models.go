@@ -843,6 +843,42 @@ type SkillVersion struct {
 	SkillID            uuid.UUID
 }
 
+type SkillsCaptureAttempt struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	CapturedByUserID string
+	SkillName        pgtype.Text
+	SkillSlug        pgtype.Text
+	Scope            string
+	DiscoveryRoot    string
+	SourceType       string
+	ResolutionStatus string
+	ContentSha256    pgtype.Text
+	AssetFormat      pgtype.Text
+	ContentLength    pgtype.Int8
+	Outcome          string
+	Reason           string
+	SkillID          uuid.NullUUID
+	SkillVersionID   uuid.NullUUID
+	AssetID          uuid.NullUUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+}
+
+type SkillsCapturePolicy struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Mode           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type SlackApp struct {
 	CreatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz

@@ -7,11 +7,20 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useFeaturesGet } from "@gram/client/react-query";
 import { ExternalLink, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { HookSourceIcon } from "./HookSourceIcon";
 
-function ClaudeInstallContent() {
+function ClaudeInstallContent({
+  skillsCaptureEnabled,
+}: {
+  skillsCaptureEnabled: boolean;
+}) {
+  const pluginName = skillsCaptureEnabled
+    ? "gram-hooks-skills@gram"
+    : "gram-hooks@gram";
+
   return (
     <div className="space-y-6">
       <div>
@@ -24,7 +33,7 @@ function ClaudeInstallContent() {
             <code>claude plugin marketplace add speakeasy-api/gram</code>
           </div>
           <div className="flex items-center justify-between">
-            <code>claude plugin install gram-hooks@gram</code>
+            <code>{`claude plugin install ${pluginName}`}</code>
           </div>
         </div>
       </div>
@@ -60,7 +69,7 @@ function ClaudeInstallContent() {
               <code>
                 {`{
   "plugins": {
-    "required": ["gram-hooks@gram"]
+    "required": ["${pluginName}"]
   }
 }`}
               </code>
@@ -84,14 +93,21 @@ function ClaudeInstallContent() {
   );
 }
 
-function CursorInstallContent() {
+function CursorInstallContent({
+  skillsCaptureEnabled,
+}: {
+  skillsCaptureEnabled: boolean;
+}) {
+  const pluginName = skillsCaptureEnabled ? "gram-hooks-skills" : "gram-hooks";
+
   return (
     <div className="space-y-6">
       <div>
         <h3 className="mb-2 text-sm font-semibold">1. Publish the Plugin</h3>
         <p className="text-muted-foreground mb-4 text-sm">
-          Add the Gram hooks plugin to your Cursor team marketplace and mark it
-          as required so it auto-installs for all team members:
+          Add the {skillsCaptureEnabled ? "Gram skills capture" : "Gram hooks"}{" "}
+          plugin to your Cursor team marketplace and mark it as required so it
+          auto-installs for all team members:
         </p>
         <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
           <a
@@ -132,7 +148,7 @@ function CursorInstallContent() {
             <span className="text-muted-foreground shrink-0 font-medium">
               Hook Name:
             </span>
-            <code>Gram Hooks</code>
+            <code>{pluginName}</code>
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-muted-foreground shrink-0 font-medium">
@@ -251,6 +267,10 @@ export function HooksSetupDialog({
   defaultProvider?: Provider;
 }) {
   const [selected, setSelected] = useState<Provider>(defaultProvider);
+  const { data: featuresData } = useFeaturesGet(undefined, undefined, {
+    throwOnError: false,
+  });
+  const skillsCaptureEnabled = featuresData?.skillsCaptureEnabled ?? false;
 
   useEffect(() => {
     setSelected(defaultProvider);
@@ -306,8 +326,12 @@ export function HooksSetupDialog({
           </TooltipProvider>
         </div>
 
-        {selected === "claude" && <ClaudeInstallContent />}
-        {selected === "cursor" && <CursorInstallContent />}
+        {selected === "claude" && (
+          <ClaudeInstallContent skillsCaptureEnabled={skillsCaptureEnabled} />
+        )}
+        {selected === "cursor" && (
+          <CursorInstallContent skillsCaptureEnabled={skillsCaptureEnabled} />
+        )}
       </Dialog.Content>
     </Dialog>
   );

@@ -1,3 +1,7 @@
+import {
+  APP_LOADING_NAV_META,
+  APP_NAV_GROUPS,
+} from "@/components/app-navigation";
 import { FullPageError } from "@/components/full-page-error";
 import { GramLogo } from "@/components/gram-logo";
 import { PageHeader } from "@/components/page-header";
@@ -400,29 +404,6 @@ export const useSessionData = () => {
   return { session, error, status };
 };
 
-/** Static nav items matching the real sidebar groups — no auth context needed. */
-const LOADING_NAV = {
-  project: [{ label: "Home", icon: "house" as const }],
-  connect: [
-    { label: "Sources", icon: "file-code" as const },
-    { label: "Catalog", icon: "store" as const },
-    { label: "Playground", icon: "message-circle" as const },
-  ],
-  build: [
-    { label: "Chat Elements", icon: "message-circle" as const },
-    { label: "MCP", icon: "network" as const },
-    { label: "Assistants", icon: "bot" as const },
-    { label: "Skills", icon: "terminal" as const },
-  ],
-  observe: [
-    { label: "Insights", icon: "layout-dashboard" as const },
-    { label: "MCP Logs", icon: "file-text" as const },
-    { label: "Agent Sessions", icon: "messages-square" as const },
-    { label: "Hooks", icon: "webhook" as const },
-  ],
-  settings: [{ label: "Settings", icon: "settings" as const }],
-};
-
 /**
  * Lightweight shell that mirrors the real AppLayout structure,
  * shown while the auth session is still loading so the user
@@ -454,24 +435,27 @@ const AppLoadingShell = () => (
       <div className="flex w-full flex-1 overflow-hidden pt-2">
         <Sidebar collapsible="offcanvas" variant="inset">
           <SidebarContent className="pt-2">
-            {Object.entries(LOADING_NAV).map(([group, items]) => (
+            {Object.entries(APP_NAV_GROUPS).map(([group, routeKeys]) => (
               <SidebarGroup key={group}>
                 <SidebarGroupLabel className="text-sidebar-foreground">
                   {group}
                 </SidebarGroupLabel>
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    {items.map((item) => (
-                      <SidebarMenuItem key={item.label}>
-                        <SidebarMenuButton>
-                          <Icon
-                            name={item.icon}
-                            className="text-muted-foreground"
-                          />
-                          <Type variant="small">{item.label}</Type>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
+                    {routeKeys.map((routeKey) => {
+                      const item = APP_LOADING_NAV_META[routeKey];
+                      return (
+                        <SidebarMenuItem key={item.label}>
+                          <SidebarMenuButton>
+                            <Icon
+                              name={item.icon}
+                              className="text-muted-foreground"
+                            />
+                            <Type variant="small">{item.label}</Type>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    })}
                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>

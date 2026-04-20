@@ -1,3 +1,7 @@
+import {
+  APP_NAV_GROUPS,
+  type AppNavRouteKey,
+} from "@/components/app-navigation";
 import { NavButton, NavMenu } from "@/components/nav-menu";
 import {
   Sidebar,
@@ -11,7 +15,7 @@ import {
 import { useSlugs } from "@/contexts/Sdk";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
-import { useGetPeriodUsage } from "@gram/client/react-query";
+import { useFeaturesGet, useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
 import { Building2Icon, MinusIcon, TestTube2Icon } from "lucide-react";
 import * as React from "react";
@@ -21,39 +25,36 @@ import { FeatureRequestModal } from "./FeatureRequestModal";
 import { Button } from "./ui/button";
 import { Type } from "./ui/type";
 
+function resolveNavGroupItems(
+  routes: ReturnType<typeof useRoutes>,
+  skillsCaptureEnabled: boolean,
+): Record<string, AppRoute[]> {
+  return Object.fromEntries(
+    Object.entries(APP_NAV_GROUPS)
+      .map(([group, routeKeys]) => [
+        group,
+        routeKeys
+          .filter((routeKey) => routeKey !== "skills" || skillsCaptureEnabled)
+          .map((routeKey) => routes[routeKey as AppNavRouteKey]),
+      ])
+      .filter(([, items]) => items.length > 0),
+  ) as Record<string, AppRoute[]>;
+}
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const { orgSlug } = useSlugs();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const { data: featuresData } = useFeaturesGet(undefined, undefined, {
+    throwOnError: false,
+  });
 
-  const settingsItems = [routes.settings] as AppRoute[];
-
-  const navGroups = {
-    connect: [routes.sources, routes.catalog, routes.playground] as AppRoute[],
-    build: [
-      routes.elements,
-      routes.mcp,
-      routes.plugins,
-      routes.slackApps,
-      routes.clis,
-    ],
-    observe: [
-      routes.observability,
-      routes.logs,
-      routes.chatSessions,
-      routes.hooks,
-    ],
-  };
+  const { settings: settingsItems = [routes.settings], ...navGroups } =
+    resolveNavGroupItems(routes, featuresData?.skillsCaptureEnabled ?? false);
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarContent className="pt-2">
-        <SidebarGroup>
-          <SidebarGroupLabel>project</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <NavMenu items={[routes.home]} />
-          </SidebarGroupContent>
-        </SidebarGroup>
         {Object.entries(navGroups).map(([label, items]) => (
           <SidebarGroup key={label}>
             <SidebarGroupLabel>{label}</SidebarGroupLabel>
