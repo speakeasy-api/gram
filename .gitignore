@@ -13,6 +13,7 @@ junit-report.xml
 !.vscode/extensions.json
 *.code-workspace
 .idea
+.run
 /posting
 /gram.posting.yaml
 /posting.env
