@@ -1,3 +1,4 @@
+import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +10,7 @@ import {
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { useRBAC } from "@/hooks/useRBAC";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components";
@@ -47,6 +49,8 @@ import { useEnvironmentVariables } from "./useEnvironmentVariables";
 const EMPTY_ENVIRONMENTS: never[] = [];
 
 export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const session = useSession();
@@ -712,9 +716,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
           ) : null
         }
         action={
-          <Button onClick={() => setIsAddingNew(true)} disabled={isAddingNew}>
-            <Button.Text>Add Variable</Button.Text>
-          </Button>
+          <RequireScope scope="mcp:write" level="component">
+            <Button onClick={() => setIsAddingNew(true)} disabled={isAddingNew}>
+              <Button.Text>Add Variable</Button.Text>
+            </Button>
+          </RequireScope>
         }
       >
         <div>
@@ -774,6 +780,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                   onEditHeaderName={setEditingHeaderId}
                   onHeaderDisplayNameChange={handleHeaderDisplayNameChange}
                   onHeaderBlur={() => setEditingHeaderId(null)}
+                  readOnly={!canWrite}
                 />
               ))}
             </div>
@@ -787,12 +794,17 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 custom data to your backend. Environments can be shared across
                 multiple MCP servers.
               </p>
-              <Button onClick={() => setIsAddingNew(true)} variant="secondary">
-                <Button.LeftIcon>
-                  <Plus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Add Variable</Button.Text>
-              </Button>
+              <RequireScope scope="mcp:write" level="component">
+                <Button
+                  onClick={() => setIsAddingNew(true)}
+                  variant="secondary"
+                >
+                  <Button.LeftIcon>
+                    <Plus className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Add Variable</Button.Text>
+                </Button>
+              </RequireScope>
             </div>
           )}
 
@@ -924,26 +936,28 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
       description="OAuth let's you control access to MCP servers through an identity provider."
       headingExtra={undefined}
       action={
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {!isOAuthEligible ? (
-              <span className="inline-block">
-                <Button disabled>
-                  <Button.Text>Configure</Button.Text>
+        <RequireScope scope="mcp:write" level="component">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {!isOAuthEligible ? (
+                <span className="inline-block">
+                  <Button disabled>
+                    <Button.Text>Configure</Button.Text>
+                  </Button>
+                </span>
+              ) : (
+                <Button onClick={handleConfigureClick}>
+                  <Button.Text>
+                    {isOAuthConnected ? "Manage" : "Configure"}
+                  </Button.Text>
                 </Button>
-              </span>
-            ) : (
-              <Button onClick={handleConfigureClick}>
-                <Button.Text>
-                  {isOAuthConnected ? "Manage" : "Configure"}
-                </Button.Text>
-              </Button>
+              )}
+            </TooltipTrigger>
+            {!isOAuthEligible && (
+              <TooltipContent>{disabledTooltipText}</TooltipContent>
             )}
-          </TooltipTrigger>
-          {!isOAuthEligible && (
-            <TooltipContent>{disabledTooltipText}</TooltipContent>
-          )}
-        </Tooltip>
+          </Tooltip>
+        </RequireScope>
       }
     >
       <OAuthStatusDisplay
