@@ -87,6 +87,11 @@ func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
 						return a
 					}
 
+					if a.Key == slog.TimeKey {
+						a.Key = "timestamp"
+						return a
+					}
+
 					replace, ok := temporalKeys[a.Key]
 					if !ok {
 						return a

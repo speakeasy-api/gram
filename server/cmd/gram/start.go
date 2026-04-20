@@ -182,16 +182,6 @@ func newStartCommand() *cli.Command {
 			Required: true,
 		},
 		&cli.StringFlag{
-			Name:    "redis-cache-addr",
-			Usage:   "Address of the redis cache server",
-			EnvVars: []string{"GRAM_REDIS_CACHE_ADDR"},
-		},
-		&cli.StringFlag{
-			Name:    "redis-cache-password",
-			Usage:   "Password for the redis cache server",
-			EnvVars: []string{"GRAM_REDIS_CACHE_PASSWORD"},
-		},
-		&cli.StringFlag{
 			Name:     "encryption-key",
 			Usage:    "Key for App level AES encryption/decyryption",
 			Required: true,
@@ -365,6 +355,7 @@ func newStartCommand() *cli.Command {
 		},
 	}
 
+	flags = append(flags, redisFlags...)
 	flags = append(flags, clickHouseFlags...)
 	flags = append(flags, functionsFlags...)
 	flags = append(flags, pulseMCPFlags...)
@@ -444,6 +435,7 @@ func newStartCommand() *cli.Command {
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
+				enableTracing: c.Bool("redis-enable-tracing"),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)

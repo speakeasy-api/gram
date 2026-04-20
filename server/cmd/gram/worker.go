@@ -156,16 +156,6 @@ func newWorkerCommand() *cli.Command {
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
 			EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
 		},
-		&cli.StringFlag{
-			Name:    "redis-cache-addr",
-			Usage:   "Address of the redis cache server",
-			EnvVars: []string{"GRAM_REDIS_CACHE_ADDR"},
-		},
-		&cli.StringFlag{
-			Name:    "redis-cache-password",
-			Usage:   "Password for the redis cache server",
-			EnvVars: []string{"GRAM_REDIS_CACHE_PASSWORD"},
-		},
 		&cli.StringSliceFlag{
 			Name:     "disallowed-cidr-blocks",
 			Usage:    "List of CIDR blocks to block for SSRF protection",
@@ -274,6 +264,7 @@ func newWorkerCommand() *cli.Command {
 		},
 	}
 
+	flags = append(flags, redisFlags...)
 	flags = append(flags, clickHouseFlags...)
 	flags = append(flags, functionsFlags...)
 	flags = append(flags, pulseMCPFlags...)
@@ -348,6 +339,7 @@ func newWorkerCommand() *cli.Command {
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
+				enableTracing: c.Bool("redis-enable-tracing"),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)

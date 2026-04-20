@@ -254,6 +254,7 @@ func newAssetStorage(ctx context.Context, logger *slog.Logger, opts assetStorage
 type redisClientOptions struct {
 	redisAddr     string
 	redisPassword string
+	enableTracing bool
 }
 
 func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
@@ -272,12 +273,14 @@ func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client
 		return nil, fmt.Errorf("redis connection failed: %w", err)
 	}
 
-	attrs := redisotel.WithAttributes(
-		semconv.DBSystemRedis,
-		semconv.DBRedisDBIndex(db),
-	)
-	if err := redisotel.InstrumentTracing(redisClient, redisotel.WithDBStatement(false), attrs); err != nil {
-		return nil, fmt.Errorf("failed to instrument redis client: %w", err)
+	if opts.enableTracing {
+		attrs := redisotel.WithAttributes(
+			semconv.DBSystemRedis,
+			semconv.DBRedisDBIndex(db),
+		)
+		if err := redisotel.InstrumentTracing(redisClient, redisotel.WithDBStatement(false), attrs); err != nil {
+			return nil, fmt.Errorf("failed to instrument redis client: %w", err)
+		}
 	}
 
 	return redisClient, nil
