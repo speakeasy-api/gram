@@ -81,11 +81,18 @@ type CompletionResponse struct {
 	Content      string // Text content extracted from message
 }
 
+// CaptureSession carries strategy-specific state between StartOrResumeChat and
+// CaptureMessage within a single completion request. It lets the strategy
+// avoid repeating work (chain-tip lookups, matching walks) on the happy path
+// and catch up atomically on the sad path when upfront persistence failed.
+// The concrete type is owned by the strategy — callers treat it as opaque.
+type CaptureSession = any
+
 // MessageCaptureStrategy defines how to capture and persist messages.
 // Different implementations can store messages in different ways (database, logs, no-op, etc.).
 type MessageCaptureStrategy interface {
-	StartOrResumeChat(ctx context.Context, request CompletionRequest) error
-	CaptureMessage(ctx context.Context, request CompletionRequest, response CompletionResponse) error
+	StartOrResumeChat(ctx context.Context, request CompletionRequest) (CaptureSession, error)
+	CaptureMessage(ctx context.Context, session CaptureSession, request CompletionRequest, response CompletionResponse) error
 }
 
 // UsageTrackingStrategy defines how to track model usage for billing.

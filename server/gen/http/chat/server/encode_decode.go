@@ -1683,6 +1683,7 @@ func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatM
 		UserID:         v.UserID,
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      v.CreatedAt,
+		Generation:     v.Generation,
 	}
 
 	return res

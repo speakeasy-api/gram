@@ -1,7 +1,14 @@
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { CodeBlock } from "@/components/ui/code-block";
 import type {
+  ChatMessage,
   ChatResolution,
   TelemetryLogRecord,
 } from "@gram/client/models/components";
@@ -82,6 +89,235 @@ interface ToolCall {
     name?: string;
     arguments?: string | object;
   };
+}
+
+function ChatMessagesList({
+  messages,
+  messageResolutionMap,
+  riskResultsByMessage,
+}: {
+  messages: ChatMessage[];
+  messageResolutionMap: Map<string, ChatResolution>;
+  riskResultsByMessage: Map<string, RiskResult[]>;
+}) {
+  const groups = useMemo(() => {
+    const byGeneration = new Map<number, ChatMessage[]>();
+    for (const m of messages) {
+      const list = byGeneration.get(m.generation) ?? [];
+      list.push(m);
+      byGeneration.set(m.generation, list);
+    }
+    return Array.from(byGeneration.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([generation, items]) => ({ generation, messages: items }));
+  }, [messages]);
+
+  const maxGeneration =
+    groups.length > 0 ? groups[groups.length - 1]!.generation : 0;
+
+  // A single segment (no compaction has ever occurred) stays flat — no accordion.
+  if (maxGeneration === 0) {
+    return (
+      <Stack direction="vertical" gap={4}>
+        {messages.map((message) => (
+          <MessageItem
+            key={message.id}
+            message={message}
+            resolution={messageResolutionMap.get(message.id)}
+            riskResults={riskResultsByMessage.get(message.id)}
+          />
+        ))}
+      </Stack>
+    );
+  }
+
+  return (
+    <Accordion type="multiple" defaultValue={[`gen-${maxGeneration}`]}>
+      {groups.map(({ generation, messages: groupMessages }) => (
+        <AccordionItem key={generation} value={`gen-${generation}`}>
+          <AccordionTrigger>
+            <div className="flex items-center gap-2">
+              <span>Conversation segment {generation + 1}</span>
+              <span className="text-muted-foreground text-xs font-normal">
+                {groupMessages.length} message
+                {groupMessages.length === 1 ? "" : "s"}
+              </span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent>
+            <Stack direction="vertical" gap={4}>
+              {groupMessages.map((message) => (
+                <MessageItem
+                  key={message.id}
+                  message={message}
+                  resolution={messageResolutionMap.get(message.id)}
+                  riskResults={riskResultsByMessage.get(message.id)}
+                />
+              ))}
+            </Stack>
+          </AccordionContent>
+        </AccordionItem>
+      ))}
+    </Accordion>
+  );
+}
+
+function MessageItem({
+  message,
+  resolution,
+  riskResults,
+}: {
+  message: ChatMessage;
+  resolution: ChatResolution | undefined;
+  riskResults: RiskResult[] | undefined;
+}) {
+  const parsedToolCalls: ToolCall[] | null = useMemo(() => {
+    if (!message.toolCalls) return null;
+    try {
+      const parsed = JSON.parse(message.toolCalls) as unknown;
+      return Array.isArray(parsed) ? (parsed as ToolCall[]) : null;
+    } catch {
+      return null;
+    }
+  }, [message.toolCalls]);
+
+  return (
+    <div>
+      {resolution && (
+        <div className="bg-primary/10 border-primary mb-3 rounded-lg border-l-4 p-3">
+          <div className="text-xs font-semibold">
+            Resolution Point: {resolution.resolution}
+          </div>
+        </div>
+      )}
+
+      {parsedToolCalls ? (
+        parsedToolCalls.map((tc, idx: number) => (
+          <div key={tc.id || idx} className="flex items-start gap-3">
+            <div className="bg-primary flex size-8 flex-shrink-0 items-center justify-center rounded-full">
+              <Icon name="zap" className="text-primary-foreground size-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex items-center gap-2">
+                <span className="text-sm font-semibold">Tool Call</span>
+                {tc.id && (
+                  <code className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+                    {tc.id}
+                  </code>
+                )}
+                <span className="text-muted-foreground text-xs">
+                  {message.createdAt &&
+                    format(new Date(message.createdAt), "HH:mm:ss")}
+                </span>
+              </div>
+              <div className="bg-background overflow-hidden rounded-lg border text-sm">
+                <div className="bg-muted/30 border-b p-3">
+                  <div className="flex items-center gap-2">
+                    <Icon name="zap" className="text-primary size-4" />
+                    <span className="font-semibold">
+                      {tc.function?.name || tc.name || "Tool Call"}
+                    </span>
+                  </div>
+                </div>
+                {tc.function?.arguments && (
+                  <CodeBlock
+                    content={
+                      typeof tc.function.arguments === "string"
+                        ? tc.function.arguments
+                        : JSON.stringify(tc.function.arguments, null, 2)
+                    }
+                    maxHeight={300}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        ))
+      ) : (
+        <div className="flex items-start gap-3">
+          {message.role === "user" && (
+            <div className="bg-primary/10 flex size-8 flex-shrink-0 items-center justify-center rounded-full">
+              <Icon name="user" className="text-primary size-4" />
+            </div>
+          )}
+          {message.role === "assistant" && (
+            <div className="bg-muted flex size-8 flex-shrink-0 items-center justify-center rounded-full">
+              <Icon name="bot" className="size-4" />
+            </div>
+          )}
+          {message.role === "tool" && (
+            <div className="bg-primary flex size-8 flex-shrink-0 items-center justify-center rounded-full">
+              <Icon name="zap" className="text-primary-foreground size-4" />
+            </div>
+          )}
+          {message.role === "system" && (
+            <div className="bg-muted flex size-8 flex-shrink-0 items-center justify-center rounded-full">
+              <Icon name="settings" className="size-4" />
+            </div>
+          )}
+
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-sm font-semibold capitalize">
+                {message.role === "tool"
+                  ? "Tool Result"
+                  : message.role === "system"
+                    ? "System Prompt"
+                    : message.role}
+              </span>
+              {message.toolCallId && (
+                <code className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+                  {message.toolCallId}
+                </code>
+              )}
+              <span className="text-muted-foreground text-xs">
+                {message.createdAt &&
+                  format(new Date(message.createdAt), "HH:mm:ss")}
+              </span>
+              {riskResults && riskResults.length > 0 && (
+                <RiskBadgePopover results={riskResults} />
+              )}
+            </div>
+            {message.role === "system" ? (
+              <details className="bg-muted/30 group overflow-hidden rounded-lg border text-sm">
+                <summary className="text-muted-foreground hover:bg-muted/50 flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs select-none">
+                  <Icon
+                    name="chevron-right"
+                    className="size-3 transition-transform group-open:rotate-90"
+                  />
+                  <span>Show content</span>
+                </summary>
+                <div className="border-t p-3 font-mono text-xs whitespace-pre-wrap">
+                  {typeof message.content === "string"
+                    ? message.content.trim()
+                    : JSON.stringify(message.content)}
+                </div>
+              </details>
+            ) : (
+              <div
+                className={cn(
+                  "overflow-hidden rounded-lg text-sm",
+                  message.role === "user" && "bg-primary/5 p-3",
+                  message.role === "assistant" && "bg-muted/50 p-3",
+                  message.role === "tool" && "bg-background border",
+                )}
+              >
+                {message.role === "tool" ? (
+                  <CodeBlock content={message.content ?? ""} maxHeight={300} />
+                ) : (
+                  <div className="whitespace-pre-wrap">
+                    {typeof message.content === "string"
+                      ? message.content.trim()
+                      : JSON.stringify(message.content)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function formatTimestamp(nanos: string): string {
@@ -407,12 +643,6 @@ export function ChatDetailPanel({
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
   );
 
-  // Filter out system messages for display count
-  const nonSystemMessages = chat.messages.filter((m) => m.role !== "system");
-
-  // Get system messages for the System Prompt tab
-  const systemMessages = chat.messages.filter((m) => m.role === "system");
-
   // Create a map of message IDs to resolution info for showing breakpoints
   const messageResolutionMap = new Map<string, ChatResolution>();
   resolutions.forEach((res) => {
@@ -504,15 +734,6 @@ export function ChatDetailPanel({
               </span>
             )}
           </TabsTrigger>
-          {systemMessages.length > 0 && (
-            <TabsTrigger
-              value="system"
-              className="data-[state=active]:border-b-primary relative rounded-none border-0 border-b-2 border-transparent px-4 py-3 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-            >
-              <Icon name="settings" className="mr-2 size-4" />
-              System Prompt
-            </TabsTrigger>
-          )}
         </TabsList>
 
         {/* Overview Tab */}
@@ -558,7 +779,7 @@ export function ChatDetailPanel({
                   Messages:
                 </div>
                 <div className="text-sm font-medium">
-                  {nonSystemMessages.length}
+                  {chat.messages.length}
                 </div>
               </div>
               <div>
@@ -667,167 +888,11 @@ export function ChatDetailPanel({
 
           {/* Chat Messages */}
           <div className="p-6">
-            <Stack direction="vertical" gap={4}>
-              {nonSystemMessages.map((message) => {
-                const resolution = messageResolutionMap.get(message.id);
-
-                return (
-                  <div key={message.id}>
-                    {/* Resolution breakpoint */}
-                    {resolution && (
-                      <div className="bg-primary/10 border-primary mb-3 rounded-lg border-l-4 p-3">
-                        <div className="text-xs font-semibold">
-                          Resolution Point: {resolution.resolution}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Message - render tool calls as separate entries */}
-                    {message.toolCalls ? (
-                      (() => {
-                        try {
-                          const parsedToolCalls = JSON.parse(
-                            message.toolCalls,
-                          ) as ToolCall[];
-                          return Array.isArray(parsedToolCalls)
-                            ? parsedToolCalls.map((tc, idx: number) => (
-                                <div
-                                  key={tc.id || idx}
-                                  className="flex items-start gap-3"
-                                >
-                                  <div className="bg-primary flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-                                    <Icon
-                                      name="zap"
-                                      className="text-primary-foreground size-4"
-                                    />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="mb-1 flex items-center gap-2">
-                                      <span className="text-sm font-semibold">
-                                        Tool Call
-                                      </span>
-                                      {tc.id && (
-                                        <code className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
-                                          {tc.id}
-                                        </code>
-                                      )}
-                                      <span className="text-muted-foreground text-xs">
-                                        {message.createdAt &&
-                                          format(
-                                            new Date(message.createdAt),
-                                            "HH:mm:ss",
-                                          )}
-                                      </span>
-                                    </div>
-                                    <div className="bg-background overflow-hidden rounded-lg border text-sm">
-                                      <div className="bg-muted/30 border-b p-3">
-                                        <div className="flex items-center gap-2">
-                                          <Icon
-                                            name="zap"
-                                            className="text-primary size-4"
-                                          />
-                                          <span className="font-semibold">
-                                            {tc.function?.name ||
-                                              tc.name ||
-                                              "Tool Call"}
-                                          </span>
-                                        </div>
-                                      </div>
-                                      {tc.function?.arguments && (
-                                        <CodeBlock
-                                          content={
-                                            typeof tc.function.arguments ===
-                                            "string"
-                                              ? tc.function.arguments
-                                              : JSON.stringify(
-                                                  tc.function.arguments,
-                                                  null,
-                                                  2,
-                                                )
-                                          }
-                                          maxHeight={300}
-                                        />
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))
-                            : null;
-                        } catch {
-                          return null;
-                        }
-                      })()
-                    ) : (
-                      <div className="flex items-start gap-3">
-                        {message.role === "user" && (
-                          <div className="bg-primary/10 flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-                            <Icon name="user" className="text-primary size-4" />
-                          </div>
-                        )}
-                        {message.role === "assistant" && (
-                          <div className="bg-muted flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-                            <Icon name="bot" className="size-4" />
-                          </div>
-                        )}
-                        {message.role === "tool" && (
-                          <div className="bg-primary flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-                            <Icon
-                              name="zap"
-                              className="text-primary-foreground size-4"
-                            />
-                          </div>
-                        )}
-
-                        <div className="min-w-0 flex-1">
-                          <div className="mb-1 flex items-center gap-2">
-                            <span className="text-sm font-semibold capitalize">
-                              {message.role === "tool"
-                                ? "Tool Result"
-                                : message.role}
-                            </span>
-                            {message.toolCallId && (
-                              <code className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
-                                {message.toolCallId}
-                              </code>
-                            )}
-                            <span className="text-muted-foreground text-xs">
-                              {message.createdAt &&
-                                format(new Date(message.createdAt), "HH:mm:ss")}
-                            </span>
-                            {riskResultsByMessage.has(message.id) && (
-                              <RiskBadgePopover
-                                results={riskResultsByMessage.get(message.id)!}
-                              />
-                            )}
-                          </div>
-                          <div
-                            className={cn(
-                              "overflow-hidden rounded-lg text-sm",
-                              message.role === "user" && "bg-primary/5 p-3",
-                              message.role === "assistant" && "bg-muted/50 p-3",
-                              message.role === "tool" && "bg-background border",
-                            )}
-                          >
-                            {message.role === "tool" ? (
-                              <CodeBlock
-                                content={message.content}
-                                maxHeight={300}
-                              />
-                            ) : (
-                              <div className="whitespace-pre-wrap">
-                                {typeof message.content === "string"
-                                  ? message.content.trim()
-                                  : JSON.stringify(message.content)}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </Stack>
+            <ChatMessagesList
+              messages={chat.messages}
+              messageResolutionMap={messageResolutionMap}
+              riskResultsByMessage={riskResultsByMessage}
+            />
           </div>
         </TabsContent>
 
@@ -854,43 +919,6 @@ export function ChatDetailPanel({
             error={logsError as Error | null}
           />
         </TabsContent>
-
-        {/* System Prompt Tab */}
-        {systemMessages.length > 0 && (
-          <TabsContent
-            value="system"
-            className="m-0 flex-1 overflow-y-auto data-[state=inactive]:hidden"
-          >
-            <div className="p-6">
-              <Stack direction="vertical" gap={4}>
-                {systemMessages.map((message) => (
-                  <div key={message.id}>
-                    <div className="mb-2 flex items-center gap-2">
-                      <div className="bg-muted flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-                        <Icon name="settings" className="size-4" />
-                      </div>
-                      <span className="text-sm font-semibold">
-                        System Prompt
-                      </span>
-                      {message.createdAt && (
-                        <span className="text-muted-foreground text-xs">
-                          {format(new Date(message.createdAt), "HH:mm:ss")}
-                        </span>
-                      )}
-                    </div>
-                    <div className="bg-muted/30 rounded-lg border p-4">
-                      <pre className="font-mono text-sm whitespace-pre-wrap">
-                        {typeof message.content === "string"
-                          ? message.content.trim()
-                          : JSON.stringify(message.content, null, 2)}
-                      </pre>
-                    </div>
-                  </div>
-                ))}
-              </Stack>
-            </div>
-          </TabsContent>
-        )}
       </Tabs>
 
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
