@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +14,7 @@ import (
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/throttle"
 )
 
 const (
@@ -191,7 +191,7 @@ func drainWorkflowID(policyID uuid.UUID) string {
 // are coalesced into a single trailing signal when the window expires.
 type ThrottledSignaler struct {
 	inner    RiskAnalysisSignaler
-	throttle *Throttle[uuid.UUID, DrainRiskAnalysisParams]
+	throttle *throttle.Throttle[uuid.UUID, DrainRiskAnalysisParams]
 }
 
 // NewThrottledSignaler wraps inner with a per-policy cooldown. A zero or
@@ -199,7 +199,7 @@ type ThrottledSignaler struct {
 func NewThrottledSignaler(inner RiskAnalysisSignaler, cooldown time.Duration, logger *slog.Logger) *ThrottledSignaler {
 	return &ThrottledSignaler{
 		inner: inner,
-		throttle: NewThrottle(cooldown, func(params DrainRiskAnalysisParams) uuid.UUID {
+		throttle: throttle.New(cooldown, func(params DrainRiskAnalysisParams) uuid.UUID {
 			return params.RiskPolicyID
 		}, func(params DrainRiskAnalysisParams) error {
 			if err := inner.SignalNewMessages(context.Background(), params); err != nil {
@@ -211,88 +211,11 @@ func NewThrottledSignaler(inner RiskAnalysisSignaler, cooldown time.Duration, lo
 }
 
 func (t *ThrottledSignaler) SignalNewMessages(ctx context.Context, params DrainRiskAnalysisParams) error {
-	if t.throttle.cooldown <= 0 {
+	if t.throttle.Cooldown <= 0 {
 		return t.inner.SignalNewMessages(ctx, params)
 	}
 	if t.throttle.Do(params) {
 		return t.inner.SignalNewMessages(ctx, params)
 	}
 	return nil
-}
-
-// ── Generic Throttle ────────────────────────────────────────────────────
-
-// throttleEntry tracks per-key throttle state.
-type throttleEntry struct {
-	mu      sync.Mutex
-	pending bool
-	timer   *time.Timer
-}
-
-// Throttle provides per-key leading-edge throttling with a trailing fire.
-// The first call for a key executes immediately (Do returns true). Subsequent
-// calls within the cooldown window are suppressed. When the window expires,
-// if any calls were suppressed, the onTrailing callback fires once.
-type Throttle[K comparable, V any] struct {
-	cooldown   time.Duration
-	keyFn      func(V) K
-	onTrailing func(V) error
-	entries    sync.Map // K → *throttleEntry
-}
-
-// NewThrottle creates a throttle. keyFn extracts the throttle key from the
-// value. onTrailing is called (in a goroutine) when the cooldown expires and
-// calls were suppressed during the window.
-func NewThrottle[K comparable, V any](cooldown time.Duration, keyFn func(V) K, onTrailing func(V) error) *Throttle[K, V] {
-	return &Throttle[K, V]{
-		cooldown:   cooldown,
-		keyFn:      keyFn,
-		onTrailing: onTrailing,
-	}
-}
-
-// Do reports whether the caller should execute. Returns true on the leading
-// edge (first call for this key, or first call after cooldown expires).
-// Returns false when the call is suppressed (inside cooldown window).
-func (t *Throttle[K, V]) Do(v V) bool {
-	key := t.keyFn(v)
-
-	val, _ := t.entries.LoadOrStore(key, &throttleEntry{})
-	entry := val.(*throttleEntry)
-
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
-
-	if entry.timer == nil {
-		entry.pending = false
-		entry.timer = time.AfterFunc(t.cooldown, func() {
-			t.onExpired(key, v)
-		})
-		return true
-	}
-
-	entry.pending = true
-	return false
-}
-
-func (t *Throttle[K, V]) onExpired(key K, v V) {
-	val, ok := t.entries.Load(key)
-	if !ok {
-		return
-	}
-	entry := val.(*throttleEntry)
-
-	entry.mu.Lock()
-	pending := entry.pending
-	entry.pending = false
-	if pending {
-		entry.timer.Reset(t.cooldown)
-	} else {
-		entry.timer = nil
-	}
-	entry.mu.Unlock()
-
-	if pending {
-		_ = t.onTrailing(v)
-	}
 }

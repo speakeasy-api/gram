@@ -1,4 +1,4 @@
-package background
+package throttle
 
 import (
 	"sync/atomic"
@@ -12,7 +12,7 @@ func TestThrottle_LeadingEdge(t *testing.T) {
 	t.Parallel()
 
 	var trailingCount atomic.Int64
-	throttle := NewThrottle[string, string](
+	throttle := New[string, string](
 		100*time.Millisecond,
 		func(v string) string { return v },
 		func(v string) error { trailingCount.Add(1); return nil },
@@ -27,7 +27,7 @@ func TestThrottle_TrailingFire(t *testing.T) {
 	t.Parallel()
 
 	var trailingCount atomic.Int64
-	throttle := NewThrottle[string, string](
+	throttle := New[string, string](
 		50*time.Millisecond,
 		func(v string) string { return v },
 		func(v string) error { trailingCount.Add(1); return nil },
@@ -44,7 +44,7 @@ func TestThrottle_NoTrailingWithoutPending(t *testing.T) {
 	t.Parallel()
 
 	var trailingCount atomic.Int64
-	throttle := NewThrottle[int, int](
+	throttle := New[int, int](
 		50*time.Millisecond,
 		func(v int) int { return v },
 		func(v int) error { trailingCount.Add(1); return nil },
@@ -59,7 +59,7 @@ func TestThrottle_NoTrailingWithoutPending(t *testing.T) {
 func TestThrottle_ResetsAfterCooldown(t *testing.T) {
 	t.Parallel()
 
-	throttle := NewThrottle[string, string](
+	throttle := New[string, string](
 		50*time.Millisecond,
 		func(v string) string { return v },
 		func(v string) error { return nil },
