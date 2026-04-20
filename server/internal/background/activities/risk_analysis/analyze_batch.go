@@ -18,12 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
-// Log key constants to satisfy sloglint no-raw-keys.
-const (
-	logKeyCount         = "risk.count"
-	logKeyPolicyVersion = "risk.policy_version"
-)
-
 // AnalyzeBatch scans a batch of messages against enabled detection sources
 // and writes the results back to the database.
 type AnalyzeBatch struct {
@@ -76,14 +70,21 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 
 	// Fetch message content for the batch.
 	queries := repo.New(a.db)
-	ctx, fetchSpan := a.tracer.Start(ctx, "risk.fetchContent")
-	messages, err := queries.GetMessageContentBatch(ctx, repo.GetMessageContentBatchParams{
-		Ids:       args.MessageIDs,
-		ProjectID: uuid.NullUUID{UUID: args.ProjectID, Valid: true},
-	})
-	fetchSpan.End()
-	if err != nil {
-		return nil, fmt.Errorf("get message content batch: %w", err)
+	var messages []repo.GetMessageContentBatchRow
+	{
+		ctx, fetchSpan := a.tracer.Start(ctx, "risk.fetchContent")
+		var fetchErr error
+		messages, fetchErr = queries.GetMessageContentBatch(ctx, repo.GetMessageContentBatchParams{
+			Ids:       args.MessageIDs,
+			ProjectID: uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+		})
+		if fetchErr != nil {
+			fetchSpan.SetStatus(codes.Error, fetchErr.Error())
+		}
+		fetchSpan.End()
+		if fetchErr != nil {
+			return nil, fmt.Errorf("get message content batch: %w", fetchErr)
+		}
 	}
 
 	// Build content slice for parallel scanning.
@@ -93,13 +94,19 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	}
 
 	// Scan all messages in parallel using a goroutine worker pool.
-	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
-	activity.RecordHeartbeat(ctx, 0)
-
-	batchFindings, err := a.scanner.ScanBatchParallel(contents)
-	scanSpan.End()
-	if err != nil {
-		return nil, fmt.Errorf("scan batch: %w", err)
+	var batchFindings [][]Finding
+	{
+		ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
+		activity.RecordHeartbeat(ctx, 0)
+		var scanErr error
+		batchFindings, scanErr = a.scanner.ScanBatchParallel(contents)
+		if scanErr != nil {
+			scanSpan.SetStatus(codes.Error, scanErr.Error())
+		}
+		scanSpan.End()
+		if scanErr != nil {
+			return nil, fmt.Errorf("scan batch: %w", scanErr)
+		}
 	}
 
 	// Convert scan results to DB rows.
@@ -144,37 +151,42 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		}
 	}
 	// Atomically delete old results (any version) and insert new ones.
-	ctx, writeSpan := a.tracer.Start(ctx, "risk.writeResults")
-	tx, err := a.db.Begin(ctx)
-	if err != nil {
-		writeSpan.End()
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
-	txRepo := queries.WithTx(tx)
-
-	if err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
-		RiskPolicyID: args.RiskPolicyID,
-		ProjectID:    args.ProjectID,
-		MessageIds:   args.MessageIDs,
-	}); err != nil {
-		writeSpan.End()
-		return nil, fmt.Errorf("delete old results: %w", err)
-	}
-
-	if len(rows) > 0 {
-		if _, err := txRepo.InsertRiskResults(ctx, rows); err != nil {
+	writeErr := func() (writeErr error) {
+		ctx, writeSpan := a.tracer.Start(ctx, "risk.writeResults")
+		defer func() {
+			if writeErr != nil {
+				writeSpan.SetStatus(codes.Error, writeErr.Error())
+			}
 			writeSpan.End()
-			return nil, fmt.Errorf("insert risk results: %w", err)
-		}
-	}
+		}()
 
-	if err := tx.Commit(ctx); err != nil {
-		writeSpan.End()
-		return nil, fmt.Errorf("commit results: %w", err)
+		tx, err := a.db.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin transaction: %w", err)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+		txRepo := queries.WithTx(tx)
+
+		if err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
+			RiskPolicyID: args.RiskPolicyID,
+			ProjectID:    args.ProjectID,
+			MessageIds:   args.MessageIDs,
+		}); err != nil {
+			return fmt.Errorf("delete old results: %w", err)
+		}
+
+		if len(rows) > 0 {
+			if _, err := txRepo.InsertRiskResults(ctx, rows); err != nil {
+				return fmt.Errorf("insert risk results: %w", err)
+			}
+		}
+
+		return tx.Commit(ctx)
+	}()
+	if writeErr != nil {
+		return nil, writeErr
 	}
-	writeSpan.End()
 
 	span.SetAttributes(
 		attribute.Int("risk.messages_processed", len(messages)),

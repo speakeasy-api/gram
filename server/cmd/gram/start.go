@@ -66,6 +66,7 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -744,6 +745,7 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), accessManager))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, accessManager))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, accessManager))
+			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, accessManager))
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, accessManager, triggerApp))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, accessManager))

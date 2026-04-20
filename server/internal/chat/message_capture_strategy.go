@@ -30,7 +30,7 @@ type ChatMessageCaptureStrategy struct {
 	repo         *repo.Queries
 	assetStorage assets.BlobStore
 	observers    []MessageObserver
-	shutdownCtx  context.Context
+	shutdownCtx  context.Context //nolint:containedctx // shutdown context must outlive any single request
 }
 
 var _ openrouter.MessageCaptureStrategy = (*ChatMessageCaptureStrategy)(nil)
@@ -53,7 +53,7 @@ func NewChatMessageCaptureStrategy(
 	db *pgxpool.Pool,
 	assetStorage assets.BlobStore,
 ) (strategy *ChatMessageCaptureStrategy, shutdown func(context.Context) error) {
-	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck // this context must be tied to the lifetime of the application
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck,gosec // this context must be tied to the lifetime of the application; cancel is called via the returned shutdown function
 	shutdown = func(_ context.Context) error {
 		cancel()
 		return nil
