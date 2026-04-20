@@ -19,14 +19,14 @@ import (
 type FetchUnanalyzed struct {
 	logger *slog.Logger
 	tracer trace.Tracer
-	repo   *repo.Queries
+	db     *pgxpool.Pool
 }
 
 func NewFetchUnanalyzed(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *FetchUnanalyzed {
 	return &FetchUnanalyzed{
 		logger: logger,
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
-		repo:   repo.New(db),
+		db:     db,
 	}
 }
 
@@ -56,7 +56,8 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 	}()
 
 	// Always read the current policy to get the latest version and sources.
-	policy, err := a.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+	queries := repo.New(a.db)
+	policy, err := queries.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
 		ID:        args.RiskPolicyID,
 		ProjectID: args.ProjectID,
 	})
@@ -67,20 +68,9 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 	span.SetAttributes(attribute.Int64("risk.policy_version", policy.Version))
 
 	if !policy.Enabled {
-		// Side-effect: when a policy is disabled, we purge all its results here
-		// rather than in a separate activity. This is the only place that runs
-		// per-cycle for a disabled policy, and leaving stale results would be
-		// misleading in the dashboard (showing findings for a policy that's off).
-		if err := a.repo.DeleteStaleRiskResults(ctx, repo.DeleteStaleRiskResultsParams{
-			RiskPolicyID:      args.RiskPolicyID,
-			ProjectID:         args.ProjectID,
-			RiskPolicyVersion: policy.Version + 1, // version+1 deletes everything including current
-		}); err != nil {
-			return nil, fmt.Errorf("delete results for disabled policy: %w", err)
-		}
-
+		// No work to do — results for disabled policies are already hidden
+		// by the list queries (JOIN rp.enabled IS TRUE).
 		span.SetAttributes(attribute.Bool("risk.policy_disabled", true))
-
 		return &FetchUnanalyzedResult{
 			MessageIDs:     nil,
 			OrganizationID: policy.OrganizationID,
@@ -89,7 +79,7 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 		}, nil
 	}
 
-	ids, err := a.repo.FetchUnanalyzedMessageIDs(ctx, repo.FetchUnanalyzedMessageIDsParams{
+	ids, err := queries.FetchUnanalyzedMessageIDs(ctx, repo.FetchUnanalyzedMessageIDsParams{
 		ProjectID:         uuid.NullUUID{UUID: args.ProjectID, Valid: true},
 		RiskPolicyID:      args.RiskPolicyID,
 		RiskPolicyVersion: policy.Version,

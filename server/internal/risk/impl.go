@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -536,37 +537,15 @@ func foundRowToResult(
 		PolicyVersion: policyVersion,
 		ChatMessageID: chatMessageID.String(),
 		ChatID:        chatID,
-		ChatTitle:     ptrText(chatTitle),
+		ChatTitle:     conv.FromPGText[string](chatTitle),
 		Source:        source,
-		RuleID:        ptrText(ruleID),
-		Description:   ptrText(description),
-		Match:         ptrText(match),
-		StartPos:      ptrInt4(startPos),
-		EndPos:        ptrInt4(endPos),
-		Confidence:    ptrFloat8(confidence),
+		RuleID:        conv.FromPGText[string](ruleID),
+		Description:   conv.FromPGText[string](description),
+		Match:         conv.FromPGText[string](match),
+		StartPos:      conv.FromPGInt4(startPos),
+		EndPos:        conv.FromPGInt4(endPos),
+		Confidence:    conv.FromPGFloat8(confidence),
 		Tags:          tags,
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),
 	}
-}
-
-func ptrText(v pgtype.Text) *string {
-	if !v.Valid {
-		return nil
-	}
-	return &v.String
-}
-
-func ptrInt4(v pgtype.Int4) *int {
-	if !v.Valid {
-		return nil
-	}
-	i := int(v.Int32)
-	return &i
-}
-
-func ptrFloat8(v pgtype.Float8) *float64 {
-	if !v.Valid {
-		return nil
-	}
-	return &v.Float64
 }

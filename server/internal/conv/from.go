@@ -167,6 +167,23 @@ func FromPGBool[T ~bool](t pgtype.Bool) *T {
 	return &val
 }
 
+// FromPGInt4 converts a pgtype.Int4 to *int. If not valid, returns nil.
+func FromPGInt4(t pgtype.Int4) *int {
+	if !t.Valid {
+		return nil
+	}
+	v := int(t.Int32)
+	return &v
+}
+
+// FromPGFloat8 converts a pgtype.Float8 to *float64. If not valid, returns nil.
+func FromPGFloat8(t pgtype.Float8) *float64 {
+	if !t.Valid {
+		return nil
+	}
+	return &t.Float64
+}
+
 // FromBytes converts a byte slice to a string pointer. If the byte slice is
 // empty, it returns nil.
 func FromBytes(b []byte) *string {

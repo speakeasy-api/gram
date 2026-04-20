@@ -30,7 +30,6 @@ type AnalyzeBatch struct {
 	logger  *slog.Logger
 	tracer  trace.Tracer
 	db      *pgxpool.Pool
-	repo    *repo.Queries
 	scanner *Scanner
 }
 
@@ -39,7 +38,6 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, d
 		logger:  logger,
 		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
 		db:      db,
-		repo:    repo.New(db),
 		scanner: NewScanner(),
 	}
 }
@@ -77,8 +75,9 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	}()
 
 	// Fetch message content for the batch.
+	queries := repo.New(a.db)
 	ctx, fetchSpan := a.tracer.Start(ctx, "risk.fetchContent")
-	messages, err := a.repo.GetMessageContentBatch(ctx, repo.GetMessageContentBatchParams{
+	messages, err := queries.GetMessageContentBatch(ctx, repo.GetMessageContentBatchParams{
 		Ids:       args.MessageIDs,
 		ProjectID: uuid.NullUUID{UUID: args.ProjectID, Valid: true},
 	})
@@ -153,7 +152,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	txRepo := a.repo.WithTx(tx)
+	txRepo := queries.WithTx(tx)
 
 	if err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
 		RiskPolicyID: args.RiskPolicyID,
