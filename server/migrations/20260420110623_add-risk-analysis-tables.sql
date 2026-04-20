@@ -1,6 +1,6 @@
 -- Create "risk_policies" table
 CREATE TABLE "risk_policies" (
-  "id" uuid NOT NULL,
+  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "project_id" uuid NOT NULL,
   "organization_id" text NOT NULL,
   "enabled" boolean NOT NULL DEFAULT true,
@@ -19,7 +19,7 @@ CREATE TABLE "risk_policies" (
 CREATE INDEX "risk_policies_project_id_idx" ON "risk_policies" ("project_id") WHERE (deleted IS FALSE);
 -- Create "risk_results" table
 CREATE TABLE "risk_results" (
-  "id" uuid NOT NULL,
+  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "project_id" uuid NOT NULL,
   "organization_id" text NOT NULL,
   "risk_policy_id" uuid NOT NULL,
