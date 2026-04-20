@@ -78,12 +78,14 @@ export function MCPOverview() {
   };
 
   const newMcpServerButton = (
-    <Button size="sm" onClick={() => setNewMcpDialogOpen(true)}>
-      <Button.LeftIcon>
-        <Plus />
-      </Button.LeftIcon>
-      <Button.Text>New MCP Server</Button.Text>
-    </Button>
+    <RequireScope scope="mcp:write" level="component">
+      <Button size="sm" onClick={() => setNewMcpDialogOpen(true)}>
+        <Button.LeftIcon>
+          <Plus />
+        </Button.LeftIcon>
+        <Button.Text>New MCP Server</Button.Text>
+      </Button>
+    </RequireScope>
   );
 
   const newMcpServerDialog = (
