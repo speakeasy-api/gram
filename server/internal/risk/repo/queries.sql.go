@@ -162,10 +162,16 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 const deleteAllRiskResultsForPolicy = `-- name: DeleteAllRiskResultsForPolicy :exec
 DELETE FROM risk_results
 WHERE risk_policy_id = $1
+  AND project_id = $2
 `
 
-func (q *Queries) DeleteAllRiskResultsForPolicy(ctx context.Context, riskPolicyID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteAllRiskResultsForPolicy, riskPolicyID)
+type DeleteAllRiskResultsForPolicyParams struct {
+	RiskPolicyID uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+func (q *Queries) DeleteAllRiskResultsForPolicy(ctx context.Context, arg DeleteAllRiskResultsForPolicyParams) error {
+	_, err := q.db.Exec(ctx, deleteAllRiskResultsForPolicy, arg.RiskPolicyID, arg.ProjectID)
 	return err
 }
 
@@ -191,16 +197,18 @@ func (q *Queries) DeleteRiskPolicy(ctx context.Context, arg DeleteRiskPolicyPara
 const deleteRiskResultsForMessages = `-- name: DeleteRiskResultsForMessages :exec
 DELETE FROM risk_results
 WHERE risk_policy_id = $1
-  AND chat_message_id = ANY($2::uuid[])
+  AND project_id = $2
+  AND chat_message_id = ANY($3::uuid[])
 `
 
 type DeleteRiskResultsForMessagesParams struct {
 	RiskPolicyID uuid.UUID
+	ProjectID    uuid.UUID
 	MessageIds   []uuid.UUID
 }
 
 func (q *Queries) DeleteRiskResultsForMessages(ctx context.Context, arg DeleteRiskResultsForMessagesParams) error {
-	_, err := q.db.Exec(ctx, deleteRiskResultsForMessages, arg.RiskPolicyID, arg.MessageIds)
+	_, err := q.db.Exec(ctx, deleteRiskResultsForMessages, arg.RiskPolicyID, arg.ProjectID, arg.MessageIds)
 	return err
 }
 
@@ -229,7 +237,8 @@ WHERE cm.project_id = $1
   AND NOT EXISTS (
     SELECT 1
     FROM risk_results rr
-    WHERE rr.chat_message_id = cm.id
+    WHERE rr.project_id = $1
+      AND rr.chat_message_id = cm.id
       AND rr.risk_policy_id = $2
       AND rr.risk_policy_version = $3
   )

@@ -1820,11 +1820,8 @@ CREATE TABLE IF NOT EXISTS risk_results (
   CONSTRAINT risk_results_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS risk_results_project_id_risk_policy_id_idx
-ON risk_results (project_id, risk_policy_id);
+CREATE INDEX IF NOT EXISTS risk_results_project_policy_version_message_idx
+ON risk_results (project_id, risk_policy_id, risk_policy_version, chat_message_id);
 
-CREATE INDEX IF NOT EXISTS risk_results_chat_message_id_idx
-ON risk_results (chat_message_id);
-
-CREATE INDEX IF NOT EXISTS risk_results_policy_version_message_idx
-ON risk_results (risk_policy_id, risk_policy_version, chat_message_id);
+CREATE INDEX IF NOT EXISTS risk_results_project_chat_message_idx
+ON risk_results (project_id, chat_message_id);

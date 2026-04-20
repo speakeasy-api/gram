@@ -100,7 +100,8 @@ WHERE cm.project_id = @project_id
   AND NOT EXISTS (
     SELECT 1
     FROM risk_results rr
-    WHERE rr.chat_message_id = cm.id
+    WHERE rr.project_id = @project_id
+      AND rr.chat_message_id = cm.id
       AND rr.risk_policy_id = @risk_policy_id
       AND rr.risk_policy_version = @risk_policy_version
   )
@@ -157,11 +158,13 @@ WHERE risk_policy_id = @risk_policy_id
 
 -- name: DeleteAllRiskResultsForPolicy :exec
 DELETE FROM risk_results
-WHERE risk_policy_id = @risk_policy_id;
+WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id;
 
 -- name: DeleteRiskResultsForMessages :exec
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id
   AND chat_message_id = ANY(@message_ids::uuid[]);
 
 -- name: ListRiskResultsByProject :many

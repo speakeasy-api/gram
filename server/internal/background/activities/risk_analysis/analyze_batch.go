@@ -148,6 +148,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 
 	if err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
 		RiskPolicyID: args.RiskPolicyID,
+		ProjectID:    args.ProjectID,
 		MessageIds:   args.MessageIDs,
 	}); err != nil {
 		return nil, fmt.Errorf("delete old results: %w", err)

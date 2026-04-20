@@ -283,7 +283,10 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 	}
 
 	// Purge all risk results for this policy first.
-	if err := s.repo.DeleteAllRiskResultsForPolicy(ctx, id); err != nil {
+	if err := s.repo.DeleteAllRiskResultsForPolicy(ctx, repo.DeleteAllRiskResultsForPolicyParams{
+		RiskPolicyID: id,
+		ProjectID:    *authCtx.ProjectID,
+	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete risk results for policy").Log(ctx, s.logger)
 	}
 
