@@ -13,10 +13,16 @@ import {
   usePluginsSuspense,
 } from "@gram/client/react-query/plugins";
 import { useDeletePluginMutation } from "@gram/client/react-query/deletePlugin";
+import {
+  invalidateAllPublishStatus,
+  usePublishStatusSuspense,
+} from "@gram/client/react-query/publishStatus";
+import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, Outlet, useNavigate } from "react-router";
+import { toast } from "sonner";
 
 export function PluginsRoot() {
   return <Outlet />;
@@ -31,6 +37,17 @@ export default function Plugins() {
   const navigate = useNavigate();
 
   const { data } = usePluginsSuspense();
+  const { data: publishStatus } = usePublishStatusSuspense();
+
+  const publishMutation = usePublishPluginsMutation({
+    onSuccess: () => {
+      invalidateAllPublishStatus(queryClient);
+      toast.success("Plugins published to GitHub");
+    },
+    onError: () => {
+      toast.error("Failed to publish plugins to GitHub");
+    },
+  });
 
   const filteredPlugins = useMemo(() => {
     const plugins = data?.plugins ?? [];
@@ -174,6 +191,21 @@ export default function Plugins() {
               Create distributable plugin bundles that package MCP servers and
               hooks together. Assign plugins to roles and publish them to Claude
               Code and Cursor marketplaces via GitHub.
+              {publishStatus?.connected && publishStatus.repoUrl && (
+                <>
+                  {" "}
+                  Published to{" "}
+                  <a
+                    href={publishStatus.repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    {publishStatus.repoOwner}/{publishStatus.repoName}
+                  </a>
+                  .
+                </>
+              )}
             </Type>
             <Stack
               direction="horizontal"
@@ -187,9 +219,38 @@ export default function Plugins() {
                 placeholder="Search plugins"
                 className="w-64"
               />
-              <Button onClick={() => setIsCreateDialogOpen(true)}>
-                New Plugin
-              </Button>
+              <Stack direction="horizontal" gap={2}>
+                {publishStatus?.configured && (
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      publishMutation.mutate({
+                        security: { sessionHeaderGramSession: "" },
+                      })
+                    }
+                    disabled={publishMutation.isPending}
+                  >
+                    <Button.LeftIcon>
+                      <Icon
+                        name={
+                          publishStatus.connected ? "refresh-cw" : "upload"
+                        }
+                        className="h-4 w-4"
+                      />
+                    </Button.LeftIcon>
+                    <Button.Text>
+                      {publishMutation.isPending
+                        ? "Publishing..."
+                        : publishStatus.connected
+                          ? "Re-publish"
+                          : "Publish to GitHub"}
+                    </Button.Text>
+                  </Button>
+                )}
+                <Button onClick={() => setIsCreateDialogOpen(true)}>
+                  New Plugin
+                </Button>
+              </Stack>
             </Stack>
             <Table
               columns={columns}
