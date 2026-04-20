@@ -52,7 +52,9 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   const session = useSession();
   const routes = useRoutes();
 
-  const { data: environmentsData } = useListEnvironments();
+  const { data: environmentsData } = useListEnvironments(undefined, undefined, {
+    throwOnError: false,
+  });
   // Use stable reference for empty array to prevent infinite loops
   const environments = environmentsData?.environments ?? EMPTY_ENVIRONMENTS;
   const { data: mcpMetadataData } = useGetMcpMetadata(
@@ -888,7 +890,9 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
 
-  const { data: environmentsData } = useListEnvironments();
+  const { data: environmentsData } = useListEnvironments(undefined, undefined, {
+    throwOnError: false,
+  });
   const environments = environmentsData?.environments ?? [];
 
   const isOAuthConnected = !!(

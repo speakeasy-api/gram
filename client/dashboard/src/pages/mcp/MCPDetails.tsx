@@ -170,7 +170,9 @@ function MCPDetailPageInner() {
 
   // Call hooks before any conditional returns
   const { url: mcpUrl } = useMcpUrl(toolset);
-  const { data: environmentsData } = useListEnvironments();
+  const { data: environmentsData } = useListEnvironments(undefined, undefined, {
+    throwOnError: false,
+  });
   const environments = environmentsData?.environments ?? [];
 
   // Fetch MCP metadata early to use in useMissingRequiredEnvVars
@@ -429,7 +431,9 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   const telemetry = useTelemetry();
 
   // Fetch data needed to detect system-provided vars on the attached env.
-  const { data: environmentsData } = useListEnvironments();
+  const { data: environmentsData } = useListEnvironments(undefined, undefined, {
+    throwOnError: false,
+  });
   const environments = environmentsData?.environments ?? [];
   const { data: mcpMetadataData, isLoading: mcpMetadataLoading } =
     useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
