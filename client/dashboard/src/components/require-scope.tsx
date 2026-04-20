@@ -3,12 +3,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { Icon } from "@speakeasy-api/moonshine";
 import React from "react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "./ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 type RequireScopeProps = {
   scope: Scope | Scope[];
@@ -94,30 +89,28 @@ function ScopeDisabled({
   children: React.ReactNode;
 }) {
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className={cn(
+            "pointer-events-none inline-flex opacity-50 select-none",
+            className,
+          )}
+        >
+          {/* Wrapper div that re-enables pointer events for the tooltip to work */}
           <div
-            className={cn(
-              "pointer-events-none inline-flex opacity-50 select-none",
-              className,
-            )}
+            className="pointer-events-auto w-full cursor-not-allowed [&_*]:cursor-not-allowed"
+            onClickCapture={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
           >
-            {/* Wrapper div that re-enables pointer events for the tooltip to work */}
-            <div
-              className="pointer-events-auto w-full cursor-not-allowed [&_*]:cursor-not-allowed"
-              onClickCapture={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-            >
-              {children}
-            </div>
+            {children}
           </div>
-        </TooltipTrigger>
-        <TooltipContent>{reason}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>{reason}</TooltipContent>
+    </Tooltip>
   );
 }
 
