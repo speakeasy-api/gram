@@ -12,7 +12,7 @@ import { invalidateAllPlugins } from "@gram/client/react-query/plugins";
 import { useUpdatePluginMutation } from "@gram/client/react-query/updatePlugin";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
-import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg";
+import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -30,7 +30,7 @@ export default function PluginDetail() {
 
   const { fetch: authFetch } = useFetcher();
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
-    useListToolsetsForOrg();
+    useListToolsets();
   const toolsets = toolsetsData?.toolsets ?? [];
 
   const invalidateAll = async () => {
