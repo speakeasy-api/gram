@@ -40,7 +40,6 @@ function detectToolsetKind(tools: GeneratedTool[]): ToolsetKind {
 export function useToolset(toolsetSlug: string | undefined) {
   const result = useToolsetQuery({ slug: toolsetSlug! }, undefined, {
     enabled: !!toolsetSlug,
-    throwOnError: false,
   });
 
   const kind = detectToolsetKind(result.data?.tools ?? []);
@@ -65,10 +64,7 @@ export function useListTools(
   security?: ListToolsSecurity,
   options?: QueryHookOptions<ListToolsQueryData, ListToolsQueryError>,
 ) {
-  const result = useListToolsQuery(request, security, {
-    throwOnError: false,
-    ...options,
-  });
+  const result = useListToolsQuery(request, security, options);
 
   return {
     ...result,
@@ -112,7 +108,6 @@ export function useLatestDeployment(
 ) {
   return useLatestDeploymentQuery(undefined, undefined, {
     staleTime: 1000 * 60 * 60, // 1 hour
-    throwOnError: false,
     ...options,
   });
 }

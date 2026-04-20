@@ -25,9 +25,7 @@ export function ServerEnableDialog({
 }: ServerEnableDialogProps) {
   const productTier = useProductTier();
   const orgRoutes = useOrgRoutes();
-  const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
-    throwOnError: false,
-  });
+  const { data: periodUsage } = useGetPeriodUsage();
 
   const handleConfirm = () => {
     onConfirm();

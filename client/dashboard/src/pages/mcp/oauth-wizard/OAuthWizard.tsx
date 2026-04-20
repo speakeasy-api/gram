@@ -207,9 +207,7 @@ function OAuthWizard({
   });
 
   const createEnvironmentMutation = useCreateEnvironmentMutation();
-  const { data: environmentsData } = useListEnvironments(undefined, undefined, {
-    throwOnError: false,
-  });
+  const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
 
   // --- Step actions ---

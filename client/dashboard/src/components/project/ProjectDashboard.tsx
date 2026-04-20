@@ -29,25 +29,23 @@ export function ProjectDashboard() {
     data: featuresData,
     isPending: isFeaturesPending,
     isError: isFeaturesError,
-  } = useFeaturesGet(undefined, undefined, { throwOnError: false });
+  } = useFeaturesGet();
   const logsEnabled = featuresData?.logsEnabled === true;
 
   const { data: overview, isPending: isOverviewPending } =
     useGetProjectOverview(
       { getProjectMetricsSummaryPayload: { from, to } },
       undefined,
-      { enabled: logsEnabled, throwOnError: false },
+      { enabled: logsEnabled },
     );
 
   const featuresSettled = !isFeaturesPending || isFeaturesError;
   const isOverviewLoading =
     !featuresSettled || (logsEnabled && isOverviewPending);
 
-  const { data: auditLogsData, isPending: isAuditLogsPending } = useAuditLogs(
-    { projectSlug },
-    undefined,
-    { throwOnError: false },
-  );
+  const { data: auditLogsData, isPending: isAuditLogsPending } = useAuditLogs({
+    projectSlug,
+  });
 
   const recentLogs = useMemo(
     () => (auditLogsData?.result.logs ?? []).slice(0, 10),

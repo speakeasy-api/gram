@@ -1,5 +1,6 @@
 import { handleError } from "@/lib/errors";
 import { Gram } from "@gram/client";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { QueryClient } from "@tanstack/react-query";
 import { createContext, useContext } from "react";
 import { useLocation, useParams } from "react-router";
@@ -25,7 +26,11 @@ const createQueryClient = () =>
   new QueryClient({
     defaultOptions: {
       queries: {
-        throwOnError: true,
+        // Suppress 403s so RBAC-restricted queries degrade gracefully
+        // instead of crashing the page. All other errors still throw to
+        // the nearest error boundary.
+        throwOnError: (error) =>
+          !(error instanceof GramError && error.statusCode === 403),
         retry: (failureCount, error: Error) => {
           // Don't retry on 4xx errors
           if (error && typeof error === "object") {
