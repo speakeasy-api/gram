@@ -35,6 +35,12 @@
     "overrides": {
       "react-is": "$react-is",
       "recharts": "2.15.4"
-    }
+    },
+    "ignoredBuiltDependencies": [
+      "core-js",
+      "cpu-features",
+      "msw",
+      "ssh2"
+    ]
   }
 }
