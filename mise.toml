@@ -99,6 +99,7 @@ GRAM_REDIS_CACHE_HOST = "127.0.0.1"
 GRAM_REDIS_CACHE_PORT = "5445"
 GRAM_REDIS_CACHE_ADDR = "{{env.GRAM_REDIS_CACHE_HOST}}:{{env.GRAM_REDIS_CACHE_PORT}}"
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
+GRAM_REDIS_ENABLE_TRACING = "false"
 OPENROUTER_DEV_KEY = "unset"
 ## The following variables configure the mock Speakeasy IDP for local dev.
 ## MOCK_IDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.

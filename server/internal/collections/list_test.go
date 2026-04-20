@@ -178,6 +178,30 @@ func TestCollectionsService_List_DefaultRegistryConcurrent(t *testing.T) {
 	require.Equal(t, 1, registryCount, "exactly one default registry collection should exist after concurrent calls")
 }
 
+func TestCollectionsService_List_EnsureDefaultRegistryFailureIsNonFatal(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestCollectionsService(t)
+
+	// Create a context with an org ID that doesn't exist in organization_metadata.
+	// This causes ensureDefaultRegistryCollection to fail (FK violation), but List
+	// should still succeed and return an empty result.
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org_nonexistent",
+		OrganizationSlug:     "nonexistent",
+		UserID:               "user_test",
+	})
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Empty(t, result.Collections)
+}
+
 func TestCollectionsService_List_DefaultRegistryBackfillsMissingNamespace(t *testing.T) {
 	t.Parallel()
 

@@ -1,0 +1,202 @@
+package chat_test
+
+import (
+	"context"
+	"testing"
+
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+)
+
+func newCaptureStrategy(t *testing.T, conn *pgxpool.Pool) *chat.ChatMessageCaptureStrategy {
+	t.Helper()
+	return chat.NewChatMessageCaptureStrategy(
+		testenv.NewLogger(t),
+		conn,
+		assetstest.NewTestBlobStore(t),
+	)
+}
+
+func makeRequest(chatID, projectID uuid.UUID, orgID string, msgs ...or.ChatMessages) openrouter.CompletionRequest {
+	return openrouter.CompletionRequest{
+		OrgID:       orgID,
+		ProjectID:   projectID.String(),
+		ChatID:      chatID,
+		Messages:    msgs,
+		UsageSource: billing.ModelUsageSourcePlayground,
+		Model:       "test-model",
+	}
+}
+
+func makeResponse(content string) openrouter.CompletionResponse {
+	return openrouter.CompletionResponse{
+		Content:   content,
+		Model:     "test-model",
+		MessageID: "msg-" + content,
+	}
+}
+
+// runTurn threads a single request through StartOrResumeChat + CaptureMessage
+// the same way the unified client does — so tests exercise the session handoff.
+func runTurn(t *testing.T, ctx context.Context, s *chat.ChatMessageCaptureStrategy, req openrouter.CompletionRequest, resp openrouter.CompletionResponse) {
+	t.Helper()
+	sess, err := s.StartOrResumeChat(ctx, req)
+	require.NoError(t, err)
+	require.NoError(t, s.CaptureMessage(ctx, sess, req, resp))
+}
+
+func listAllMessages(t *testing.T, ctx context.Context, conn *pgxpool.Pool, chatID, projectID uuid.UUID) []repo.ChatMessage {
+	t.Helper()
+	rows, err := repo.New(conn).ListChatMessages(ctx, repo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	return rows
+}
+
+// Clean append: reload with full history + new message should insert only the
+// new message and stay on generation 0.
+func TestMatcher_CleanAppend(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, orgID := newTestChatContext(t)
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("Hello")),
+		makeResponse("Hi there"),
+	)
+
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("Hello"),
+			openrouter.CreateMessageAssistant("Hi there"),
+			openrouter.CreateMessageUser("How are you?"),
+		),
+		makeResponse("Doing well"),
+	)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	require.Len(t, rows, 4)
+	for i, r := range rows {
+		require.Equal(t, int32(0), r.Generation, "row %d on generation 0", i)
+		require.NotEmpty(t, r.ContentHash, "row %d hashed", i)
+	}
+	require.Equal(t, []string{"user", "assistant", "user", "assistant"}, roles(rows))
+}
+
+// Compaction: round 2 sends fewer messages than round 1 stored. Matcher should
+// bump generation and start a fresh chain while keeping the old rows.
+func TestMatcher_CompactionBumpsGeneration(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, orgID := newTestChatContext(t)
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	seed := []or.ChatMessages{openrouter.CreateMessageUser("one")}
+	runTurn(t, ctx, s, makeRequest(chatID, projectID, orgID, seed...), makeResponse("r1"))
+
+	seed = append(seed,
+		openrouter.CreateMessageAssistant("r1"),
+		openrouter.CreateMessageUser("two"),
+	)
+	runTurn(t, ctx, s, makeRequest(chatID, projectID, orgID, seed...), makeResponse("r2"))
+
+	beforeCount := len(listAllMessages(t, ctx, conn, chatID, projectID))
+	require.Equal(t, 4, beforeCount)
+
+	// Client compacts: sends a summary + new user message instead of full history.
+	compacted := []or.ChatMessages{
+		openrouter.CreateMessageSystem("Summary: user said hi, assistant said hi back."),
+		openrouter.CreateMessageUser("continue"),
+	}
+	runTurn(t, ctx, s, makeRequest(chatID, projectID, orgID, compacted...), makeResponse("ok"))
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	require.Len(t, rows, 7, "original 4 + compacted 3 (system, user, assistant)")
+
+	gens := map[int32]int{}
+	for _, r := range rows {
+		gens[r.Generation]++
+	}
+	require.Equal(t, 4, gens[0], "pre-compaction rows stay at gen 0")
+	require.Equal(t, 3, gens[1], "compacted chain starts at gen 1")
+}
+
+// Edit: same number of messages but content at index 0 differs. Treated as a
+// new generation.
+func TestMatcher_EditBumpsGeneration(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, orgID := newTestChatContext(t)
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	round1 := []or.ChatMessages{openrouter.CreateMessageUser("original question")}
+	runTurn(t, ctx, s, makeRequest(chatID, projectID, orgID, round1...), makeResponse("answer"))
+
+	// Client edits the first user message and retries.
+	round2 := []or.ChatMessages{openrouter.CreateMessageUser("edited question")}
+	runTurn(t, ctx, s, makeRequest(chatID, projectID, orgID, round2...), makeResponse("different answer"))
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	require.Len(t, rows, 4)
+	require.Equal(t, int32(0), rows[0].Generation)
+	require.Equal(t, int32(0), rows[1].Generation)
+	require.Equal(t, int32(1), rows[2].Generation)
+	require.Equal(t, int32(1), rows[3].Generation)
+}
+
+// Legacy rows have no content_hash. Matcher backfills them on read and should
+// still detect a matching prefix.
+func TestMatcher_LazyBackfillsMissingHash(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, orgID := newTestChatContext(t)
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("hi")),
+		makeResponse("hello"),
+	)
+
+	// Simulate pre-migration rows by nulling out the hashes.
+	_, err := conn.Exec(ctx, "UPDATE chat_messages SET content_hash = NULL WHERE chat_id = $1", chatID)
+	require.NoError(t, err)
+
+	// Reload with full history + new message. Should backfill hashes and clean-append.
+	_, err = s.StartOrResumeChat(ctx, makeRequest(chatID, projectID, orgID,
+		openrouter.CreateMessageUser("hi"),
+		openrouter.CreateMessageAssistant("hello"),
+		openrouter.CreateMessageUser("follow up"),
+	))
+	require.NoError(t, err)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	require.Len(t, rows, 3)
+	for i, r := range rows {
+		require.Equal(t, int32(0), r.Generation, "row %d still gen 0", i)
+		require.NotEmpty(t, r.ContentHash, "row %d hash backfilled", i)
+	}
+}
+
+func roles(rows []repo.ChatMessage) []string {
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.Role
+	}
+	return out
+}

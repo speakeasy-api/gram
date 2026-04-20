@@ -111,6 +111,8 @@ type ChatMessage struct {
 	ExternalUserID *string
 	// When the message was created.
 	CreatedAt string
+	// Conversation generation — bumps on compaction or edit divergence
+	Generation int
 }
 
 type ChatOverview struct {

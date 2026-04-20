@@ -290,8 +290,9 @@ var ChatMessage = Type("ChatMessage", func() {
 		Description("When the message was created.")
 		Format(FormatDateTime)
 	})
+	Attribute("generation", Int, "Conversation generation — bumps on compaction or edit divergence")
 
-	Required("id", "role", "model", "created_at")
+	Required("id", "role", "model", "created_at", "generation")
 })
 
 var ChatResolution = Type("ChatResolution", func() {

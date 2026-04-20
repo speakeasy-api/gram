@@ -18193,6 +18193,10 @@ components:
                 finish_reason:
                     type: string
                     description: The finish reason of the message
+                generation:
+                    type: integer
+                    description: Conversation generation — bumps on compaction or edit divergence
+                    format: int64
                 id:
                     type: string
                     description: The ID of the message
@@ -18216,6 +18220,7 @@ components:
                 - role
                 - model
                 - created_at
+                - generation
         ChatOverview:
             type: object
             properties:

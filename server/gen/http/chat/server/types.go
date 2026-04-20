@@ -1431,6 +1431,8 @@ type ChatMessageResponseBody struct {
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// When the message was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// Conversation generation — bumps on compaction or edit divergence
+	Generation int `form:"generation" json:"generation" xml:"generation"`
 }
 
 // ChatOverviewWithResolutionsResponseBody is used to define fields on response
