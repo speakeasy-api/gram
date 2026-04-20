@@ -1,15 +1,17 @@
 package organizations_test
 
 import (
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
 	"time"
+
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/rbactest"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/mock"
@@ -85,7 +87,7 @@ func TestService_ListInvites_AllowsOrgReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID})
 
 	ti.orgs.On("ListInvitations", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Invitation{}, nil).Once()
 
@@ -102,7 +104,7 @@ func TestService_ListInvites_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) 
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
 	ti.orgs.On("ListInvitations", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Invitation{}, nil).Once()
 
@@ -115,10 +117,12 @@ func TestService_ListInvites_ForbiddenWithoutOrgReadGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = withExactAccessGrants(t, ctx, ti.conn)
+	ctx = rbactest.WithExactAccessGrants(t, ctx)
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	require.Nil(t, res)
 }
 
@@ -126,10 +130,12 @@ func TestService_ListInvites_ForbiddenWithGrantForDifferentOrganization(t *testi
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	require.Nil(t, res)
 }
 
@@ -140,6 +146,8 @@ func TestService_ListInvites_ForbiddenWhenNotOrgAdmin(t *testing.T) {
 	expectWorkOSOrgNonAdminRole(t, ti.orgs)
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	require.Nil(t, res)
 }
