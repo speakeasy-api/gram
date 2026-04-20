@@ -16,7 +16,7 @@ func TestService_ListScopes(t *testing.T) {
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Scopes, 7)
+	require.Len(t, result.Scopes, 10)
 
 	bySlug := make(map[string]*gen.ScopeDefinition, len(result.Scopes))
 	for _, scope := range result.Scopes {

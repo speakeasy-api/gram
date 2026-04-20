@@ -5,7 +5,7 @@ export function ProjectOnboardingBanner() {
   const routes = useRoutes();
 
   return (
-    <Card className="bg-linear-to-tr from-white via-white to-blue-200 p-8">
+    <Card className="from-background via-background bg-linear-to-tr to-blue-200 p-8 dark:to-blue-950">
       <Card.Header>
         <h2 className="text-3xl font-light">Welcome</h2>
       </Card.Header>
