@@ -4,6 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import * as components from "../components/index.js";
 
 export type PublishPluginsSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -19,6 +20,7 @@ export type PublishPluginsRequest = {
    * project header
    */
   gramProject?: string | undefined;
+  publishPluginsRequestBody: components.PublishPluginsRequestBody;
 };
 
 /** @internal */
@@ -56,6 +58,7 @@ export function publishPluginsSecurityToJSON(
 export type PublishPluginsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
+  PublishPluginsRequestBody: components.PublishPluginsRequestBody$Outbound;
 };
 
 /** @internal */
@@ -66,11 +69,14 @@ export const PublishPluginsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
+    publishPluginsRequestBody:
+      components.PublishPluginsRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
+      publishPluginsRequestBody: "PublishPluginsRequestBody",
     });
   }),
 );

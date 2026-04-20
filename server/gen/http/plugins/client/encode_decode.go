@@ -2640,6 +2640,10 @@ func EncodePublishPluginsRequest(encoder func(*http.Request) goahttp.Encoder) fu
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		body := NewPublishPluginsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("plugins", "publishPlugins", err)
+		}
 		return nil
 	}
 }

@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -35,7 +35,7 @@ import { Result } from "../types/fp.js";
  */
 export function pluginsPublishPlugins(
   client: GramCore,
-  request?: operations.PublishPluginsRequest | undefined,
+  request: operations.PublishPluginsRequest,
   security?: operations.PublishPluginsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -62,7 +62,7 @@ export function pluginsPublishPlugins(
 
 async function $do(
   client: GramCore,
-  request?: operations.PublishPluginsRequest | undefined,
+  request: operations.PublishPluginsRequest,
   security?: operations.PublishPluginsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -84,28 +84,27 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(
-        z.optional(operations.PublishPluginsRequest$outboundSchema),
-        value,
-      ),
+    (value) => z.parse(operations.PublishPluginsRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload.PublishPluginsRequestBody, {
+    explode: true,
+  });
 
   const path = pathToFunc("/rpc/plugins.publishPlugins")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),

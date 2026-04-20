@@ -2442,6 +2442,22 @@ func DecodePublishPluginsRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 	return func(r *http.Request) (*plugins.PublishPluginsPayload, error) {
 		var payload *plugins.PublishPluginsPayload
 		var (
+			body PublishPluginsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+
+		var (
 			sessionToken     *string
 			projectSlugInput *string
 		)
@@ -2453,7 +2469,7 @@ func DecodePublishPluginsRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewPublishPluginsPayload(sessionToken, projectSlugInput)
+		payload = NewPublishPluginsPayload(&body, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

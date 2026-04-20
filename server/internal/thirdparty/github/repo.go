@@ -71,6 +71,32 @@ func (c *Client) CreateRepo(ctx context.Context, installationID int64, org, name
 	return nil
 }
 
+// AddCollaborator invites a GitHub user as a collaborator on the repo with
+// the given permission level ("pull", "push", or "admin").
+func (c *Client) AddCollaborator(ctx context.Context, installationID int64, owner, repo, username, permission string) error {
+	payload := map[string]any{
+		"permission": permission,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal add collaborator: %w", err)
+	}
+
+	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "collaborators", username)
+	resp, err := c.doAPI(ctx, installationID, http.MethodPut, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("add collaborator: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	// 201 = invite sent, 204 = already a collaborator
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("add collaborator: status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	return nil
+}
+
 // PushFiles atomically commits a set of files to the given repository branch
 // using the Git Trees API.
 func (c *Client) PushFiles(ctx context.Context, installationID int64, owner, repo, branch, commitMsg string, files map[string][]byte) (string, error) {

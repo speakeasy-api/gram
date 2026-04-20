@@ -65,6 +65,13 @@ type SetPluginAssignmentsRequestBody struct {
 	PrincipalUrns []string `form:"principal_urns,omitempty" json:"principal_urns,omitempty" xml:"principal_urns,omitempty"`
 }
 
+// PublishPluginsRequestBody is the type of the "plugins" service
+// "publishPlugins" endpoint HTTP request body.
+type PublishPluginsRequestBody struct {
+	// GitHub username to add as a collaborator on the repo.
+	GithubUsername *string `form:"github_username,omitempty" json:"github_username,omitempty" xml:"github_username,omitempty"`
+}
+
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
 // endpoint HTTP response body.
 type ListPluginsResponseBody struct {
@@ -4531,8 +4538,10 @@ func NewGetPublishStatusPayload(sessionToken *string, projectSlugInput *string) 
 
 // NewPublishPluginsPayload builds a plugins service publishPlugins endpoint
 // payload.
-func NewPublishPluginsPayload(sessionToken *string, projectSlugInput *string) *plugins.PublishPluginsPayload {
-	v := &plugins.PublishPluginsPayload{}
+func NewPublishPluginsPayload(body *PublishPluginsRequestBody, sessionToken *string, projectSlugInput *string) *plugins.PublishPluginsPayload {
+	v := &plugins.PublishPluginsPayload{
+		GithubUsername: body.GithubUsername,
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

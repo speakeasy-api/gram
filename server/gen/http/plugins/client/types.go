@@ -65,6 +65,13 @@ type SetPluginAssignmentsRequestBody struct {
 	PrincipalUrns []string `form:"principal_urns" json:"principal_urns" xml:"principal_urns"`
 }
 
+// PublishPluginsRequestBody is the type of the "plugins" service
+// "publishPlugins" endpoint HTTP request body.
+type PublishPluginsRequestBody struct {
+	// GitHub username to add as a collaborator on the repo.
+	GithubUsername *string `form:"github_username,omitempty" json:"github_username,omitempty" xml:"github_username,omitempty"`
+}
+
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
 // endpoint HTTP response body.
 type ListPluginsResponseBody struct {
@@ -2540,6 +2547,15 @@ func NewSetPluginAssignmentsRequestBody(p *plugins.SetPluginAssignmentsPayload) 
 		}
 	} else {
 		body.PrincipalUrns = []string{}
+	}
+	return body
+}
+
+// NewPublishPluginsRequestBody builds the HTTP request body from the payload
+// of the "publishPlugins" endpoint of the "plugins" service.
+func NewPublishPluginsRequestBody(p *plugins.PublishPluginsPayload) *PublishPluginsRequestBody {
+	body := &PublishPluginsRequestBody{
+		GithubUsername: p.GithubUsername,
 	}
 	return body
 }

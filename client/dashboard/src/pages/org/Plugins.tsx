@@ -30,6 +30,7 @@ export function PluginsRoot() {
 
 export default function Plugins() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [pluginToDelete, setPluginToDelete] = useState<Plugin | null>(null);
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
@@ -223,11 +224,7 @@ export default function Plugins() {
                 {publishStatus?.configured && (
                   <Button
                     variant="secondary"
-                    onClick={() =>
-                      publishMutation.mutate({
-                        security: { sessionHeaderGramSession: "" },
-                      })
-                    }
+                    onClick={() => setIsPublishDialogOpen(true)}
                     disabled={publishMutation.isPending}
                   >
                     <Button.LeftIcon>
@@ -317,6 +314,53 @@ export default function Plugins() {
                 Delete
               </Button>
             </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog>
+        {/* Publish Dialog */}
+        <Dialog
+          open={isPublishDialogOpen}
+          onOpenChange={setIsPublishDialogOpen}
+        >
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>Publish Plugins</Dialog.Title>
+              <Dialog.Description>
+                Publish all plugins to a GitHub repository. Optionally add a
+                collaborator who will receive read access to the repo.
+              </Dialog.Description>
+            </Dialog.Header>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                const username =
+                  (fd.get("githubUsername") as string) || undefined;
+                publishMutation.mutate({
+                  security: { sessionHeaderGramSession: "" },
+                  request: { githubUsername: username },
+                });
+                setIsPublishDialogOpen(false);
+              }}
+              className="flex flex-col gap-4"
+            >
+              <InputField
+                label="GitHub Username (optional)"
+                name="githubUsername"
+                placeholder="e.g. octocat"
+              />
+              <Dialog.Footer>
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsPublishDialogOpen(false)}
+                  type="button"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={publishMutation.isPending}>
+                  {publishMutation.isPending ? "Publishing..." : "Publish"}
+                </Button>
+              </Dialog.Footer>
+            </form>
           </Dialog.Content>
         </Dialog>
       </Page.Body>

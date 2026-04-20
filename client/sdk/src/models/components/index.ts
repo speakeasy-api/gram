@@ -209,6 +209,7 @@ export * from "./prompttemplate.js";
 export * from "./prompttemplateentry.js";
 export * from "./publishpackageform.js";
 export * from "./publishpackageresult.js";
+export * from "./publishpluginsrequestbody.js";
 export * from "./publishpluginsresult.js";
 export * from "./publishstatusresult.js";
 export * from "./rbacstatus.js";

@@ -160,7 +160,7 @@ export class Plugins extends ClientSDK {
    * Generate and publish all plugin packages to a GitHub repository.
    */
   async publishPlugins(
-    request?: operations.PublishPluginsRequest | undefined,
+    request: operations.PublishPluginsRequest,
     security?: operations.PublishPluginsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.PublishPluginsResult> {

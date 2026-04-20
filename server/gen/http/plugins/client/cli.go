@@ -441,7 +441,15 @@ func BuildGetPublishStatusPayload(pluginsGetPublishStatusSessionToken string, pl
 
 // BuildPublishPluginsPayload builds the payload for the plugins publishPlugins
 // endpoint from CLI flags.
-func BuildPublishPluginsPayload(pluginsPublishPluginsSessionToken string, pluginsPublishPluginsProjectSlugInput string) (*plugins.PublishPluginsPayload, error) {
+func BuildPublishPluginsPayload(pluginsPublishPluginsBody string, pluginsPublishPluginsSessionToken string, pluginsPublishPluginsProjectSlugInput string) (*plugins.PublishPluginsPayload, error) {
+	var err error
+	var body PublishPluginsRequestBody
+	{
+		err = json.Unmarshal([]byte(pluginsPublishPluginsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"github_username\": \"abc123\"\n   }'")
+		}
+	}
 	var sessionToken *string
 	{
 		if pluginsPublishPluginsSessionToken != "" {
@@ -454,7 +462,9 @@ func BuildPublishPluginsPayload(pluginsPublishPluginsSessionToken string, plugin
 			projectSlugInput = &pluginsPublishPluginsProjectSlugInput
 		}
 	}
-	v := &plugins.PublishPluginsPayload{}
+	v := &plugins.PublishPluginsPayload{
+		GithubUsername: body.GithubUsername,
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

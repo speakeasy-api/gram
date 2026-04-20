@@ -43,6 +43,7 @@ var validPrincipalURN = regexp.MustCompile(`^(\*|role:[a-zA-Z0-9_-]+|user:[a-zA-
 type GitHubPublisher interface {
 	CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error
 	PushFiles(ctx context.Context, installationID int64, owner, repo, branch, commitMsg string, files map[string][]byte) (string, error)
+	AddCollaborator(ctx context.Context, installationID int64, owner, repo, username, permission string) error
 }
 
 // GitHubConfig holds the configured GitHub client and the Gram-owned org
@@ -705,6 +706,15 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "push plugin files to GitHub").Log(ctx, s.logger)
+	}
+
+	if payload.GithubUsername != nil && *payload.GithubUsername != "" {
+		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, s.github.Org, repoName, *payload.GithubUsername, "pull"); err != nil {
+			s.logger.WarnContext(ctx, "failed to add collaborator (non-fatal)",
+				attr.SlogOrganizationID(ac.ActiveOrganizationID),
+				attr.SlogError(err),
+			)
+		}
 	}
 
 	// Note: if this upsert fails after a successful push, the repo will be

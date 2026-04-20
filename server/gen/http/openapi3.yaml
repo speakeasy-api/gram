@@ -10620,6 +10620,12 @@ paths:
                   schema:
                     description: project header
                     type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PublishPluginsRequestBody'
+                required: true
             responses:
                 "200":
                     content:
@@ -23916,6 +23922,12 @@ components:
             required:
                 - package
                 - version
+        PublishPluginsRequestBody:
+            type: object
+            properties:
+                github_username:
+                    type: string
+                    description: GitHub username to add as a collaborator on the repo.
         PublishPluginsResult:
             type: object
             properties:
