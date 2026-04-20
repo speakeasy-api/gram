@@ -315,7 +315,7 @@ func (s *Service) ListAll(ctx context.Context, payload *gen.ListAllPayload) (*ge
 		if v > maxListAllLimit {
 			v = maxListAllLimit
 		}
-		limit = int32(v) //nolint:gosec // bounded by maxListAllLimit above
+		limit = int32(v)
 	}
 	var offset int32
 	if payload.Offset != nil && *payload.Offset > 0 {
@@ -323,7 +323,7 @@ func (s *Service) ListAll(ctx context.Context, payload *gen.ListAllPayload) (*ge
 		if v > maxListAllOffset {
 			v = maxListAllOffset
 		}
-		offset = int32(v) //nolint:gosec // bounded by maxListAllOffset above
+		offset = int32(v)
 	}
 
 	repo := orgrepo.New(s.db)
