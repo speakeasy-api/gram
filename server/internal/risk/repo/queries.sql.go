@@ -18,8 +18,8 @@ SET version = version + 1
   , updated_at = clock_timestamp()
 WHERE id = $1
   AND project_id = $2
-  AND deleted_at IS NULL
-RETURNING id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at, deleted
 `
 
 type BumpRiskPolicyVersionParams struct {
@@ -41,6 +41,7 @@ func (q *Queries) BumpRiskPolicyVersion(ctx context.Context, arg BumpRiskPolicyV
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }
@@ -120,7 +121,7 @@ VALUES (
   , $6
   , 1
 )
-RETURNING id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at
+RETURNING id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRiskPolicyParams struct {
@@ -153,6 +154,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }
@@ -173,7 +175,7 @@ SET deleted_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE id = $1
   AND project_id = $2
-  AND deleted_at IS NULL
+  AND deleted IS FALSE
 `
 
 type DeleteRiskPolicyParams struct {
@@ -305,11 +307,11 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 }
 
 const getRiskPolicy = `-- name: GetRiskPolicy :one
-SELECT id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE id = $1
   AND project_id = $2
-  AND deleted_at IS NULL
+  AND deleted IS FALSE
 `
 
 type GetRiskPolicyParams struct {
@@ -331,6 +333,7 @@ func (q *Queries) GetRiskPolicy(ctx context.Context, arg GetRiskPolicyParams) (R
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }
@@ -354,11 +357,11 @@ type InsertRiskResultsParams struct {
 }
 
 const listEnabledRiskPoliciesByProject = `-- name: ListEnabledRiskPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
-  AND deleted_at IS NULL
+  AND deleted IS FALSE
 `
 
 func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
@@ -381,6 +384,7 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}
@@ -393,10 +397,10 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 }
 
 const listRiskPolicies = `-- name: ListRiskPolicies :many
-SELECT id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
-  AND deleted_at IS NULL
+  AND deleted IS FALSE
 ORDER BY created_at DESC
 `
 
@@ -420,6 +424,7 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}
@@ -436,7 +441,7 @@ SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_poli
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted_at IS NULL
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 WHERE cm.chat_id = $1
   AND rr.project_id = $2
   AND rr.found IS TRUE
@@ -615,7 +620,7 @@ SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_poli
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted_at IS NULL
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 WHERE rr.project_id = $1
   AND rr.risk_policy_id = $2
   AND rr.found IS TRUE
@@ -694,7 +699,7 @@ SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_poli
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted_at IS NULL
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE
 ORDER BY rr.created_at DESC
@@ -779,8 +784,8 @@ SET name = $1
   , updated_at = clock_timestamp()
 WHERE id = $4
   AND project_id = $5
-  AND deleted_at IS NULL
-RETURNING id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRiskPolicyParams struct {
@@ -811,6 +816,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }

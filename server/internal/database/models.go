@@ -820,6 +820,7 @@ type RiskPolicy struct {
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type RiskResult struct {
