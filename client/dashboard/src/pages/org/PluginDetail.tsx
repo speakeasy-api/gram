@@ -301,7 +301,8 @@ export default function PluginDetail() {
                   </select>
                 ) : (
                   <Type muted small>
-                    No toolsets available. Create a toolset first.
+                    No toolsets available. Create a toolset in this project
+                    first.
                   </Type>
                 )}
               </div>
