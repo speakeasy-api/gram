@@ -83,8 +83,14 @@ type ListUsersResponseBody struct {
 // ListAllResponseBody is the type of the "organizations" service "listAll"
 // endpoint HTTP response body.
 type ListAllResponseBody struct {
-	// All Gram organizations.
+	// Gram organizations for this page.
 	Organizations []*OrganizationSummaryResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
+	// Total number of Gram organizations (ignores limit/offset).
+	Total int `form:"total" json:"total" xml:"total"`
+	// Maximum number of organizations returned in this response.
+	Limit int `form:"limit" json:"limit" xml:"limit"`
+	// Number of organizations skipped before this page.
+	Offset int `form:"offset" json:"offset" xml:"offset"`
 }
 
 // SendInviteUnauthorizedResponseBody is the type of the "organizations"
@@ -1700,7 +1706,11 @@ func NewListUsersResponseBody(res *organizations.ListUsersResult) *ListUsersResp
 // NewListAllResponseBody builds the HTTP response body from the result of the
 // "listAll" endpoint of the "organizations" service.
 func NewListAllResponseBody(res *organizations.ListAllOrganizationsResult) *ListAllResponseBody {
-	body := &ListAllResponseBody{}
+	body := &ListAllResponseBody{
+		Total:  res.Total,
+		Limit:  res.Limit,
+		Offset: res.Offset,
+	}
 	if res.Organizations != nil {
 		body.Organizations = make([]*OrganizationSummaryResponseBody, len(res.Organizations))
 		for i, val := range res.Organizations {
@@ -2906,8 +2916,10 @@ func NewSetAccountTypePayload(body *SetAccountTypeRequestBody, apikeyToken *stri
 }
 
 // NewListAllPayload builds a organizations service listAll endpoint payload.
-func NewListAllPayload(apikeyToken *string) *organizations.ListAllPayload {
+func NewListAllPayload(limit *int, offset *int, apikeyToken *string) *organizations.ListAllPayload {
 	v := &organizations.ListAllPayload{}
+	v.Limit = limit
+	v.Offset = offset
 	v.ApikeyToken = apikeyToken
 
 	return v

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	organizations "github.com/speakeasy-api/gram/server/gen/organizations"
@@ -1235,13 +1236,57 @@ func DecodeListAllRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp
 	return func(r *http.Request) (*organizations.ListAllPayload, error) {
 		var payload *organizations.ListAllPayload
 		var (
+			limit       *int
+			offset      *int
 			apikeyToken *string
+			err         error
 		)
+		qp := r.URL.Query()
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw != "" {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				pv := int(v)
+				limit = &pv
+			}
+		}
+		if limit != nil {
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+		}
+		if limit != nil {
+			if *limit > 500 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 500, false))
+			}
+		}
+		{
+			offsetRaw := qp.Get("offset")
+			if offsetRaw != "" {
+				v, err2 := strconv.ParseInt(offsetRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("offset", offsetRaw, "integer"))
+				}
+				pv := int(v)
+				offset = &pv
+			}
+		}
+		if offset != nil {
+			if *offset < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("offset", *offset, 0, true))
+			}
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		payload = NewListAllPayload(apikeyToken)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListAllPayload(limit, offset, apikeyToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

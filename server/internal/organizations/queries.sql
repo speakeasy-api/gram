@@ -24,7 +24,7 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at = clock_timestamp()
 RETURNING *;
 
--- name: SetAccountType :exec
+-- name: SetAccountType :execrows
 UPDATE organization_metadata
 SET gram_account_type = @gram_account_type,
     updated_at = clock_timestamp()
@@ -33,7 +33,11 @@ WHERE id = @id;
 -- name: ListAllOrganizations :many
 SELECT id, slug, name, gram_account_type, workos_id, whitelisted, disabled_at, created_at, updated_at
 FROM organization_metadata
-ORDER BY created_at DESC;
+ORDER BY created_at DESC
+LIMIT @lim OFFSET @off;
+
+-- name: CountAllOrganizations :one
+SELECT COUNT(*) FROM organization_metadata;
 
 -- name: GetOrganizationMetadata :one
 SELECT *

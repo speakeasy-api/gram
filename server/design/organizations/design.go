@@ -98,8 +98,11 @@ var OrganizationSummary = Type("OrganizationSummary", func() {
 })
 
 var ListAllOrganizationsResult = Type("ListAllOrganizationsResult", func() {
-	Required("organizations")
-	Attribute("organizations", ArrayOf(OrganizationSummary), "All Gram organizations.")
+	Required("organizations", "total", "limit", "offset")
+	Attribute("organizations", ArrayOf(OrganizationSummary), "Gram organizations for this page.")
+	Attribute("total", Int, "Total number of Gram organizations (ignores limit/offset).")
+	Attribute("limit", Int, "Maximum number of organizations returned in this response.")
+	Attribute("offset", Int, "Number of organizations skipped before this page.")
 })
 
 var _ = Service("organizations", func() {
@@ -249,6 +252,13 @@ var _ = Service("organizations", func() {
 		})
 
 		Payload(func() {
+			Attribute("limit", Int, "Maximum organizations to return (default 100, max 500).", func() {
+				Minimum(1)
+				Maximum(500)
+			})
+			Attribute("offset", Int, "Number of organizations to skip.", func() {
+				Minimum(0)
+			})
 			security.ByKeyPayload()
 		})
 
@@ -256,6 +266,8 @@ var _ = Service("organizations", func() {
 
 		HTTP(func() {
 			GET("/rpc/organizations.listAll")
+			Param("limit")
+			Param("offset")
 			security.ByKeyHeader()
 			Response(StatusOK)
 		})

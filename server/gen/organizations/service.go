@@ -69,13 +69,23 @@ type GetInviteByTokenPayload struct {
 // ListAllOrganizationsResult is the result type of the organizations service
 // listAll method.
 type ListAllOrganizationsResult struct {
-	// All Gram organizations.
+	// Gram organizations for this page.
 	Organizations []*OrganizationSummary
+	// Total number of Gram organizations (ignores limit/offset).
+	Total int
+	// Maximum number of organizations returned in this response.
+	Limit int
+	// Number of organizations skipped before this page.
+	Offset int
 }
 
 // ListAllPayload is the payload type of the organizations service listAll
 // method.
 type ListAllPayload struct {
+	// Maximum organizations to return (default 100, max 500).
+	Limit *int
+	// Number of organizations to skip.
+	Offset      *int
 	ApikeyToken *string
 }
 

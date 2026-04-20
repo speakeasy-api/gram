@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -1409,6 +1410,14 @@ func EncodeListAllRequest(encoder func(*http.Request) goahttp.Encoder) func(*htt
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
+		values := req.URL.Query()
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
+		}
+		if p.Offset != nil {
+			values.Add("offset", fmt.Sprintf("%v", *p.Offset))
+		}
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

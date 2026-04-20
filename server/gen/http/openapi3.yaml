@@ -8995,6 +8995,25 @@ paths:
             operationId: listAllOrganizations
             parameters:
                 - allowEmptyValue: true
+                  description: Maximum organizations to return (default 100, max 500).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum organizations to return (default 100, max 500).
+                    format: int64
+                    maximum: 500
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Number of organizations to skip.
+                  in: query
+                  name: offset
+                  schema:
+                    description: Number of organizations to skip.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
@@ -21171,13 +21190,28 @@ components:
         ListAllOrganizationsResult:
             type: object
             properties:
+                limit:
+                    type: integer
+                    description: Maximum number of organizations returned in this response.
+                    format: int64
+                offset:
+                    type: integer
+                    description: Number of organizations skipped before this page.
+                    format: int64
                 organizations:
                     type: array
                     items:
                         $ref: '#/components/schemas/OrganizationSummary'
-                    description: All Gram organizations.
+                    description: Gram organizations for this page.
+                total:
+                    type: integer
+                    description: Total number of Gram organizations (ignores limit/offset).
+                    format: int64
             required:
                 - organizations
+                - total
+                - limit
+                - offset
         ListAllowedOriginsResult:
             type: object
             properties:

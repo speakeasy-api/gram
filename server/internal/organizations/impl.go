@@ -279,29 +279,60 @@ func (s *Service) requireSpeakeasyTeam(ctx context.Context, action string) (*con
 	return ac, nil
 }
 
+const (
+	defaultListAllLimit = 100
+	maxListAllLimit     = 500
+)
+
 func (s *Service) SetAccountType(ctx context.Context, payload *gen.SetAccountTypePayload) error {
 	if _, err := s.requireSpeakeasyTeam(ctx, "set organization account type"); err != nil {
 		return err
 	}
 
-	if err := orgrepo.New(s.db).SetAccountType(ctx, orgrepo.SetAccountTypeParams{
+	n, err := orgrepo.New(s.db).SetAccountType(ctx, orgrepo.SetAccountTypeParams{
 		ID:              payload.OrganizationID,
 		GramAccountType: payload.GramAccountType,
-	}); err != nil {
+	})
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "set account type").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
+	}
+	if n == 0 {
+		return oops.E(oops.CodeNotFound, nil, "organization not found").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
 	}
 
 	return nil
 }
 
-func (s *Service) ListAll(ctx context.Context, _ *gen.ListAllPayload) (*gen.ListAllOrganizationsResult, error) {
+func (s *Service) ListAll(ctx context.Context, payload *gen.ListAllPayload) (*gen.ListAllOrganizationsResult, error) {
 	if _, err := s.requireSpeakeasyTeam(ctx, "list all organizations"); err != nil {
 		return nil, err
 	}
 
-	rows, err := orgrepo.New(s.db).ListAllOrganizations(ctx)
+	limit := int32(defaultListAllLimit)
+	if payload.Limit != nil && *payload.Limit > 0 {
+		if *payload.Limit > maxListAllLimit {
+			limit = maxListAllLimit
+		} else {
+			limit = int32(*payload.Limit)
+		}
+	}
+	var offset int32
+	if payload.Offset != nil && *payload.Offset > 0 {
+		offset = int32(*payload.Offset)
+	}
+
+	repo := orgrepo.New(s.db)
+	rows, err := repo.ListAllOrganizations(ctx, orgrepo.ListAllOrganizationsParams{
+		Lim: limit,
+		Off: offset,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list organizations").Log(ctx, s.logger)
+	}
+
+	total, err := repo.CountAllOrganizations(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count organizations").Log(ctx, s.logger)
 	}
 
 	orgs := make([]*gen.OrganizationSummary, 0, len(rows))
@@ -323,7 +354,12 @@ func (s *Service) ListAll(ctx context.Context, _ *gen.ListAllPayload) (*gen.List
 		orgs = append(orgs, summary)
 	}
 
-	return &gen.ListAllOrganizationsResult{Organizations: orgs}, nil
+	return &gen.ListAllOrganizationsResult{
+		Organizations: orgs,
+		Total:         int(total),
+		Limit:         int(limit),
+		Offset:        int(offset),
+	}, nil
 }
 
 // ListUsers returns Gram organization members from organization_user_relationships.

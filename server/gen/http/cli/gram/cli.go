@@ -659,6 +659,8 @@ func ParseEndpoint(
 		organizationsSetAccountTypeApikeyTokenFlag = organizationsSetAccountTypeFlags.String("apikey-token", "", "")
 
 		organizationsListAllFlags           = flag.NewFlagSet("list-all", flag.ExitOnError)
+		organizationsListAllLimitFlag       = organizationsListAllFlags.String("limit", "", "")
+		organizationsListAllOffsetFlag      = organizationsListAllFlags.String("offset", "", "")
 		organizationsListAllApikeyTokenFlag = organizationsListAllFlags.String("apikey-token", "", "")
 
 		organizationsRemoveUserFlags            = flag.NewFlagSet("remove-user", flag.ExitOnError)
@@ -2545,7 +2547,7 @@ func ParseEndpoint(
 				data, err = organizationsc.BuildSetAccountTypePayload(*organizationsSetAccountTypeBodyFlag, *organizationsSetAccountTypeApikeyTokenFlag)
 			case "list-all":
 				endpoint = c.ListAll()
-				data, err = organizationsc.BuildListAllPayload(*organizationsListAllApikeyTokenFlag)
+				data, err = organizationsc.BuildListAllPayload(*organizationsListAllLimitFlag, *organizationsListAllOffsetFlag, *organizationsListAllApikeyTokenFlag)
 			case "remove-user":
 				endpoint = c.RemoveUser()
 				data, err = organizationsc.BuildRemoveUserPayload(*organizationsRemoveUserUserIDFlag, *organizationsRemoveUserSessionTokenFlag)
@@ -5335,6 +5337,8 @@ func organizationsSetAccountTypeUsage() {
 func organizationsListAllUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] organizations list-all", os.Args[0])
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -offset INT")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -5343,11 +5347,13 @@ func organizationsListAllUsage() {
 	fmt.Fprintln(os.Stderr, `List every Gram organization (admin only - requires speakeasy-team API key).`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -offset INT: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations list-all --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations list-all --limit 2 --offset 1 --apikey-token \"abc123\"")
 }
 
 func organizationsRemoveUserUsage() {

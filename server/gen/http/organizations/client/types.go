@@ -83,8 +83,14 @@ type ListUsersResponseBody struct {
 // ListAllResponseBody is the type of the "organizations" service "listAll"
 // endpoint HTTP response body.
 type ListAllResponseBody struct {
-	// All Gram organizations.
+	// Gram organizations for this page.
 	Organizations []*OrganizationSummaryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	// Total number of Gram organizations (ignores limit/offset).
+	Total *int `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+	// Maximum number of organizations returned in this response.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+	// Number of organizations skipped before this page.
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty" xml:"offset,omitempty"`
 }
 
 // SendInviteUnauthorizedResponseBody is the type of the "organizations"
@@ -2616,7 +2622,11 @@ func NewSetAccountTypeGatewayError(body *SetAccountTypeGatewayErrorResponseBody)
 // NewListAllOrganizationsResultOK builds a "organizations" service "listAll"
 // endpoint result from a HTTP "OK" response.
 func NewListAllOrganizationsResultOK(body *ListAllResponseBody) *organizations.ListAllOrganizationsResult {
-	v := &organizations.ListAllOrganizationsResult{}
+	v := &organizations.ListAllOrganizationsResult{
+		Total:  *body.Total,
+		Limit:  *body.Limit,
+		Offset: *body.Offset,
+	}
 	v.Organizations = make([]*organizations.OrganizationSummary, len(body.Organizations))
 	for i, val := range body.Organizations {
 		if val == nil {
@@ -3030,6 +3040,15 @@ func ValidateListUsersResponseBody(body *ListUsersResponseBody) (err error) {
 func ValidateListAllResponseBody(body *ListAllResponseBody) (err error) {
 	if body.Organizations == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))
+	}
+	if body.Total == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
+	}
+	if body.Limit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("limit", "body"))
+	}
+	if body.Offset == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("offset", "body"))
 	}
 	for _, e := range body.Organizations {
 		if e != nil {
