@@ -88,11 +88,12 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 			}
 
 			f := workflow.ExecuteActivity(ctx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
-				ProjectID:     params.ProjectID,
-				RiskPolicyID:  params.RiskPolicyID,
-				PolicyVersion: fetchResult.PolicyVersion,
-				MessageIDs:    batch,
-				Sources:       fetchResult.Sources,
+				ProjectID:      params.ProjectID,
+				OrganizationID: fetchResult.OrganizationID,
+				RiskPolicyID:   params.RiskPolicyID,
+				PolicyVersion:  fetchResult.PolicyVersion,
+				MessageIDs:     batch,
+				Sources:        fetchResult.Sources,
 			})
 			pending = append(pending, f)
 		}

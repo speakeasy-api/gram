@@ -47,11 +47,12 @@ func NewAnalyzeBatch(logger *slog.Logger, db *pgxpool.Pool) *AnalyzeBatch {
 }
 
 type AnalyzeBatchArgs struct {
-	ProjectID     uuid.UUID
-	RiskPolicyID  uuid.UUID
-	PolicyVersion int64
-	MessageIDs    []uuid.UUID
-	Sources       []string
+	ProjectID      uuid.UUID
+	OrganizationID string
+	RiskPolicyID   uuid.UUID
+	PolicyVersion  int64
+	MessageIDs     []uuid.UUID
+	Sources        []string
 }
 
 type AnalyzeBatchResult struct {
@@ -115,20 +116,21 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 				return nil, fmt.Errorf("generate result id: %w", err)
 			}
 			rows = append(rows, repo.InsertRiskResultsParams{
-				ID:            resultID,
-				ProjectID:     args.ProjectID,
-				RiskPolicyID:  args.RiskPolicyID,
-				PolicyVersion: args.PolicyVersion,
-				ChatMessageID: msg.ID,
-				Source:        "gitleaks",
-				Found:         true,
-				RuleID:        pgtype.Text{String: f.RuleID, Valid: true},
-				Description:   pgtype.Text{String: f.Description, Valid: true},
-				Match:         pgtype.Text{String: f.Match, Valid: true},
-				StartPos:      pgtype.Int4{Int32: safeInt32(f.StartPos), Valid: true},
-				EndPos:        pgtype.Int4{Int32: safeInt32(f.EndPos), Valid: true},
-				Confidence:    pgtype.Float8{Float64: 1.0, Valid: true},
-				Tags:          f.Tags,
+				ID:                resultID,
+				ProjectID:         args.ProjectID,
+				OrganizationID:    args.OrganizationID,
+				RiskPolicyID:      args.RiskPolicyID,
+				RiskPolicyVersion: args.PolicyVersion,
+				ChatMessageID:     msg.ID,
+				Source:            "gitleaks",
+				Found:             true,
+				RuleID:            pgtype.Text{String: f.RuleID, Valid: true},
+				Description:       pgtype.Text{String: f.Description, Valid: true},
+				Match:             pgtype.Text{String: f.Match, Valid: true},
+				StartPos:          pgtype.Int4{Int32: safeInt32(f.StartPos), Valid: true},
+				EndPos:            pgtype.Int4{Int32: safeInt32(f.EndPos), Valid: true},
+				Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
+				Tags:              f.Tags,
 			})
 		}
 	}
@@ -180,20 +182,21 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (*AnalyzeB
 
 func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) repo.InsertRiskResultsParams {
 	return repo.InsertRiskResultsParams{
-		ID:            id,
-		ProjectID:     args.ProjectID,
-		RiskPolicyID:  args.RiskPolicyID,
-		PolicyVersion: args.PolicyVersion,
-		ChatMessageID: messageID,
-		Source:        "none",
-		Found:         false,
-		RuleID:        pgtype.Text{String: "", Valid: false},
-		Description:   pgtype.Text{String: "", Valid: false},
-		Match:         pgtype.Text{String: "", Valid: false},
-		StartPos:      pgtype.Int4{Int32: 0, Valid: false},
-		EndPos:        pgtype.Int4{Int32: 0, Valid: false},
-		Confidence:    pgtype.Float8{Float64: 0, Valid: false},
-		Tags:          nil,
+		ID:                id,
+		ProjectID:         args.ProjectID,
+		OrganizationID:    args.OrganizationID,
+		RiskPolicyID:      args.RiskPolicyID,
+		RiskPolicyVersion: args.PolicyVersion,
+		ChatMessageID:     messageID,
+		Source:            "none",
+		Found:             false,
+		RuleID:            pgtype.Text{String: "", Valid: false},
+		Description:       pgtype.Text{String: "", Valid: false},
+		Match:             pgtype.Text{String: "", Valid: false},
+		StartPos:          pgtype.Int4{Int32: 0, Valid: false},
+		EndPos:            pgtype.Int4{Int32: 0, Valid: false},
+		Confidence:        pgtype.Float8{Float64: 0, Valid: false},
+		Tags:              nil,
 	}
 }
 

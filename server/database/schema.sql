@@ -1783,7 +1783,6 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT risk_policies_pkey PRIMARY KEY (id),
-  CONSTRAINT risk_policies_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT risk_policies_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
 );
 
@@ -1796,8 +1795,9 @@ WHERE deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS risk_results (
   id uuid NOT NULL,
   project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
   risk_policy_id uuid NOT NULL,
-  policy_version BIGINT NOT NULL,
+  risk_policy_version BIGINT NOT NULL,
   chat_message_id uuid NOT NULL,
   source TEXT NOT NULL,
 
@@ -1812,10 +1812,7 @@ CREATE TABLE IF NOT EXISTS risk_results (
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT risk_results_pkey PRIMARY KEY (id),
-  CONSTRAINT risk_results_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-  CONSTRAINT risk_results_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE,
-  CONSTRAINT risk_results_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+  CONSTRAINT risk_results_pkey PRIMARY KEY (id)
 );
 
 CREATE INDEX IF NOT EXISTS risk_results_project_id_risk_policy_id_idx
@@ -1825,4 +1822,4 @@ CREATE INDEX IF NOT EXISTS risk_results_chat_message_id_idx
 ON risk_results (chat_message_id);
 
 CREATE INDEX IF NOT EXISTS risk_results_policy_version_message_idx
-ON risk_results (risk_policy_id, policy_version, chat_message_id);
+ON risk_results (risk_policy_id, risk_policy_version, chat_message_id);

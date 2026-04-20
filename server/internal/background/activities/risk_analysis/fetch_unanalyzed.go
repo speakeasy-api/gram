@@ -33,9 +33,10 @@ type FetchUnanalyzedArgs struct {
 }
 
 type FetchUnanalyzedResult struct {
-	MessageIDs    []uuid.UUID
-	PolicyVersion int64
-	Sources       []string
+	MessageIDs     []uuid.UUID
+	OrganizationID string
+	PolicyVersion  int64
+	Sources        []string
 }
 
 func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*FetchUnanalyzedResult, error) {
@@ -53,26 +54,27 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*Fe
 	if !policy.Enabled {
 		// Policy is disabled — clear all existing results.
 		if err := a.repo.DeleteStaleRiskResults(ctx, repo.DeleteStaleRiskResultsParams{
-			RiskPolicyID:  args.RiskPolicyID,
-			ProjectID:     args.ProjectID,
-			PolicyVersion: policy.Version + 1, // version+1 deletes everything including current
+			RiskPolicyID:      args.RiskPolicyID,
+			ProjectID:         args.ProjectID,
+			RiskPolicyVersion: policy.Version + 1, // version+1 deletes everything including current
 		}); err != nil {
 			return nil, fmt.Errorf("delete results for disabled policy: %w", err)
 		}
 
 		return &FetchUnanalyzedResult{
-			MessageIDs:    nil,
-			PolicyVersion: policy.Version,
-			Sources:       policy.Sources,
+			MessageIDs:     nil,
+			OrganizationID: policy.OrganizationID,
+			PolicyVersion:  policy.Version,
+			Sources:        policy.Sources,
 		}, nil
 	}
 
 	queryStart := time.Now()
 	ids, err := a.repo.FetchUnanalyzedMessageIDs(ctx, repo.FetchUnanalyzedMessageIDsParams{
-		ProjectID:     uuid.NullUUID{UUID: args.ProjectID, Valid: true},
-		RiskPolicyID:  args.RiskPolicyID,
-		PolicyVersion: policy.Version,
-		BatchLimit:    args.BatchLimit,
+		ProjectID:         uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+		RiskPolicyID:      args.RiskPolicyID,
+		RiskPolicyVersion: policy.Version,
+		BatchLimit:        args.BatchLimit,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("fetch unanalyzed message IDs: %w", err)
@@ -86,8 +88,9 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (*Fe
 	)
 
 	return &FetchUnanalyzedResult{
-		MessageIDs:    ids,
-		PolicyVersion: policy.Version,
-		Sources:       policy.Sources,
+		MessageIDs:     ids,
+		OrganizationID: policy.OrganizationID,
+		PolicyVersion:  policy.Version,
+		Sources:        policy.Sources,
 	}, nil
 }

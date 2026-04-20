@@ -331,7 +331,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		results = make([]*types.RiskResult, 0, len(rows))
 		for _, row := range rows {
 			cid := row.ChatID.String()
-			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.PolicyVersion, row.ChatMessageID, &cid, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
+			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &cid, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 		}
 	} else if payload.PolicyID != nil && *payload.PolicyID != "" {
 		policyID, parseErr := uuid.Parse(*payload.PolicyID)
@@ -349,7 +349,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		results = make([]*types.RiskResult, 0, len(rows))
 		for _, row := range rows {
 			chatID := row.ChatID.String()
-			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.PolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
+			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 		}
 	} else {
 		rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
@@ -362,7 +362,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		results = make([]*types.RiskResult, 0, len(rows))
 		for _, row := range rows {
 			chatID := row.ChatID.String()
-			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.PolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
+			results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 		}
 	}
 
@@ -398,18 +398,18 @@ func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskP
 	}
 
 	analyzedMessages, err := s.repo.CountAnalyzedMessages(ctx, repo.CountAnalyzedMessagesParams{
-		ProjectID:     *authCtx.ProjectID,
-		RiskPolicyID:  id,
-		PolicyVersion: policy.Version,
+		ProjectID:         *authCtx.ProjectID,
+		RiskPolicyID:      id,
+		RiskPolicyVersion: policy.Version,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count analyzed messages").Log(ctx, s.logger)
 	}
 
 	findingsCount, err := s.repo.CountFindingsByPolicy(ctx, repo.CountFindingsByPolicyParams{
-		ProjectID:     *authCtx.ProjectID,
-		RiskPolicyID:  id,
-		PolicyVersion: policy.Version,
+		ProjectID:         *authCtx.ProjectID,
+		RiskPolicyID:      id,
+		RiskPolicyVersion: policy.Version,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count findings").Log(ctx, s.logger)
@@ -477,9 +477,9 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	}
 
 	pendingMessages, err := s.repo.CountUnanalyzedMessages(ctx, repo.CountUnanalyzedMessagesParams{
-		ProjectID:     uuid.NullUUID{UUID: row.ProjectID, Valid: true},
-		RiskPolicyID:  row.ID,
-		PolicyVersion: row.Version,
+		ProjectID:         uuid.NullUUID{UUID: row.ProjectID, Valid: true},
+		RiskPolicyID:      row.ID,
+		RiskPolicyVersion: row.Version,
 	})
 	if err != nil {
 		pendingMessages = 0

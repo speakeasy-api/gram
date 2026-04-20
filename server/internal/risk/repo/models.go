@@ -24,19 +24,20 @@ type RiskPolicy struct {
 }
 
 type RiskResult struct {
-	ID            uuid.UUID
-	ProjectID     uuid.UUID
-	RiskPolicyID  uuid.UUID
-	PolicyVersion int64
-	ChatMessageID uuid.UUID
-	Source        string
-	Found         bool
-	RuleID        pgtype.Text
-	Description   pgtype.Text
-	Match         pgtype.Text
-	StartPos      pgtype.Int4
-	EndPos        pgtype.Int4
-	Confidence    pgtype.Float8
-	Tags          []string
-	CreatedAt     pgtype.Timestamptz
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatMessageID     uuid.UUID
+	Source            string
+	Found             bool
+	RuleID            pgtype.Text
+	Description       pgtype.Text
+	Match             pgtype.Text
+	StartPos          pgtype.Int4
+	EndPos            pgtype.Int4
+	Confidence        pgtype.Float8
+	Tags              []string
+	CreatedAt         pgtype.Timestamptz
 }

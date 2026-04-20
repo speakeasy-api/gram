@@ -82,7 +82,7 @@ WHERE cm.project_id = @project_id
     FROM risk_results rr
     WHERE rr.chat_message_id = cm.id
       AND rr.risk_policy_id = @risk_policy_id
-      AND rr.policy_version = @policy_version
+      AND rr.risk_policy_version = @risk_policy_version
   );
 
 -- name: CountTotalMessages :one
@@ -95,14 +95,14 @@ SELECT COUNT(DISTINCT rr.chat_message_id)::BIGINT
 FROM risk_results rr
 WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
-  AND rr.policy_version = @policy_version;
+  AND rr.risk_policy_version = @risk_policy_version;
 
 -- name: CountFindingsByPolicy :one
 SELECT COUNT(*)::BIGINT
 FROM risk_results
 WHERE project_id = @project_id
   AND risk_policy_id = @risk_policy_id
-  AND policy_version = @policy_version
+  AND risk_policy_version = @risk_policy_version
   AND found IS TRUE;
 
 -- name: FetchUnanalyzedMessageIDs :many
@@ -114,7 +114,7 @@ WHERE cm.project_id = @project_id
     FROM risk_results rr
     WHERE rr.chat_message_id = cm.id
       AND rr.risk_policy_id = @risk_policy_id
-      AND rr.policy_version = @policy_version
+      AND rr.risk_policy_version = @risk_policy_version
   )
 ORDER BY cm.seq ASC
 LIMIT @batch_limit;
@@ -129,8 +129,9 @@ WHERE id = ANY(@ids::uuid[])
 INSERT INTO risk_results (
     id
   , project_id
+  , organization_id
   , risk_policy_id
-  , policy_version
+  , risk_policy_version
   , chat_message_id
   , source
   , found
@@ -145,8 +146,9 @@ INSERT INTO risk_results (
 VALUES (
     @id
   , @project_id
+  , @organization_id
   , @risk_policy_id
-  , @policy_version
+  , @risk_policy_version
   , @chat_message_id
   , @source
   , @found
@@ -163,7 +165,7 @@ VALUES (
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
-  AND policy_version < @policy_version;
+  AND risk_policy_version < @risk_policy_version;
 
 -- name: DeleteAllRiskResultsForPolicy :exec
 DELETE FROM risk_results
@@ -185,7 +187,8 @@ LIMIT @result_limit;
 SELECT rr.*, cm.chat_id, c.title AS chat_title
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chats c ON c.id = cm.chat_id
+LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 WHERE rr.project_id = @project_id
   AND rr.found IS TRUE
 ORDER BY rr.created_at DESC
@@ -195,7 +198,8 @@ LIMIT @result_limit;
 SELECT rr.*, cm.chat_id, c.title AS chat_title
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chats c ON c.id = cm.chat_id
+LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
   AND rr.found IS TRUE
@@ -206,7 +210,8 @@ LIMIT @result_limit;
 SELECT rr.*, cm.chat_id, c.title AS chat_title
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chats c ON c.id = cm.chat_id
+LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 WHERE cm.chat_id = @chat_id
   AND rr.project_id = @project_id
   AND rr.found IS TRUE
