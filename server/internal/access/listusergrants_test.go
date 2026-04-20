@@ -1,8 +1,8 @@
 package access
 
 import (
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"errors"
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -22,6 +22,9 @@ var expectedFullAccessScopes = []string{
 	string(ScopeMCPRead),
 	string(ScopeMCPWrite),
 	string(ScopeMCPConnect),
+	string(ScopeRemoteMCPRead),
+	string(ScopeRemoteMCPWrite),
+	string(ScopeRemoteMCPConnect),
 }
 
 func TestService_ListGrants(t *testing.T) {

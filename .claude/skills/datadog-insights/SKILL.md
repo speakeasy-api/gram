@@ -24,7 +24,7 @@ You are producing a health report for Gram's production services. The report mus
 These take priority over everything else. If any exist, they become the top of the digest.
 
 1. **Open incidents** — `search_datadog_incidents` for `state:(active OR stable)` in the last 24h
-2. **Monitors in alert** — `search_datadog_monitors` for `status:alert`
+2. **Monitors in alert** — `search_datadog_monitors` with query `status:alert (notification:slack-Speakeasy-gram-oncall OR notification:slack-oncall-gram)`. This filters to Gram-only monitors. Never include monitors that don't notify one of these two channels.
 3. **Error spikes** — Use `analyze_datadog_logs` with SQL:
    ```sql
    SELECT service, status, count(*) FROM logs GROUP BY service, status ORDER BY count(*) DESC

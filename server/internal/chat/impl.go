@@ -201,7 +201,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		}
 
 		for _, chat := range chats {
-			var lastMessageTimestamp string
+			lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
 			if chat.LastMessageTimestamp.Valid {
 				lastMessageTimestamp = chat.LastMessageTimestamp.Time.Format(time.RFC3339)
 			}
@@ -238,7 +238,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		}
 
 		for _, chat := range chats {
-			var lastMessageTimestamp string
+			lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
 			if chat.LastMessageTimestamp.Valid {
 				lastMessageTimestamp = chat.LastMessageTimestamp.Time.Format(time.RFC3339)
 			}
@@ -281,7 +281,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	for _, chat := range chats {
-		var lastMessageTimestamp string
+		lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
 		if chat.LastMessageTimestamp.Valid {
 			lastMessageTimestamp = chat.LastMessageTimestamp.Time.Format(time.RFC3339)
 		}
@@ -399,7 +399,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 
 		// If this is the first row for this chat, create the chat entry
 		if _, exists := chatMap[chatID]; !exists {
-			var lastMessageTimestamp string
+			lastMessageTimestamp := row.CreatedAt.Time.Format(time.RFC3339)
 			if row.LastMessageTimestamp.Valid {
 				lastMessageTimestamp = row.LastMessageTimestamp.Time.Format(time.RFC3339)
 			}
@@ -522,6 +522,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			ToolCallID:     &msg.ToolCallID.String,
 			FinishReason:   &msg.FinishReason.String,
 			CreatedAt:      msg.CreatedAt.Time.Format(time.RFC3339),
+			Generation:     int(msg.Generation),
 		}
 	}
 
@@ -535,8 +536,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 	}
 
-	// Get last message timestamp from the most recent message
-	var lastMessageTimestamp string
+	// Get last message timestamp from the most recent message, or fall back to
+	// the chat's own created_at so the response always carries a valid datetime.
+	lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
 	if len(messages) > 0 {
 		lastMessageTimestamp = messages[len(messages)-1].CreatedAt.Time.Format(time.RFC3339)
 	}
@@ -994,6 +996,9 @@ type chatMessageRow struct {
 	completionTokens int64
 	totalTokens      int64
 
+	contentHash []byte
+	generation  int32
+
 	metadata httpMetadata
 }
 
@@ -1122,6 +1127,8 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 			UserAgent:        conv.ToPGText(row.metadata.UserAgent),
 			IpAddress:        conv.ToPGText(row.metadata.IPAddress),
 			Source:           conv.ToPGText(row.metadata.Source),
+			ContentHash:      row.contentHash,
+			Generation:       row.generation,
 		}
 	}
 
