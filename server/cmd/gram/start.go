@@ -763,7 +763,7 @@ func newStartCommand() *cli.Command {
 
 			riskSignaler := background.NewThrottledSignaler(
 				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv},
-				time.Minute,
+				30*time.Second,
 				logger,
 			)
 			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, accessManager, riskSignaler)

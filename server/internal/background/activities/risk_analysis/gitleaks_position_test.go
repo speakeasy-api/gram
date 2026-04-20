@@ -238,7 +238,6 @@ GITHUB_TOKEN=ghp_1234567890abcdefghijklmnopqrstuvwxyz`,
 
 func TestBytePosEdgeCases(t *testing.T) {
 	t.Parallel()
-	// Test edge cases with Unicode and special characters
 	tests := []struct {
 		name    string
 		content string
@@ -246,28 +245,10 @@ func TestBytePosEdgeCases(t *testing.T) {
 		col     int
 	}{
 		{
-			name:    "Unicode characters",
-			content: "Hello 世界\nNext line",
-			line:    0,
-			col:     7, // Position of 世
-		},
-		{
-			name:    "Emoji in content",
-			content: "🔒 API_KEY=secret123 🚀",
-			line:    0,
-			col:     4, // After emoji and space
-		},
-		{
-			name:    "Multiple emojis",
-			content: "Line 1 ✅\n🔑 token=abc123def\n❌ Invalid",
-			line:    1,
-			col:     9, // Position of 'a' in abc123def
-		},
-		{
 			name:    "Tabs and spaces",
 			content: "\t\tAPI_KEY=secret123",
 			line:    0,
-			col:     11, // Position of 's' in secret
+			col:     11,
 		},
 		{
 			name:    "Windows line endings",
@@ -275,20 +256,75 @@ func TestBytePosEdgeCases(t *testing.T) {
 			line:    1,
 			col:     1,
 		},
-		{
-			name:    "Mixed emoji and secrets",
-			content: "⚠️ WARNING: password=SuperSecret!123 🛑",
-			line:    0,
-			col:     22, // Position of 'S' in SuperSecret
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			pos := lineColToBytePos(tt.content, tt.line, tt.col)
-			// Just ensure it doesn't panic and returns a valid position
 			assert.True(t, pos >= 0 && pos <= len(tt.content))
 		})
+	}
+}
+
+func TestLineColToBytePos_MultiByte(t *testing.T) {
+	t.Parallel()
+	// Gitleaks columns are byte offsets, not rune offsets.
+	// 🔒 is 4 bytes (U+1F512). With byte-based columns, the character
+	// after "🔒 " starts at byte 5, not rune 3.
+	tests := []struct {
+		name    string
+		content string
+		line    int
+		col     int
+		want    int
+	}{
+		{
+			name:    "after 4-byte emoji",
+			content: "🔒 SECRET=abc",
+			line:    0,
+			col:     6, // byte 5 = 'S', col is 1-indexed so col 6
+			want:    5, // "🔒" = 4 bytes, " " = 1 byte
+		},
+		{
+			name:    "CJK characters are 3 bytes each",
+			content: "世界KEY=val",
+			line:    0,
+			col:     7, // byte 6 = 'K', col 7
+			want:    6, // "世" = 3 bytes, "界" = 3 bytes
+		},
+		{
+			name:    "emoji on second line before secret",
+			content: "line1\n🔑 token=abc123",
+			line:    1,
+			col:     10, // byte offset from line start: 🔑(4) + " "(1) + "token"(5) = 10, col 10
+			want:    15, // 6 (line1\n) + 4 (🔑) + 1 ( ) + 5 (token) - 1 = 15
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := lineColToBytePos(tt.content, tt.line, tt.col)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestScanWithGitleaks_MultiByteBeforeSecret(t *testing.T) {
+	t.Parallel()
+	// Verify that multi-byte characters before a secret don't cause
+	// incorrect byte positions when extracting the match.
+	content := "🔒 GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab"
+	findings, err := ScanWithGitleaks(content)
+	require.NoError(t, err)
+	require.NotEmpty(t, findings, "should detect GitHub token after emoji")
+
+	for _, f := range findings {
+		require.True(t, f.StartPos >= 0 && f.EndPos <= len(content),
+			"positions must be within content bounds")
+		extracted := content[f.StartPos:f.EndPos]
+		assert.Equal(t, f.Match, extracted,
+			"byte positions must extract the exact match even with multi-byte prefix")
 	}
 }

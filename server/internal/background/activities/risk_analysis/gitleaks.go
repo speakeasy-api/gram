@@ -109,10 +109,11 @@ func convertFindings(content string, raw []report.Finding) []Finding {
 	return out
 }
 
-// lineColToBytePos converts line and column numbers to byte position in string.
-// Gitleaks uses 0-indexed lines and 0-indexed columns for StartLine/EndLine
-// and 1-indexed columns for StartColumn/EndColumn. We treat lines as 0-indexed
-// and columns as 1-indexed here.
+// lineColToBytePos converts line and column numbers to a byte position in
+// content. Gitleaks columns are byte offsets from the start of the line
+// (1-indexed for StartColumn, 0-indexed for EndColumn) — see
+// github.com/zricethezav/gitleaks/v8/detect/location.go. We iterate by byte
+// (not rune) to match gitleaks' accounting.
 func lineColToBytePos(content string, line, col int) int {
 	if line < 0 || col <= 0 {
 		return 0
@@ -121,12 +122,12 @@ func lineColToBytePos(content string, line, col int) int {
 	currentLine := 0
 	currentCol := 1
 
-	for i, ch := range content {
+	for i := 0; i < len(content); i++ {
 		if currentLine == line && currentCol == col {
 			return i
 		}
 
-		if ch == '\n' {
+		if content[i] == '\n' {
 			currentLine++
 			currentCol = 1
 		} else {
@@ -134,7 +135,6 @@ func lineColToBytePos(content string, line, col int) int {
 		}
 	}
 
-	// If we reach here, the position is beyond the end of content
 	return len(content)
 }
 
