@@ -100,11 +100,7 @@ export function ProjectDashboard() {
     return () => setInsightsOverride(null);
   }, [setInsightsOverride]);
 
-  const timeWindowContext = useMemo(
-    () =>
-      `The user is on the Project Overview dashboard. The selected period is the last 7 days (from ${from.toISOString()} to ${to.toISOString()}).`,
-    [from, to],
-  );
+  const timeWindowContext = `The user is on the Project Overview dashboard. The selected period is the last 7 days (from ${from.toISOString()} to ${to.toISOString()}).`;
 
   return (
     <Page.Section>
