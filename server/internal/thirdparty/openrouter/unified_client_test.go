@@ -1223,17 +1223,17 @@ func TestResolveModel_UnsupportedAnthropicFallback(t *testing.T) {
 
 func TestResolveModel_UnknownProviderReturnsEmpty(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "", ResolveModel("fakeprovider/some-model"))
+	require.Empty(t, ResolveModel("fakeprovider/some-model"))
 }
 
 func TestResolveModel_BareModelNameReturnsEmpty(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "", ResolveModel("gpt-4"))
+	require.Empty(t, ResolveModel("gpt-4"))
 }
 
 func TestResolveModel_EmptyModelReturnsEmpty(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "", ResolveModel(""))
+	require.Empty(t, ResolveModel(""))
 }
 
 func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
