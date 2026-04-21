@@ -143,6 +143,10 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={orgRoutes.auditLogs}
                 scope={["org:read", "org:admin"]}
               />
+              <ScopeGatedNavItem
+                item={orgRoutes.identity}
+                scope={["org:read", "org:admin"]}
+              />
               {isRbacEnabled && (
                 <ScopeGatedNavItem
                   item={orgRoutes.access}
