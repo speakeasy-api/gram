@@ -126,7 +126,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
               size="icon-sm"
               tooltip={installSourceTooltip}
               aria-label={installSourceTooltip}
-              onClick={() => {}}
+              onClick={(e) => e.stopPropagation()}
             >
               <Package className="text-muted-foreground group-hover:text-foreground h-4 w-4" />
             </Button>
