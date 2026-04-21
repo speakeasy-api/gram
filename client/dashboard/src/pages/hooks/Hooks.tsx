@@ -127,6 +127,12 @@ type _BarLegend = Exclude<
 type _BarTooltip = NonNullable<ChartOptions<"bar">["plugins"]>["tooltip"];
 type _BarScales = NonNullable<ChartOptions<"bar">["scales"]>;
 
+// Disable Chart.js's built-in resize animation so the CSS height transition
+// drives the visual expansion instead of triggering a full redraw animation.
+const SHARED_RESIZE_TRANSITION = {
+  resize: { animation: { duration: 0 } },
+} as const;
+
 const SHARED_LEGEND = {
   display: false,
 } satisfies NonNullable<_BarLegend>;
@@ -1447,6 +1453,7 @@ function StackedBarChart({
         if (el) el.style.cursor = elements.length ? "pointer" : "default";
       },
       scales: SHARED_BAR_SCALES,
+      transitions: SHARED_RESIZE_TRANSITION,
       plugins: {
         legend: SHARED_LEGEND,
         tooltip: {
@@ -1464,7 +1471,10 @@ function StackedBarChart({
   if (labels.length === 0) return null;
 
   return (
-    <div style={{ height: containerHeight }}>
+    <div
+      className="transition-all duration-200 ease-in-out"
+      style={{ height: containerHeight }}
+    >
       <Bar
         plugins={STACKED_BAR_PLUGINS}
         data={{ labels, datasets }}
@@ -1703,6 +1713,7 @@ function ServerErrorRateChart({
       },
     },
     scales: SHARED_BAR_SCALES,
+    transitions: SHARED_RESIZE_TRANSITION,
   };
 
   return (
@@ -1717,7 +1728,10 @@ function ServerErrorRateChart({
           No errors in this period
         </div>
       ) : (
-        <div style={{ position: "relative", height }}>
+        <div
+          className="relative transition-all duration-200 ease-in-out"
+          style={{ height }}
+        >
           <Bar data={{ labels, datasets }} options={options} />
         </div>
       )}
@@ -1840,10 +1854,14 @@ function MultiLineChart({
         ticks: { precision: 0 },
       },
     },
+    transitions: SHARED_RESIZE_TRANSITION,
   };
 
   return (
-    <div style={{ position: "relative", height }}>
+    <div
+      className="relative transition-all duration-200 ease-in-out"
+      style={{ height }}
+    >
       <Line data={{ labels, datasets }} options={options} />
     </div>
   );
