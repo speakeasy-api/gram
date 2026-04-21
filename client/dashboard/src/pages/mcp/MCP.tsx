@@ -1,4 +1,5 @@
 import { InputDialog } from "@/components/input-dialog";
+import { RequireScope } from "@/components/require-scope";
 import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
 import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
 import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
@@ -39,7 +40,9 @@ export const MCPPage = () => {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <MCPOverview />
+        <RequireScope scope={["mcp:read", "mcp:write"]} level="page">
+          <MCPOverview />
+        </RequireScope>
       </Page.Body>
     </Page>
   );
@@ -75,12 +78,14 @@ export function MCPOverview() {
   };
 
   const newMcpServerButton = (
-    <Button size="sm" onClick={() => setNewMcpDialogOpen(true)}>
-      <Button.LeftIcon>
-        <Plus />
-      </Button.LeftIcon>
-      <Button.Text>New MCP Server</Button.Text>
-    </Button>
+    <RequireScope scope="mcp:write" level="component">
+      <Button size="sm" onClick={() => setNewMcpDialogOpen(true)}>
+        <Button.LeftIcon>
+          <Plus />
+        </Button.LeftIcon>
+        <Button.Text>New MCP Server</Button.Text>
+      </Button>
+    </RequireScope>
   );
 
   const newMcpServerDialog = (
@@ -130,10 +135,22 @@ export function MCPOverview() {
     return (
       <>
         {isProjectEmpty ? (
-          <InitialChoiceStep
-            routes={routes}
-            isFunctionsEnabled={isFunctionsEnabled}
-          />
+          <>
+            <InitialChoiceStep
+              routes={routes}
+              isFunctionsEnabled={isFunctionsEnabled}
+            />
+            <Page.Section>
+              <Page.Section.Title>
+                Or start with a blank MCP server
+              </Page.Section.Title>
+              <Page.Section.Description>
+                Create an empty MCP server and add built-in tools like MCP Logs
+                to it. You can connect a data source later.
+              </Page.Section.Description>
+              <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
+            </Page.Section>
+          </>
         ) : (
           <MCPEmptyState nonEmptyProjectCTA={newMcpServerButton} />
         )}

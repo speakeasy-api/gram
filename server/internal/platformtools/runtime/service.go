@@ -13,8 +13,10 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
 type Service struct {
@@ -32,6 +34,12 @@ func WithTriggerTools(app *bgtriggers.App) Option {
 	}
 }
 
+func WithSlackHTTPClient(client *guardian.HTTPClient) Option {
+	return func(deps *platformtools.Dependencies) {
+		deps.SlackHTTPClient = client
+	}
+}
+
 func NewService(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
@@ -43,6 +51,7 @@ func NewService(
 		DB:               db,
 		TelemetryService: telemetrySvc,
 		TriggerApp:       nil,
+		SlackHTTPClient:  nil,
 	}
 	for _, option := range options {
 		option(&deps)
@@ -54,7 +63,7 @@ func NewService(
 	}
 }
 
-func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, requestBody io.Reader) (*gateway.PlatformResult, error) {
+func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, env toolconfig.ToolCallEnv, requestBody io.Reader) (*gateway.PlatformResult, error) {
 	if plan == nil || plan.Kind != gateway.ToolKindPlatform || plan.Descriptor == nil {
 		return nil, fmt.Errorf("invalid platform tool plan")
 	}
@@ -72,7 +81,7 @@ func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, r
 	}
 
 	var out bytes.Buffer
-	if err := executor.Call(ctx, requestBody, &out); err != nil {
+	if err := executor.Call(ctx, env, requestBody, &out); err != nil {
 		return nil, fmt.Errorf("execute platform tool %s: %w", plan.Descriptor.URN, err)
 	}
 

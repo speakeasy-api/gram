@@ -1,8 +1,9 @@
 import type { ElementsConfig } from "@gram-ai/elements";
 import { Chat, GramElementsProvider } from "@gram-ai/elements";
+import { useAssistantRuntime } from "@assistant-ui/react";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Wand2, ChevronRight, Sparkles, Terminal } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
 import { InsightsContext, useInsightsState } from "./insights-context";
@@ -10,6 +11,70 @@ import type { InsightsConfigOptions } from "./insights-context";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
 export type { InsightsConfigOptions } from "./insights-context";
+
+/**
+ * Cycles an element's `color` through the Speakeasy brand rainbow on hover —
+ * used for small icon-only "Explore with AI" CTAs where a border treatment
+ * would be invisible. Requires <InsightsRainbowStyles /> in the tree.
+ */
+export const INSIGHTS_AI_RAINBOW_CLASS = "insights-ai-rainbow";
+
+/**
+ * Reveals a full-spectrum Speakeasy brand gradient border on hover — same
+ * 9-stop palette as the login page's BrandGradientBar. Used for the nav-bar
+ * AI Insights trigger where the button shape can host a real border.
+ * Requires <InsightsRainbowStyles /> in the tree. Works best on elements
+ * with a 1px border and a border-radius.
+ */
+export const INSIGHTS_AI_RAINBOW_BORDER_CLASS = "insights-ai-rainbow-border";
+
+function InsightsRainbowStyles() {
+  return (
+    <style>{`
+      @keyframes insights-ai-rainbow {
+        0%   { color: #C83228; }
+        16%  { color: #FB873F; }
+        33%  { color: #D2DC91; }
+        50%  { color: #5A8250; }
+        66%  { color: #2873D7; }
+        83%  { color: #9BC3FF; }
+        100% { color: #C83228; }
+      }
+      .${INSIGHTS_AI_RAINBOW_CLASS}:hover {
+        animation: insights-ai-rainbow 2.5s linear infinite;
+      }
+
+      /* Gradient border via a masked pseudo-element. Mask cuts the interior
+         so only the 1px ring shows; border-radius is inherited so rounded
+         corners stay intact. Fades in on hover; the underlying border goes
+         transparent so we don't double up. */
+      .${INSIGHTS_AI_RAINBOW_BORDER_CLASS} {
+        position: relative;
+      }
+      .${INSIGHTS_AI_RAINBOW_BORDER_CLASS}::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        padding: 1px;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #320F1E 0%, #C83228 12.5%, #FB873F 25%, #D2DC91 37.5%, #5A8250 50%, #002314 62%, #00143C 74%, #2873D7 86%, #9BC3FF 100%);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        mask-composite: exclude;
+        opacity: 0;
+        transition: opacity 200ms ease;
+        pointer-events: none;
+      }
+      .${INSIGHTS_AI_RAINBOW_BORDER_CLASS}:hover::before {
+        opacity: 1;
+      }
+      .${INSIGHTS_AI_RAINBOW_BORDER_CLASS}:hover {
+        border-color: transparent;
+      }
+    `}</style>
+  );
+}
 
 /**
  * Header-bar trigger for opening the AI Insights sidebar. Renders only
@@ -29,6 +94,7 @@ export function InsightsTrigger({ className }: { className?: string }) {
       className={cn(
         "border-border hover:bg-accent hover:text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
         isExpanded && "bg-accent text-accent-foreground",
+        INSIGHTS_AI_RAINBOW_BORDER_CLASS,
         className,
       )}
     >
@@ -87,6 +153,10 @@ export function InsightsProvider({
 }: InsightsProviderProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [override, setOverride] = useState<InsightsConfigOptions | null>(null);
+  const [pendingPrompt, setPendingPrompt] = useState<{
+    text: string;
+    nonce: number;
+  } | null>(null);
   const { theme } = useMoonshineConfig();
 
   // Resolve effective values: per-page override wins, fall back to defaults.
@@ -122,6 +192,13 @@ ${contextInfo}
 When the user asks about "current period", "selected period", "this timeframe", or similar, use the date range from the context above. Do not ask the user to specify a date range if it's already provided in the context.`
     : baseInstructions;
 
+  // New config identity on every override change is intentional: clicking
+  // "Explore with AI" on a different chart should drop the user into a fresh,
+  // focused conversation with the new contextInfo, not splice a new system
+  // prompt into an in-flight thread from a different chart. If we ever want
+  // to preserve threads across Explore clicks, split transport config
+  // (mcpConfig/model/theme) from presentation config (systemPrompt/welcome)
+  // inside GramElementsProvider so only the transport piece is stable.
   const elementsConfig = useMemo<ElementsConfig>(
     () => ({
       ...mcpConfig,
@@ -161,18 +238,29 @@ When the user asks about "current period", "selected period", "this timeframe", 
     [],
   );
 
+  const handleSendPrompt = useCallback((text: string) => {
+    // Nonce lets the bridge detect repeat clicks on the same prompt (same
+    // chart twice in a row); reference-equal objects would otherwise be
+    // skipped by the bridge's useEffect.
+    setPendingPrompt({ text, nonce: Date.now() });
+  }, []);
+
+  const consumePendingPrompt = useCallback(() => setPendingPrompt(null), []);
+
   const contextValue = useMemo(
     () => ({
       available: !hideTrigger,
       isExpanded,
       setIsExpanded,
       setOverride: handleSetOverride,
+      sendPrompt: handleSendPrompt,
     }),
-    [hideTrigger, isExpanded, handleSetOverride],
+    [hideTrigger, isExpanded, handleSetOverride, handleSendPrompt],
   );
 
   return (
     <InsightsContext.Provider value={contextValue}>
+      <InsightsRainbowStyles />
       <div className="flex h-full w-full">
         {/* Main content area - shrinks when sidebar opens */}
         <div
@@ -234,6 +322,10 @@ When the user asks about "current period", "selected period", "this timeframe", 
           {/* Chat content */}
           <div className="flex-1 overflow-hidden">
             <GramElementsProvider config={elementsConfig}>
+              <PendingPromptBridge
+                pending={pendingPrompt}
+                onConsume={consumePendingPrompt}
+              />
               <Chat />
             </GramElementsProvider>
           </div>
@@ -249,3 +341,49 @@ When the user asks about "current period", "selected period", "this timeframe", 
  * to avoid breaking out-of-tree consumers; remove after migration.
  */
 export const InsightsSidebar = InsightsProvider;
+
+/**
+ * Lives inside GramElementsProvider so it can access useThreadRuntime().
+ * When a pending prompt is queued via InsightsContext.sendPrompt, this bridge
+ * appends it to the current thread as a user message, triggering the
+ * assistant to respond. It fires once per nonce so repeat clicks on the
+ * same CTA still work.
+ */
+function PendingPromptBridge({
+  pending,
+  onConsume,
+}: {
+  pending: { text: string; nonce: number } | null;
+  onConsume: () => void;
+}) {
+  const assistantRuntime = useAssistantRuntime();
+  const firedNonceRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!pending || !assistantRuntime) return;
+    if (firedNonceRef.current === pending.nonce) return;
+    firedNonceRef.current = pending.nonce;
+
+    const { text } = pending;
+    // Switch to a brand-new thread before appending. This sidesteps the
+    // assistant-ui MessageRepository id-collision error
+    // ("A message with the same id already exists in the parent tree")
+    // that triggers when a second Explore click tries to append into a
+    // thread that still holds messages from the previous chart's
+    // conversation. It also matches the intended product UX: each Explore
+    // CTA starts a fresh focused chat with the new contextInfo.
+    assistantRuntime.threads
+      .switchToNewThread()
+      .then(() => {
+        assistantRuntime.thread.append(text);
+      })
+      .catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error("Failed to send Explore prompt:", err);
+      });
+
+    onConsume();
+  }, [pending, assistantRuntime, onConsume]);
+
+  return null;
+}

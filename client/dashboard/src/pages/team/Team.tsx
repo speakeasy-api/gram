@@ -49,7 +49,7 @@ export default function Team() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Title>Team</Page.Header.Title>
+        <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
         <RequireScope scope="org:admin" level="page">

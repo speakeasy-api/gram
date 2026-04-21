@@ -7,6 +7,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"io"
 	"reflect"
 )
@@ -66,7 +67,7 @@ func (s *SearchLogs) Descriptor() core.ToolDescriptor {
 	}
 }
 
-func (s *SearchLogs) Call(ctx context.Context, payload io.Reader, wr io.Writer) error {
+func (s *SearchLogs) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	if s.telemetry == nil {
 		return fmt.Errorf("telemetry service not configured")
 	}

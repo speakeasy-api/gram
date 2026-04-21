@@ -43,11 +43,20 @@ func (q *Queries) BackfillChatMessageHash(ctx context.Context, arg BackfillChatM
 }
 
 const countChatMessages = `-- name: CountChatMessages :one
-SELECT COUNT(*) FROM chat_messages WHERE chat_id = $1
+SELECT COUNT(*) FROM chat_messages
+WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
 `
 
-func (q *Queries) CountChatMessages(ctx context.Context, chatID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countChatMessages, chatID)
+type CountChatMessagesParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Must match ListChatMessages' project_id filter, otherwise count and the
+// list drift and the client hits "chat history mismatch" at
+// message_capture_strategy.go.
+func (q *Queries) CountChatMessages(ctx context.Context, arg CountChatMessagesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countChatMessages, arg.ChatID, arg.ProjectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

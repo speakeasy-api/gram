@@ -1655,6 +1655,7 @@ func marshalTypesExternalMCPServerToExternalMCPServerResponseBody(v *types.Exter
 		RegistrySpecifier:                   v.RegistrySpecifier,
 		Version:                             v.Version,
 		Description:                         v.Description,
+		ToolsetID:                           v.ToolsetID,
 		RegistryID:                          v.RegistryID,
 		OrganizationMcpCollectionRegistryID: v.OrganizationMcpCollectionRegistryID,
 		Title:                               v.Title,

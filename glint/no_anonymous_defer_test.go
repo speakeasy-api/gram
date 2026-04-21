@@ -33,6 +33,7 @@ func TestBuildAnalyzersSkipsDisabledNoAnonymousDefer(t *testing.T) {
 		settings: settings{
 			Rules: ruleSettings{
 				NoAnonymousDefer:           noAnonymousDeferSettings{Disabled: true},
+				EnforceO11yConventions:     enforceO11yConventionsSettings{Disabled: true},
 				ServiceHasServiceAssertion: serviceHasServiceAssertionSettings{Disabled: true},
 				ServiceHasAutherAssertion:  serviceHasAutherAssertionSettings{Disabled: true},
 				ServiceHasAttachFunc:       serviceHasAttachFuncSettings{Disabled: true},

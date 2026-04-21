@@ -2905,6 +2905,32 @@ func DecodeUpdateOAuthProxyServerResponse(decoder func(*http.Response) goahttp.D
 	}
 }
 
+// marshalTypesToolsetOriginToToolsetOriginRequestBody builds a value of type
+// *ToolsetOriginRequestBody from a value of type *types.ToolsetOrigin.
+func marshalTypesToolsetOriginToToolsetOriginRequestBody(v *types.ToolsetOrigin) *ToolsetOriginRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &ToolsetOriginRequestBody{
+		RegistrySpecifier: v.RegistrySpecifier,
+	}
+
+	return res
+}
+
+// marshalToolsetOriginRequestBodyToTypesToolsetOrigin builds a value of type
+// *types.ToolsetOrigin from a value of type *ToolsetOriginRequestBody.
+func marshalToolsetOriginRequestBodyToTypesToolsetOrigin(v *ToolsetOriginRequestBody) *types.ToolsetOrigin {
+	if v == nil {
+		return nil
+	}
+	res := &types.ToolsetOrigin{
+		RegistrySpecifier: v.RegistrySpecifier,
+	}
+
+	return res
+}
+
 // unmarshalSecurityVariableResponseBodyToTypesSecurityVariable builds a value
 // of type *types.SecurityVariable from a value of type
 // *SecurityVariableResponseBody.
@@ -3396,6 +3422,19 @@ func unmarshalFunctionResourceDefinitionResponseBodyToTypesFunctionResourceDefin
 	return res
 }
 
+// unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin builds a value of
+// type *types.ToolsetOrigin from a value of type *ToolsetOriginResponseBody.
+func unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(v *ToolsetOriginResponseBody) *types.ToolsetOrigin {
+	if v == nil {
+		return nil
+	}
+	res := &types.ToolsetOrigin{
+		RegistrySpecifier: *v.RegistrySpecifier,
+	}
+
+	return res
+}
+
 // unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer builds a
 // value of type *types.ExternalOAuthServer from a value of type
 // *ExternalOAuthServerResponseBody.
@@ -3582,6 +3621,9 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 			continue
 		}
 		res.PromptTemplates[i] = unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(val)
+	}
+	if v.Origin != nil {
+		res.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(v.Origin)
 	}
 
 	return res

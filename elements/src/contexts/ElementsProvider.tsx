@@ -39,6 +39,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   convertToModelMessages,
   createUIMessageStream,
+  lastAssistantMessageIsCompleteWithToolCalls,
   LanguageModel,
   smoothStream,
   stepCountIs,
@@ -642,9 +643,14 @@ const ElementsProviderWithHistory = ({
   });
   const initialThreadId = contextValue?.config.history?.initialThreadId;
 
-  // Hook factory for creating the base chat runtime
+  // Without `sendAutomaticallyWhen`, client-side frontend tools leave the turn
+  // half-finished: the tool-result is patched in but the agent never resumes,
+  // so the next user message lands on top of an unresolved tool-call sequence.
   const useChatRuntimeHook = useCallback(() => {
-    return useChatRuntime({ transport });
+    return useChatRuntime({
+      transport,
+      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    });
   }, [transport]);
 
   const runtime = useRemoteThreadListRuntime({
@@ -727,7 +733,10 @@ const ElementsProviderWithoutHistory = ({
   executableTools,
   currentChatId,
 }: ElementsProviderWithoutHistoryProps) => {
-  const runtime = useChatRuntime({ transport });
+  const runtime = useChatRuntime({
+    transport,
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+  });
 
   // Populate runtimeRef so transport can access thread context
   useEffect(() => {

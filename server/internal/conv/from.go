@@ -167,6 +167,23 @@ func FromPGBool[T ~bool](t pgtype.Bool) *T {
 	return &val
 }
 
+// FromPGInt4 converts a pgtype.Int4 to *int. If not valid, returns nil.
+func FromPGInt4(t pgtype.Int4) *int {
+	if !t.Valid {
+		return nil
+	}
+	v := int(t.Int32)
+	return &v
+}
+
+// FromPGFloat8 converts a pgtype.Float8 to *float64. If not valid, returns nil.
+func FromPGFloat8(t pgtype.Float8) *float64 {
+	if !t.Valid {
+		return nil
+	}
+	return &t.Float64
+}
+
 // FromBytes converts a byte slice to a string pointer. If the byte slice is
 // empty, it returns nil.
 func FromBytes(b []byte) *string {
@@ -229,4 +246,17 @@ func Ternary[T any](condition bool, trueVal, falseVal T) T {
 		return trueVal
 	}
 	return falseVal
+}
+
+// SafeInt32 converts int to int32, clamping at boundaries.
+func SafeInt32(v int) int32 {
+	const maxInt32 = 1<<31 - 1
+	const minInt32 = -(1 << 31)
+	if v > maxInt32 {
+		return maxInt32
+	}
+	if v < minInt32 {
+		return minInt32
+	}
+	return int32(v)
 }

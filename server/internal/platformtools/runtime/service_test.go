@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -25,6 +26,11 @@ func TestService_ExecuteTool_RequiresProjectAuthContext(t *testing.T) {
 			ProjectID: projectID.String(),
 			URN:       urn.NewTool(urn.ToolKindPlatform, "logs", "search_logs"),
 		},
+	}, toolconfig.ToolCallEnv{
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
+		OAuthToken: "",
+		GramEmail:  "",
 	}, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "project auth context")
@@ -46,6 +52,11 @@ func TestService_ExecuteTool_RejectsMismatchedProjectAuthContext(t *testing.T) {
 			ProjectID: descriptorProjectID.String(),
 			URN:       urn.NewTool(urn.ToolKindPlatform, "logs", "search_logs"),
 		},
+	}, toolconfig.ToolCallEnv{
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
+		OAuthToken: "",
+		GramEmail:  "",
 	}, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "does not match project")

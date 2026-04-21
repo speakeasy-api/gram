@@ -21,6 +21,7 @@ type settings struct {
 
 type ruleSettings struct {
 	NoAnonymousDefer           noAnonymousDeferSettings           `json:"no-anonymous-defer"`
+	EnforceO11yConventions     enforceO11yConventionsSettings     `json:"enforce-o11y-conventions"`
 	ServiceHasServiceAssertion serviceHasServiceAssertionSettings `json:"service-has-service-assertion"`
 	ServiceHasAutherAssertion  serviceHasAutherAssertionSettings  `json:"service-has-auther-assertion"`
 	ServiceHasAttachFunc       serviceHasAttachFuncSettings       `json:"service-has-attach-func"`
@@ -44,6 +45,9 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	analyzers := []*analysis.Analyzer{}
 	if !p.settings.Rules.NoAnonymousDefer.Disabled {
 		analyzers = append(analyzers, newNoAnonymousDeferAnalyzer(p.settings.Rules.NoAnonymousDefer))
+	}
+	if !p.settings.Rules.EnforceO11yConventions.Disabled {
+		analyzers = append(analyzers, newEnforceO11yConventionsAnalyzer(p.settings.Rules.EnforceO11yConventions))
 	}
 	if !p.settings.Rules.ServiceHasServiceAssertion.Disabled {
 		analyzers = append(analyzers, newServiceHasServiceAssertionAnalyzer(p.settings.Rules.ServiceHasServiceAssertion))

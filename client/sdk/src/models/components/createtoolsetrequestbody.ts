@@ -4,6 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  ToolsetOrigin,
+  ToolsetOrigin$Outbound,
+  ToolsetOrigin$outboundSchema,
+} from "./toolsetorigin.js";
 
 export type CreateToolsetRequestBody = {
   /**
@@ -18,6 +23,7 @@ export type CreateToolsetRequestBody = {
    * The name of the toolset
    */
   name: string;
+  origin?: ToolsetOrigin | undefined;
   /**
    * List of resource URNs to include in the toolset
    */
@@ -33,6 +39,7 @@ export type CreateToolsetRequestBody$Outbound = {
   default_environment_slug?: string | undefined;
   description?: string | undefined;
   name: string;
+  origin?: ToolsetOrigin$Outbound | undefined;
   resource_urns?: Array<string> | undefined;
   tool_urns?: Array<string> | undefined;
 };
@@ -46,6 +53,7 @@ export const CreateToolsetRequestBody$outboundSchema: z.ZodMiniType<
     defaultEnvironmentSlug: z.optional(z.string()),
     description: z.optional(z.string()),
     name: z.string(),
+    origin: z.optional(ToolsetOrigin$outboundSchema),
     resourceUrns: z.optional(z.array(z.string())),
     toolUrns: z.optional(z.array(z.string())),
   }),

@@ -40,7 +40,7 @@ func TestCollectionsService_Create_WithToolsetIds(t *testing.T) {
 
 	ctx, ti := newTestCollectionsService(t)
 
-	ts := createMCPEnabledToolset(t, ctx, ti, "Attach Me")
+	ts := createMCPEnabledToolset(t, ctx, ti, "Attach Me", "")
 
 	result, err := ti.service.Create(ctx, &gen.CreatePayload{
 		Name:                 "Collection With Toolsets",
@@ -63,6 +63,8 @@ func TestCollectionsService_Create_WithToolsetIds(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, servers.Servers, 1)
+	require.NotNil(t, servers.Servers[0].ToolsetID)
+	require.Equal(t, ts.ID, *servers.Servers[0].ToolsetID)
 }
 
 func TestCollectionsService_Create_InvalidToolsetIdsRejected(t *testing.T) {

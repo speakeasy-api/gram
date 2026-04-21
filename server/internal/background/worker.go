@@ -212,6 +212,9 @@ func NewTemporalWorker(
 	// Trigger related activities
 	temporalWorker.RegisterActivity(activities.DispatchTrigger)
 	temporalWorker.RegisterActivity(activities.ProcessScheduledTrigger)
+	// Risk analysis activities
+	temporalWorker.RegisterActivity(activities.FetchUnanalyzedMessages)
+	temporalWorker.RegisterActivity(activities.AnalyzeBatch)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -229,6 +232,8 @@ func NewTemporalWorker(
 	// Trigger workflows
 	temporalWorker.RegisterWorkflow(TriggerCronWorkflow)
 	temporalWorker.RegisterWorkflow(TriggerDispatchWorkflow)
+	// Risk analysis workflow
+	temporalWorker.RegisterWorkflow(DrainRiskAnalysisWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {

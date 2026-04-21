@@ -1,4 +1,5 @@
 import { InsightsConfig } from "@/components/insights-sidebar";
+import { RequireScope } from "@/components/require-scope";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
@@ -124,6 +125,14 @@ function isValidPreset(value: string | null): value is DateRangePreset {
 }
 
 export default function ChatLogs() {
+  return (
+    <RequireScope scope="build:read" level="page">
+      <ChatLogsInner />
+    </RequireScope>
+  );
+}
+
+function ChatLogsInner() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [offset, setOffset] = useState(0);
@@ -177,6 +186,7 @@ export default function ChatLogs() {
   const urlFrom = searchParams.get("from");
   const urlTo = searchParams.get("to");
   const urlSearch = searchParams.get("search");
+  const urlChatId = searchParams.get("chatId");
   const urlStatus = searchParams.get("status");
   const urlSort = searchParams.get("sort") as SortField | null;
   const urlOrder = searchParams.get("order") as SortOrder | null;
@@ -324,8 +334,8 @@ export default function ChatLogs() {
 
   // Stable deep-link for the currently opened chat. URL (`chatId`) is source of
   // truth; the list is the fresh source for the full object; cache holds the
-  // last-seen object so pagination doesn't drop it.
-  const urlChatId = searchParams.get("chatId");
+  // last-seen object so pagination doesn't drop it. `urlChatId` is declared
+  // above alongside the other URL params.
   const selectedChat = useMemo<ChatOverviewWithResolutions | null>(() => {
     if (!urlChatId) return null;
     const fromList = chats.find((c) => c.id === urlChatId);
