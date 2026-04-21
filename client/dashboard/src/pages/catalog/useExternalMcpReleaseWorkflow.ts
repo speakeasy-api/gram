@@ -208,12 +208,31 @@ export function useExternalMcpReleaseWorkflow({
   // Track last processed server index to prevent double-click duplicates
   const lastProcessedIndexRef = useRef(-1);
 
+  // Keep a live handle on the current phase so the partition effect can bail
+  // out when installed-state changes arrive after the user has started (or
+  // finished) deploying. Without this, a post-deploy cache refresh would
+  // re-run the partition and snap the dialog back to a fresh configure step.
+  const phaseRef = useRef<ReleasePhase>("configure");
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
   // Initialize server configs when servers change - partition into multi/single remote.
   // Already-installed servers always go to singleRemote: the fork flow reuses the
   // existing external MCP attachment, so remote re-selection is not meaningful.
   // Fork-friendly names are applied here so they appear on the first configure
   // render, regardless of when installed-state data resolves.
   useEffect(() => {
+    // Don't re-partition once we've moved past configuration. Post-submission
+    // refetches (e.g., refreshing the latest deployment after success) can
+    // otherwise flip `isServerAlreadyInstalled` and clobber deploying/complete/error state.
+    if (
+      phaseRef.current !== "selectRemotes" &&
+      phaseRef.current !== "configure"
+    ) {
+      return;
+    }
+
     const multiRemote: MultiRemoteServerConfig[] = [];
     const singleRemote: ServerConfig[] = [];
 
