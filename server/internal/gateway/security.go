@@ -36,14 +36,7 @@ func processSecurity(
 	serverURL string,
 	attrRecorder tm.HTTPLogAttributes,
 ) bool {
-	// Merge: system env is base, user config overrides
-	mergedEnv := toolconfig.NewCaseInsensitiveEnv()
-	for k, v := range env.SystemEnv.All() {
-		mergedEnv.Set(k, v)
-	}
-	for k, v := range env.UserConfig.All() {
-		mergedEnv.Set(k, v)
-	}
+	mergedEnv := env.Merged()
 
 	securityHeadersProcessed := make(map[string]string)
 	setHeader := func(key, value string) {
