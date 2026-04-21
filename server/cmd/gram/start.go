@@ -640,6 +640,7 @@ func newStartCommand() *cli.Command {
 				db,
 				telemSvc,
 				platformtoolsruntime.WithTriggerTools(triggerApp),
+				platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
 			)
 
 			mcpService := mcp.NewService(

@@ -7,12 +7,12 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
@@ -44,18 +44,15 @@ const (
 	tokenRequireUser
 )
 
-type envLookupFunc func(string) (string, bool)
-
 type apiClient struct {
 	baseURL    string
 	httpClient *guardian.HTTPClient
-	lookupEnv  envLookupFunc
 }
 
 type slackTool struct {
 	descriptor core.ToolDescriptor
 	client     *apiClient
-	callFn     func(context.Context, *apiClient, io.Reader, io.Writer) error
+	callFn     func(context.Context, *apiClient, toolconfig.ToolCallEnv, io.Reader, io.Writer) error
 }
 
 type slackResponseEnvelope struct {
@@ -154,7 +151,7 @@ func NewReadChannelMessagesTool(httpClient *guardian.HTTPClient) core.PlatformTo
 			OwnerKind:   nil,
 			OwnerID:     nil,
 		},
-		client: newAPIClient(defaultSlackAPIBaseURL, httpClient, os.LookupEnv),
+		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callReadChannelMessages,
 	}
 }
@@ -180,7 +177,7 @@ func NewReadThreadMessagesTool(httpClient *guardian.HTTPClient) core.PlatformToo
 			OwnerKind:   nil,
 			OwnerID:     nil,
 		},
-		client: newAPIClient(defaultSlackAPIBaseURL, httpClient, os.LookupEnv),
+		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callReadThreadMessages,
 	}
 }
@@ -204,7 +201,7 @@ func NewReadUserProfileTool(httpClient *guardian.HTTPClient) core.PlatformToolEx
 			OwnerKind:   nil,
 			OwnerID:     nil,
 		},
-		client: newAPIClient(defaultSlackAPIBaseURL, httpClient, os.LookupEnv),
+		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callReadUserProfile,
 	}
 }
@@ -230,7 +227,7 @@ func NewSearchChannelsTool(httpClient *guardian.HTTPClient) core.PlatformToolExe
 			OwnerKind:   nil,
 			OwnerID:     nil,
 		},
-		client: newAPIClient(defaultSlackAPIBaseURL, httpClient, os.LookupEnv),
+		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callSearchChannels,
 	}
 }
@@ -258,7 +255,7 @@ func NewSearchMessagesAndFilesTool(httpClient *guardian.HTTPClient) core.Platfor
 			OwnerKind:   nil,
 			OwnerID:     nil,
 		},
-		client: newAPIClient(defaultSlackAPIBaseURL, httpClient, os.LookupEnv),
+		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callSearchMessagesAndFiles,
 	}
 }
@@ -284,7 +281,7 @@ func NewSearchUsersTool(httpClient *guardian.HTTPClient) core.PlatformToolExecut
 			OwnerKind:   nil,
 			OwnerID:     nil,
 		},
-		client: newAPIClient(defaultSlackAPIBaseURL, httpClient, os.LookupEnv),
+		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callSearchUsers,
 	}
 }
@@ -308,7 +305,7 @@ func NewScheduleMessageTool(httpClient *guardian.HTTPClient) core.PlatformToolEx
 			OwnerKind:   nil,
 			OwnerID:     nil,
 		},
-		client: newAPIClient(defaultSlackAPIBaseURL, httpClient, os.LookupEnv),
+		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callScheduleMessage,
 	}
 }
@@ -332,7 +329,7 @@ func NewSendMessageTool(httpClient *guardian.HTTPClient) core.PlatformToolExecut
 			OwnerKind:   nil,
 			OwnerID:     nil,
 		},
-		client: newAPIClient(defaultSlackAPIBaseURL, httpClient, os.LookupEnv),
+		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callSendMessage,
 	}
 }
@@ -345,43 +342,21 @@ func (t *slackTool) Call(ctx context.Context, env toolconfig.ToolCallEnv, payloa
 	if t.client == nil {
 		return fmt.Errorf("slack client not configured")
 	}
-	scoped := *t.client
-	scoped.lookupEnv = envLookupFromToolCall(env)
-	return t.callFn(ctx, &scoped, payload, wr)
+	return t.callFn(ctx, t.client, env, payload, wr)
 }
 
-func envLookupFromToolCall(env toolconfig.ToolCallEnv) envLookupFunc {
-	return func(key string) (string, bool) {
-		if env.UserConfig != nil {
-			if v := env.UserConfig.Get(key); v != "" {
-				return v, true
-			}
-		}
-		if env.SystemEnv != nil {
-			if v := env.SystemEnv.Get(key); v != "" {
-				return v, true
-			}
-		}
-		return "", false
-	}
-}
-
-func newAPIClient(baseURL string, httpClient *guardian.HTTPClient, lookupEnv envLookupFunc) *apiClient {
+func newAPIClient(baseURL string, httpClient *guardian.HTTPClient) *apiClient {
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = defaultSlackAPIBaseURL
-	}
-	if lookupEnv == nil {
-		lookupEnv = os.LookupEnv
 	}
 	return &apiClient{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		httpClient: httpClient,
-		lookupEnv:  lookupEnv,
 	}
 }
 
-func (c *apiClient) call(ctx context.Context, method string, payload map[string]any, kind slackTokenKind) ([]byte, error) {
-	token, err := c.token(kind)
+func (c *apiClient) call(ctx context.Context, method string, payload map[string]any, kind slackTokenKind, env toolconfig.ToolCallEnv) ([]byte, error) {
+	token, err := c.token(kind, env)
 	if err != nil {
 		return nil, err
 	}
@@ -405,9 +380,7 @@ func (c *apiClient) call(ctx context.Context, method string, payload map[string]
 	if err != nil {
 		return nil, fmt.Errorf("call slack %s: %w", method, err)
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -429,7 +402,7 @@ func (c *apiClient) call(ctx context.Context, method string, payload map[string]
 	return bodyBytes, nil
 }
 
-func (c *apiClient) token(kind slackTokenKind) (string, error) {
+func (c *apiClient) token(kind slackTokenKind, env toolconfig.ToolCallEnv) (string, error) {
 	var candidates []string
 	switch kind {
 	case tokenRequireUser:
@@ -437,9 +410,10 @@ func (c *apiClient) token(kind slackTokenKind) (string, error) {
 	default:
 		candidates = []string{slackBotTokenEnvVar, slackUserTokenEnvVar, slackTokenEnvVar}
 	}
+	merged := env.Merged()
 	for _, key := range candidates {
-		if value, ok := c.lookupEnv(key); ok && strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value), nil
+		if value := strings.TrimSpace(merged.Get(key)); value != "" {
+			return value, nil
 		}
 	}
 	if kind == tokenRequireUser {
@@ -501,7 +475,7 @@ func defaultChannelTypes(channelTypes []string) []string {
 	return append([]string(nil), channelTypes...)
 }
 
-func callReadChannelMessages(ctx context.Context, client *apiClient, payload io.Reader, wr io.Writer) error {
+func callReadChannelMessages(ctx context.Context, client *apiClient, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	var input readChannelMessagesInput
 	if err := decodePayload(payload, &input); err != nil {
 		return err
@@ -522,14 +496,14 @@ func callReadChannelMessages(ctx context.Context, client *apiClient, payload io.
 	setOptionalInt(request, "limit", input.Limit)
 	setOptionalBool(request, "include_all_metadata", input.IncludeAllMetadata)
 
-	body, err := client.call(ctx, "conversations.history", request, tokenPreferBot)
+	body, err := client.call(ctx, "conversations.history", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}
 	return writeResponse(wr, body)
 }
 
-func callReadThreadMessages(ctx context.Context, client *apiClient, payload io.Reader, wr io.Writer) error {
+func callReadThreadMessages(ctx context.Context, client *apiClient, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	var input readThreadMessagesInput
 	if err := decodePayload(payload, &input); err != nil {
 		return err
@@ -555,14 +529,14 @@ func callReadThreadMessages(ctx context.Context, client *apiClient, payload io.R
 	setOptionalInt(request, "limit", input.Limit)
 	setOptionalBool(request, "include_all_metadata", input.IncludeAllMetadata)
 
-	body, err := client.call(ctx, "conversations.replies", request, tokenPreferBot)
+	body, err := client.call(ctx, "conversations.replies", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}
 	return writeResponse(wr, body)
 }
 
-func callReadUserProfile(ctx context.Context, client *apiClient, payload io.Reader, wr io.Writer) error {
+func callReadUserProfile(ctx context.Context, client *apiClient, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	var input readUserProfileInput
 	if err := decodePayload(payload, &input); err != nil {
 		return err
@@ -578,14 +552,14 @@ func callReadUserProfile(ctx context.Context, client *apiClient, payload io.Read
 	}
 	setOptionalBool(request, "include_locale", input.IncludeLocale)
 
-	body, err := client.call(ctx, "users.info", request, tokenPreferBot)
+	body, err := client.call(ctx, "users.info", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}
 	return writeResponse(wr, body)
 }
 
-func callSearchChannels(ctx context.Context, client *apiClient, payload io.Reader, wr io.Writer) error {
+func callSearchChannels(ctx context.Context, client *apiClient, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	var input searchChannelsInput
 	if err := decodePayload(payload, &input); err != nil {
 		return err
@@ -598,7 +572,7 @@ func callSearchChannels(ctx context.Context, client *apiClient, payload io.Reade
 	setOptionalInt(request, "limit", input.Limit)
 	setOptionalBool(request, "exclude_archived", input.ExcludeArchived)
 
-	body, err := client.call(ctx, "conversations.list", request, tokenPreferBot)
+	body, err := client.call(ctx, "conversations.list", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}
@@ -610,7 +584,7 @@ func callSearchChannels(ctx context.Context, client *apiClient, payload io.Reade
 	return writeResponse(wr, filtered)
 }
 
-func callSearchMessagesAndFiles(ctx context.Context, client *apiClient, payload io.Reader, wr io.Writer) error {
+func callSearchMessagesAndFiles(ctx context.Context, client *apiClient, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	var input searchMessagesAndFilesInput
 	if err := decodePayload(payload, &input); err != nil {
 		return err
@@ -630,14 +604,14 @@ func callSearchMessagesAndFiles(ctx context.Context, client *apiClient, payload 
 	setOptionalString(request, "sort", input.Sort)
 	setOptionalString(request, "sort_dir", input.SortDir)
 
-	body, err := client.call(ctx, "search.all", request, tokenRequireUser)
+	body, err := client.call(ctx, "search.all", request, tokenRequireUser, env)
 	if err != nil {
 		return err
 	}
 	return writeResponse(wr, body)
 }
 
-func callSearchUsers(ctx context.Context, client *apiClient, payload io.Reader, wr io.Writer) error {
+func callSearchUsers(ctx context.Context, client *apiClient, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	var input searchUsersInput
 	if err := decodePayload(payload, &input); err != nil {
 		return err
@@ -648,7 +622,7 @@ func callSearchUsers(ctx context.Context, client *apiClient, payload io.Reader, 
 	setOptionalInt(request, "limit", input.Limit)
 	setOptionalBool(request, "include_locale", input.IncludeLocale)
 
-	body, err := client.call(ctx, "users.list", request, tokenPreferBot)
+	body, err := client.call(ctx, "users.list", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}
@@ -660,7 +634,7 @@ func callSearchUsers(ctx context.Context, client *apiClient, payload io.Reader, 
 	return writeResponse(wr, filtered)
 }
 
-func callScheduleMessage(ctx context.Context, client *apiClient, payload io.Reader, wr io.Writer) error {
+func callScheduleMessage(ctx context.Context, client *apiClient, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	var input scheduleMessageInput
 	if err := decodePayload(payload, &input); err != nil {
 		return err
@@ -685,14 +659,14 @@ func callScheduleMessage(ctx context.Context, client *apiClient, payload io.Read
 	}
 	setOptionalString(request, "thread_ts", input.ThreadTS)
 
-	body, err := client.call(ctx, "chat.scheduleMessage", request, tokenPreferBot)
+	body, err := client.call(ctx, "chat.scheduleMessage", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}
 	return writeResponse(wr, body)
 }
 
-func callSendMessage(ctx context.Context, client *apiClient, payload io.Reader, wr io.Writer) error {
+func callSendMessage(ctx context.Context, client *apiClient, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	var input sendMessageInput
 	if err := decodePayload(payload, &input); err != nil {
 		return err
@@ -716,7 +690,7 @@ func callSendMessage(ctx context.Context, client *apiClient, payload io.Reader, 
 	setOptionalBool(request, "unfurl_links", input.UnfurlLinks)
 	setOptionalBool(request, "unfurl_media", input.UnfurlMedia)
 
-	body, err := client.call(ctx, "chat.postMessage", request, tokenPreferBot)
+	body, err := client.call(ctx, "chat.postMessage", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

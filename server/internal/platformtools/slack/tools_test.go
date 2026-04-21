@@ -2,7 +2,6 @@ package slack
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -57,17 +56,12 @@ func TestReadChannelMessagesTool_UsesSlackTokenFromEnv(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewReadChannelMessagesTool(nil).Descriptor(),
-		client: newAPIClient(server.URL, server.Client(), func(key string) (string, bool) {
-			if key == slackBotTokenEnvVar {
-				return "xoxb-test-token", true
-			}
-			return "", false
-		}),
-		callFn: callReadChannelMessages,
+		client:     newAPIClient(server.URL, server.Client()),
+		callFn:     callReadChannelMessages,
 	}
 
 	var out bytes.Buffer
-	err := tool.Call(context.Background(), testSlackEnv(), bytes.NewBufferString(`{"channel_id":"C123","limit":25}`), &out)
+	err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{"channel_id":"C123","limit":25}`), &out)
 	require.NoError(t, err)
 
 	require.Equal(t, "Bearer xoxb-test-token", authorization)
@@ -83,16 +77,11 @@ func TestSearchMessagesAndFilesTool_RequiresUserToken(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewSearchMessagesAndFilesTool(nil).Descriptor(),
-		client: newAPIClient("https://slack.test.invalid", nil, func(key string) (string, bool) {
-			if key == slackBotTokenEnvVar {
-				return "xoxb-bot-only", true
-			}
-			return "", false
-		}),
-		callFn: callSearchMessagesAndFiles,
+		client:     newAPIClient("https://slack.test.invalid", nil),
+		callFn:     callSearchMessagesAndFiles,
 	}
 
-	err := tool.Call(context.Background(), toolconfig.ToolCallEnv{
+	err := tool.Call(t.Context(), toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.CIEnvFrom(map[string]string{slackBotTokenEnvVar: "xoxb-bot-only"}),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
@@ -122,17 +111,12 @@ func TestSendMessageTool_PassesOptionalFields(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewSendMessageTool(nil).Descriptor(),
-		client: newAPIClient(server.URL, server.Client(), func(key string) (string, bool) {
-			if key == slackBotTokenEnvVar {
-				return "xoxb-test-token", true
-			}
-			return "", false
-		}),
-		callFn: callSendMessage,
+		client:     newAPIClient(server.URL, server.Client()),
+		callFn:     callSendMessage,
 	}
 
 	var out bytes.Buffer
-	err := tool.Call(context.Background(), testSlackEnv(), bytes.NewBufferString(`{
+	err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{
 		"channel_id":"C123",
 		"text":"hello",
 		"thread_ts":"123.000",
@@ -157,11 +141,11 @@ func TestSlackTool_MissingTokenReturnsHelpfulError(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewReadUserProfileTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil, func(string) (string, bool) { return "", false }),
+		client:     newAPIClient("https://slack.test.invalid", nil),
 		callFn:     callReadUserProfile,
 	}
 
-	err := tool.Call(context.Background(), toolconfig.ToolCallEnv{
+	err := tool.Call(t.Context(), toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
@@ -193,16 +177,11 @@ func TestSearchMessagesAndFilesTool_CallsSearchAllWithUserToken(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewSearchMessagesAndFilesTool(nil).Descriptor(),
-		client: newAPIClient(server.URL, server.Client(), func(key string) (string, bool) {
-			if key == slackUserTokenEnvVar {
-				return "xoxp-user-token", true
-			}
-			return "", false
-		}),
-		callFn: callSearchMessagesAndFiles,
+		client:     newAPIClient(server.URL, server.Client()),
+		callFn:     callSearchMessagesAndFiles,
 	}
 
-	err := tool.Call(context.Background(), toolconfig.ToolCallEnv{
+	err := tool.Call(t.Context(), toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.CIEnvFrom(map[string]string{slackUserTokenEnvVar: "xoxp-user-token"}),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
@@ -239,17 +218,12 @@ func TestSearchChannelsTool_ListsAndFiltersByQuery(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewSearchChannelsTool(nil).Descriptor(),
-		client: newAPIClient(server.URL, server.Client(), func(key string) (string, bool) {
-			if key == slackBotTokenEnvVar {
-				return "xoxb-test-token", true
-			}
-			return "", false
-		}),
-		callFn: callSearchChannels,
+		client:     newAPIClient(server.URL, server.Client()),
+		callFn:     callSearchChannels,
 	}
 
 	var out bytes.Buffer
-	err := tool.Call(context.Background(), testSlackEnv(), bytes.NewBufferString(`{"query":"eng","channel_types":["public_channel","private_channel"],"exclude_archived":true}`), &out)
+	err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{"query":"eng","channel_types":["public_channel","private_channel"],"exclude_archived":true}`), &out)
 	require.NoError(t, err)
 
 	require.Equal(t, "/conversations.list", requestPath)
@@ -280,17 +254,12 @@ func TestSearchUsersTool_ListsAndFiltersByQuery(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewSearchUsersTool(nil).Descriptor(),
-		client: newAPIClient(server.URL, server.Client(), func(key string) (string, bool) {
-			if key == slackBotTokenEnvVar {
-				return "xoxb-test-token", true
-			}
-			return "", false
-		}),
-		callFn: callSearchUsers,
+		client:     newAPIClient(server.URL, server.Client()),
+		callFn:     callSearchUsers,
 	}
 
 	var out bytes.Buffer
-	err := tool.Call(context.Background(), testSlackEnv(), bytes.NewBufferString(`{"query":"alice"}`), &out)
+	err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{"query":"alice"}`), &out)
 	require.NoError(t, err)
 
 	require.Equal(t, "/users.list", requestPath)

@@ -28,7 +28,7 @@ func TestExecuteSearchLogs_IgnoresInjectedAuthFields(t *testing.T) {
 
 	from := "2026-04-08T09:00:00Z"
 	var out bytes.Buffer
-	err := tool.Call(context.Background(), toolconfig.ToolCallEnv{
+	err := tool.Call(t.Context(), toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
