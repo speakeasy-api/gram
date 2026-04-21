@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -28,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var _ gen.Service = (*Service)(nil)
@@ -161,6 +163,18 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
 	}
 
+	if err := audit.LogRiskPolicyCreate(ctx, s.db, audit.LogRiskPolicyCreateEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		RiskPolicyID:     row.ID,
+		RiskPolicyName:   row.Name,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy create").Log(ctx, s.logger)
+	}
+
 	// Trigger the drain workflow for the new policy.
 	if enabled {
 		_ = s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
@@ -263,6 +277,8 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		enabled = *payload.Enabled
 	}
 
+	snapshotBefore, _ := s.policyToType(ctx, current)
+
 	row, err := s.repo.UpdateRiskPolicy(ctx, repo.UpdateRiskPolicyParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
@@ -272,6 +288,22 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
+	}
+
+	snapshotAfter, _ := s.policyToType(ctx, row)
+
+	if err := audit.LogRiskPolicyUpdate(ctx, s.db, audit.LogRiskPolicyUpdateEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		RiskPolicyID:     row.ID,
+		RiskPolicyName:   row.Name,
+		SnapshotBefore:   snapshotBefore,
+		SnapshotAfter:    snapshotAfter,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy update").Log(ctx, s.logger)
 	}
 
 	// Signal the drain workflow — it reads the current enabled/version
@@ -299,6 +331,15 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		return oops.C(oops.CodeInvalid)
 	}
 
+	// Fetch before delete so we can log the policy name.
+	existing, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+	}
+
 	// Soft-delete only — list queries already filter out results for deleted
 	// policies via the risk_policies join, so orphaned rows are harmless.
 	if err := s.repo.DeleteRiskPolicy(ctx, repo.DeleteRiskPolicyParams{
@@ -306,6 +347,18 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		ProjectID: *authCtx.ProjectID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete risk policy").Log(ctx, s.logger)
+	}
+
+	if err := audit.LogRiskPolicyDelete(ctx, s.db, audit.LogRiskPolicyDeleteEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		RiskPolicyID:     id,
+		RiskPolicyName:   existing.Name,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log risk policy delete").Log(ctx, s.logger)
 	}
 
 	return nil
@@ -482,6 +535,18 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "bump policy version").Log(ctx, s.logger)
+	}
+
+	if err := audit.LogRiskPolicyTrigger(ctx, s.db, audit.LogRiskPolicyTriggerEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		RiskPolicyID:     policy.ID,
+		RiskPolicyName:   policy.Name,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log risk policy trigger").Log(ctx, s.logger)
 	}
 
 	if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
