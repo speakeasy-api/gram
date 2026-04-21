@@ -505,9 +505,6 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 }
 
 func (a *App) RegisterDispatcher(dispatcher Dispatcher) {
-	if dispatcher == nil {
-		return
-	}
 	a.dispatchers[dispatcher.Kind()] = dispatcher
 }
 
