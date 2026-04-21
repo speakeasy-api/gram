@@ -114,20 +114,48 @@ export function compactBySlidingWindow(
   const systemMessages = messages.filter((m) => m.role === "system");
   const nonSystem = messages.filter((m) => m.role !== "system");
 
-  // Reserve the most recent `keepRecent` non-system messages.
-  const recent = nonSystem.slice(Math.max(0, nonSystem.length - keepRecent));
-  const droppable = nonSystem.slice(
-    0,
-    Math.max(0, nonSystem.length - keepRecent),
-  );
+  // Group consecutive `tool` messages with the assistant message that
+  // precedes them. OpenAI-compatible providers require every tool-result
+  // message to be immediately preceded by the assistant message holding its
+  // tool_calls — splitting these produces an invalid conversation that
+  // providers reject with a 400. Grouping ensures we drop or keep the
+  // full assistant+tools unit atomically.
+  const groups: ModelMessage[][] = [];
+  for (const m of nonSystem) {
+    if (m.role === "tool" && groups.length > 0) {
+      groups[groups.length - 1]!.push(m);
+    } else {
+      groups.push([m]);
+    }
+  }
+
+  // Reserve the trailing groups that together contain at least `keepRecent`
+  // messages. Using groups (not raw messages) keeps assistant+tool pairs
+  // intact at the boundary between retained and dropped.
+  let recentMsgCount = 0;
+  let recentStart = groups.length;
+  while (recentStart > 0 && recentMsgCount < keepRecent) {
+    recentStart -= 1;
+    recentMsgCount += groups[recentStart]!.length;
+  }
+  const recentGroups = groups.slice(recentStart);
+  const droppableGroups = groups.slice(0, recentStart);
 
   let droppedCount = 0;
-  let working = [...systemMessages, ...droppable, ...recent];
+  let working = [
+    ...systemMessages,
+    ...droppableGroups.flat(),
+    ...recentGroups.flat(),
+  ];
 
-  while (droppable.length > 0 && estimateTokens(working) > maxTokens) {
-    droppable.shift();
-    droppedCount += 1;
-    working = [...systemMessages, ...droppable, ...recent];
+  while (droppableGroups.length > 0 && estimateTokens(working) > maxTokens) {
+    const droppedGroup = droppableGroups.shift()!;
+    droppedCount += droppedGroup.length;
+    working = [
+      ...systemMessages,
+      ...droppableGroups.flat(),
+      ...recentGroups.flat(),
+    ];
   }
 
   if (droppedCount > 0) {
@@ -137,7 +165,12 @@ export function compactBySlidingWindow(
         droppedCount === 1 ? "" : "s"
       } omitted to stay under context length. If the user asks about them, say you no longer have that context and suggest they restate the relevant details.]`,
     };
-    working = [...systemMessages, marker, ...droppable, ...recent];
+    working = [
+      ...systemMessages,
+      marker,
+      ...droppableGroups.flat(),
+      ...recentGroups.flat(),
+    ];
   }
 
   return {
