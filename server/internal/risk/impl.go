@@ -455,6 +455,42 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 	return &gen.ListRiskResultsByChatResult{Chats: chats}, nil
 }
 
+func (s *Service) ListRiskResultsByUser(ctx context.Context, payload *gen.ListRiskResultsByUserPayload) (*gen.ListRiskResultsByUserResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	rawLimit := payload.Limit
+	if rawLimit <= 0 || rawLimit > 100 {
+		rawLimit = 10
+	}
+
+	rows, err := s.repo.ListRiskResultsGroupedByUser(ctx, repo.ListRiskResultsGroupedByUserParams{
+		ProjectID:   *authCtx.ProjectID,
+		ResultLimit: int32(rawLimit),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by user").Log(ctx, s.logger)
+	}
+
+	users := make([]*types.RiskUserSummary, 0, len(rows))
+	for _, row := range rows {
+		users = append(users, &types.RiskUserSummary{
+			UserID:         conv.FromPGText[string](row.ChatUserID),
+			FindingsCount:  row.FindingsCount,
+			ChatsCount:     row.ChatsCount,
+			LatestDetected: row.LatestDetected.Time.Format(time.RFC3339),
+		})
+	}
+
+	return &gen.ListRiskResultsByUserResult{Users: users}, nil
+}
+
 func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, rawChatID string, limit int32) (*gen.ListRiskResultsResult, error) {
 	chatID, err := uuid.Parse(rawChatID)
 	if err != nil {

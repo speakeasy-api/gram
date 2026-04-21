@@ -17,6 +17,7 @@ import {
   useRiskListResults,
   useRiskListPolicies,
   useRiskListResultsByChat,
+  useRiskListResultsByUser,
 } from "@gram/client/react-query/index.js";
 import { RULE_CATEGORY_META } from "./policy-data";
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
@@ -33,21 +34,41 @@ export default function SecurityOverview() {
 function SecurityOverviewContent() {
   const routes = useRoutes();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [chatsLimit, setChatsLimit] = useState(10);
+  const [usersLimit, setUsersLimit] = useState(10);
+  const [findingsLimit, setFindingsLimit] = useState(10);
+
   const { data: policiesData, isLoading: policiesLoading } =
     useRiskListPolicies();
-  const { data: resultsData, isLoading: resultsLoading } = useRiskListResults({
-    limit: 10,
-  });
-  const { data: chatSummaryData, isLoading: chatSummaryLoading } =
-    useRiskListResultsByChat({ limit: 10 });
+  const {
+    data: resultsData,
+    isLoading: resultsLoading,
+    isFetching: resultsFetching,
+  } = useRiskListResults({ limit: findingsLimit });
+  const {
+    data: chatSummaryData,
+    isLoading: chatSummaryLoading,
+    isFetching: chatSummaryFetching,
+  } = useRiskListResultsByChat({ limit: chatsLimit });
+  const {
+    data: userSummaryData,
+    isLoading: userSummaryLoading,
+    isFetching: userSummaryFetching,
+  } = useRiskListResultsByUser({ limit: usersLimit });
 
   const policies = policiesData?.policies ?? [];
   const results = resultsData?.results ?? [];
   const recentChats = chatSummaryData?.chats ?? [];
+  const recentUsers = userSummaryData?.users ?? [];
 
-  const isLoading = policiesLoading || resultsLoading || chatSummaryLoading;
+  // Only show full-page loading on initial load, not on limit changes
+  const isInitialLoading =
+    policiesLoading ||
+    resultsLoading ||
+    chatSummaryLoading ||
+    userSummaryLoading;
 
-  if (isLoading) {
+  if (isInitialLoading) {
     return (
       <Page>
         <Page.Header>
@@ -91,6 +112,9 @@ function SecurityOverviewContent() {
     0,
   );
 
+  const hasData =
+    recentUsers.length > 0 || recentChats.length > 0 || results.length > 0;
+
   return (
     <>
       <Page>
@@ -128,8 +152,56 @@ function SecurityOverviewContent() {
             </div>
           </div>
 
-          {recentChats.length > 0 || results.length > 0 ? (
+          {hasData ? (
             <>
+              {recentUsers.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="mb-2 text-sm font-semibold">By User</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead>Chats</TableHead>
+                        <TableHead>Findings</TableHead>
+                        <TableHead>Latest Detected</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recentUsers.map((user) => (
+                        <TableRow key={user.userId ?? "unknown"}>
+                          <TableCell className="text-xs">
+                            {user.userId ?? "Unknown"}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {user.chatsCount}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {user.findingsCount}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-xs">
+                            {user.latestDetected
+                              ? new Date(user.latestDetected).toLocaleString()
+                              : "-"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {recentUsers.length >= usersLimit && (
+                    <div className="mt-2 flex justify-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={userSummaryFetching}
+                        onClick={() => setUsersLimit((l) => l + 100)}
+                      >
+                        {userSummaryFetching ? "Loading..." : "Load More"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {recentChats.length > 0 && (
                 <div className="mt-6">
                   <h3 className="mb-2 text-sm font-semibold">Recent Chats</h3>
@@ -167,6 +239,18 @@ function SecurityOverviewContent() {
                       ))}
                     </TableBody>
                   </Table>
+                  {recentChats.length >= chatsLimit && (
+                    <div className="mt-2 flex justify-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={chatSummaryFetching}
+                        onClick={() => setChatsLimit((l) => l + 100)}
+                      >
+                        {chatSummaryFetching ? "Loading..." : "Load More"}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -227,6 +311,18 @@ function SecurityOverviewContent() {
                       ))}
                     </TableBody>
                   </Table>
+                  {results.length >= findingsLimit && (
+                    <div className="mt-2 flex justify-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={resultsFetching}
+                        onClick={() => setFindingsLimit((l) => l + 100)}
+                      >
+                        {resultsFetching ? "Loading..." : "Load More"}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </>

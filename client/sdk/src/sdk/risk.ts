@@ -9,6 +9,7 @@ import { riskGetPolicyStatus } from "../funcs/riskGetPolicyStatus.js";
 import { riskListPolicies } from "../funcs/riskListPolicies.js";
 import { riskListResults } from "../funcs/riskListResults.js";
 import { riskListResultsByChat } from "../funcs/riskListResultsByChat.js";
+import { riskListResultsByUser } from "../funcs/riskListResultsByUser.js";
 import { riskTriggerAnalysis } from "../funcs/riskTriggerAnalysis.js";
 import { riskUpdatePolicy } from "../funcs/riskUpdatePolicy.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -162,6 +163,25 @@ export class Risk extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListRiskResultsByChatResult> {
     return unwrapAsync(riskListResultsByChat(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listRiskResultsByUser risk
+   *
+   * @remarks
+   * List risk results grouped by user for the current project.
+   */
+  async listResultsByUser(
+    request?: operations.ListRiskResultsByUserRequest | undefined,
+    security?: operations.ListRiskResultsByUserSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListRiskResultsByUserResult> {
+    return unwrapAsync(riskListResultsByUser(
       this,
       request,
       security,

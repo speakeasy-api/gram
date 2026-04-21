@@ -78,6 +78,19 @@ var RiskChatSummary = Type("RiskChatSummary", func() {
 	Required("chat_id", "findings_count", "latest_detected")
 })
 
+var RiskUserSummary = Type("RiskUserSummary", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("user_id", String, "The user identifier.")
+	Attribute("findings_count", Int64, "Number of findings for this user.")
+	Attribute("chats_count", Int64, "Number of chats with findings for this user.")
+	Attribute("latest_detected", String, "When the most recent finding was detected.", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("findings_count", "chats_count", "latest_detected")
+})
+
 var RiskPolicyStatus = Type("RiskPolicyStatus", func() {
 	Meta("struct:pkg:path", "types")
 

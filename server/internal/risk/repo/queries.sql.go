@@ -843,6 +843,60 @@ func (q *Queries) ListRiskResultsGroupedByChat(ctx context.Context, arg ListRisk
 	return items, nil
 }
 
+const listRiskResultsGroupedByUser = `-- name: ListRiskResultsGroupedByUser :many
+SELECT
+    c.user_id AS chat_user_id
+  , COUNT(*)::BIGINT AS findings_count
+  , COUNT(DISTINCT cm.chat_id)::BIGINT AS chats_count
+  , MAX(rr.created_at)::TIMESTAMPTZ AS latest_detected
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+WHERE rr.project_id = $1
+  AND rr.found IS TRUE
+GROUP BY c.user_id
+ORDER BY latest_detected DESC
+LIMIT $2
+`
+
+type ListRiskResultsGroupedByUserParams struct {
+	ProjectID   uuid.UUID
+	ResultLimit int32
+}
+
+type ListRiskResultsGroupedByUserRow struct {
+	ChatUserID     pgtype.Text
+	FindingsCount  int64
+	ChatsCount     int64
+	LatestDetected pgtype.Timestamptz
+}
+
+func (q *Queries) ListRiskResultsGroupedByUser(ctx context.Context, arg ListRiskResultsGroupedByUserParams) ([]ListRiskResultsGroupedByUserRow, error) {
+	rows, err := q.db.Query(ctx, listRiskResultsGroupedByUser, arg.ProjectID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRiskResultsGroupedByUserRow
+	for rows.Next() {
+		var i ListRiskResultsGroupedByUserRow
+		if err := rows.Scan(
+			&i.ChatUserID,
+			&i.FindingsCount,
+			&i.ChatsCount,
+			&i.LatestDetected,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateRiskPolicy = `-- name: UpdateRiskPolicy :one
 UPDATE risk_policies
 SET name = $1

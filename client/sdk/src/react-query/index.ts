@@ -147,6 +147,7 @@ export * from "./riskGetPolicyStatus.js";
 export * from "./riskListPolicies.js";
 export * from "./riskListResults.js";
 export * from "./riskListResultsByChat.js";
+export * from "./riskListResultsByUser.js";
 export * from "./riskTriggerAnalysis.js";
 export * from "./riskUpdatePolicy.js";
 export * from "./role.js";

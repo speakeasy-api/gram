@@ -341,6 +341,7 @@ run();
 * [triggerAnalysis](docs/sdks/risk/README.md#triggeranalysis) - triggerRiskAnalysis risk
 * [updatePolicy](docs/sdks/risk/README.md#updatepolicy) - updateRiskPolicy risk
 * [listResultsByChat](docs/sdks/risk/README.md#listresultsbychat) - listRiskResultsByChat risk
+* [listResultsByUser](docs/sdks/risk/README.md#listresultsbyuser) - listRiskResultsByUser risk
 * [listResults](docs/sdks/risk/README.md#listresults) - listRiskResults risk
 
 ### [Slack](docs/sdks/slack/README.md)
@@ -573,6 +574,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskListPolicies`](docs/sdks/risk/README.md#listpolicies) - listRiskPolicies risk
 - [`riskListResults`](docs/sdks/risk/README.md#listresults) - listRiskResults risk
 - [`riskListResultsByChat`](docs/sdks/risk/README.md#listresultsbychat) - listRiskResultsByChat risk
+- [`riskListResultsByUser`](docs/sdks/risk/README.md#listresultsbyuser) - listRiskResultsByUser risk
 - [`riskTriggerAnalysis`](docs/sdks/risk/README.md#triggeranalysis) - triggerRiskAnalysis risk
 - [`riskUpdatePolicy`](docs/sdks/risk/README.md#updatepolicy) - updateRiskPolicy risk
 - [`slackConfigureSlackApp`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
@@ -797,6 +799,7 @@ To learn about this feature and how to get started, check
 - [`useRiskListPolicies`](docs/sdks/risk/README.md#listpolicies) - listRiskPolicies risk
 - [`useRiskListResults`](docs/sdks/risk/README.md#listresults) - listRiskResults risk
 - [`useRiskListResultsByChat`](docs/sdks/risk/README.md#listresultsbychat) - listRiskResultsByChat risk
+- [`useRiskListResultsByUser`](docs/sdks/risk/README.md#listresultsbyuser) - listRiskResultsByUser risk
 - [`useRiskTriggerAnalysisMutation`](docs/sdks/risk/README.md#triggeranalysis) - triggerRiskAnalysis risk
 - [`useRiskUpdatePolicyMutation`](docs/sdks/risk/README.md#updatepolicy) - updateRiskPolicy risk
 - [`useRole`](docs/sdks/access/README.md#getrole) - getRole access
