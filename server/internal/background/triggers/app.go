@@ -488,11 +488,27 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 		TargetDisplay:     instance.TargetDisplay,
 		EventID:           envelope.EventID,
 		CorrelationID:     envelope.CorrelationID,
+		EventJSON:         nil,
 		RawPayload:        envelope.RawPayload,
+	}
+	if envelope.Event != nil {
+		eventJSON, err := json.Marshal(envelope.Event)
+		if err != nil {
+			a.emitDeliveryLog(instance, envelope, DeliveryStatusFailed, "marshal event payload", err)
+			return nil, fmt.Errorf("marshal event payload: %w", err)
+		}
+		task.EventJSON = eventJSON
 	}
 
 	a.emitDeliveryLog(instance, envelope, DeliveryStatusSent, "trigger event enqueued", nil)
 	return task, nil
+}
+
+func (a *App) RegisterDispatcher(dispatcher Dispatcher) {
+	if dispatcher == nil {
+		return
+	}
+	a.dispatchers[dispatcher.Kind()] = dispatcher
 }
 
 func (a *App) Dispatch(ctx context.Context, input Task) error {
