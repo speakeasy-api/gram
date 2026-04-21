@@ -465,25 +465,6 @@ func (q *Queries) IsServerAttachedToOrganizationMcpCollection(ctx context.Contex
 	return exists, err
 }
 
-const isToolsetInstalledFromCatalog = `-- name: IsToolsetInstalledFromCatalog :one
-SELECT EXISTS (
-  SELECT 1 FROM toolset_versions tv, unnest(tv.tool_urns) AS urn
-  WHERE tv.toolset_id = $1 AND tv.deleted IS FALSE
-  AND urn LIKE 'tools:externalmcp:%'
-  AND tv.version = (
-    SELECT MAX(tv2.version) FROM toolset_versions tv2
-    WHERE tv2.toolset_id = $1 AND tv2.deleted IS FALSE
-  )
-)
-`
-
-func (q *Queries) IsToolsetInstalledFromCatalog(ctx context.Context, toolsetID uuid.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, isToolsetInstalledFromCatalog, toolsetID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const listOrganizationMcpCollectionServerAttachments = `-- name: ListOrganizationMcpCollectionServerAttachments :many
 SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.created_at, t.updated_at, t.deleted_at, t.deleted FROM toolsets t
 JOIN organization_mcp_collection_server_attachments rt ON t.id = rt.toolset_id

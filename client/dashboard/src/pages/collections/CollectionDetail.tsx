@@ -3,6 +3,7 @@ import { ProjectAvatar } from "@/components/project-menu";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
+import { Combobox } from "@/components/ui/combobox";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import {
@@ -38,11 +39,6 @@ import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { Server as CatalogServer } from "@/pages/catalog/hooks";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 export function CollectionDetailRoot() {
   return <Outlet />;
@@ -58,10 +54,13 @@ export default function CollectionDetail() {
   const defaultProjectSlug = organization.projects?.[0]?.slug;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [showProjectPicker, setShowProjectPicker] = useState(false);
   const [selectedProjectSlug, setSelectedProjectSlug] = useState<
     string | undefined
-  >();
+  >(defaultProjectSlug);
+  const [pendingInstallServer, setPendingInstallServer] =
+    useState<CatalogServer | null>(null);
+  const [activeInstallServer, setActiveInstallServer] =
+    useState<CatalogServer | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -95,27 +94,40 @@ export default function CollectionDetail() {
 
   const toolsetsLoading = toolsetQueries.some((q) => q.isLoading);
 
-  // Build a set of attached mcpSlugs for checkbox state.
-  // registrySpecifier from serve() is "namespace/mcpSlug" — extract the last segment.
+  const attachedServerSpecifiers = useMemo(
+    () =>
+      new Set(
+        rawServers
+          .map((server) => server.registrySpecifier ?? "")
+          .filter(Boolean),
+      ),
+    [rawServers],
+  );
+
+  // registrySpecifier from serve() is usually "namespace/mcpSlug" for collection-backed
+  // servers, so keep the last segment around for matching user-created servers.
   const attachedMcpSlugs = useMemo(
     () =>
       new Set(
-        servers.map((s) => {
-          const parts = s.registrySpecifier.split("/");
-          return parts[parts.length - 1];
-        }),
+        rawServers
+          .map((server) => {
+            const parts = (server.registrySpecifier ?? "").split("/");
+            return parts[parts.length - 1];
+          })
+          .filter(Boolean),
       ),
-    [servers],
+    [rawServers],
   );
 
-  // All toolsets from all projects (only MCP-enabled, excluding catalog-installed)
+  // All MCP-enabled toolsets from all projects.
   const allToolsets = useMemo(() => {
     const all: Array<{
       id: string;
-      mcpSlug: string;
+      mcpSlug?: string;
       name: string;
       description?: string;
       projectName: string;
+      originRegistrySpecifier?: string;
     }> = [];
     for (let i = 0; i < projects.length; i++) {
       const project = projects[i];
@@ -123,14 +135,13 @@ export default function CollectionDetail() {
       for (const t of data?.toolsets ?? []) {
         if (!t.mcpEnabled) continue;
         if (!t.mcpSlug) continue;
-        if (t.toolUrns?.some((u) => u.startsWith("tools:externalmcp:")))
-          continue;
         all.push({
           id: t.id,
           mcpSlug: t.mcpSlug,
           name: t.name,
           description: t.description ?? undefined,
           projectName: project.name,
+          originRegistrySpecifier: t.origin?.registrySpecifier,
         });
       }
     }
@@ -152,12 +163,20 @@ export default function CollectionDetail() {
   const attachedToolsetIds = useMemo(() => {
     const ids = new Set<string>();
     for (const toolset of allToolsets) {
-      if (attachedMcpSlugs.has(toolset.mcpSlug)) {
+      if (
+        toolset.originRegistrySpecifier &&
+        attachedServerSpecifiers.has(toolset.originRegistrySpecifier)
+      ) {
+        ids.add(toolset.id);
+        continue;
+      }
+
+      if (toolset.mcpSlug && attachedMcpSlugs.has(toolset.mcpSlug)) {
         ids.add(toolset.id);
       }
     }
     return ids;
-  }, [allToolsets, attachedMcpSlugs]);
+  }, [allToolsets, attachedMcpSlugs, attachedServerSpecifiers]);
 
   const toggleToolset = (toolsetId: string) => {
     setEditSelectedToolsetIds((prev) => {
@@ -176,23 +195,31 @@ export default function CollectionDetail() {
     meta: {},
   }));
 
-  const totalTools = servers.reduce((sum, s) => sum + s.toolCount, 0);
-  const isInstallDisabled = isLoading || rawServers.length === 0;
-  const installDisabledReason = isLoading
-    ? "Loading collection servers..."
-    : "Add at least one MCP server to this collection before installing it.";
-  const installButton = (
-    <Button
-      size="sm"
-      onClick={() => setShowProjectPicker(true)}
-      disabled={isInstallDisabled}
-    >
-      <Button.Icon>
-        <Download />
-      </Button.Icon>
-      <Button.Text>Install</Button.Text>
-    </Button>
+  const projectOptions = useMemo(
+    () =>
+      projects.map((project) => ({
+        ...project,
+        value: project.slug,
+        label: project.name,
+        icon: (
+          <ProjectAvatar
+            project={project}
+            className="h-4 min-h-4 w-4 min-w-4"
+          />
+        ),
+      })),
+    [projects],
   );
+  const selectedProjectOption =
+    projectOptions.find((project) => project.value === selectedProjectSlug) ??
+    projectOptions[0];
+
+  const openInstallDialog = (server: CatalogServer) => {
+    setPendingInstallServer(server);
+    setSelectedProjectSlug((current) => current ?? defaultProjectSlug);
+  };
+
+  const totalTools = servers.reduce((sum, s) => sum + s.toolCount, 0);
 
   if (!collection) {
     return (
@@ -251,16 +278,6 @@ export default function CollectionDetail() {
                   </p>
                 )}
                 <div className="flex gap-2">
-                  {isInstallDisabled ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="inline-block">{installButton}</span>
-                      </TooltipTrigger>
-                      <TooltipContent>{installDisabledReason}</TooltipContent>
-                    </Tooltip>
-                  ) : (
-                    installButton
-                  )}
                   <Button
                     size="sm"
                     variant="secondary"
@@ -511,37 +528,57 @@ export default function CollectionDetail() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {servers.map((server) => (
-                      <div
-                        key={server.registrySpecifier}
-                        className="flex items-center gap-3 rounded-md border p-3"
-                      >
-                        <div className="bg-muted flex h-9 w-9 shrink-0 items-center justify-center rounded border">
-                          <Monitor className="text-muted-foreground h-4 w-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium">
-                              {server.title}
-                            </span>
-                            {server.toolCount > 0 && (
-                              <Badge
-                                variant="secondary"
-                                className="shrink-0 text-xs"
-                              >
-                                <Wrench className="mr-1 h-3 w-3" />
-                                {server.toolCount} tools
-                              </Badge>
+                    {rawServers.map((server, index) => {
+                      const installableServer = installableServers[index];
+                      return (
+                        <div
+                          key={server.registrySpecifier}
+                          className="flex items-center gap-3 rounded-md border p-3"
+                        >
+                          <div className="bg-muted flex h-9 w-9 shrink-0 items-center justify-center rounded border">
+                            <Monitor className="text-muted-foreground h-4 w-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="truncate text-sm font-medium">
+                                {server.title ?? server.registrySpecifier}
+                              </span>
+                              {(server.tools?.length ?? 0) > 0 && (
+                                <Badge
+                                  variant="secondary"
+                                  className="shrink-0 text-xs"
+                                >
+                                  <Wrench className="mr-1 h-3 w-3" />
+                                  {server.tools?.length ?? 0} tools
+                                </Badge>
+                              )}
+                            </div>
+                            {server.description && (
+                              <p className="text-muted-foreground mt-0.5 truncate text-xs">
+                                {server.description}
+                              </p>
                             )}
                           </div>
-                          {server.description && (
-                            <p className="text-muted-foreground mt-0.5 truncate text-xs">
-                              {server.description}
-                            </p>
-                          )}
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={
+                              !installableServer || projects.length === 0
+                            }
+                            onClick={() => {
+                              if (installableServer) {
+                                openInstallDialog(installableServer);
+                              }
+                            }}
+                          >
+                            <Button.Icon>
+                              <Download />
+                            </Button.Icon>
+                            <Button.Text>Install</Button.Text>
+                          </Button>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -638,50 +675,109 @@ export default function CollectionDetail() {
             </div>
           </div>
         </div>
-        <Dialog open={showProjectPicker} onOpenChange={setShowProjectPicker}>
+        <Dialog
+          open={pendingInstallServer !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPendingInstallServer(null);
+            }
+          }}
+        >
           <Dialog.Content className="sm:max-w-md">
             <Dialog.Header>
               <Dialog.Title>Select Project</Dialog.Title>
               <Dialog.Description>
-                Choose a project to install this collection's servers into.
+                Choose where to install{" "}
+                <span className="font-medium">
+                  {pendingInstallServer?.title ??
+                    pendingInstallServer?.registrySpecifier}
+                </span>
+                .
               </Dialog.Description>
             </Dialog.Header>
-            <div className="space-y-1 py-2">
-              {organization.projects.map((project) => (
-                <button
-                  key={project.id}
-                  type="button"
-                  className="hover:bg-accent flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors"
-                  onClick={() => {
-                    setSelectedProjectSlug(project.slug);
-                    setShowProjectPicker(false);
-                    setShowAddDialog(true);
-                  }}
-                >
-                  <ProjectAvatar project={project} className="h-6 w-6" />
-                  <span className="font-medium">{project.name}</span>
-                </button>
-              ))}
-              {organization.projects.length === 0 && (
+            <div className="space-y-4 py-2">
+              {pendingInstallServer && (
+                <div className="rounded-lg border p-3">
+                  <div className="text-sm font-medium">
+                    {pendingInstallServer.title ??
+                      pendingInstallServer.registrySpecifier}
+                  </div>
+                  {pendingInstallServer.description && (
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {pendingInstallServer.description}
+                    </p>
+                  )}
+                </div>
+              )}
+              {projectOptions.length === 0 ? (
                 <div className="flex flex-col items-center py-6 text-center">
                   <FolderOpen className="text-muted-foreground mb-2 h-8 w-8" />
                   <p className="text-muted-foreground text-sm">
                     No projects found.
                   </p>
                 </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Project</label>
+                  <Combobox
+                    items={projectOptions}
+                    selected={selectedProjectOption}
+                    onSelectionChange={(project) =>
+                      setSelectedProjectSlug(project.value)
+                    }
+                    className="w-full justify-between"
+                  >
+                    {selectedProjectOption ? (
+                      <div className="flex items-center gap-2">
+                        <ProjectAvatar
+                          project={selectedProjectOption}
+                          className="h-4 min-h-4 w-4 min-w-4"
+                        />
+                        <span className="truncate">
+                          {selectedProjectOption.label}
+                        </span>
+                      </div>
+                    ) : (
+                      <span>Select a project</span>
+                    )}
+                  </Combobox>
+                </div>
               )}
             </div>
+            <Dialog.Footer>
+              <Button
+                variant="secondary"
+                onClick={() => setPendingInstallServer(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={!pendingInstallServer || !selectedProjectOption}
+                onClick={() => {
+                  if (!pendingInstallServer || !selectedProjectOption) {
+                    return;
+                  }
+
+                  setSelectedProjectSlug(selectedProjectOption.value);
+                  setActiveInstallServer(pendingInstallServer);
+                  setPendingInstallServer(null);
+                  setShowAddDialog(true);
+                }}
+              >
+                Continue
+              </Button>
+            </Dialog.Footer>
           </Dialog.Content>
         </Dialog>
-        {selectedProjectSlug && (
+        {activeInstallServer && selectedProjectSlug && (
           <AddServerDialog
-            servers={installableServers}
+            servers={[activeInstallServer]}
             projectSlug={selectedProjectSlug}
             open={showAddDialog}
             onOpenChange={(open) => {
               setShowAddDialog(open);
               if (!open) {
-                setTimeout(() => setSelectedProjectSlug(undefined), 300);
+                setTimeout(() => setActiveInstallServer(null), 300);
               }
             }}
           />

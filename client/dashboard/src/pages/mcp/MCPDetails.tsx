@@ -263,9 +263,11 @@ export function MCPDetailPage() {
         >
           <div className="flex items-end justify-between">
             <Stack gap={2}>
-              <div className="ml-1 flex gap-3">
+              <div className="ml-1 flex items-end gap-3">
                 <Heading variant="h1">{toolset.name}</Heading>
-                <div className="mt-auto mb-1">{statusBadge}</div>
+                <div className="mb-1 flex items-center gap-2">
+                  {statusBadge}
+                </div>
               </div>
               <div className="ml-1 flex items-center gap-2">
                 <Type className="text-muted-foreground max-w-2xl truncate">
@@ -1416,9 +1418,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         </Block>
       </PageSection>
 
-      {!toolset.toolUrns?.some((u) => u.startsWith("tools:externalmcp:")) && (
-        <MCPPublishingSection toolset={toolset} />
-      )}
+      <MCPPublishingSection toolset={toolset} />
 
       <PageSection
         heading="Actions"
@@ -1548,6 +1548,11 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
     for (let i = 0; i < collections.length; i++) {
       const servers = serveQueries[i]?.data?.servers ?? [];
       for (const server of servers) {
+        if (server.toolsetId === toolset.id) {
+          ids.add(collections[i].id);
+          break;
+        }
+
         const parts = server.registrySpecifier?.split("/") ?? [];
         const slug = parts[parts.length - 1];
         if (slug === toolset.mcpSlug) {
@@ -1558,7 +1563,7 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
     }
 
     return ids;
-  }, [collections, serveQueries, toolset.mcpSlug]);
+  }, [collections, serveQueries, toolset.id, toolset.mcpSlug]);
 
   const effectiveSelected = selectedIds ?? publishedCollectionIds;
 

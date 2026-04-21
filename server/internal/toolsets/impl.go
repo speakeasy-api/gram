@@ -184,6 +184,17 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create toolset").Log(ctx, logger)
 	}
 
+	if payload.Origin != nil {
+		_, err = tr.CreateToolsetOrigin(ctx, repo.CreateToolsetOriginParams{
+			OrganizationID:    authCtx.ActiveOrganizationID,
+			ToolsetID:         createdToolset.ID,
+			RegistrySpecifier: payload.Origin.RegistrySpecifier,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to create toolset origin").Log(ctx, logger)
+		}
+	}
+
 	// Create initial toolset version with tool URNs
 	err = s.createToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, createdToolset.ID, tr)
 	if err != nil {

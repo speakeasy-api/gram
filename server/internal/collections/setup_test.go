@@ -127,6 +127,53 @@ func createMCPEnabledToolset(t *testing.T, ctx context.Context, ti *testInstance
 	return updated
 }
 
+func createOriginBackedMCPEnabledToolset(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	name string,
+	registrySpecifier string,
+) *types.Toolset {
+	t.Helper()
+
+	created, err := ti.toolsets.CreateToolset(ctx, &tgen.CreateToolsetPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		Name:                   name,
+		Description:            nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		Origin: &types.ToolsetOrigin{
+			RegistrySpecifier: registrySpecifier,
+		},
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	mcpEnabled := true
+	updated, err := ti.toolsets.UpdateToolset(ctx, &tgen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		Slug:                   created.Slug,
+		Name:                   nil,
+		Description:            nil,
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpIsPublic:            nil,
+		McpEnabled:             &mcpEnabled,
+		CustomDomainID:         nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.True(t, *updated.McpEnabled)
+
+	return updated
+}
+
 func createCollection(t *testing.T, ctx context.Context, ti *testInstance, name, slug, namespace string) *types.MCPCollection {
 	t.Helper()
 
