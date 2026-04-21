@@ -22,18 +22,8 @@ CREATE TABLE "mcp_frontends" (
   CONSTRAINT "mcp_frontends_backend_exclusivity_check" CHECK ((remote_mcp_server_id IS NULL) <> (toolset_id IS NULL)),
   CONSTRAINT "mcp_frontends_visibility_check" CHECK (visibility <> ''::text)
 );
--- Create index "mcp_frontends_environment_id_idx" to table: "mcp_frontends"
-CREATE INDEX "mcp_frontends_environment_id_idx" ON "mcp_frontends" ("environment_id") WHERE (deleted IS FALSE);
--- Create index "mcp_frontends_external_oauth_server_id_idx" to table: "mcp_frontends"
-CREATE INDEX "mcp_frontends_external_oauth_server_id_idx" ON "mcp_frontends" ("external_oauth_server_id") WHERE (deleted IS FALSE);
--- Create index "mcp_frontends_oauth_proxy_server_id_idx" to table: "mcp_frontends"
-CREATE INDEX "mcp_frontends_oauth_proxy_server_id_idx" ON "mcp_frontends" ("oauth_proxy_server_id") WHERE (deleted IS FALSE);
 -- Create index "mcp_frontends_project_id_idx" to table: "mcp_frontends"
 CREATE INDEX "mcp_frontends_project_id_idx" ON "mcp_frontends" ("project_id") WHERE (deleted IS FALSE);
--- Create index "mcp_frontends_remote_mcp_server_id_idx" to table: "mcp_frontends"
-CREATE INDEX "mcp_frontends_remote_mcp_server_id_idx" ON "mcp_frontends" ("remote_mcp_server_id") WHERE (deleted IS FALSE);
--- Create index "mcp_frontends_toolset_id_idx" to table: "mcp_frontends"
-CREATE INDEX "mcp_frontends_toolset_id_idx" ON "mcp_frontends" ("toolset_id") WHERE (deleted IS FALSE);
 -- Create "mcp_slugs" table
 CREATE TABLE "mcp_slugs" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),

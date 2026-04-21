@@ -1763,26 +1763,6 @@ CREATE INDEX IF NOT EXISTS mcp_frontends_project_id_idx
 ON mcp_frontends (project_id)
 WHERE deleted IS FALSE;
 
-CREATE INDEX IF NOT EXISTS mcp_frontends_environment_id_idx
-ON mcp_frontends (environment_id)
-WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS mcp_frontends_external_oauth_server_id_idx
-ON mcp_frontends (external_oauth_server_id)
-WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS mcp_frontends_oauth_proxy_server_id_idx
-ON mcp_frontends (oauth_proxy_server_id)
-WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS mcp_frontends_remote_mcp_server_id_idx
-ON mcp_frontends (remote_mcp_server_id)
-WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS mcp_frontends_toolset_id_idx
-ON mcp_frontends (toolset_id)
-WHERE deleted IS FALSE;
-
 -- MCP Slugs: addressable slugs for an MCP frontend. A NULL custom_domain_id
 -- represents a Gram-hosted slug (resolved by slug alone); a non-NULL
 -- custom_domain_id represents a custom-domain slug (resolved by the
