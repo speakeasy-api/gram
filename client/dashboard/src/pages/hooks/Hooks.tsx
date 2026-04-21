@@ -1790,11 +1790,13 @@ function MultiLineChart({
   tooltipLabels,
   datasets,
   tooltipAfterBody,
+  height = 200,
 }: {
   labels: string[];
   tooltipLabels: string[];
   datasets: ReturnType<typeof buildTimeSeriesFromSummary>["datasets"];
   tooltipAfterBody?: (dataIndex: number) => string[];
+  height?: number;
 }) {
   if (labels.length === 0) {
     return (
@@ -1841,7 +1843,7 @@ function MultiLineChart({
   };
 
   return (
-    <div style={{ position: "relative", height: 200 }}>
+    <div style={{ position: "relative", height }}>
       <Line data={{ labels, datasets }} options={options} />
     </div>
   );
@@ -1852,11 +1854,13 @@ function ServerUsageTimeSeries({
   from,
   to,
   serverNameMappings,
+  expanded = false,
 }: {
   timeSeries: HooksTimeSeriesPoint[];
   from: Date;
   to: Date;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
+  expanded?: boolean;
 }) {
   const timeRangeMs = to.getTime() - from.getTime();
   const { labels, tooltipLabels, datasets } = useMemo(
@@ -1878,6 +1882,7 @@ function ServerUsageTimeSeries({
       labels={labels}
       tooltipLabels={tooltipLabels}
       datasets={datasets}
+      height={expanded ? 500 : 200}
     />
   );
 }
@@ -1886,10 +1891,12 @@ function UserUsageTimeSeries({
   timeSeries,
   from,
   to,
+  expanded = false,
 }: {
   timeSeries: HooksTimeSeriesPoint[];
   from: Date;
   to: Date;
+  expanded?: boolean;
 }) {
   const timeRangeMs = to.getTime() - from.getTime();
   const { labels, tooltipLabels, datasets } = useMemo(
@@ -1902,6 +1909,7 @@ function UserUsageTimeSeries({
       labels={labels}
       tooltipLabels={tooltipLabels}
       datasets={datasets}
+      height={expanded ? 500 : 200}
     />
   );
 }
@@ -1911,11 +1919,13 @@ function ErrorsOverTimeChart({
   from,
   to,
   serverNameMappings,
+  expanded = false,
 }: {
   timeSeries: HooksTimeSeriesPoint[];
   from: Date;
   to: Date;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
+  expanded?: boolean;
 }) {
   const timeRangeMs = to.getTime() - from.getTime();
   const { labels, tooltipLabels, datasets, hasErrors, perServerByIndex } =
@@ -1998,6 +2008,7 @@ function ErrorsOverTimeChart({
       labels={labels}
       tooltipLabels={tooltipLabels}
       datasets={datasets}
+      height={expanded ? 500 : 200}
       tooltipAfterBody={(idx) => {
         const servers = perServerByIndex[idx];
         if (!servers || servers.length === 0) return [];
