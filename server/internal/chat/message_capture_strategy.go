@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
@@ -28,6 +29,8 @@ type ChatMessageCaptureStrategy struct {
 	db           *pgxpool.Pool
 	repo         *repo.Queries
 	assetStorage assets.BlobStore
+	observers    []MessageObserver
+	shutdownCtx  context.Context //nolint:containedctx // shutdown context must outlive any single request
 }
 
 var _ openrouter.MessageCaptureStrategy = (*ChatMessageCaptureStrategy)(nil)
@@ -49,13 +52,39 @@ func NewChatMessageCaptureStrategy(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	assetStorage assets.BlobStore,
-) *ChatMessageCaptureStrategy {
+) (strategy *ChatMessageCaptureStrategy, shutdown func(context.Context) error) {
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck,gosec // this context must be tied to the lifetime of the application; cancel is called via the returned shutdown function
+	shutdown = func(_ context.Context) error {
+		cancel()
+		return nil
+	}
+
 	return &ChatMessageCaptureStrategy{
 		logger:       logger,
 		db:           db,
 		repo:         repo.New(db),
 		assetStorage: assetStorage,
-	}
+		observers:    nil,
+		shutdownCtx:  ctx,
+	}, shutdown
+}
+
+// AddObserver registers a MessageObserver to be notified when messages are stored.
+func (s *ChatMessageCaptureStrategy) AddObserver(obs MessageObserver) {
+	s.observers = append(s.observers, obs)
+}
+
+func (s *ChatMessageCaptureStrategy) notifyObservers(ctx context.Context, projectID uuid.UUID) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		stop := context.AfterFunc(s.shutdownCtx, cancel)
+		defer stop()
+
+		for _, obs := range s.observers {
+			obs.OnMessagesStored(ctx, projectID)
+		}
+	}()
 }
 
 func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request openrouter.CompletionRequest) (openrouter.CaptureSession, error) {
@@ -126,6 +155,8 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 			pendingRows: rows,
 		}, nil
 	}
+
+	s.notifyObservers(ctx, projectID)
 
 	return &chatCaptureSession{
 		generation:  generation,
@@ -327,6 +358,7 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 			s.logger.ErrorContext(ctx, "failed to store chat message", attr.SlogError(err))
 			return fmt.Errorf("store chat message: %w", err)
 		}
+		s.notifyObservers(ctx, projectID)
 		return nil
 	}
 
@@ -334,7 +366,11 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 	// assistant row atomically so either the whole turn lands or none of it
 	// does. A partial write would orphan the assistant and force divergence
 	// detection to open a new generation on the next turn.
-	return s.flushTurnAtomically(ctx, session.pendingRows, assistantParams)
+	if err := s.flushTurnAtomically(ctx, session.pendingRows, assistantParams); err != nil {
+		return err
+	}
+	s.notifyObservers(ctx, projectID)
+	return nil
 }
 
 // resolveSession returns the session produced by StartOrResumeChat. If the

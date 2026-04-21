@@ -53,6 +53,8 @@ import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
+import SecurityOverview from "./pages/security/SecurityOverview";
+import PolicyCenter from "./pages/security/PolicyCenter";
 import Team from "./pages/team/Team";
 import AcceptInvite from "./pages/invite/AcceptInvite";
 import SourceDetails from "./pages/sources/SourceDetails";
@@ -337,6 +339,18 @@ const ROUTE_STRUCTURE = {
     url: "observability",
     icon: "layout-dashboard",
     component: ObservabilityOverview,
+  },
+  riskOverview: {
+    title: "Risk Overview",
+    url: "risk-overview",
+    icon: "shield",
+    component: SecurityOverview,
+  },
+  policyCenter: {
+    title: "Policy Center",
+    url: "risk-policies",
+    icon: "shield-check",
+    component: PolicyCenter,
   },
   sdks: {
     title: "SDKs",
