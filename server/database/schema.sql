@@ -523,6 +523,24 @@ CREATE INDEX IF NOT EXISTS trigger_instances_environment_id_idx
 ON trigger_instances (environment_id)
 WHERE deleted IS FALSE;
 
+-- Create the chats table to track individual chat conversations
+CREATE TABLE IF NOT EXISTS chats (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  user_id TEXT,
+  external_user_id TEXT,
+  title TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT chats_pkey PRIMARY KEY (id),
+  CONSTRAINT chats_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS assistants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -565,7 +583,8 @@ CREATE TABLE IF NOT EXISTS assistant_threads (
 
   CONSTRAINT assistant_threads_pkey PRIMARY KEY (id),
   CONSTRAINT assistant_threads_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants(id) ON DELETE CASCADE,
-  CONSTRAINT assistant_threads_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  CONSTRAINT assistant_threads_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT assistant_threads_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_threads_project_id_assistant_id_correlation_id_key
@@ -910,36 +929,6 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id)
 );
 
-
--- Create the chats table to track individual chat conversations
-CREATE TABLE IF NOT EXISTS chats (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
-  organization_id TEXT NOT NULL,
-  user_id TEXT,
-  external_user_id TEXT,
-  title TEXT,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT chats_pkey PRIMARY KEY (id),
-  CONSTRAINT chats_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-);
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint
-    WHERE conname = 'assistant_threads_chat_id_fkey'
-  ) THEN
-    ALTER TABLE assistant_threads
-      ADD CONSTRAINT assistant_threads_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE;
-  END IF;
-END $$;
 
 -- Create the chat_messages table to store individual messages in each chat
 CREATE TABLE IF NOT EXISTS chat_messages (
