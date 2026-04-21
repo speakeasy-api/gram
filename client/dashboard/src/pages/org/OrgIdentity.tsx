@@ -154,7 +154,7 @@ export default function OrgIdentity() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Title>Identity</Page.Header.Title>
+        <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">

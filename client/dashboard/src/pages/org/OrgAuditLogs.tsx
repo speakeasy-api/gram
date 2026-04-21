@@ -503,7 +503,7 @@ export default function OrgAuditLogs() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Title>Audit Logs</Page.Header.Title>
+        <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
         <RequireScope scope="org:read" level="page">

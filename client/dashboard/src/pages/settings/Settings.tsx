@@ -16,7 +16,7 @@ export default function Settings() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Title>Project Settings</Page.Header.Title>
+        <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
         <RequireScope scope="build:write" level="page">
