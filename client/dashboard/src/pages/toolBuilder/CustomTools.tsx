@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Card, Cards } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
@@ -28,6 +29,21 @@ export function CustomToolsRoot() {
 }
 
 export default function CustomTools() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <RequireScope scope={["build:read", "build:write"]} level="page">
+          <CustomToolsInner />
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
+}
+
+function CustomToolsInner() {
   const { customTools, isLoading } = useCustomTools();
   const [newToolDialogOpen, setNewToolDialogOpen] = useState(false);
 
@@ -35,42 +51,36 @@ export default function CustomTools() {
     setNewToolDialogOpen(true);
   };
 
-  let content = (
-    <Page.Section>
-      <Page.Section.Title>Custom Tools</Page.Section.Title>
-      <Page.Section.Description>
-        Create higher-order tools by sequencing together tools and instructions
-      </Page.Section.Description>
-      <Page.Section.CTA>
-        <Button onClick={onNewCustomTool}>
-          <Button.LeftIcon>
-            <Plus className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>New Custom Tool</Button.Text>
-        </Button>
-      </Page.Section.CTA>
-      <Page.Section.Body>
-        <Cards isLoading={isLoading}>
-          {customTools?.map((template) => {
-            return <CustomToolCard key={template.id} template={template} />;
-          })}
-        </Cards>
-      </Page.Section.Body>
-    </Page.Section>
-  );
-
-  if (!isLoading && (!customTools || customTools.length === 0)) {
-    content = <CustomToolsEmptyState onCreateCustomTool={onNewCustomTool} />;
-  }
-
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>{content}</Page.Body>
+    <>
+      {!isLoading && (!customTools || customTools.length === 0) ? (
+        <CustomToolsEmptyState onCreateCustomTool={onNewCustomTool} />
+      ) : (
+        <Page.Section>
+          <Page.Section.Title>Custom Tools</Page.Section.Title>
+          <Page.Section.Description>
+            Create higher-order tools by sequencing together tools and
+            instructions
+          </Page.Section.Description>
+          <Page.Section.CTA>
+            <Button onClick={onNewCustomTool}>
+              <Button.LeftIcon>
+                <Plus className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>New Custom Tool</Button.Text>
+            </Button>
+          </Page.Section.CTA>
+          <Page.Section.Body>
+            <Cards isLoading={isLoading}>
+              {customTools?.map((template) => {
+                return <CustomToolCard key={template.id} template={template} />;
+              })}
+            </Cards>
+          </Page.Section.Body>
+        </Page.Section>
+      )}
       <ToolifyDialog open={newToolDialogOpen} setOpen={setNewToolDialogOpen} />
-    </Page>
+    </>
   );
 }
 

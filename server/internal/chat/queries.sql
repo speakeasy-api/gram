@@ -152,7 +152,11 @@ WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uu
 ORDER BY seq ASC;
 
 -- name: CountChatMessages :one
-SELECT COUNT(*) FROM chat_messages WHERE chat_id = @chat_id;
+-- Must match ListChatMessages' project_id filter, otherwise count and the
+-- list drift and the client hits "chat history mismatch" at
+-- message_capture_strategy.go.
+SELECT COUNT(*) FROM chat_messages
+WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid);
 
 -- name: GetMaxGenerationForChat :one
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = @chat_id;

@@ -90,6 +90,7 @@ type Task struct {
 	TargetDisplay     string
 	EventID           string
 	CorrelationID     string
+	EventJSON         []byte
 	RawPayload        []byte
 }
 
@@ -154,6 +155,8 @@ type slackEventRequestBody struct {
 	Subtype  string `json:"subtype,omitempty"`
 	Text     string `json:"text,omitempty"`
 	User     string `json:"user,omitempty"`
+	BotID    string `json:"bot_id,omitempty"`
+	AppID    string `json:"app_id,omitempty"`
 	Channel  string `json:"channel,omitempty"`
 	ThreadTs string `json:"thread_ts,omitempty"`
 	Ts       string `json:"ts,omitempty"`
@@ -167,6 +170,8 @@ type slackTriggerEvent struct {
 	ChannelID    string `json:"channel_id,omitempty" cel:"channel_id"`
 	ThreadID     string `json:"thread_id,omitempty" cel:"thread_id"`
 	UserID       string `json:"user_id,omitempty" cel:"user_id"`
+	BotID        string `json:"bot_id,omitempty" cel:"bot_id"`
+	AppID        string `json:"app_id,omitempty" cel:"app_id"`
 	Text         string `json:"text,omitempty" cel:"text"`
 	Timestamp    string `json:"timestamp,omitempty" cel:"timestamp"`
 }
@@ -303,6 +308,13 @@ func newSlackDefinition() Definition {
 			return cfg, nil
 		},
 		AuthenticateWebhook: func(body []byte, headers http.Header, env map[string]string, config Config) error {
+			// Slack's URL verification handshake must echo the challenge before
+			// any signing secret has necessarily been configured. Allow it
+			// through auth; HandleWebhook will respond with the challenge.
+			var probe slackEventRequest
+			if err := json.Unmarshal(body, &probe); err == nil && probe.Type == "url_verification" && probe.Challenge != "" {
+				return nil
+			}
 			ciEnv := toolconfig.CIEnvFrom(env)
 			signingSecret := ciEnv.Get("SLACK_SIGNING_SECRET")
 			if signingSecret == "" {
@@ -331,10 +343,11 @@ func newSlackDefinition() Definition {
 				}, nil
 			}
 
+			// thread_ts is only set for replies inside a thread. For top-level
+			// messages we key the correlation on the channel alone so a user
+			// sending multiple standalone messages in a DM or channel lands
+			// on a single Gram thread rather than spawning one per message.
 			threadID := req.Event.ThreadTs
-			if threadID == "" {
-				threadID = req.Event.Ts
-			}
 
 			eventID := req.EventID
 			if eventID == "" {
@@ -349,6 +362,8 @@ func newSlackDefinition() Definition {
 				ChannelID:    req.Event.Channel,
 				ThreadID:     threadID,
 				UserID:       req.Event.User,
+				BotID:        req.Event.BotID,
+				AppID:        req.Event.AppID,
 				Text:         req.Event.Text,
 				Timestamp:    req.Event.Ts,
 			}

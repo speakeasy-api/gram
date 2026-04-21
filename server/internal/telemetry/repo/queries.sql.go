@@ -1735,6 +1735,7 @@ type HooksTimeSeriesPoint struct {
 	ServerName    string `ch:"server_name"`
 	UserEmail     string `ch:"user_email"`
 	EventCount    uint64 `ch:"event_count"`
+	FailureCount  uint64 `ch:"failure_count"`
 }
 
 // GetHooksTimeSeriesParams defines the parameters for the hooks time series query.
@@ -1757,6 +1758,7 @@ func (q *Queries) GetHooksTimeSeries(ctx context.Context, arg GetHooksTimeSeries
 		"if(tool_source = '', 'local', tool_source) as server_name",
 		"if(user_email = '', 'Unknown', user_email) as user_email",
 		"count(*) as event_count",
+		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).

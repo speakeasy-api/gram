@@ -20,6 +20,7 @@ const (
 	subjectTypeRemoteMcpServer subjectType = "remote_mcp_server"
 	subjectTypeToolset         subjectType = "toolset"
 	subjectTypeVariation       subjectType = "variation"
+	subjectTypeRiskPolicy      subjectType = "risk_policy"
 )
 
 type Action string

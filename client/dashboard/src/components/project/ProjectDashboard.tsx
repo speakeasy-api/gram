@@ -25,7 +25,11 @@ export function ProjectDashboard() {
   const to = useMemo(() => new Date(), []);
   const from = useMemo(() => subDays(to, 7), [to]);
 
-  const { data: featuresData, isPending: isFeaturesPending } = useFeaturesGet();
+  const {
+    data: featuresData,
+    isPending: isFeaturesPending,
+    isError: isFeaturesError,
+  } = useFeaturesGet();
   const logsEnabled = featuresData?.logsEnabled === true;
 
   const { data: overview, isPending: isOverviewPending } =
@@ -35,8 +39,9 @@ export function ProjectDashboard() {
       { enabled: logsEnabled },
     );
 
+  const featuresSettled = !isFeaturesPending || isFeaturesError;
   const isOverviewLoading =
-    isFeaturesPending || (logsEnabled && isOverviewPending);
+    !featuresSettled || (logsEnabled && isOverviewPending);
 
   const { data: auditLogsData, isPending: isAuditLogsPending } = useAuditLogs({
     projectSlug,
@@ -55,7 +60,8 @@ export function ProjectDashboard() {
     overview?.summary?.activeServersCount === 0 &&
     overview?.summary?.totalToolCalls === 0;
 
-  const showDisabledBanner = !isFeaturesPending && !logsEnabled;
+  const showDisabledBanner =
+    !isFeaturesPending && !isFeaturesError && !logsEnabled;
 
   return (
     <Page.Section>
@@ -79,9 +85,11 @@ export function ProjectDashboard() {
             <ProjectOnboardingBanner />
           )}
 
-          {showDisabledBanner ? (
+          {showDisabledBanner && (
             <LoggingDisabledBanner settingsHref={orgRoutes.logs.href()} />
-          ) : (
+          )}
+
+          {logsEnabled && (
             <>
               {/* Row 0: KPI Cards */}
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -246,13 +254,14 @@ export function ProjectDashboard() {
                   )}
                 </DashboardCard>
               </div>
-              <ActivityTimelineCard
-                logs={recentLogs}
-                isPending={isAuditLogsPending}
-                viewAllHref={orgRoutes.auditLogs.href()}
-              />
             </>
           )}
+
+          <ActivityTimelineCard
+            logs={recentLogs}
+            isPending={isAuditLogsPending}
+            viewAllHref={orgRoutes.auditLogs.href()}
+          />
         </div>
       </Page.Section.Body>
     </Page.Section>

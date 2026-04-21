@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/dot-table";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,6 +31,14 @@ export function CatalogRoot() {
 }
 
 export default function Catalog() {
+  return (
+    <RequireScope scope={["build:read", "mcp:write"]} level="page">
+      <CatalogInner />
+    </RequireScope>
+  );
+}
+
+function CatalogInner() {
   const routes = useRoutes();
   const project = useProject();
   const [searchQuery, setSearchQuery] = useState("");

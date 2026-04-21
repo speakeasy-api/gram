@@ -1068,9 +1068,9 @@ function OAuthStatusDisplay({
   }
 
   return (
-    <div className="rounded-lg border border-dashed p-4 text-center">
-      <p className="text-muted-foreground mb-1">
-        <Shield className="text-muted-foreground mx-auto mb-1 h-5 w-5" />
+    <div className="rounded-lg border border-dashed px-6 py-8 text-center">
+      <Shield className="text-muted-foreground mx-auto mb-3 h-6 w-6" />
+      <p className="text-muted-foreground mb-2 font-medium">
         OAuth is not applicable
       </p>
       {!mcpEnabled ? (
@@ -1078,17 +1078,12 @@ function OAuthStatusDisplay({
           Enable the MCP server to configure OAuth.
         </p>
       ) : (
-        <>
-          <p className="text-muted-foreground text-sm">
-            OAuth cannot be configured because there are no tools in this server
-            that require OAuth authentication.
-          </p>
-          <p className="text-muted-foreground text-sm">
-            OAuth is available for public MCP servers that have at least one
-            tool requiring OAuth authentication, or private servers (using
-            Speakeasy as an auth provider).
-          </p>
-        </>
+        <p className="text-muted-foreground mx-auto max-w-lg text-sm">
+          OAuth cannot be configured because there are no tools in this server
+          that require OAuth authentication. OAuth is available for public MCP
+          servers that have at least one tool requiring OAuth authentication, or
+          private servers (using Speakeasy as an auth provider).
+        </p>
       )}
     </div>
   );
