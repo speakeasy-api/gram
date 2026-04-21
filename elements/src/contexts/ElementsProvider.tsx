@@ -487,6 +487,11 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     [
       config.languageModel,
       config.tools?.toolsRequiringApproval,
+      config.tools?.maxOutputBytes,
+      config.contextCompaction?.disabled,
+      config.contextCompaction?.maxTokens,
+      config.contextCompaction?.compactAtFraction,
+      config.contextCompaction?.keepRecent,
       model,
       systemPrompt,
       mcpTools,
