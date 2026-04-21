@@ -763,7 +763,7 @@ func (s *Service) createPluginAPIKey(ctx context.Context, ac *contextvalues.Auth
 		return "", fmt.Errorf("hash key: %w", err)
 	}
 
-	keyName := fmt.Sprintf("plugins-%s", time.Now().UTC().Format("20060102-150405"))
+	keyName := fmt.Sprintf("plugins-%s-%s", time.Now().UTC().Format("20060102-150405"), token[:6])
 	scopes := []string{auth.APIKeyScopeConsumer.String()}
 	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
 

@@ -2,14 +2,19 @@ package plugins_test
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -480,4 +485,168 @@ func TestPluginsService_PublishPlugins_WithCollaborator(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, mock.addCollaboratorCalled)
+}
+
+func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Key Test"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "key-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Key Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	// Verify a key was created with consumer scope.
+	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+
+	var pluginKey *keysrepo.ApiKey
+	for i := range keys {
+		if strings.HasPrefix(keys[i].Name, "plugins-") {
+			pluginKey = &keys[i]
+			break
+		}
+	}
+	require.NotNil(t, pluginKey, "expected a plugins-* API key to be created")
+	require.Contains(t, pluginKey.Scopes, "consumer")
+	require.True(t, strings.HasPrefix(pluginKey.KeyPrefix, "gram_local_"))
+
+	// Verify the key is injected into the pushed MCP config.
+	mcpJSON := mock.lastPushedFiles["key-test/.mcp.json"]
+	require.NotNil(t, mcpJSON)
+	require.Contains(t, string(mcpJSON), "gram_local_")
+	require.NotContains(t, string(mcpJSON), "user_config")
+}
+
+func TestPluginsService_PublishPlugins_RePublishCreatesAdditionalKey(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Republish Test"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "republish-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Republish Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	// Publish twice.
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	// Count plugin keys — currently creates one per publish (known issue).
+	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+
+	count := 0
+	for _, k := range keys {
+		if strings.HasPrefix(k.Name, "plugins-") {
+			count++
+		}
+	}
+	// Documents the current behavior: each publish creates a new key.
+	// A future improvement should revoke the previous key first.
+	require.Equal(t, 2, count, "expected 2 plugin keys after 2 publishes")
+}
+
+func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Public Test"})
+	require.NoError(t, err)
+
+	// Create a toolset and make it public.
+	toolset := createTestToolset(t, ctx, ti.conn, "public-toolset")
+	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	// Create MCP metadata + environment config for the public toolset.
+	mcpRepo := mcpmetarepo.New(ti.conn)
+	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
+		ToolsetID:                 toolset.ID,
+		ProjectID:                 *authCtx.ProjectID,
+		ExternalDocumentationUrl:  pgtype.Text{Valid: false},
+		ExternalDocumentationText: pgtype.Text{Valid: false},
+		LogoID:                    uuid.NullUUID{Valid: false},
+		Instructions:              pgtype.Text{Valid: false},
+		DefaultEnvironmentID:      uuid.NullUUID{Valid: false},
+		InstallationOverrideUrl:   pgtype.Text{Valid: false},
+	})
+	require.NoError(t, err)
+
+	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
+		ProjectID:         *authCtx.ProjectID,
+		McpMetadataID:     metadata.ID,
+		VariableName:      "ANALYTICS_API_KEY",
+		HeaderDisplayName: pgtype.Text{String: "Authorization", Valid: true},
+		ProvidedBy:        "user",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Public Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	// Verify the Cursor config uses ${env:ANALYTICS_API_KEY} for the public server.
+	cursorMCP := mock.lastPushedFiles["public-test-cursor/mcp.json"]
+	require.NotNil(t, cursorMCP)
+
+	var cursorConfig struct {
+		MCPServers map[string]struct {
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	err = json.Unmarshal(cursorMCP, &cursorConfig)
+	require.NoError(t, err)
+
+	server, ok := cursorConfig.MCPServers["Public Server"]
+	require.True(t, ok)
+	require.Equal(t, "${env:ANALYTICS_API_KEY}", server.Headers["Authorization"])
+
+	// Verify the Claude config uses ${user_config.ANALYTICS_API_KEY}.
+	claudeMCP := mock.lastPushedFiles["public-test/.mcp.json"]
+	require.NotNil(t, claudeMCP)
+	require.Contains(t, string(claudeMCP), "${user_config.ANALYTICS_API_KEY}")
+
+	// Verify NO Gram API key is injected for public servers.
+	require.NotContains(t, string(cursorMCP), "gram_local_")
 }
