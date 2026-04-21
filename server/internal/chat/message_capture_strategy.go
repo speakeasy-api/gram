@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
@@ -364,7 +365,15 @@ func buildAssistantRows(
 	parentHash []byte,
 	generation int32,
 ) []repo.CreateChatMessageParams {
-	hasText := response.Content != ""
+	// Whitespace-only content is treated as "no text" to stay in sync with
+	// NormalizeAssistantMessages, which trims before deciding whether to split
+	// a replayed combined message. Any divergence here would hash the stored
+	// rows against a different incoming shape and bump generation every turn.
+	content := response.Content
+	if strings.TrimSpace(content) == "" {
+		content = ""
+	}
+	hasText := content != ""
 	hasTools := len(toolCallsJSON) > 0
 
 	base := repo.CreateChatMessageParams{
@@ -400,8 +409,8 @@ func buildAssistantRows(
 
 	if hasText && hasTools {
 		text := base
-		text.Content = response.Content
-		text.ContentHash = hashAssistantResponse(parentHash, response.Content)
+		text.Content = content
+		text.ContentHash = hashAssistantResponse(parentHash, content)
 
 		tools := base
 		tools.ToolCalls = toolCallsJSON
@@ -415,13 +424,13 @@ func buildAssistantRows(
 	}
 
 	only := base
-	only.Content = response.Content
+	only.Content = content
 	only.ToolCalls = toolCallsJSON
 	only.FinishReason = finishReason
 	only.PromptTokens = promptTokens
 	only.CompletionTokens = completionTokens
 	only.TotalTokens = totalTokens
-	only.ContentHash = hashAssistantResponse(parentHash, response.Content)
+	only.ContentHash = hashAssistantResponse(parentHash, content)
 
 	return []repo.CreateChatMessageParams{only}
 }

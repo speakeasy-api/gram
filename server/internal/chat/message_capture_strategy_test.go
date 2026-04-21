@@ -255,3 +255,46 @@ func TestCaptureMessage_SplitsAssistantResponseWithBothTextAndToolCalls(t *testi
 
 	require.NotEqual(t, text.ContentHash, tools.ContentHash, "chained hashes differ")
 }
+
+// Whitespace-only content must be treated as "no text" on both sides of the
+// normalize/capture boundary. Storing 2 rows for whitespace + tools would make
+// the replay match (which sees 1 tool-only message after normalization) diverge
+// and bump generation every turn.
+func TestCaptureMessage_WhitespaceOnlyContentWithToolCallsStoresSingleRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, orgID := newTestChatContext(t)
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	req := makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("Check weather"))
+	resp := openrouter.CompletionResponse{
+		Content:   "   \n\t",
+		Model:     "test-model",
+		MessageID: "msg-ws",
+		ToolCalls: []openrouter.ToolCall{{
+			Index: 0,
+			ID:    "tool_abc",
+			Type:  "function",
+			Function: openrouter.ToolCallFunction{
+				Name:      "get_weather",
+				Arguments: `{"city":"SF"}`,
+			},
+		}},
+		Usage: openrouter.Usage{
+			PromptTokens:     10,
+			CompletionTokens: 5,
+			TotalTokens:      15,
+		},
+	}
+
+	runTurn(t, ctx, s, req, resp)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	require.Len(t, rows, 2, "whitespace-only content collapses into the tool row")
+	require.Equal(t, []string{"user", "assistant"}, roles(rows))
+
+	tools := rows[1]
+	require.Empty(t, tools.Content, "stored Content is empty, not the whitespace")
+	require.NotEmpty(t, tools.ToolCalls)
+}
