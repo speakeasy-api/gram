@@ -192,6 +192,13 @@ ${contextInfo}
 When the user asks about "current period", "selected period", "this timeframe", or similar, use the date range from the context above. Do not ask the user to specify a date range if it's already provided in the context.`
     : baseInstructions;
 
+  // New config identity on every override change is intentional: clicking
+  // "Explore with AI" on a different chart should drop the user into a fresh,
+  // focused conversation with the new contextInfo, not splice a new system
+  // prompt into an in-flight thread from a different chart. If we ever want
+  // to preserve threads across Explore clicks, split transport config
+  // (mcpConfig/model/theme) from presentation config (systemPrompt/welcome)
+  // inside GramElementsProvider so only the transport piece is stable.
   const elementsConfig = useMemo<ElementsConfig>(
     () => ({
       ...mcpConfig,
