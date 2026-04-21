@@ -23,6 +23,7 @@ const (
 	FilePathKey                       = semconv.FilePathKey
 	HostNameKey                       = semconv.HostNameKey
 	HTTPRefererHostKey                = attribute.Key("http.request.referer_host")
+	HTTPRequestIDKey                  = attribute.Key("http.request_id")
 	HTTPRequestHeaderRefererKey       = attribute.Key("http.request.header.referer")
 	HTTPRequestHeaderContentTypeKey   = attribute.Key("http.request.header.content_type")
 	HTTPRequestHeaderUserAgentKey     = attribute.Key("http.request.header.user_agent")
@@ -313,6 +314,13 @@ func SlogHostName(v string) slog.Attr      { return slog.String(string(HostNameK
 
 func HTTPReferrerHost(v string) attribute.KeyValue { return HTTPRefererHostKey.String(v) }
 func SlogHTTPReferrerHost(v string) slog.Attr      { return slog.String(string(HTTPRefererHostKey), v) }
+
+func HTTPRequestID(v string) attribute.KeyValue {
+	return HTTPRequestIDKey.String(v)
+}
+func SlogHTTPRequestID(v string) slog.Attr {
+	return slog.String(string(HTTPRequestIDKey), v)
+}
 
 func HTTPRequestHeaderReferer(v string) attribute.KeyValue {
 	return HTTPRequestHeaderRefererKey.String(v)

@@ -26,6 +26,7 @@ type AuthContext struct {
 }
 
 type RequestContext struct {
+	ReqID       string
 	ReqURL      string
 	Host        string
 	Method      string
