@@ -6,7 +6,7 @@ export function useExpandedChart() {
   useEffect(() => {
     if (!expandedChart) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setExpandedChart(null);
+      if (e.key === "Escape" && !e.defaultPrevented) setExpandedChart(null);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
