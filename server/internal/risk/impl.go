@@ -418,6 +418,43 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 	return s.listResultsByProject(ctx, *authCtx.ProjectID, limit)
 }
 
+func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	rawLimit := payload.Limit
+	if rawLimit <= 0 || rawLimit > 100 {
+		rawLimit = 10
+	}
+
+	rows, err := s.repo.ListRiskResultsGroupedByChat(ctx, repo.ListRiskResultsGroupedByChatParams{
+		ProjectID:   *authCtx.ProjectID,
+		ResultLimit: int32(rawLimit),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").Log(ctx, s.logger)
+	}
+
+	chats := make([]*types.RiskChatSummary, 0, len(rows))
+	for _, row := range rows {
+		chats = append(chats, &types.RiskChatSummary{
+			ChatID:         row.ChatID.String(),
+			ChatTitle:      conv.FromPGText[string](row.ChatTitle),
+			UserID:         conv.FromPGText[string](row.ChatUserID),
+			FindingsCount:  row.FindingsCount,
+			LatestDetected: row.LatestDetected.Time.Format(time.RFC3339),
+		})
+	}
+
+	return &gen.ListRiskResultsByChatResult{Chats: chats}, nil
+}
+
 func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, rawChatID string, limit int32) (*gen.ListRiskResultsResult, error) {
 	chatID, err := uuid.Parse(rawChatID)
 	if err != nil {
@@ -434,7 +471,7 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 	results := make([]*types.RiskResult, 0, len(rows))
 	for _, row := range rows {
 		cid := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &cid, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 	}
 	return &gen.ListRiskResultsResult{Results: results}, nil
 }
@@ -455,7 +492,7 @@ func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, 
 	results := make([]*types.RiskResult, 0, len(rows))
 	for _, row := range rows {
 		chatID := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 	}
 	return &gen.ListRiskResultsResult{Results: results}, nil
 }
@@ -471,7 +508,7 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 	results := make([]*types.RiskResult, 0, len(rows))
 	for _, row := range rows {
 		chatID := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 	}
 	return &gen.ListRiskResultsResult{Results: results}, nil
 }
@@ -649,7 +686,7 @@ func validatePolicyName(name string) error {
 }
 
 func foundRowToResult(
-	id, policyID uuid.UUID, policyVersion int64, chatMessageID uuid.UUID, chatID *string, chatTitle pgtype.Text,
+	id, policyID uuid.UUID, policyVersion int64, chatMessageID uuid.UUID, chatID *string, chatTitle, chatUserID pgtype.Text,
 	source string, ruleID, description, match pgtype.Text,
 	startPos, endPos pgtype.Int4,
 	confidence pgtype.Float8, tags []string, createdAt pgtype.Timestamptz,
@@ -661,6 +698,7 @@ func foundRowToResult(
 		ChatMessageID: chatMessageID.String(),
 		ChatID:        chatID,
 		ChatTitle:     conv.FromPGText[string](chatTitle),
+		UserID:        conv.FromPGText[string](chatUserID),
 		Source:        source,
 		RuleID:        conv.FromPGText[string](ruleID),
 		Description:   conv.FromPGText[string](description),

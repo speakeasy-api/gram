@@ -186,6 +186,34 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResults"}`)
 	})
 
+	Method("listRiskResultsByChat", func() {
+		Description("List risk results grouped by chat session for the current project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("limit", Int, "Maximum number of chats to return.", func() {
+				Default(10)
+			})
+		})
+
+		Result(ListRiskResultsByChatResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.results.byChat")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("limit")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskResultsByChat")
+		Meta("openapi:extension:x-speakeasy-name-override", "listResultsByChat")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResultsByChat"}`)
+	})
+
 	Method("getRiskPolicyStatus", func() {
 		Description("Get the analysis status of a risk policy including progress and workflow state.")
 
@@ -248,4 +276,9 @@ var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {
 var ListRiskResultsResult = Type("ListRiskResultsResult", func() {
 	Attribute("results", ArrayOf(shared.RiskResult), "The list of risk results.")
 	Required("results")
+})
+
+var ListRiskResultsByChatResult = Type("ListRiskResultsByChatResult", func() {
+	Attribute("chats", ArrayOf(shared.RiskChatSummary), "Risk results grouped by chat.")
+	Required("chats")
 })

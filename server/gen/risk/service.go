@@ -29,6 +29,8 @@ type Service interface {
 	DeleteRiskPolicy(context.Context, *DeleteRiskPolicyPayload) (err error)
 	// List risk analysis results for the current project.
 	ListRiskResults(context.Context, *ListRiskResultsPayload) (res *ListRiskResultsResult, err error)
+	// List risk results grouped by chat session for the current project.
+	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
 	// Get the analysis status of a risk policy including progress and workflow
 	// state.
 	GetRiskPolicyStatus(context.Context, *GetRiskPolicyStatusPayload) (res *types.RiskPolicyStatus, err error)
@@ -57,7 +59,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "getRiskPolicyStatus", "triggerRiskAnalysis"}
+var MethodNames = [9]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskPolicyStatus", "triggerRiskAnalysis"}
 
 // CreateRiskPolicyPayload is the payload type of the risk service
 // createRiskPolicy method.
@@ -116,6 +118,23 @@ type ListRiskPoliciesPayload struct {
 type ListRiskPoliciesResult struct {
 	// The list of risk policies.
 	Policies []*types.RiskPolicy
+}
+
+// ListRiskResultsByChatPayload is the payload type of the risk service
+// listRiskResultsByChat method.
+type ListRiskResultsByChatPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Maximum number of chats to return.
+	Limit int
+}
+
+// ListRiskResultsByChatResult is the result type of the risk service
+// listRiskResultsByChat method.
+type ListRiskResultsByChatResult struct {
+	// Risk results grouped by chat.
+	Chats []*types.RiskChatSummary
 }
 
 // ListRiskResultsPayload is the payload type of the risk service

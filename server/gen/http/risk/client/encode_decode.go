@@ -1458,6 +1458,248 @@ func DecodeListRiskResultsResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildListRiskResultsByChatRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "listRiskResultsByChat"
+// endpoint
+func (c *Client) BuildListRiskResultsByChatRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListRiskResultsByChatRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "listRiskResultsByChat", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListRiskResultsByChatRequest returns an encoder for requests sent to
+// the risk listRiskResultsByChat server.
+func EncodeListRiskResultsByChatRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.ListRiskResultsByChatPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "listRiskResultsByChat", "*risk.ListRiskResultsByChatPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListRiskResultsByChatResponse returns a decoder for responses returned
+// by the risk listRiskResultsByChat endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListRiskResultsByChatResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListRiskResultsByChatResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListRiskResultsByChatResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsByChat", err)
+			}
+			err = ValidateListRiskResultsByChatResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsByChat", err)
+			}
+			res := NewListRiskResultsByChatResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListRiskResultsByChatUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsByChat", err)
+			}
+			err = ValidateListRiskResultsByChatUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsByChat", err)
+			}
+			return nil, NewListRiskResultsByChatUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListRiskResultsByChatForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsByChat", err)
+			}
+			err = ValidateListRiskResultsByChatForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsByChat", err)
+			}
+			return nil, NewListRiskResultsByChatForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListRiskResultsByChatBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsByChat", err)
+			}
+			err = ValidateListRiskResultsByChatBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsByChat", err)
+			}
+			return nil, NewListRiskResultsByChatBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListRiskResultsByChatNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsByChat", err)
+			}
+			err = ValidateListRiskResultsByChatNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsByChat", err)
+			}
+			return nil, NewListRiskResultsByChatNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListRiskResultsByChatConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsByChat", err)
+			}
+			err = ValidateListRiskResultsByChatConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsByChat", err)
+			}
+			return nil, NewListRiskResultsByChatConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListRiskResultsByChatUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsByChat", err)
+			}
+			err = ValidateListRiskResultsByChatUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsByChat", err)
+			}
+			return nil, NewListRiskResultsByChatUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListRiskResultsByChatInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsByChat", err)
+			}
+			err = ValidateListRiskResultsByChatInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsByChat", err)
+			}
+			return nil, NewListRiskResultsByChatInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListRiskResultsByChatInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listRiskResultsByChat", err)
+				}
+				err = ValidateListRiskResultsByChatInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listRiskResultsByChat", err)
+				}
+				return nil, NewListRiskResultsByChatInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListRiskResultsByChatUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listRiskResultsByChat", err)
+				}
+				err = ValidateListRiskResultsByChatUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listRiskResultsByChat", err)
+				}
+				return nil, NewListRiskResultsByChatUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "listRiskResultsByChat", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListRiskResultsByChatGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsByChat", err)
+			}
+			err = ValidateListRiskResultsByChatGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsByChat", err)
+			}
+			return nil, NewListRiskResultsByChatGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "listRiskResultsByChat", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetRiskPolicyStatusRequest instantiates a HTTP request object with
 // method and path set to call the "risk" service "getRiskPolicyStatus" endpoint
 func (c *Client) BuildGetRiskPolicyStatusRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1960,6 +2202,7 @@ func unmarshalRiskResultResponseBodyToTypesRiskResult(v *RiskResultResponseBody)
 		ChatMessageID: *v.ChatMessageID,
 		ChatID:        v.ChatID,
 		ChatTitle:     v.ChatTitle,
+		UserID:        v.UserID,
 		Source:        *v.Source,
 		RuleID:        v.RuleID,
 		Description:   v.Description,
@@ -1974,6 +2217,21 @@ func unmarshalRiskResultResponseBodyToTypesRiskResult(v *RiskResultResponseBody)
 		for i, val := range v.Tags {
 			res.Tags[i] = val
 		}
+	}
+
+	return res
+}
+
+// unmarshalRiskChatSummaryResponseBodyToTypesRiskChatSummary builds a value of
+// type *types.RiskChatSummary from a value of type
+// *RiskChatSummaryResponseBody.
+func unmarshalRiskChatSummaryResponseBodyToTypesRiskChatSummary(v *RiskChatSummaryResponseBody) *types.RiskChatSummary {
+	res := &types.RiskChatSummary{
+		ChatID:         *v.ChatID,
+		ChatTitle:      v.ChatTitle,
+		UserID:         v.UserID,
+		FindingsCount:  *v.FindingsCount,
+		LatestDetected: *v.LatestDetected,
 	}
 
 	return res

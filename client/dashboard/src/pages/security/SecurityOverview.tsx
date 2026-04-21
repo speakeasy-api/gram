@@ -16,6 +16,7 @@ import { useState } from "react";
 import {
   useRiskListResults,
   useRiskListPolicies,
+  useRiskListResultsByChat,
 } from "@gram/client/react-query/index.js";
 import { RULE_CATEGORY_META } from "./policy-data";
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
@@ -35,13 +36,16 @@ function SecurityOverviewContent() {
   const { data: policiesData, isLoading: policiesLoading } =
     useRiskListPolicies();
   const { data: resultsData, isLoading: resultsLoading } = useRiskListResults({
-    limit: 500,
+    limit: 10,
   });
+  const { data: chatSummaryData, isLoading: chatSummaryLoading } =
+    useRiskListResultsByChat({ limit: 10 });
 
   const policies = policiesData?.policies ?? [];
   const results = resultsData?.results ?? [];
+  const recentChats = chatSummaryData?.chats ?? [];
 
-  const isLoading = policiesLoading || resultsLoading;
+  const isLoading = policiesLoading || resultsLoading || chatSummaryLoading;
 
   if (isLoading) {
     return (
@@ -124,58 +128,108 @@ function SecurityOverviewContent() {
             </div>
           </div>
 
-          {results.length > 0 ? (
-            <div className="mt-6">
-              <h3 className="mb-2 text-sm font-semibold">Recent Findings</h3>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Rule</TableHead>
-                    <TableHead>Chat</TableHead>
-                    <TableHead>Match</TableHead>
-                    <TableHead>Detected</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {results.map((result) => (
-                    <TableRow
-                      key={result.id}
-                      className="cursor-pointer"
-                      onClick={() => {
-                        if (result.chatId) {
-                          setSelectedChatId(result.chatId);
-                        }
-                      }}
-                    >
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {RULE_CATEGORY_META.secrets.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {result.ruleId ?? "-"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground max-w-[200px] truncate text-xs">
-                        {result.chatTitle ?? "Untitled"}
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate font-mono text-xs">
-                        {result.match
-                          ? result.match.length > 40
-                            ? `${result.match.slice(0, 20)}...${result.match.slice(-10)}`
-                            : result.match
-                          : "-"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-xs">
-                        {result.createdAt
-                          ? new Date(result.createdAt).toLocaleString()
-                          : "-"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+          {recentChats.length > 0 || results.length > 0 ? (
+            <>
+              {recentChats.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="mb-2 text-sm font-semibold">Recent Chats</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Chat</TableHead>
+                        <TableHead>User</TableHead>
+                        <TableHead>Findings</TableHead>
+                        <TableHead>Latest Detected</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recentChats.map((chat) => (
+                        <TableRow
+                          key={chat.chatId}
+                          className="cursor-pointer"
+                          onClick={() => setSelectedChatId(chat.chatId)}
+                        >
+                          <TableCell className="text-muted-foreground max-w-[300px] truncate text-xs">
+                            {chat.chatTitle ?? "Untitled"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-xs">
+                            {chat.userId ?? "-"}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {chat.findingsCount}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-xs">
+                            {chat.latestDetected
+                              ? new Date(chat.latestDetected).toLocaleString()
+                              : "-"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {results.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="mb-2 text-sm font-semibold">
+                    Recent Findings
+                  </h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Rule</TableHead>
+                        <TableHead>Chat</TableHead>
+                        <TableHead>User</TableHead>
+                        <TableHead>Match</TableHead>
+                        <TableHead>Detected</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {results.map((result) => (
+                        <TableRow
+                          key={result.id}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            if (result.chatId) {
+                              setSelectedChatId(result.chatId);
+                            }
+                          }}
+                        >
+                          <TableCell>
+                            <Badge variant="secondary">
+                              {RULE_CATEGORY_META.secrets.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {result.ruleId ?? "-"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground max-w-[200px] truncate text-xs">
+                            {result.chatTitle ?? "Untitled"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-xs">
+                            {result.userId ?? "-"}
+                          </TableCell>
+                          <TableCell className="max-w-xs truncate font-mono text-xs">
+                            {result.match
+                              ? result.match.length > 40
+                                ? `${result.match.slice(0, 20)}...${result.match.slice(-10)}`
+                                : result.match
+                              : "-"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-xs">
+                            {result.createdAt
+                              ? new Date(result.createdAt).toLocaleString()
+                              : "-"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </>
           ) : (
             <div className="mt-8 text-center">
               <p className="text-muted-foreground text-sm">

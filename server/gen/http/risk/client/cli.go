@@ -284,6 +284,48 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	return v, nil
 }
 
+// BuildListRiskResultsByChatPayload builds the payload for the risk
+// listRiskResultsByChat endpoint from CLI flags.
+func BuildListRiskResultsByChatPayload(riskListRiskResultsByChatLimit string, riskListRiskResultsByChatApikeyToken string, riskListRiskResultsByChatSessionToken string, riskListRiskResultsByChatProjectSlugInput string) (*risk.ListRiskResultsByChatPayload, error) {
+	var err error
+	var limit int
+	{
+		if riskListRiskResultsByChatLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(riskListRiskResultsByChatLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskListRiskResultsByChatApikeyToken != "" {
+			apikeyToken = &riskListRiskResultsByChatApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListRiskResultsByChatSessionToken != "" {
+			sessionToken = &riskListRiskResultsByChatSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListRiskResultsByChatProjectSlugInput != "" {
+			projectSlugInput = &riskListRiskResultsByChatProjectSlugInput
+		}
+	}
+	v := &risk.ListRiskResultsByChatPayload{}
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetRiskPolicyStatusPayload builds the payload for the risk
 // getRiskPolicyStatus endpoint from CLI flags.
 func BuildGetRiskPolicyStatusPayload(riskGetRiskPolicyStatusID string, riskGetRiskPolicyStatusApikeyToken string, riskGetRiskPolicyStatusSessionToken string, riskGetRiskPolicyStatusProjectSlugInput string) (*risk.GetRiskPolicyStatusPayload, error) {
