@@ -1,13 +1,14 @@
 import { DotCard } from "@/components/ui/dot-card";
 import { DotRow } from "@/components/ui/dot-row";
 import { DotTable } from "@/components/ui/dot-table";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
-import { ViewToggle, useViewMode } from "@/components/ui/view-toggle";
-import { useRoutes } from "@/routes";
-import type { SkillEntry } from "@gram/client/models/components";
-import { useListSkills } from "@gram/client/react-query";
 import { Icon } from "@speakeasy-api/moonshine";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { SkillEntry } from "@gram/client/models/components";
+import { Type } from "@/components/ui/type";
+import { ViewToggle } from "@/components/ui/view-toggle";
+import { useListSkills } from "@gram/client/react-query";
+import { useRoutes } from "@/routes";
+import { useViewMode } from "@/components/ui/use-view-mode";
 
 export default function SkillsRegistry() {
   const [viewMode, setViewMode] = useViewMode();
