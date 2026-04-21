@@ -684,7 +684,8 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			return oops.E(
 				oops.CodeRequestTooLarge,
 				nil,
-				fmt.Sprintf("tool message %d exceeds %d bytes; truncate tool output client-side", i, maxToolMessageBytes),
+				"tool message %d exceeds %d bytes; truncate tool output client-side",
+				i, maxToolMessageBytes,
 			).Log(ctx, s.logger)
 		}
 	}
