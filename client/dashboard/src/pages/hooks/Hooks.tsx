@@ -41,6 +41,7 @@ import type {
 import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
+import { ChartCard } from "@/components/chart/ChartCard";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { formatChartLabel } from "@/components/chart/chartUtils";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
