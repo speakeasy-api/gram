@@ -215,10 +215,11 @@ const (
 	VisibilityKey                  = attribute.Key("gram.visibility")
 
 	// Hooks
-	HookEventKey       = attribute.Key("gram.hook.event")
-	HookErrorKey       = attribute.Key("gram.hook.error")
-	HookIsInterruptKey = attribute.Key("gram.hook.is_interrupt")
-	HookSourceKey      = attribute.Key("gram.hook.source")
+	HookEventKey                = attribute.Key("gram.hook.event")
+	HookErrorKey                = attribute.Key("gram.hook.error")
+	HookIsInterruptKey          = attribute.Key("gram.hook.is_interrupt")
+	HookSourceKey               = attribute.Key("gram.hook.source")
+	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")
 
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")
@@ -275,6 +276,9 @@ const (
 	GenAIEvaluationScoreValueKey  = attribute.Key("gen_ai.evaluation.score.value") // Numeric score (0-100)
 	GenAIEvaluationScoreLabelKey  = attribute.Key("gen_ai.evaluation.score.label") // Low cardinality label (success, failure, partial, abandoned)
 	GenAIEvaluationExplanationKey = attribute.Key("gen_ai.evaluation.explanation") // Free-form explanation
+
+	StatsToolCallCountKey  = attribute.Key("gram.stats.tool_call_count")
+	StatsMCPServerCountKey = attribute.Key("gram.stats.mcp_server_count")
 )
 
 const (
@@ -374,6 +378,13 @@ func HTTPServerRequestDuration(v float64) attribute.KeyValue {
 }
 func SlogHTTPServerRequestDuration(v float64) slog.Attr {
 	return slog.Float64(string(HTTPServerRequestDurationKey), v)
+}
+
+func HookServerNameOverrideID(v string) attribute.KeyValue {
+	return HookServerNameOverrideIDKey.String(v)
+}
+func SlogHookServerNameOverrideID(v string) slog.Attr {
+	return slog.String(string(HookServerNameOverrideIDKey), v)
 }
 
 func ServerAddress(v string) attribute.KeyValue { return ServerAddressKey.String(v) }
@@ -1178,3 +1189,9 @@ func SlogLogSeverityText(v string) slog.Attr      { return slog.String(string(Lo
 
 func LogBody(v string) attribute.KeyValue { return LogBodyKey.String(v) }
 func SlogLogBody(v string) slog.Attr      { return slog.String(string(LogBodyKey), v) }
+
+func StatsToolCallCount(v int) attribute.KeyValue { return StatsToolCallCountKey.Int(v) }
+func SlogStatsToolCallCount(v int) slog.Attr      { return slog.Int(string(StatsToolCallCountKey), v) }
+
+func StatsMCPServerCount(v int) attribute.KeyValue { return StatsMCPServerCountKey.Int(v) }
+func SlogStatsMCPServerCount(v int) slog.Attr      { return slog.Int(string(StatsMCPServerCountKey), v) }
