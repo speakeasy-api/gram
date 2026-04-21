@@ -150,7 +150,7 @@ export function SkillDetailRoot() {
 }
 
 export function SkillDefinitionPage() {
-  const { skill, activeVersion, versionCount } = useSkillDetail();
+  const { skill, activeVersion } = useSkillDetail();
 
   return (
     <section className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,320px)]">
