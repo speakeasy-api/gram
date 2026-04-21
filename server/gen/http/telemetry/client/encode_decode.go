@@ -3794,6 +3794,7 @@ func unmarshalHooksTimeSeriesPointResponseBodyToTelemetryHooksTimeSeriesPoint(v 
 		ServerName:    *v.ServerName,
 		UserEmail:     *v.UserEmail,
 		EventCount:    *v.EventCount,
+		FailureCount:  *v.FailureCount,
 	}
 
 	return res

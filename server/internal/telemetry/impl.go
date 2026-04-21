@@ -37,18 +37,19 @@ import (
 const logsDisabledMsg = "logs are not enabled for this organization"
 
 type Service struct {
-	auth         *auth.Auth
-	db           *pgxpool.Pool
-	chatRepo     *chatRepo.Queries
-	hooksRepo    *hooksRepo.Queries
-	chConn       clickhouse.Conn
-	chRepo       *repo.Queries
-	logger       *slog.Logger
-	tracer       trace.Tracer
-	posthog      PosthogClient
-	chatSessions *chatsessions.Manager
-	logsEnabled  FeatureChecker
-	access       *access.Manager
+	auth                  *auth.Auth
+	db                    *pgxpool.Pool
+	chatRepo              *chatRepo.Queries
+	hooksRepo             *hooksRepo.Queries
+	chConn                clickhouse.Conn
+	chRepo                *repo.Queries
+	logger                *slog.Logger
+	tracer                trace.Tracer
+	posthog               PosthogClient
+	chatSessions          *chatsessions.Manager
+	logsEnabled           FeatureChecker
+	sessionCaptureEnabled FeatureChecker
+	access                *access.Manager
 }
 
 var _ telem_gen.Service = (*Service)(nil)
@@ -63,6 +64,7 @@ func NewService(
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
 	logsEnabled FeatureChecker,
+	sessionCaptureEnabled FeatureChecker,
 	posthogClient PosthogClient,
 	accessManager *access.Manager,
 ) *Service {
@@ -78,18 +80,19 @@ func NewService(
 	}
 
 	return &Service{
-		auth:         a,
-		db:           db,
-		chatRepo:     chatRepo.New(db),
-		hooksRepo:    hooksRepo.New(db),
-		chConn:       chConn,
-		chRepo:       chRepo,
-		logger:       logger,
-		logsEnabled:  logsEnabled,
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
-		posthog:      posthogClient,
-		chatSessions: chatSessions,
-		access:       accessManager,
+		auth:                  a,
+		db:                    db,
+		chatRepo:              chatRepo.New(db),
+		hooksRepo:             hooksRepo.New(db),
+		chConn:                chConn,
+		chRepo:                chRepo,
+		logger:                logger,
+		logsEnabled:           logsEnabled,
+		sessionCaptureEnabled: sessionCaptureEnabled,
+		tracer:                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
+		posthog:               posthogClient,
+		chatSessions:          chatSessions,
+		access:                accessManager,
 	}
 }
 
@@ -944,17 +947,13 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	comparisonStartPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonStart), Valid: true, InfinityModifier: pgtype.Finite}
 	comparisonEndPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonEnd), Valid: true, InfinityModifier: pgtype.Finite}
 
-	// Determine metrics mode: Check if there are chat sessions in PostgreSQL
-	sessionCount, err := s.chatRepo.GetChatSessionCount(ctx, chatRepo.GetChatSessionCountParams{
-		ProjectID: *authCtx.ProjectID,
-		TimeStart: timeStartPG,
-		TimeEnd:   timeEndPG,
-	})
+	// Determine metrics mode: Check if session capture is enabled
+	sessionCaptureEnabled, err := s.sessionCaptureEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error checking session count")
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if session capture is enabled")
 	}
 
-	sessionMode := sessionCount > 0
+	sessionMode := sessionCaptureEnabled
 	metricsMode := "tool_call"
 	if sessionMode {
 		metricsMode = "session"
@@ -1684,7 +1683,8 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 			BucketStartNs: strconv.FormatInt(pt.BucketStartNs, 10),
 			ServerName:    pt.ServerName,
 			UserEmail:     pt.UserEmail,
-			EventCount:    int64(pt.EventCount), //nolint:gosec // Bounded count
+			EventCount:    int64(pt.EventCount),   //nolint:gosec // Bounded count
+			FailureCount:  int64(pt.FailureCount), //nolint:gosec // Bounded count
 		})
 	}
 
