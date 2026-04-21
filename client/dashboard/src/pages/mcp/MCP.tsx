@@ -130,10 +130,22 @@ export function MCPOverview() {
     return (
       <>
         {isProjectEmpty ? (
-          <InitialChoiceStep
-            routes={routes}
-            isFunctionsEnabled={isFunctionsEnabled}
-          />
+          <>
+            <InitialChoiceStep
+              routes={routes}
+              isFunctionsEnabled={isFunctionsEnabled}
+            />
+            <Page.Section>
+              <Page.Section.Title>
+                Or start with a blank MCP server
+              </Page.Section.Title>
+              <Page.Section.Description>
+                Create an empty MCP server and add built-in tools like MCP Logs
+                to it. You can connect a data source later.
+              </Page.Section.Description>
+              <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
+            </Page.Section>
+          </>
         ) : (
           <MCPEmptyState nonEmptyProjectCTA={newMcpServerButton} />
         )}
