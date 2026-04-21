@@ -916,7 +916,7 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug string) Gen
 
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || ac == nil || ac.ProjectID == nil {
+	if !ok || ac == nil || ac.ProjectID == nil || ac.ProjectSlug == nil {
 		return nil, errors.New("missing auth context")
 	}
 	return ac, nil
