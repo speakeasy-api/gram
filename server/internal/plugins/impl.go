@@ -87,18 +87,6 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
-	var keyEnv string
-	switch env {
-	case "local":
-		keyEnv = "local"
-	case "dev":
-		keyEnv = "test"
-	case "prod":
-		keyEnv = "live"
-	default:
-		keyEnv = "local"
-	}
-
 	return &Service{
 		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/plugins"),
 		logger:    logger,
@@ -108,7 +96,7 @@ func NewService(
 		access:    accessManager,
 		github:    github,
 		serverURL: serverURL,
-		keyPrefix: fmt.Sprintf("gram_%s_", keyEnv),
+		keyPrefix: auth.APIKeyPrefix(env),
 	}
 }
 
