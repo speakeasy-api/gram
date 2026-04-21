@@ -1,4 +1,4 @@
-import { NavButton, NavMenu } from "@/components/nav-menu";
+import { NavButton } from "@/components/nav-menu";
 import { RequireScope } from "@/components/require-scope";
 import {
   Sidebar,
@@ -75,7 +75,12 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarGroup>
           <SidebarGroupLabel>explore</SidebarGroupLabel>
           <SidebarGroupContent>
-            <NavMenu items={[orgRoutes.collections]} />
+            <SidebarMenu>
+              <ScopeGatedNavItem
+                item={orgRoutes.collections}
+                scope="org:admin"
+              />
+            </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
