@@ -2068,6 +2068,7 @@ function HooksAnalytics({
   }, [summaryData]);
 
   const hasServers = (summaryData?.servers.length ?? 0) > 0;
+  const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
   type FilterAxisConfig = Partial<Record<"user" | "server", "dataset" | "row">>;
 
@@ -2174,68 +2175,99 @@ function HooksAnalytics({
         <div
           className={cn(
             "grid gap-4",
-            compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
+            expandedChart
+              ? "grid-cols-1"
+              : compact
+                ? "grid-cols-1"
+                : "grid-cols-1 lg:grid-cols-2",
           )}
         >
-          {timeSeries.length > 0 && (
-            <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-              <h3 className="text font-semibold">Server Usage</h3>
-              <ServerUsageTimeSeries
-                timeSeries={timeSeries}
-                from={from}
-                to={to}
+          {timeSeries.length > 0 &&
+            (!expandedChart || expandedChart === "server-usage") && (
+              <ChartCard
+                title="Server Usage"
+                chartId="server-usage"
+                expandedChart={expandedChart}
+                onExpand={setExpandedChart}
+              >
+                <ServerUsageTimeSeries
+                  timeSeries={timeSeries}
+                  from={from}
+                  to={to}
+                  serverNameMappings={serverNameMappings}
+                  expanded={expandedChart === "server-usage"}
+                />
+              </ChartCard>
+            )}
+          {hasServers &&
+            (!expandedChart || expandedChart === "users-per-server") && (
+              <UsersPerServerChart
+                title="Users per Server"
+                breakdown={breakdown}
                 serverNameMappings={serverNameMappings}
+                handleFilter={makeFilterHandler({
+                  server: "row",
+                  user: "dataset",
+                })}
+                expandedChart={expandedChart}
+                onExpand={setExpandedChart}
               />
-            </div>
-          )}
-          {hasServers && (
-            <UsersPerServerChart
-              title="Users per Server"
-              breakdown={breakdown}
-              serverNameMappings={serverNameMappings}
-              handleFilter={makeFilterHandler({
-                server: "row",
-                user: "dataset",
-              })}
-            />
-          )}
+            )}
 
-          {timeSeries.length > 0 && (
-            <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-              <h3 className="text font-semibold">User Usage</h3>
-              <UserUsageTimeSeries
-                timeSeries={timeSeries}
-                from={from}
-                to={to}
+          {timeSeries.length > 0 &&
+            (!expandedChart || expandedChart === "user-usage") && (
+              <ChartCard
+                title="User Usage"
+                chartId="user-usage"
+                expandedChart={expandedChart}
+                onExpand={setExpandedChart}
+              >
+                <UserUsageTimeSeries
+                  timeSeries={timeSeries}
+                  from={from}
+                  to={to}
+                  expanded={expandedChart === "user-usage"}
+                />
+              </ChartCard>
+            )}
+          {hasServers &&
+            (!expandedChart || expandedChart === "user-event-counts") && (
+              <UserEventCountsChart
+                title="User Event Counts"
+                breakdown={breakdown}
+                handleFilter={makeFilterHandler({ user: "row" })}
+                expandedChart={expandedChart}
+                onExpand={setExpandedChart}
               />
-            </div>
-          )}
-          {hasServers && (
-            <UserEventCountsChart
-              title="User Event Counts"
-              breakdown={breakdown}
-              handleFilter={makeFilterHandler({ user: "row" })}
-            />
-          )}
+            )}
 
-          {timeSeries.length > 0 && (
-            <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-              <h3 className="text font-semibold">Errors Over Time</h3>
-              <ErrorsOverTimeChart
-                timeSeries={timeSeries}
-                from={from}
-                to={to}
+          {timeSeries.length > 0 &&
+            (!expandedChart || expandedChart === "errors-over-time") && (
+              <ChartCard
+                title="Errors Over Time"
+                chartId="errors-over-time"
+                expandedChart={expandedChart}
+                onExpand={setExpandedChart}
+              >
+                <ErrorsOverTimeChart
+                  timeSeries={timeSeries}
+                  from={from}
+                  to={to}
+                  serverNameMappings={serverNameMappings}
+                  expanded={expandedChart === "errors-over-time"}
+                />
+              </ChartCard>
+            )}
+          {hasServers &&
+            (!expandedChart || expandedChart === "errors-per-server") && (
+              <ServerErrorRateChart
+                title="Errors per Server and Tool"
+                breakdown={breakdown}
                 serverNameMappings={serverNameMappings}
+                expandedChart={expandedChart}
+                onExpand={setExpandedChart}
               />
-            </div>
-          )}
-          {hasServers && (
-            <ServerErrorRateChart
-              title="Errors per Server and Tool"
-              breakdown={breakdown}
-              serverNameMappings={serverNameMappings}
-            />
-          )}
+            )}
         </div>
       )}
     </div>
