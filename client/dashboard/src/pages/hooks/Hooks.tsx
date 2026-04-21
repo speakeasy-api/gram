@@ -1619,11 +1619,17 @@ function ServerErrorRateChart({
   title,
   breakdown,
   serverNameMappings,
+  expandedChart,
+  onExpand,
 }: {
   title: string;
   breakdown: HooksBreakdownRow[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
+  expandedChart: string | null;
+  onExpand: (id: string | null) => void;
 }) {
+  const chartId = "errors-per-server";
+  const expanded = expandedChart === chartId;
   const { labels, datasets } = useMemo(() => {
     // Build: serverDisplay → toolName → failureCount (failures only)
     const serverMap = new Map<string, Map<string, number>>();
@@ -1677,7 +1683,9 @@ function ServerErrorRateChart({
     return { labels: chartLabels, datasets: chartDatasets };
   }, [breakdown, serverNameMappings.rawToDisplay]);
 
-  const height = Math.max(120, labels.length * (24 + 8) + 60);
+  const barHeight = expanded ? 36 : 24;
+  const spacerHeight = expanded ? 12 : 8;
+  const height = Math.max(120, labels.length * (barHeight + spacerHeight) + 60);
 
   const options: ChartOptions<"bar"> = {
     indexAxis: "y",
@@ -1698,8 +1706,12 @@ function ServerErrorRateChart({
   };
 
   return (
-    <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-      <h3 className="text font-semibold">{title}</h3>
+    <ChartCard
+      title={title}
+      chartId={chartId}
+      expandedChart={expandedChart}
+      onExpand={onExpand}
+    >
       {labels.length === 0 ? (
         <div className="text-muted-foreground flex h-16 items-center justify-center text-sm">
           No errors in this period
@@ -1709,7 +1721,7 @@ function ServerErrorRateChart({
           <Bar data={{ labels, datasets }} options={options} />
         </div>
       )}
-    </div>
+    </ChartCard>
   );
 }
 
