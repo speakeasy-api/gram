@@ -54,29 +54,6 @@ type externalMCPHeaderDefinition struct {
 	Placeholder *string `json:"placeholder,omitempty"`
 }
 
-func describeToolsetOrigin(
-	ctx context.Context,
-	logger *slog.Logger,
-	toolsetRepo *tsr.Queries,
-	organizationID string,
-	toolsetID uuid.UUID,
-) (*types.ToolsetOrigin, error) {
-	origin, err := toolsetRepo.GetToolsetOriginByToolsetID(ctx, tsr.GetToolsetOriginByToolsetIDParams{
-		OrganizationID: organizationID,
-		ToolsetID:      toolsetID,
-	})
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return nil, nil
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset origin").Log(ctx, logger)
-	}
-
-	return &types.ToolsetOrigin{
-		RegistrySpecifier: origin.RegistrySpecifier,
-	}, nil
-}
-
 func DescribeToolsetEntry(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -124,7 +101,7 @@ func DescribeToolsetEntry(
 		}
 	}
 
-	toolsetOrigin, err := describeToolsetOrigin(ctx, logger, toolsetRepo, toolset.OrganizationID, toolset.ID)
+	toolsetOrigin, err := getToolsetOrigin(ctx, logger, toolsetRepo, toolset.OrganizationID, toolset.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +378,7 @@ func DescribeToolset(
 		toolsetVersion = latestVersion.Version
 	}
 
-	toolsetOrigin, err := describeToolsetOrigin(ctx, logger, toolsetRepo, toolset.OrganizationID, toolset.ID)
+	toolsetOrigin, err := getToolsetOrigin(ctx, logger, toolsetRepo, toolset.OrganizationID, toolset.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -952,6 +929,29 @@ func readToolsetTools(
 	}
 
 	return &toolsetTools, nil
+}
+
+func getToolsetOrigin(
+	ctx context.Context,
+	logger *slog.Logger,
+	toolsetRepo *tsr.Queries,
+	organizationID string,
+	toolsetID uuid.UUID,
+) (*types.ToolsetOrigin, error) {
+	origin, err := toolsetRepo.GetToolsetOriginByToolsetID(ctx, tsr.GetToolsetOriginByToolsetIDParams{
+		OrganizationID: organizationID,
+		ToolsetID:      toolsetID,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, nil
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset origin").Log(ctx, logger)
+	}
+
+	return &types.ToolsetOrigin{
+		RegistrySpecifier: origin.RegistrySpecifier,
+	}, nil
 }
 
 func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectID uuid.UUID, tools []*types.Tool) error {
