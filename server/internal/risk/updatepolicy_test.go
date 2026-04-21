@@ -16,8 +16,7 @@ func TestUpdateRiskPolicy_Success(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()},
-		access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()},
+		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
 	enabled := true
@@ -45,8 +44,7 @@ func TestUpdateRiskPolicy_BumpsVersionOnSourcesChange(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()},
-		access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()},
+		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
@@ -71,8 +69,7 @@ func TestUpdateRiskPolicy_BumpsVersionOnEnabledChange(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()},
-		access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()},
+		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
@@ -97,8 +94,7 @@ func TestUpdateRiskPolicy_PreservesFieldsWhenOmitted(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()},
-		access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()},
+		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
 	disabled := false

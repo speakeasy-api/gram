@@ -16,7 +16,7 @@ func TestListRiskPolicies_Empty(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
 	result, err := ti.service.ListRiskPolicies(ctx, &gen.ListRiskPoliciesPayload{})
 	require.NoError(t, err)
@@ -29,8 +29,7 @@ func TestListRiskPolicies_ReturnsPolicies(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()},
-		access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()},
+		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
 	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "Policy A"})
@@ -49,8 +48,7 @@ func TestGetRiskPolicy_Success(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()},
-		access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()},
+		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "Get Me"})
@@ -67,7 +65,7 @@ func TestGetRiskPolicy_NotFound(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
 	_, err := ti.service.GetRiskPolicy(ctx, &gen.GetRiskPolicyPayload{ID: uuid.New().String()})
 	require.Error(t, err)
@@ -79,8 +77,7 @@ func TestDeleteRiskPolicy_Success(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()},
-		access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()},
+		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "Delete Me"})
@@ -100,8 +97,7 @@ func TestDeleteRiskPolicy_NotInList(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()},
-		access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()},
+		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "Delete Me"})
@@ -120,7 +116,7 @@ func TestListRiskResults_EmptyProject(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
 	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
 	require.NoError(t, err)
@@ -133,8 +129,7 @@ func TestGetRiskPolicyStatus_Success(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()},
-		access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()},
+		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "Status Test"})
@@ -153,8 +148,7 @@ func TestTriggerRiskAnalysis_BumpsVersion(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()},
-		access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()},
+		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "Trigger Test"})

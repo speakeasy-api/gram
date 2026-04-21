@@ -17,7 +17,7 @@ func TestOnMessagesStored_SignalsEnabledPolicies(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()},
+		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
 	enabled := true

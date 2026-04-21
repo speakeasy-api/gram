@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -21,6 +22,14 @@ import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 
 export default function SecurityOverview() {
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <SecurityOverviewContent />
+    </RequireScope>
+  );
+}
+
+function SecurityOverviewContent() {
   const routes = useRoutes();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const { data: policiesData, isLoading: policiesLoading } =

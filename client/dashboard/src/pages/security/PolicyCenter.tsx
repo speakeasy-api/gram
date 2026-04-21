@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -86,6 +87,14 @@ const ALL_CATEGORIES: RuleCategory[] = [
 const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set(["secrets"]);
 
 export default function PolicyCenter() {
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <PolicyCenterContent />
+    </RequireScope>
+  );
+}
+
+function PolicyCenterContent() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useRiskListPolicies();
   const policies = data?.policies ?? [];
