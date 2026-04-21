@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
 import { Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -65,13 +66,17 @@ function SecurityOverviewContent() {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <div className="flex flex-col items-center justify-center gap-4 py-20">
-            <Shield className="text-muted-foreground h-12 w-12" />
-            <h2 className="text-lg font-semibold">Risk Analysis</h2>
-            <p className="text-muted-foreground max-w-md text-center text-sm">
+          <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+            <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+              <Shield className="text-muted-foreground h-6 w-6" />
+            </div>
+            <Type variant="subheading" className="mb-1">
+              Risk Analysis
+            </Type>
+            <Type small muted className="mb-4 max-w-md text-center">
               Monitor your chat messages for leaked secrets and sensitive data.
               Set up a risk policy to get started.
-            </p>
+            </Type>
             <Button onClick={() => routes.policyCenter.goTo()}>
               Go to Policy Center
             </Button>
