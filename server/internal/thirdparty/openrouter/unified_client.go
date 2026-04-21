@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -86,6 +87,11 @@ type initializeRequestResult struct {
 
 // initializeRequest creates the OpenAI-compatible request body with defaults applied.
 func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionRequest) (*initializeRequestResult, error) {
+	// Normalize before anything else so hashing, persistence, and the forwarded
+	// request all see the same canonical shape. Combined assistant messages
+	// (content + tool_calls on the same object) become two sequential messages.
+	req.Messages = slices.Collect(NormalizeAssistantMessages(req.Messages))
+
 	var captureSession CaptureSession
 	if c.messageCaptureStrategy != nil {
 		sess, err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req)
