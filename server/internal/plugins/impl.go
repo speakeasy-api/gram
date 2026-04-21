@@ -28,6 +28,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -36,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -701,7 +703,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeBadRequest, nil, "no plugins with servers to publish")
 	}
 
-	apiKey, err := s.createPluginAPIKey(ctx, ac.ActiveOrganizationID, ac.UserID, *ac.ProjectID)
+	apiKey, err := s.createPluginAPIKey(ctx, ac)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create plugin api key").Log(ctx, s.logger)
 	}
@@ -758,8 +760,9 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	return &gen.PublishPluginsResult{RepoURL: repoURL}, nil
 }
 
-// createPluginAPIKey creates a consumer-scoped API key for plugin distribution.
-func (s *Service) createPluginAPIKey(ctx context.Context, orgID, userID string, projectID uuid.UUID) (string, error) {
+// createPluginAPIKey creates a consumer-scoped API key for plugin distribution
+// and logs the creation in the audit trail.
+func (s *Service) createPluginAPIKey(ctx context.Context, ac *contextvalues.AuthContext) (string, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return "", fmt.Errorf("generate token: %w", err)
@@ -773,18 +776,43 @@ func (s *Service) createPluginAPIKey(ctx context.Context, orgID, userID string, 
 	}
 
 	keyName := fmt.Sprintf("plugins-%s", time.Now().UTC().Format("20060102-150405"))
+	scopes := []string{"consumer"}
+	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
 
-	_, err = keysrepo.New(s.db).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
-		OrganizationID:  orgID,
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return "", fmt.Errorf("begin transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	createdKey, err := keysrepo.New(dbtx).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+		OrganizationID:  ac.ActiveOrganizationID,
 		Name:            keyName,
 		KeyHash:         keyHash,
 		KeyPrefix:       s.keyPrefix + token[:5],
-		Scopes:          []string{"consumer"},
-		CreatedByUserID: userID,
-		ProjectID:       uuid.NullUUID{UUID: projectID, Valid: true},
+		Scopes:          scopes,
+		CreatedByUserID: ac.UserID,
+		ProjectID:       projectID,
 	})
 	if err != nil {
 		return "", fmt.Errorf("create api key: %w", err)
+	}
+
+	if err := audit.LogKeyCreate(ctx, dbtx, audit.LogKeyCreateEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		KeyURN:           urn.NewAPIKey(createdKey.ID),
+		KeyName:          keyName,
+		Scopes:           scopes,
+	}); err != nil {
+		return "", fmt.Errorf("audit log key creation: %w", err)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return fullKey, nil
