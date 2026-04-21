@@ -5,7 +5,7 @@ import {
   useDeploymentLogs,
   useLatestDeployment,
   useListToolsets,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query";
 import type {
   DeploymentLogEvent,
   ExternalMCPRemote,

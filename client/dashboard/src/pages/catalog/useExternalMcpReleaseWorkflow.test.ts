@@ -20,7 +20,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => mockClient,
 }));
 
-vi.mock("@gram/client/react-query/index.js", () => ({
+vi.mock("@gram/client/react-query", () => ({
   useDeployment: vi.fn(() => ({ data: undefined })),
   useDeploymentLogs: vi.fn(() => ({ data: undefined })),
   useLatestDeployment: vi.fn(() => ({ data: undefined })),
@@ -32,7 +32,7 @@ import {
   useDeploymentLogs,
   useLatestDeployment,
   useListToolsets,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query";
 import type { Server } from "@/pages/catalog/hooks";
 import {
   generateSlug,
