@@ -261,7 +261,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		Content:          "", // Tool call requests typically have empty content
 		Model:            conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, "")),
 		UserID:           conv.ToPGTextEmpty(""),
-		Source:           conv.ToPGText("ClaudeCode"),
+		Source:           conv.ToPGText(metadata.ServiceName),
 		ToolCalls:        toolCallsJSON,
 		FinishReason:     conv.ToPGText("tool_calls"),
 		PromptTokens:     0,
@@ -311,7 +311,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 		Role:             "tool",
 		Content:          content,
 		UserID:           conv.ToPGTextEmpty(""),
-		Source:           conv.ToPGText("ClaudeCode"),
+		Source:           conv.ToPGText(metadata.ServiceName),
 		ToolCallID:       conv.ToPGTextEmpty(conv.PtrValOr(payload.ToolUseID, "")),
 		PromptTokens:     0,
 		CompletionTokens: 0,
