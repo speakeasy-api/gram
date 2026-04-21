@@ -53,13 +53,12 @@ export function ProjectDashboard() {
   );
 
   const isProjectEmpty =
-    isFeaturesError ||
-    (logsEnabled &&
-      !isOverviewLoading &&
-      !isAuditLogsPending &&
-      !!overview &&
-      overview?.summary?.activeServersCount === 0 &&
-      overview?.summary?.totalToolCalls === 0);
+    logsEnabled &&
+    !isOverviewLoading &&
+    !isAuditLogsPending &&
+    !!overview &&
+    overview?.summary?.activeServersCount === 0 &&
+    overview?.summary?.totalToolCalls === 0;
 
   const showDisabledBanner =
     !isFeaturesPending && !isFeaturesError && !logsEnabled;
@@ -86,9 +85,11 @@ export function ProjectDashboard() {
             <ProjectOnboardingBanner />
           )}
 
-          {showDisabledBanner ? (
+          {showDisabledBanner && (
             <LoggingDisabledBanner settingsHref={orgRoutes.logs.href()} />
-          ) : isFeaturesError ? null : (
+          )}
+
+          {logsEnabled && (
             <>
               {/* Row 0: KPI Cards */}
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -253,13 +254,14 @@ export function ProjectDashboard() {
                   )}
                 </DashboardCard>
               </div>
-              <ActivityTimelineCard
-                logs={recentLogs}
-                isPending={isAuditLogsPending}
-                viewAllHref={orgRoutes.auditLogs.href()}
-              />
             </>
           )}
+
+          <ActivityTimelineCard
+            logs={recentLogs}
+            isPending={isAuditLogsPending}
+            viewAllHref={orgRoutes.auditLogs.href()}
+          />
         </div>
       </Page.Section.Body>
     </Page.Section>
