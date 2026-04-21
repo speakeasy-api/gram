@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
@@ -80,7 +81,46 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	}
 	files[".cursor-plugin/marketplace.json"] = cursorManifest
 
+	files["README.md"] = generateReadme(plugins, cfg)
+
 	return files, nil
+}
+
+func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
+	var b strings.Builder
+
+	b.WriteString("# " + cfg.OrgName + " Plugins\n\n")
+	b.WriteString("This repository contains plugin packages managed by [Gram](https://getgram.ai). ")
+	b.WriteString("Each plugin bundles MCP servers for distribution via Claude Code and Cursor marketplaces.\n\n")
+	b.WriteString("> **Do not edit this repository manually.** It is automatically generated and updated by Gram.\n\n")
+
+	if len(plugins) > 0 {
+		b.WriteString("## Plugins\n\n")
+		b.WriteString("| Plugin | Description | Servers |\n")
+		b.WriteString("|--------|-------------|--------:|\n")
+		for _, p := range plugins {
+			desc := p.Description
+			if desc == "" {
+				desc = "—"
+			}
+			b.WriteString(fmt.Sprintf("| %s | %s | %d |\n", p.Name, desc, len(p.Servers)))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("## Installation\n\n")
+	b.WriteString("### Claude Code\n\n")
+	b.WriteString("1. Go to your organization's [Claude admin console](https://console.anthropic.com)\n")
+	b.WriteString("2. Navigate to **Settings → Plugin Marketplaces**\n")
+	b.WriteString("3. Click **Add Marketplace** and paste this repository's URL\n")
+	b.WriteString("4. Plugins will be automatically available to members of your organization\n\n")
+	b.WriteString("### Cursor\n\n")
+	b.WriteString("1. Open your team's [Cursor dashboard](https://cursor.com/dashboard)\n")
+	b.WriteString("2. Navigate to **Settings → Plugins → Import**\n")
+	b.WriteString("3. Paste this repository's URL to import the marketplace\n")
+	b.WriteString("4. Plugins will be available to team members\n")
+
+	return []byte(b.String())
 }
 
 // GenerateSinglePluginPackage produces files for a single plugin with files at
