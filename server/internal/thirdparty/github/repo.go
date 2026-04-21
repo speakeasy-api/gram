@@ -3,12 +3,14 @@ package github
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -152,12 +154,18 @@ func (c *Client) createTree(ctx context.Context, installationID int64, owner, re
 		if strings.HasSuffix(path, ".sh") {
 			mode = "100755"
 		}
-		treeEntries = append(treeEntries, map[string]string{
-			"path":    path,
-			"mode":    mode,
-			"type":    "blob",
-			"content": string(content),
-		})
+		entry := map[string]string{
+			"path": path,
+			"mode": mode,
+			"type": "blob",
+		}
+		if utf8.Valid(content) {
+			entry["content"] = string(content)
+		} else {
+			entry["encoding"] = "base64"
+			entry["content"] = base64.StdEncoding.EncodeToString(content)
+		}
+		treeEntries = append(treeEntries, entry)
 	}
 
 	// Omit base_tree to build a clean tree from scratch. This ensures
@@ -222,8 +230,9 @@ func (c *Client) createCommit(ctx context.Context, installationID int64, owner, 
 }
 
 func (c *Client) updateRef(ctx context.Context, installationID int64, owner, repo, branch, commitSHA string) error {
-	// force: true is safe because Gram creates and fully manages this repo.
-	// Concurrent publishes will race, with one commit silently winning.
+	// force: true is required because we build clean trees (no base_tree)
+	// which Git may see as non-fast-forward. Safe because each project gets
+	// its own repo that Gram fully manages.
 	payload := map[string]any{
 		"sha":   commitSHA,
 		"force": true,

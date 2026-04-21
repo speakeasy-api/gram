@@ -745,6 +745,11 @@ func newStartCommand() *cli.Command {
 					InstallationID: installationID,
 				}
 			}
+			if pluginsGitHub != nil {
+				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
+			} else {
+				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
+			}
 			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, accessManager, pluginsGitHub, c.String("environment"), c.String("server-url")))
 			// access depends on productfeatures for the RBAC feature gate, so inject
 			// the concrete checks here instead of importing access in that package.

@@ -1,6 +1,7 @@
 package plugins_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -11,6 +12,31 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
+
+// mockGitHubPublisher records calls for testing.
+type mockGitHubPublisher struct {
+	createRepoCalled     bool
+	pushFilesCalled      bool
+	addCollaboratorCalled bool
+	lastPushedFiles      map[string][]byte
+}
+
+func (m *mockGitHubPublisher) CreateRepo(_ context.Context, _ int64, _, _ string, _ bool) error {
+	m.createRepoCalled = true
+	return nil
+}
+
+func (m *mockGitHubPublisher) PushFiles(_ context.Context, _ int64, _, _, _, _ string, files map[string][]byte) (string, error) {
+	m.pushFilesCalled = true
+	m.lastPushedFiles = files
+	return "abc123", nil
+}
+
+func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, _, _, _ string) error {
+	m.addCollaboratorCalled = true
+	return nil
+}
+
 
 func TestPluginsService_CreatePlugin(t *testing.T) {
 	t.Parallel()
@@ -368,4 +394,90 @@ func TestPluginsService_PublishPlugins_NotConfigured(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestPluginsService_GetPublishStatus_Configured(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	result, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.True(t, result.Configured)
+	require.False(t, result.Connected)
+}
+
+func TestPluginsService_PublishPlugins_NoPlugins(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	_, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.False(t, mock.createRepoCalled)
+}
+
+func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Publish Test"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "publish-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Test Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	require.Contains(t, result.RepoURL, "test-org")
+	require.True(t, mock.createRepoCalled)
+	require.True(t, mock.pushFilesCalled)
+	require.NotEmpty(t, mock.lastPushedFiles)
+
+	status, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.True(t, status.Connected)
+	require.NotNil(t, status.RepoURL)
+}
+
+func TestPluginsService_PublishPlugins_WithCollaborator(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Collab Test"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "collab-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Collab Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	username := "octocat"
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{
+		GithubUsername: &username,
+	})
+	require.NoError(t, err)
+	require.True(t, mock.addCollaboratorCalled)
 }

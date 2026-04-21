@@ -105,6 +105,53 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
+func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublisher) (context.Context, *testInstance) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	billingClient := billing.NewStubClient(logger, tracerProvider)
+
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+
+	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.AccountType = "enterprise"
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	ctx = withAccessGrants(t, ctx, conn,
+		access.Grant{Scope: access.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID},
+		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
+	)
+
+	ghConfig := &plugins.GitHubConfig{
+		Client:         ghClient,
+		Org:            "test-org",
+		InstallationID: 12345,
+	}
+
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, access.NewManager(logger, conn, stubFeatureChecker{}, workos.NewStubClient(), cache.NoopCache), ghConfig, "local", "https://app.getgram.ai")
+
+	return ctx, &testInstance{
+		service:        svc,
+		conn:           conn,
+		sessionManager: sessionManager,
+	}
+}
+
 func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
