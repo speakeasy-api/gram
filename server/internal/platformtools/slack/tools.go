@@ -100,7 +100,7 @@ type searchChannelsInput struct {
 
 type searchMessagesAndFilesInput struct {
 	Query     string  `json:"query" jsonschema:"Search query. Supports Slack modifiers like in:#channel, from:@user, before:2024-01-01, has:link."`
-	Cursor    *string `json:"cursor,omitempty" jsonschema:"Pagination cursor from a previous response."`
+	Page      *int    `json:"page,omitempty" jsonschema:"1-indexed page number to fetch. Slack returns paging metadata in the response."`
 	Limit     *int    `json:"limit,omitempty" jsonschema:"Maximum number of results per page. Slack allows up to 100."`
 	Highlight *bool   `json:"highlight,omitempty" jsonschema:"Highlight matching text in results."`
 	Sort      *string `json:"sort,omitempty" jsonschema:"Sort field. Slack accepts score or timestamp."`
@@ -598,7 +598,7 @@ func callSearchMessagesAndFiles(ctx context.Context, client *apiClient, env tool
 	request := map[string]any{
 		"query": query,
 	}
-	setOptionalString(request, "cursor", input.Cursor)
+	setOptionalInt(request, "page", input.Page)
 	setOptionalInt(request, "count", input.Limit)
 	setOptionalBool(request, "highlight", input.Highlight)
 	setOptionalString(request, "sort", input.Sort)
