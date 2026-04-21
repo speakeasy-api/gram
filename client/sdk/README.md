@@ -333,11 +333,15 @@ run();
 
 ### [Skills](docs/sdks/skills/README.md)
 
+* [approveVersion](docs/sdks/skills/README.md#approveversion) - approveVersion skills
 * [capture](docs/sdks/skills/README.md#capture) - capture skills
 * [getBySlug](docs/sdks/skills/README.md#getbyslug) - get skills
 * [getSettings](docs/sdks/skills/README.md#getsettings) - getSettings skills
 * [list](docs/sdks/skills/README.md#list) - list skills
+* [listPending](docs/sdks/skills/README.md#listpending) - listPending skills
 * [setSettings](docs/sdks/skills/README.md#setsettings) - setSettings skills
+* [supersedeVersion](docs/sdks/skills/README.md#supersedeversion) - supersedeVersion skills
+* [listVersions](docs/sdks/skills/README.md#listversions) - listVersions skills
 
 ### [Slack](docs/sdks/slack/README.md)
 
@@ -562,11 +566,15 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteMcpListServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
 - [`remoteMcpUpdateServer`](docs/sdks/remotemcp/README.md#updateserver) - updateServer remoteMcp
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
+- [`skillsApproveVersion`](docs/sdks/skills/README.md#approveversion) - approveVersion skills
 - [`skillsCapture`](docs/sdks/skills/README.md#capture) - capture skills
 - [`skillsGetBySlug`](docs/sdks/skills/README.md#getbyslug) - get skills
 - [`skillsGetSettings`](docs/sdks/skills/README.md#getsettings) - getSettings skills
 - [`skillsList`](docs/sdks/skills/README.md#list) - list skills
+- [`skillsListPending`](docs/sdks/skills/README.md#listpending) - listPending skills
+- [`skillsListVersions`](docs/sdks/skills/README.md#listversions) - listVersions skills
 - [`skillsSetSettings`](docs/sdks/skills/README.md#setsettings) - setSettings skills
+- [`skillsSupersedeVersion`](docs/sdks/skills/README.md#supersedeversion) - supersedeVersion skills
 - [`slackConfigureSlackApp`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
 - [`slackCreateSlackApp`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`slackDeleteSlackApp`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
@@ -802,8 +810,12 @@ To learn about this feature and how to get started, check
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`useSkill`](docs/sdks/skills/README.md#getbyslug) - get skills
+- [`useSkillsApproveVersionMutation`](docs/sdks/skills/README.md#approveversion) - approveVersion skills
 - [`useSkillsCaptureMutation`](docs/sdks/skills/README.md#capture) - capture skills
+- [`useSkillsListPending`](docs/sdks/skills/README.md#listpending) - listPending skills
+- [`useSkillsListVersions`](docs/sdks/skills/README.md#listversions) - listVersions skills
 - [`useSkillsSettings`](docs/sdks/skills/README.md#getsettings) - getSettings skills
+- [`useSkillsSupersedeVersionMutation`](docs/sdks/skills/README.md#supersedeversion) - supersedeVersion skills
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates

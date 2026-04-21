@@ -5,8 +5,18 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+export const SkillVersionSummaryState = {
+  PendingReview: "pending_review",
+  Active: "active",
+  Superseded: "superseded",
+} as const;
+export type SkillVersionSummaryState = ClosedEnum<
+  typeof SkillVersionSummaryState
+>;
 
 export type SkillVersionSummary = {
   assetFormat: string;
@@ -16,7 +26,13 @@ export type SkillVersionSummary = {
   firstSeenAt?: Date | undefined;
   id: string;
   sizeBytes: number;
+  state?: SkillVersionSummaryState | undefined;
 };
+
+/** @internal */
+export const SkillVersionSummaryState$inboundSchema: z.ZodMiniEnum<
+  typeof SkillVersionSummaryState
+> = z.enum(SkillVersionSummaryState);
 
 /** @internal */
 export const SkillVersionSummary$inboundSchema: z.ZodMiniType<
@@ -36,6 +52,7 @@ export const SkillVersionSummary$inboundSchema: z.ZodMiniType<
     ),
     id: z.string(),
     size_bytes: z.int(),
+    state: z.optional(SkillVersionSummaryState$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {

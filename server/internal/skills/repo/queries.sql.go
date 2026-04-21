@@ -57,7 +57,7 @@ SET
 WHERE skills.project_id = $1
   AND skills.id = $2
   AND skills.deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+RETURNING created_at, deleted_at, updated_at, skill_uuid, slug, description, created_by_user_id, name, organization_id, id, active_version_id, project_id, deleted
 `
 
 type ClearSkillActiveVersionParams struct {
@@ -69,18 +69,18 @@ func (q *Queries) ClearSkillActiveVersion(ctx context.Context, arg ClearSkillAct
 	row := q.db.QueryRow(ctx, clearSkillActiveVersion, arg.ProjectID, arg.ID)
 	var i Skill
 	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SkillUuid,
 		&i.Slug,
 		&i.Description,
-		&i.SkillUuid,
-		&i.ActiveVersionID,
 		&i.CreatedByUserID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.Name,
+		&i.OrganizationID,
+		&i.ID,
+		&i.ActiveVersionID,
+		&i.ProjectID,
 		&i.Deleted,
 	)
 	return i, err
@@ -645,8 +645,8 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 
 const listPendingSkillVersions = `-- name: ListPendingSkillVersions :many
 SELECT
-  s.id, s.organization_id, s.project_id, s.name, s.slug, s.description, s.skill_uuid, s.active_version_id, s.created_by_user_id, s.created_at, s.updated_at, s.deleted_at, s.deleted,
-  sv.id, sv.skill_id, sv.asset_id, sv.content_sha256, sv.asset_format, sv.size_bytes, sv.skill_bytes, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.first_seen_at, sv.created_at, sv.updated_at
+  s.created_at, s.deleted_at, s.updated_at, s.skill_uuid, s.slug, s.description, s.created_by_user_id, s.name, s.organization_id, s.id, s.active_version_id, s.project_id, s.deleted,
+  sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
 FROM skill_versions sv
 INNER JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -670,34 +670,34 @@ func (q *Queries) ListPendingSkillVersions(ctx context.Context, projectID uuid.U
 	for rows.Next() {
 		var i ListPendingSkillVersionsRow
 		if err := rows.Scan(
-			&i.Skill.ID,
-			&i.Skill.OrganizationID,
-			&i.Skill.ProjectID,
-			&i.Skill.Name,
+			&i.Skill.CreatedAt,
+			&i.Skill.DeletedAt,
+			&i.Skill.UpdatedAt,
+			&i.Skill.SkillUuid,
 			&i.Skill.Slug,
 			&i.Skill.Description,
-			&i.Skill.SkillUuid,
-			&i.Skill.ActiveVersionID,
 			&i.Skill.CreatedByUserID,
-			&i.Skill.CreatedAt,
-			&i.Skill.UpdatedAt,
-			&i.Skill.DeletedAt,
+			&i.Skill.Name,
+			&i.Skill.OrganizationID,
+			&i.Skill.ID,
+			&i.Skill.ActiveVersionID,
+			&i.Skill.ProjectID,
 			&i.Skill.Deleted,
-			&i.SkillVersion.ID,
-			&i.SkillVersion.SkillID,
-			&i.SkillVersion.AssetID,
+			&i.SkillVersion.SizeBytes,
+			&i.SkillVersion.UpdatedAt,
+			&i.SkillVersion.CreatedAt,
+			&i.SkillVersion.FirstSeenAt,
+			&i.SkillVersion.SkillBytes,
 			&i.SkillVersion.ContentSha256,
 			&i.SkillVersion.AssetFormat,
-			&i.SkillVersion.SizeBytes,
-			&i.SkillVersion.SkillBytes,
 			&i.SkillVersion.State,
 			&i.SkillVersion.CapturedByUserID,
 			&i.SkillVersion.AuthorName,
 			&i.SkillVersion.FirstSeenTraceID,
 			&i.SkillVersion.FirstSeenSessionID,
-			&i.SkillVersion.FirstSeenAt,
-			&i.SkillVersion.CreatedAt,
-			&i.SkillVersion.UpdatedAt,
+			&i.SkillVersion.ID,
+			&i.SkillVersion.AssetID,
+			&i.SkillVersion.SkillID,
 		); err != nil {
 			return nil, err
 		}
@@ -918,7 +918,7 @@ WITH version_counts AS (
   GROUP BY skill_versions.skill_id
 )
 SELECT
-  skills.id, skills.organization_id, skills.project_id, skills.name, skills.slug, skills.description, skills.skill_uuid, skills.active_version_id, skills.created_by_user_id, skills.created_at, skills.updated_at, skills.deleted_at, skills.deleted,
+  skills.created_at, skills.deleted_at, skills.updated_at, skills.skill_uuid, skills.slug, skills.description, skills.created_by_user_id, skills.name, skills.organization_id, skills.id, skills.active_version_id, skills.project_id, skills.deleted,
   active_version.id AS active_version_id,
   active_version.content_sha256 AS active_version_content_sha256,
   active_version.asset_format AS active_version_asset_format,
@@ -959,18 +959,18 @@ func (q *Queries) ListSkillsWithActiveVersion(ctx context.Context, projectID uui
 	for rows.Next() {
 		var i ListSkillsWithActiveVersionRow
 		if err := rows.Scan(
-			&i.Skill.ID,
-			&i.Skill.OrganizationID,
-			&i.Skill.ProjectID,
-			&i.Skill.Name,
+			&i.Skill.CreatedAt,
+			&i.Skill.DeletedAt,
+			&i.Skill.UpdatedAt,
+			&i.Skill.SkillUuid,
 			&i.Skill.Slug,
 			&i.Skill.Description,
-			&i.Skill.SkillUuid,
-			&i.Skill.ActiveVersionID,
 			&i.Skill.CreatedByUserID,
-			&i.Skill.CreatedAt,
-			&i.Skill.UpdatedAt,
-			&i.Skill.DeletedAt,
+			&i.Skill.Name,
+			&i.Skill.OrganizationID,
+			&i.Skill.ID,
+			&i.Skill.ActiveVersionID,
+			&i.Skill.ProjectID,
 			&i.Skill.Deleted,
 			&i.ActiveVersionID,
 			&i.ActiveVersionContentSha256,
@@ -1050,7 +1050,7 @@ WHERE skills.project_id = $2
     WHERE sv.id = $1
       AND sv.skill_id = skills.id
   )
-RETURNING id, organization_id, project_id, name, slug, description, skill_uuid, active_version_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+RETURNING created_at, deleted_at, updated_at, skill_uuid, slug, description, created_by_user_id, name, organization_id, id, active_version_id, project_id, deleted
 `
 
 type SetSkillActiveVersionIfNullParams struct {
@@ -1063,18 +1063,18 @@ func (q *Queries) SetSkillActiveVersionIfNull(ctx context.Context, arg SetSkillA
 	row := q.db.QueryRow(ctx, setSkillActiveVersionIfNull, arg.ActiveVersionID, arg.ProjectID, arg.ID)
 	var i Skill
 	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.SkillUuid,
 		&i.Slug,
 		&i.Description,
-		&i.SkillUuid,
-		&i.ActiveVersionID,
 		&i.CreatedByUserID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
+		&i.Name,
+		&i.OrganizationID,
+		&i.ID,
+		&i.ActiveVersionID,
+		&i.ProjectID,
 		&i.Deleted,
 	)
 	return i, err
