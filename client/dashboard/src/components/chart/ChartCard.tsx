@@ -30,6 +30,7 @@ export function ChartCard({
         <h3 className="text font-semibold">{title}</h3>
         {showExpandButton && (
           <button
+            type="button"
             onClick={() => onExpand(isExpanded ? null : chartId)}
             className="text-muted-foreground hover:text-foreground rounded p-0.5 transition-colors"
             aria-label={isExpanded ? "Minimize chart" : "Expand chart"}
