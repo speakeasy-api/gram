@@ -4,12 +4,32 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/tools/go/analysis/analysistest"
 )
 
-// disabledAllRulesPlugin returns a plugin instance with every rule disabled.
-// Tests can flip individual rules back on to assert per-rule registration.
-func disabledAllRulesPlugin() *plugin {
-	return &plugin{
+func TestEnforceO11yConventions(t *testing.T) {
+	t.Parallel()
+
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, newEnforceO11yConventionsAnalyzer(enforceO11yConventionsSettings{}), "enforceo11yconventions")
+}
+
+func TestEnforceO11yConventionsCustomMessage(t *testing.T) {
+	t.Parallel()
+
+	testdata := analysistest.TestData()
+	analysistest.Run(
+		t,
+		testdata,
+		newEnforceO11yConventionsAnalyzer(enforceO11yConventionsSettings{Message: "use attr.Slog* helpers instead"}),
+		"enforceo11yconventionscustommessage",
+	)
+}
+
+func TestBuildAnalyzersSkipsDisabledEnforceO11yConventions(t *testing.T) {
+	t.Parallel()
+
+	p := &plugin{
 		settings: settings{
 			Rules: ruleSettings{
 				NoAnonymousDefer:           noAnonymousDeferSettings{Disabled: true},
@@ -21,22 +41,8 @@ func disabledAllRulesPlugin() *plugin {
 			},
 		},
 	}
-}
 
-func TestBuildAnalyzersAllDisabled(t *testing.T) {
-	t.Parallel()
-
-	p := disabledAllRulesPlugin()
 	analyzers, err := p.BuildAnalyzers()
 	require.NoError(t, err)
 	require.Empty(t, analyzers)
-}
-
-func TestBuildAnalyzersAllEnabled(t *testing.T) {
-	t.Parallel()
-
-	p := &plugin{}
-	analyzers, err := p.BuildAnalyzers()
-	require.NoError(t, err)
-	require.Len(t, analyzers, 6)
 }

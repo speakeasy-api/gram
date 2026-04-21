@@ -2,7 +2,6 @@ package hooks
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/google/uuid"
 	goahttp "goa.design/goa/v3/http"
@@ -134,7 +133,7 @@ func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error 
 			oops.CodeUnexpected,
 			err,
 			"failed to delete hooks server name override",
-		).Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()), slog.String("override_id", payload.OverrideID))
+		).Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogHookServerNameOverrideID(payload.OverrideID))
 	}
 
 	return nil
