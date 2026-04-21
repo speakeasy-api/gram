@@ -515,19 +515,30 @@ export function useExternalMcpReleaseWorkflow({
     // Install-as-fork: every selected server (whether this is a fresh install
     // or a fork of an already-installed one) must go through evolveDeployment
     // so its attachment row exists under the slug we bake into its tool URNs.
-    // That slug is derived from the user-chosen name, so the only way two
-    // configs clash with an already-deployed attachment is if the user picks a
-    // name whose slug matches one already in use — surface that as an error.
-    const collidingConfig = serverConfigs.find((config) =>
-      existingSlugs.has(generateSlug(config.name)),
-    );
-    if (collidingConfig) {
-      const collidingSlug = generateSlug(collidingConfig.name);
-      setError(
-        `A server with slug "${collidingSlug}" already exists in this project. Rename "${collidingConfig.name}" to disambiguate.`,
-      );
-      setPhase("error");
-      return;
+    // That slug is derived from the user-chosen name, so we need to reject two
+    // kinds of collisions before the upsert silently clobbers a row:
+    //   1. the derived slug matches one already deployed to this project, and
+    //   2. two configs in this same batch derive to the same slug (e.g.
+    //      "My Server!" and "My Server?" both slug to "my-server").
+    const seenInBatch = new Map<string, ServerConfig>();
+    for (const config of serverConfigs) {
+      const slug = generateSlug(config.name);
+      if (existingSlugs.has(slug)) {
+        setError(
+          `A server with slug "${slug}" already exists in this project. Rename "${config.name}" to disambiguate.`,
+        );
+        setPhase("error");
+        return;
+      }
+      const prior = seenInBatch.get(slug);
+      if (prior) {
+        setError(
+          `"${prior.name}" and "${config.name}" both resolve to slug "${slug}". Rename one to disambiguate.`,
+        );
+        setPhase("error");
+        return;
+      }
+      seenInBatch.set(slug, config);
     }
 
     setPhase("deploying");

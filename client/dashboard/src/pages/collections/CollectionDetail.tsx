@@ -94,31 +94,6 @@ export default function CollectionDetail() {
 
   const toolsetsLoading = toolsetQueries.some((q) => q.isLoading);
 
-  const attachedServerSpecifiers = useMemo(
-    () =>
-      new Set(
-        rawServers
-          .map((server) => server.registrySpecifier ?? "")
-          .filter(Boolean),
-      ),
-    [rawServers],
-  );
-
-  // registrySpecifier from serve() is usually "namespace/mcpSlug" for collection-backed
-  // servers, so keep the last segment around for matching user-created servers.
-  const attachedMcpSlugs = useMemo(
-    () =>
-      new Set(
-        rawServers
-          .map((server) => {
-            const parts = (server.registrySpecifier ?? "").split("/");
-            return parts[parts.length - 1];
-          })
-          .filter(Boolean),
-      ),
-    [rawServers],
-  );
-
   // All MCP-enabled toolsets from all projects.
   const allToolsets = useMemo(() => {
     const all: Array<{
@@ -127,7 +102,6 @@ export default function CollectionDetail() {
       name: string;
       description?: string;
       projectName: string;
-      originRegistrySpecifier?: string;
     }> = [];
     for (let i = 0; i < projects.length; i++) {
       const project = projects[i];
@@ -141,7 +115,6 @@ export default function CollectionDetail() {
           name: t.name,
           description: t.description ?? undefined,
           projectName: project.name,
-          originRegistrySpecifier: t.origin?.registrySpecifier,
         });
       }
     }
@@ -159,24 +132,18 @@ export default function CollectionDetail() {
     );
   }, [allToolsets, serverSearch]);
 
-  // Build the set of toolset IDs that are currently attached (for diffing on save)
-  const attachedToolsetIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const toolset of allToolsets) {
-      if (
-        toolset.originRegistrySpecifier &&
-        attachedServerSpecifiers.has(toolset.originRegistrySpecifier)
-      ) {
-        ids.add(toolset.id);
-        continue;
-      }
-
-      if (toolset.mcpSlug && attachedMcpSlugs.has(toolset.mcpSlug)) {
-        ids.add(toolset.id);
-      }
-    }
-    return ids;
-  }, [allToolsets, attachedMcpSlugs, attachedServerSpecifiers]);
+  // Collection attachments carry the concrete toolset_id they link to, so
+  // membership is a direct identity check — no need to reconcile via origin
+  // specifier or mcp slug (see plan.md decision #4).
+  const attachedToolsetIds = useMemo(
+    () =>
+      new Set(
+        rawServers
+          .map((server) => server.toolsetId)
+          .filter((id): id is string => !!id),
+      ),
+    [rawServers],
+  );
 
   const toggleToolset = (toolsetId: string) => {
     setEditSelectedToolsetIds((prev) => {

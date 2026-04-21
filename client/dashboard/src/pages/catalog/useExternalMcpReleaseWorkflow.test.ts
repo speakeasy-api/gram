@@ -604,6 +604,30 @@ describe("useExternalMcpReleaseWorkflow", () => {
       expect(result.current.phase).toBe("deploying");
     });
 
+    it("errors when two configs in the same batch derive to the same slug", async () => {
+      const servers = [
+        makeServer({ title: "My Server!", registrySpecifier: "org/a" }),
+        makeServer({ title: "My Server?", registrySpecifier: "org/b" }),
+      ];
+      const { result } = renderHook(() =>
+        useExternalMcpReleaseWorkflow({ servers }),
+      );
+
+      await act(async () => {
+        const state = result.current;
+        if (state.phase !== "configure") throw new Error("unexpected phase");
+        await state.startDeployment();
+      });
+
+      expect(mockEvolveDeployment).not.toHaveBeenCalled();
+      expect(result.current.phase).toBe("error");
+      const state = result.current;
+      if (state.phase !== "error") throw new Error("unexpected phase");
+      expect(state.error).toMatch(
+        /both resolve to slug "my-server". Rename one to disambiguate\./,
+      );
+    });
+
     it("errors when a name's slug collides with an existing attachment", async () => {
       mockLatest.mockReturnValue({
         data: {
