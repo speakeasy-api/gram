@@ -164,7 +164,8 @@ export async function shouldSuppressUpload(
   options: CacheOptions = {},
 ): Promise<boolean> {
   const ttlMs = toNumberOr(DEFAULT_TTL_MS, options.ttlMs);
-  const nowMs = toNumberOr(Date.now(), options.nowMs ?? Date.now());
+  const defaultNow = Date.now();
+  const nowMs = toNumberOr(defaultNow, options.nowMs ?? defaultNow);
   const cachePath = options.cachePath ?? getDefaultCachePath(options.homeDir);
 
   const key = computeCacheKey({
@@ -190,7 +191,8 @@ export async function markUploadSeen(
   options: CacheOptions = {},
 ): Promise<void> {
   const ttlMs = toNumberOr(DEFAULT_TTL_MS, options.ttlMs);
-  const nowMs = toNumberOr(Date.now(), options.nowMs ?? Date.now());
+  const defaultNow = Date.now();
+  const nowMs = toNumberOr(defaultNow, options.nowMs ?? defaultNow);
   const cachePath = options.cachePath ?? getDefaultCachePath(options.homeDir);
 
   const key = computeCacheKey({

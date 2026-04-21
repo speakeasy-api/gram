@@ -42,4 +42,5 @@ if (!result.ok && !result.skipped) {
   stderr.write(
     `[gram-skills-producer] upload worker failed: ${result.reason ?? "any"}${"status" in result && result.status ? ` status=${result.status}` : ""}\n`,
   );
+  process.exitCode = 1;
 }

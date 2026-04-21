@@ -23,9 +23,8 @@ export default function SkillsRegistry() {
           <div>
             <Type variant="subheading">Registry</Type>
             <Type small muted className="mt-1 block max-w-2xl">
-              Browse the skills captured for this project. This is backed by the
-              new `skills.list` contract. Click a row or card to open the
-              skill-level view.
+              Browse the skills captured for this project. Click a row or card
+              to open the details for that skill.
             </Type>
           </div>
           <ViewToggle value={viewMode} onChange={setViewMode} />
@@ -176,8 +175,7 @@ function RegistryErrorState() {
         Couldn&apos;t load skills
       </Type>
       <Type small muted>
-        The registry surface is wired to the new `skills.list` endpoint, but the
-        request failed.
+        There was a problem loading the skills registry for this project.
       </Type>
     </div>
   );

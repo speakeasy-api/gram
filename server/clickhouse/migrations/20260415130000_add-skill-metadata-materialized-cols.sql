@@ -1,5 +1,5 @@
 -- Drop "trace_summaries_mv" view
-DROP VIEW `trace_summaries_mv`;
+DROP VIEW IF EXISTS `trace_summaries_mv`;
 
 ALTER TABLE `telemetry_logs` ADD COLUMN `skill_scope` String MATERIALIZED toString(attributes.gram.skill.scope) COMMENT 'Skill scope (materialized from attributes.gram.skill.scope).';
 ALTER TABLE `telemetry_logs` ADD COLUMN `skill_discovery_root` String MATERIALIZED toString(attributes.gram.skill.discovery_root) COMMENT 'Skill discovery root (materialized from attributes.gram.skill.discovery_root).';

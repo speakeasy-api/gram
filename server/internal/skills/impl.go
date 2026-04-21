@@ -276,16 +276,40 @@ func (s *Service) SetSettings(ctx context.Context, payload *gen.SetSettingsPaylo
 		return nil, err
 	}
 
-	mode := captureModeFromSettings(payload.Enabled, payload.CaptureProjectSkills, payload.CaptureUserSkills)
-	if _, err := s.skillsRepo.UpsertProjectCapturePolicyOverride(ctx, skillsrepo.UpsertProjectCapturePolicyOverrideParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		Mode:           string(mode),
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("set capture policy override: %w", err), "error saving capture policy")
+	settings, err := s.getCaptureSettings(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	if err != nil {
+		return nil, err
 	}
 
-	settings, err := s.getCaptureSettings(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	mode := captureModeFromSettings(payload.Enabled, payload.CaptureProjectSkills, payload.CaptureUserSkills)
+	orgDefaultMode := CaptureModeDisabled
+	if settings.OrgDefaultMode != nil {
+		orgDefaultMode, err = parseCaptureMode(*settings.OrgDefaultMode)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if mode == orgDefaultMode {
+		if !settings.InheritedFromOrganization {
+			if _, err := s.skillsRepo.DeleteProjectCapturePolicyOverride(ctx, skillsrepo.DeleteProjectCapturePolicyOverrideParams{
+				OrganizationID: authCtx.ActiveOrganizationID,
+				ProjectID:      *authCtx.ProjectID,
+			}); err != nil && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("delete capture policy override: %w", err), "error saving capture policy")
+			}
+		}
+	} else {
+		if _, err := s.skillsRepo.UpsertProjectCapturePolicyOverride(ctx, skillsrepo.UpsertProjectCapturePolicyOverrideParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      *authCtx.ProjectID,
+			Mode:           string(mode),
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("set capture policy override: %w", err), "error saving capture policy")
+		}
+	}
+
+	settings, err = s.getCaptureSettings(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -428,6 +452,10 @@ func (s *Service) ApproveVersion(ctx context.Context, payload *gen.ApproveVersio
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, nil, "another skill version is already active")
+		}
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("mark skill version active: %w", err), "error approving skill version").Log(ctx, s.logger)
 	}
 
@@ -672,7 +700,7 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 			return dbtx.Rollback(ctx)
 		})
 
-		err = s.ensureSkillLineageForCapture(ctx, s.skillsRepo.WithTx(dbtx), authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, skillSlug, contentSHA, payload, existingAssetID)
+		skill, version, err := s.ensureSkillLineageForCapture(ctx, s.skillsRepo.WithTx(dbtx), authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, skillSlug, contentSHA, payload, existingAssetID)
 		if err != nil {
 			return nil, err
 		}
@@ -686,8 +714,8 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 			payload,
 			"duplicate",
 			"existing_asset",
-			uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			uuid.NullUUID{UUID: skill.ID, Valid: true},
+			uuid.NullUUID{UUID: version.ID, Valid: true},
 			uuid.NullUUID{UUID: existingAssetID, Valid: true},
 		); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error recording capture attempt").Log(ctx, s.logger)
@@ -696,6 +724,7 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 		if err := dbtx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to save skill artifact").Log(ctx, s.logger)
 		}
+		txClosed = true
 
 		return &gen.CaptureSkillResult{Asset: existing}, nil
 	}
@@ -754,7 +783,7 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 			}
 			skillsTxRepo = s.skillsRepo.WithTx(dbtx)
 
-			err = s.ensureSkillLineageForCapture(ctx, skillsTxRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, skillSlug, contentSHA, payload, existingAssetID)
+			skill, version, err := s.ensureSkillLineageForCapture(ctx, skillsTxRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, skillSlug, contentSHA, payload, existingAssetID)
 			if err != nil {
 				return nil, err
 			}
@@ -768,8 +797,8 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 				payload,
 				"duplicate",
 				"asset_conflict_reused",
-				uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				uuid.NullUUID{UUID: skill.ID, Valid: true},
+				uuid.NullUUID{UUID: version.ID, Valid: true},
 				uuid.NullUUID{UUID: existingAssetID, Valid: true},
 			); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "error recording capture attempt").Log(ctx, s.logger)
@@ -778,6 +807,7 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 			if err := dbtx.Commit(ctx); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to save skill artifact").Log(ctx, s.logger)
 			}
+			txClosed = true
 
 			return &gen.CaptureSkillResult{Asset: existing}, nil
 		}
@@ -787,7 +817,7 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 		return nil, oops.E(oops.CodeConflict, nil, "skill asset hash conflicts with existing non-skill asset")
 	}
 
-	err = s.ensureSkillLineageForCapture(ctx, skillsTxRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, skillSlug, contentSHA, payload, asset.ID)
+	skill, version, err := s.ensureSkillLineageForCapture(ctx, skillsTxRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, skillSlug, contentSHA, payload, asset.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -801,8 +831,8 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 		payload,
 		"accepted",
 		"captured",
-		uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		uuid.NullUUID{UUID: skill.ID, Valid: true},
+		uuid.NullUUID{UUID: version.ID, Valid: true},
 		uuid.NullUUID{UUID: asset.ID, Valid: true},
 	); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording capture attempt").Log(ctx, s.logger)
@@ -811,6 +841,7 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to save skill artifact").Log(ctx, s.logger)
 	}
+	txClosed = true
 
 	return &gen.CaptureSkillResult{
 		Asset: &gen.CaptureSkillAsset{
@@ -887,7 +918,7 @@ func (s *Service) ensureSkillLineageForCapture(
 	contentSHA string,
 	payload *gen.CaptureSkillForm,
 	assetID uuid.UUID,
-) error {
+) (skillsrepo.Skill, skillsrepo.SkillVersion, error) {
 	skill, err := repo.GetSkillBySlug(ctx, skillsrepo.GetSkillBySlugParams{
 		ProjectID: projectID,
 		Slug:      skillSlug,
@@ -921,14 +952,14 @@ func (s *Service) ensureSkillLineageForCapture(
 						Slug:      skillSlug,
 					})
 					if err != nil {
-						return oops.E(oops.CodeUnexpected, fmt.Errorf("get skill by slug after create conflict: %w", err), "error loading skill")
+						return skillsrepo.Skill{}, skillsrepo.SkillVersion{}, oops.E(oops.CodeUnexpected, fmt.Errorf("get skill by slug after create conflict: %w", err), "error loading skill")
 					}
 				} else {
-					return oops.E(oops.CodeUnexpected, fmt.Errorf("create skill: %w", err), "error saving skill artifact")
+					return skillsrepo.Skill{}, skillsrepo.SkillVersion{}, oops.E(oops.CodeUnexpected, fmt.Errorf("create skill: %w", err), "error saving skill artifact")
 				}
 			}
 		} else {
-			return oops.E(oops.CodeUnexpected, fmt.Errorf("get skill by slug: %w", err), "error loading skill")
+			return skillsrepo.Skill{}, skillsrepo.SkillVersion{}, oops.E(oops.CodeUnexpected, fmt.Errorf("get skill by slug: %w", err), "error loading skill")
 		}
 	}
 
@@ -979,14 +1010,14 @@ func (s *Service) ensureSkillLineageForCapture(
 						ProjectID:     projectID,
 					})
 					if err != nil {
-						return oops.E(oops.CodeUnexpected, fmt.Errorf("get skill version by hash after create conflict: %w", err), "error loading skill")
+						return skillsrepo.Skill{}, skillsrepo.SkillVersion{}, oops.E(oops.CodeUnexpected, fmt.Errorf("get skill version by hash after create conflict: %w", err), "error loading skill")
 					}
 				} else {
-					return oops.E(oops.CodeUnexpected, fmt.Errorf("create skill version: %w", err), "error saving skill artifact")
+					return skillsrepo.Skill{}, skillsrepo.SkillVersion{}, oops.E(oops.CodeUnexpected, fmt.Errorf("create skill version: %w", err), "error saving skill artifact")
 				}
 			}
 		} else {
-			return oops.E(oops.CodeUnexpected, fmt.Errorf("get skill version by hash: %w", err), "error loading skill")
+			return skillsrepo.Skill{}, skillsrepo.SkillVersion{}, oops.E(oops.CodeUnexpected, fmt.Errorf("get skill version by hash: %w", err), "error loading skill")
 		}
 	}
 
@@ -998,13 +1029,13 @@ func (s *Service) ensureSkillLineageForCapture(
 		})
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
-				return nil
+				return skill, version, nil
 			}
-			return oops.E(oops.CodeUnexpected, fmt.Errorf("set skill active version when empty: %w", err), "error saving skill artifact")
+			return skillsrepo.Skill{}, skillsrepo.SkillVersion{}, oops.E(oops.CodeUnexpected, fmt.Errorf("set skill active version when empty: %w", err), "error saving skill artifact")
 		}
 	}
 
-	return nil
+	return skill, version, nil
 }
 
 func captureModeAllowsScope(mode CaptureMode, scope string) bool {
@@ -1158,7 +1189,7 @@ func buildSkillVersionSummary(row skillsrepo.ListSkillsWithActiveVersionRow) *ge
 		AssetFormat:   row.ActiveVersionAssetFormat.String,
 		SizeBytes:     row.ActiveVersionSizeBytes.Int64,
 		AuthorName:    conv.FromPGText[string](row.ActiveVersionAuthorName),
-		State:         nil,
+		State:         conv.PtrEmpty("active"),
 		CreatedAt:     row.ActiveVersionCreatedAt.Time.Format(time.RFC3339),
 		FirstSeenAt:   firstSeenAt,
 	}

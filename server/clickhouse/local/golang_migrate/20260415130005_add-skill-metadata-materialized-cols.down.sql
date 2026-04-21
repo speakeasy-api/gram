@@ -1,5 +1,5 @@
 -- reverse: drop "trace_summaries_mv" view
-DROP VIEW `trace_summaries_mv`;
+DROP VIEW IF EXISTS `trace_summaries_mv`;
 
 ALTER TABLE `trace_summaries` DROP COLUMN `skill_resolution_status`;
 ALTER TABLE `trace_summaries` DROP COLUMN `skill_version_id`;

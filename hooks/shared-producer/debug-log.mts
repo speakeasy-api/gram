@@ -1,6 +1,7 @@
+import { appendFile, mkdir } from "node:fs/promises";
+
 import os from "node:os";
 import path from "node:path";
-import { appendFile, mkdir } from "node:fs/promises";
 
 const DEBUG_FLAG_ENV = "GRAM_HOOKS_DEBUG";
 const DEBUG_LOG_PATH_ENV = "GRAM_HOOKS_DEBUG_LOG_PATH";
@@ -53,8 +54,11 @@ export async function logHookDebug(
   };
 
   try {
-    await mkdir(path.dirname(logPath), { recursive: true });
-    await appendFile(logPath, `${JSON.stringify(record)}\n`, "utf8");
+    await mkdir(path.dirname(logPath), { recursive: true, mode: 0o700 });
+    await appendFile(logPath, `${JSON.stringify(record)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
   } catch {
     // fail-open: debug logging must never affect hook flow
   }

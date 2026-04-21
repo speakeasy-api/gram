@@ -1,28 +1,44 @@
 import { Outlet, useOutletContext, useParams } from "react-router";
 import { PageTabsTrigger, Tabs, TabsList } from "@/components/ui/tabs";
+import type { Skill, SkillVersion } from "@gram/client/models/components";
+import { useSkill, useSkillsListVersions } from "@gram/client/react-query";
 
 import { Button } from "@/components/ui/button";
 import { DownloadIcon } from "lucide-react";
 import { Icon } from "@speakeasy-api/moonshine";
 import { Link } from "react-router";
-import type { SkillEntry } from "@gram/client/models/components";
 import { SkillsPlaceholder } from "./SkillsPlaceholder";
 import { Type } from "@/components/ui/type";
-import { useListSkills } from "@gram/client/react-query";
 import { useRoutes } from "@/routes";
 
 type SkillDetailContext = {
-  skill: SkillEntry;
+  skill: Skill;
+  activeVersion: SkillVersion | null;
+  versionCount: number;
 };
 
 export function SkillDetailRoot() {
   const routes = useRoutes();
   const { skillSlug } = useParams();
-  const { data, isPending, error } = useListSkills(undefined, undefined, {
+  const {
+    data: skill,
+    isPending: isSkillPending,
+    error: skillError,
+  } = useSkill({ slug: skillSlug ?? "" }, undefined, {
     enabled: Boolean(skillSlug),
   });
+  const {
+    data: versionsData,
+    isPending: areVersionsPending,
+    error: versionsError,
+  } = useSkillsListVersions({ skillId: skill?.id ?? "" }, undefined, {
+    enabled: Boolean(skill?.id),
+  });
 
-  const skill = data?.skills.find((entry) => entry.slug === skillSlug) ?? null;
+  const activeVersion =
+    versionsData?.versions.find((version) => version.state === "active") ??
+    null;
+  const versionCount = versionsData?.versions.length ?? 0;
 
   const routeParam = skill?.slug ?? skillSlug ?? "";
   const activeTab = routes.skills.registry.skill.versions.active
@@ -33,20 +49,29 @@ export function SkillDetailRoot() {
         ? "install"
         : "definition";
 
-  if (isPending) {
+  if (isSkillPending || (skill != null && areVersionsPending)) {
     return (
       <SkillDetailState
         title="Loading skill"
-        description="Fetching skill details from the registry list."
+        description="Fetching skill details."
       />
     );
   }
 
-  if (error || !skill) {
+  if (skillError || versionsError) {
+    return (
+      <SkillDetailState
+        title="Couldn't load skill"
+        description="There was a problem loading this skill. Please try again."
+      />
+    );
+  }
+
+  if (!skill) {
     return (
       <SkillDetailState
         title="Skill not found"
-        description="The selected skill could not be resolved from the current registry response."
+        description="The selected skill could not be found in this project."
       />
     );
   }
@@ -75,13 +100,12 @@ export function SkillDetailRoot() {
             "No description has been set for this skill yet."}
         </Type>
         <div className="text-muted-foreground flex items-center gap-4 text-xs">
-          {skill.activeVersion?.authorName && (
-            <span>by {skill.activeVersion.authorName}</span>
+          {activeVersion?.authorName && (
+            <span>by {activeVersion.authorName}</span>
           )}
           <span>Updated {formatDate(skill.updatedAt)}</span>
           <span>
-            v{skill.versionCount} · {skill.versionCount} version
-            {skill.versionCount === 1 ? "" : "s"}
+            {versionCount} version{versionCount === 1 ? "" : "s"}
           </span>
           <span className="font-mono">{skill.slug}</span>
         </div>
@@ -118,7 +142,7 @@ export function SkillDetailRoot() {
             </TabsList>
           </div>
 
-          <Outlet context={{ skill }} />
+          <Outlet context={{ skill, activeVersion, versionCount }} />
         </Tabs>
       </div>
     </div>
@@ -126,7 +150,7 @@ export function SkillDetailRoot() {
 }
 
 export function SkillDefinitionPage() {
-  const { skill } = useSkillDetail();
+  const { skill, activeVersion, versionCount } = useSkillDetail();
 
   return (
     <section className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,320px)]">
@@ -149,34 +173,30 @@ export function SkillDefinitionPage() {
       <div className="border-border bg-card rounded-xl border p-5">
         <div className="flex items-center justify-between">
           <Type variant="subheading">Active Version</Type>
-          {skill.activeVersion && (
+          {activeVersion && (
             <Type small muted className="font-mono">
-              v{skill.versionCount}
+              Active
             </Type>
           )}
         </div>
         <div className="mt-4 space-y-3">
           <DefinitionBlock
             label="Author"
-            value={skill.activeVersion?.authorName || "Unknown"}
+            value={activeVersion?.authorName || "Unknown"}
           />
           <DefinitionBlock
             label="Format"
-            value={skill.activeVersion?.assetFormat || "N/A"}
+            value={activeVersion?.assetFormat || "N/A"}
           />
           <DefinitionBlock
             label="Size"
-            value={
-              skill.activeVersion
-                ? formatBytes(skill.activeVersion.sizeBytes)
-                : "N/A"
-            }
+            value={activeVersion ? formatBytes(activeVersion.sizeBytes) : "N/A"}
           />
           <DefinitionBlock
             label="First seen"
             value={
-              skill.activeVersion?.firstSeenAt
-                ? formatDate(skill.activeVersion.firstSeenAt)
+              activeVersion?.firstSeenAt
+                ? formatDate(activeVersion.firstSeenAt)
                 : "N/A"
             }
           />

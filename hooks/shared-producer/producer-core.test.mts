@@ -261,6 +261,32 @@ test("stripRegistryManagedFrontmatter removes empty metadata block after strippi
   assert.equal(cleaned.includes("metadata:"), false);
 });
 
+test("stripRegistryManagedFrontmatter preserves unmanaged nested metadata children", () => {
+  const src = `---\nmetadata:\n  skill_uuid: abc\n  x-gram-note: remove\n  author: keep\n  tags:\n    - yaml\n---\n# skill\n`;
+  const cleaned = stripRegistryManagedFrontmatter(src);
+
+  assert.equal(cleaned.includes("skill_uuid:"), false);
+  assert.equal(cleaned.includes("x-gram-note:"), false);
+  assert.equal(cleaned.includes("author: keep"), true);
+  assert.equal(cleaned.includes("tags:"), true);
+});
+
+test("stripRegistryManagedFrontmatter preserves inline unmanaged metadata values", () => {
+  const src = `---\nmetadata: owner: platform\nmetadata.x-gram-note: remove\n---\n# skill\n`;
+  const cleaned = stripRegistryManagedFrontmatter(src);
+
+  assert.equal(cleaned.includes("metadata: owner: platform"), true);
+  assert.equal(cleaned.includes("metadata.x-gram-note:"), false);
+});
+
+test("hasXGramIgnoreFrontmatter handles comments and quoted values", () => {
+  const quotedTrue = `---\nmetadata:\n  x-gram-ignore: "true" # keep out of registry\n---\n# skill\n`;
+  const quotedFalse = `---\nmetadata.x-gram-ignore: 'false' # explicitly keep\n---\n# skill\n`;
+
+  assert.equal(hasXGramIgnoreFrontmatter(quotedTrue), true);
+  assert.equal(hasXGramIgnoreFrontmatter(quotedFalse), false);
+});
+
 test("computeCanonicalContentSha256 is stable across CRLF/LF and key order", async () => {
   const dirA = await makeTempDir("gram-producer-hash-a-");
   const dirB = await makeTempDir("gram-producer-hash-b-");
