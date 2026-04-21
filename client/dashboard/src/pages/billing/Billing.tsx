@@ -1,8 +1,6 @@
 import { Page } from "@/components/page-layout";
-import {
-  ProductTierBadge,
-  productTierColors,
-} from "@/components/product-tier-badge";
+import { ProductTierBadge } from "@/components/product-tier-badge";
+import { productTierColors } from "@/components/product-tier-utils";
 import { Card, Cards, CardSkeleton } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,7 +27,7 @@ export default function Billing() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Title>Billing</Page.Header.Title>
+        <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">

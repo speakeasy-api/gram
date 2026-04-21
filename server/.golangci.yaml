@@ -26,6 +26,7 @@ linters:
     - gochecksumtype
     - gocritic
     - gosec
+    - glint
     - govet
     - iface
     - importas
@@ -67,6 +68,12 @@ linters:
         linters:
           - exhaustruct
           - gosec
+      # False positives that scope constants, such as remote-mcp:write, are
+      # somehow hardcoded credentials.
+      - path: internal/access/scopes\.go
+        linters:
+          - gosec
+        text: G101
       # The guardian package is the only package that is allowed to access
       # http.Client directly since it constructs the safe HTTP clients
       # that are used throughout the codebase. This is tracked by GG002.
@@ -82,7 +89,36 @@ linters:
         linters:
           - forbidigo
         text: GG002
+      # This is the only sanctioned place to use slog attribute builders to establish conventions.
+      - path: internal/attr/conventions\.go
+        linters:
+          - glint
+        text: enforceo11yconventions
+      # This is forwarding log events from within pgx library that we have no control over.
+      - path: internal/o11y/slog\.go
+        linters:
+          - glint
+        text: enforceo11yconventions
+      # Not interesting to enforce this in tests
+      - path: _test\.go|internal/testenv/
+        linters:
+          - glint
+        text: enforceo11yconventions
   settings:
+    custom:
+      glint:
+        type: module
+        description: Gram-specific lint rules.
+        original-url: github.com/speakeasy-api/gram/glint
+        settings:
+          rules:
+            enforce-o11y-conventions:
+              disabled: false
+              message: Use the attribute builders in `github.com/speakeasy-api/gram/server/internal/attr` instead.
+            no-anonymous-defer:
+              disabled: true
+            no-repo-fields-in-service:
+              disabled: true
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate

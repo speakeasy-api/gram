@@ -867,6 +867,17 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   );
 }
 
+type OAuthParadigm = "external" | "gram" | "proxy";
+
+function getOAuthParadigm(toolset: Toolset): OAuthParadigm | null {
+  if (toolset.externalOauthServer) return "external";
+  if (!toolset.oauthProxyServer) return null;
+  return toolset.oauthProxyServer.oauthProxyProviders?.[0]?.providerType ===
+    "gram"
+    ? "gram"
+    : "proxy";
+}
+
 type OAuthSectionProps = {
   toolset: Toolset;
 };
@@ -877,6 +888,9 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
 
+  const { data: environmentsData } = useListEnvironments();
+  const environments = environmentsData?.environments ?? [];
+
   const isOAuthConnected = !!(
     toolset?.oauthProxyServer || toolset?.externalOauthServer
   );
@@ -885,14 +899,24 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   const isOAuthEligible =
     toolset.mcpEnabled && (toolset.mcpIsPublic ? availableOAuthAuthCode : true);
 
-  const oauthParadigm = toolset.externalOauthServer
-    ? ("external" as const)
-    : toolset.oauthProxyServer
-      ? toolset.oauthProxyServer.oauthProxyProviders?.[0]?.providerType ===
-        "gram"
-        ? ("gram" as const)
-        : ("proxy" as const)
-      : null;
+  const oauthParadigm = getOAuthParadigm(toolset);
+
+  const proxyEnvironmentSlug =
+    toolset.oauthProxyServer?.oauthProxyProviders?.[0]?.environmentSlug;
+  const proxyEnvironmentName =
+    environments.find((e) => e.slug === proxyEnvironmentSlug)?.name ??
+    proxyEnvironmentSlug ??
+    "unknown";
+
+  const handleConfigureClick = () => {
+    if (isOAuthConnected) return setIsOAuthDetailsModalOpen(true);
+    if (toolset.mcpIsPublic) return setIsOAuthModalOpen(true);
+    setIsGramOAuthModalOpen(true);
+  };
+
+  const disabledTooltipText = !toolset.mcpEnabled
+    ? "Enable the MCP server to configure OAuth"
+    : "This MCP server does not require the OAuth authorization code flow";
 
   return (
     <PageSection
@@ -909,15 +933,7 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
                 </Button>
               </span>
             ) : (
-              <Button
-                onClick={() =>
-                  isOAuthConnected
-                    ? setIsOAuthDetailsModalOpen(true)
-                    : toolset.mcpIsPublic
-                      ? setIsOAuthModalOpen(true)
-                      : setIsGramOAuthModalOpen(true)
-                }
-              >
+              <Button onClick={handleConfigureClick}>
                 <Button.Text>
                   {isOAuthConnected ? "Manage" : "Configure"}
                 </Button.Text>
@@ -925,80 +941,20 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
             )}
           </TooltipTrigger>
           {!isOAuthEligible && (
-            <TooltipContent>
-              {!toolset.mcpEnabled
-                ? "Enable the MCP server to configure OAuth"
-                : "This MCP server does not require the OAuth authorization code flow"}
-            </TooltipContent>
+            <TooltipContent>{disabledTooltipText}</TooltipContent>
           )}
         </Tooltip>
       }
     >
-      {isOAuthConnected ? (
-        <div className="border-success-softest bg-success-softest rounded-lg border border-dashed p-8 text-center">
-          <p className="text-success-foreground mb-1">
-            <CheckCircle className="text-success-foreground mx-auto mb-1 h-5 w-5" />
-            {oauthParadigm === "external"
-              ? "External OAuth"
-              : oauthParadigm === "gram"
-                ? "Gram OAuth"
-                : "OAuth Proxy"}{" "}
-            is configured
-          </p>
-          <p className="text-success-foreground text-sm">
-            {oauthParadigm === "external"
-              ? "Users will authenticate with your external OAuth server before accessing this MCP server."
-              : oauthParadigm === "gram"
-                ? "Users will authenticate with Gram OAuth before accessing this MCP server."
-                : "The attached CLIENT_ID and CLIENT_SECRET environment variables will be used to authenticate with the OAuth provider before users can access this MCP server."}
-          </p>
-        </div>
-      ) : isOAuthEligible ? (
-        <div className="rounded-lg border border-dashed p-4 text-center">
-          <p className="text-muted-foreground mb-1">
-            <Shield className="text-muted-foreground mx-auto mb-1 h-5 w-5" />
-            OAuth is available but not configured
-          </p>
-          <p className="text-muted-foreground mb-3 text-sm">
-            Enable OAuth to require users to authenticate before accessing this
-            MCP server.
-          </p>
-          <Button
-            variant="secondary"
-            onClick={() =>
-              toolset.mcpIsPublic
-                ? setIsOAuthModalOpen(true)
-                : setIsGramOAuthModalOpen(true)
-            }
-          >
-            <Button.Text>Configure OAuth</Button.Text>
-          </Button>
-        </div>
-      ) : (
-        <div className="rounded-lg border border-dashed p-4 text-center">
-          <p className="text-muted-foreground mb-1">
-            <Shield className="text-muted-foreground mx-auto mb-1 h-5 w-5" />
-            OAuth is not applicable
-          </p>
-          {!toolset.mcpEnabled ? (
-            <p className="text-muted-foreground text-sm">
-              Enable the MCP server to configure OAuth.
-            </p>
-          ) : (
-            <>
-              <p className="text-muted-foreground text-sm">
-                OAuth cannot be configured because there are no tools in this
-                server that require OAuth authentication.
-              </p>
-              <p className="text-muted-foreground text-sm">
-                OAuth is available for public MCP servers that have at least one
-                tool requiring OAuth authentication, or private servers (using
-                Speakeasy as an auth provider).
-              </p>
-            </>
-          )}
-        </div>
-      )}
+      <OAuthStatusDisplay
+        isOAuthConnected={isOAuthConnected}
+        isOAuthEligible={!!isOAuthEligible}
+        oauthParadigm={oauthParadigm}
+        mcpEnabled={!!toolset.mcpEnabled}
+        proxyEnvironmentSlug={proxyEnvironmentSlug}
+        proxyEnvironmentName={proxyEnvironmentName}
+        onConfigureClick={handleConfigureClick}
+      />
 
       {/* OAuth Modals */}
       <GramOAuthProxyModal
@@ -1031,5 +987,104 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
         }
       />
     </PageSection>
+  );
+}
+
+const PARADIGM_LABELS: Record<OAuthParadigm, string> = {
+  external: "External OAuth",
+  gram: "Gram OAuth",
+  proxy: "OAuth Proxy",
+};
+
+function OAuthStatusDisplay({
+  isOAuthConnected,
+  isOAuthEligible,
+  oauthParadigm,
+  mcpEnabled,
+  proxyEnvironmentSlug,
+  proxyEnvironmentName,
+  onConfigureClick,
+}: {
+  isOAuthConnected: boolean;
+  isOAuthEligible: boolean;
+  oauthParadigm: OAuthParadigm | null;
+  mcpEnabled: boolean;
+  proxyEnvironmentSlug: string | undefined;
+  proxyEnvironmentName: string;
+  onConfigureClick: () => void;
+}) {
+  const routes = useRoutes();
+
+  if (isOAuthConnected && oauthParadigm) {
+    return (
+      <div className="border-success-softest bg-success-softest rounded-lg border border-dashed p-8 text-center">
+        <p className="text-success-foreground mb-1">
+          <CheckCircle className="text-success-foreground mx-auto mb-1 h-5 w-5" />
+          {PARADIGM_LABELS[oauthParadigm]} is configured
+        </p>
+        <p className="text-success-foreground text-sm">
+          {oauthParadigm === "external" ? (
+            "Users will authenticate with your external OAuth server before accessing this MCP server."
+          ) : oauthParadigm === "gram" ? (
+            "Users will authenticate with Gram OAuth before accessing this MCP server."
+          ) : (
+            <>
+              The CLIENT_ID and CLIENT_SECRET values in the{" "}
+              {proxyEnvironmentSlug ? (
+                <routes.environments.environment.Link
+                  params={[proxyEnvironmentSlug]}
+                  className="underline"
+                >
+                  {proxyEnvironmentName}
+                </routes.environments.environment.Link>
+              ) : (
+                `"${proxyEnvironmentName}"`
+              )}{" "}
+              environment will be used to authenticate with the OAuth provider
+              before users can access this MCP server.
+            </>
+          )}
+        </p>
+      </div>
+    );
+  }
+
+  if (isOAuthEligible) {
+    return (
+      <div className="rounded-lg border border-dashed p-4 text-center">
+        <p className="text-muted-foreground mb-1">
+          <Shield className="text-muted-foreground mx-auto mb-1 h-5 w-5" />
+          OAuth is available but not configured
+        </p>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Enable OAuth to require users to authenticate before accessing this
+          MCP server.
+        </p>
+        <Button variant="secondary" onClick={onConfigureClick}>
+          <Button.Text>Configure OAuth</Button.Text>
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-dashed px-6 py-8 text-center">
+      <Shield className="text-muted-foreground mx-auto mb-3 h-6 w-6" />
+      <p className="text-muted-foreground mb-2 font-medium">
+        OAuth is not applicable
+      </p>
+      {!mcpEnabled ? (
+        <p className="text-muted-foreground text-sm">
+          Enable the MCP server to configure OAuth.
+        </p>
+      ) : (
+        <p className="text-muted-foreground mx-auto max-w-lg text-sm">
+          OAuth cannot be configured because there are no tools in this server
+          that require OAuth authentication. OAuth is available for public MCP
+          servers that have at least one tool requiring OAuth authentication, or
+          private servers (using Speakeasy as an auth provider).
+        </p>
+      )}
+    </div>
   );
 }

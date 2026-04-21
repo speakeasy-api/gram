@@ -7,7 +7,7 @@
 [tools]
 "aqua:ariga/atlas" = "1.0.0"
 "github:speakeasy-api/openapi" = "1.19.2"
-"github:speakeasy-api/speakeasy" = "1.730.1"
+"github:speakeasy-api/speakeasy" = "1.761.5"
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.1.3"
 flyctl = "0.4.6"
@@ -24,7 +24,7 @@ uv = "0.10.9"
 yq = "4.52.4"
 hk = "1.38.0"
 pkl = "0.31.0"
-"github:speakeasy-api/madprocs" = "0.1.27"
+"github:speakeasy-api/madprocs" = "0.1.32"
 "github:temporalio/cli" = "1.6.1"
 
 # ℹ️ The settings below are sensible defaults for local development. When
@@ -99,6 +99,7 @@ GRAM_REDIS_CACHE_HOST = "127.0.0.1"
 GRAM_REDIS_CACHE_PORT = "5445"
 GRAM_REDIS_CACHE_ADDR = "{{env.GRAM_REDIS_CACHE_HOST}}:{{env.GRAM_REDIS_CACHE_PORT}}"
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
+GRAM_REDIS_ENABLE_TRACING = "false"
 OPENROUTER_DEV_KEY = "unset"
 ## The following variables configure the mock Speakeasy IDP for local dev.
 ## MOCK_IDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.

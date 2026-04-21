@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { useRoutes } from "@/routes";
 import { useListDeploymentsSuspense } from "@gram/client/react-query";
@@ -26,9 +27,11 @@ export default function DeploymentsPage() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Suspense fallback={<div>Loading...</div>}>
-          <DeploymentsTable />
-        </Suspense>
+        <RequireScope scope={["build:read", "build:write"]} level="page">
+          <Suspense fallback={<div>Loading...</div>}>
+            <DeploymentsTable />
+          </Suspense>
+        </RequireScope>
       </Page.Body>
     </Page>
   );
@@ -94,26 +97,28 @@ function DeploymentActionsDropdown({
     : actionText;
 
   return (
-    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="tertiary" size="sm" className="h-8 w-8 p-0">
-          <Button.LeftIcon>
-            <Icon name="ellipsis" className="size-4" />
-          </Button.LeftIcon>
-          <Button.Text className="sr-only">Open menu</Button.Text>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem
-          onClick={handleRedeploy}
-          disabled={redeployMutation.isPending}
-          className="cursor-pointer"
-        >
-          <Icon name="refresh-cw" className="mr-2 size-4" />
-          {buttonText}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <RequireScope scope="build:write" level="section">
+      <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="tertiary" size="sm" className="h-8 w-8 p-0">
+            <Button.LeftIcon>
+              <Icon name="ellipsis" className="size-4" />
+            </Button.LeftIcon>
+            <Button.Text className="sr-only">Open menu</Button.Text>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onClick={handleRedeploy}
+            disabled={redeployMutation.isPending}
+            className="cursor-pointer"
+          >
+            <Icon name="refresh-cw" className="mr-2 size-4" />
+            {buttonText}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </RequireScope>
   );
 }
 

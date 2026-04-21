@@ -77,6 +77,38 @@ func resolveAttributeColumn(path string) string {
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
+// applyHookFiltersToBuilder applies attribute filters and hook type conditions to sb.
+// It mirrors the filter logic used in ListHooksTraces.
+func applyHookFiltersToBuilder(sb squirrel.SelectBuilder, filters []AttributeFilter, typesToInclude []string) squirrel.SelectBuilder {
+	for _, filter := range filters {
+		if !validJSONPath.MatchString(filter.Path) {
+			continue // skip invalid paths to prevent injection
+		}
+		col := resolveAttributeColumn(filter.Path)
+		pred := filter.Predicate(col)
+		if pred != nil {
+			sb = sb.Where(pred)
+		}
+	}
+	if len(typesToInclude) > 0 {
+		typeConditions := make([]string, 0, len(typesToInclude))
+		for _, hookType := range typesToInclude {
+			switch hookType {
+			case "skill":
+				typeConditions = append(typeConditions, "tool_name = 'Skill'")
+			case "mcp":
+				typeConditions = append(typeConditions, "(tool_source != '' AND tool_name != 'Skill')")
+			case "local":
+				typeConditions = append(typeConditions, "(tool_source = '' AND tool_name != 'Skill')")
+			}
+		}
+		if len(typeConditions) > 0 {
+			sb = sb.Where(fmt.Sprintf("(%s)", strings.Join(typeConditions, " OR ")))
+		}
+	}
+	return sb
+}
+
 // InsertTelemetryLogParams contains the parameters for inserting a telemetry log.
 type InsertTelemetryLogParams struct {
 	ID                   string
@@ -499,32 +531,35 @@ func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryPa
 	if !rows.Next() {
 		// Return empty metrics if no rows
 		return &MetricsSummaryRow{
-			FirstSeenUnixNano:       0,
-			LastSeenUnixNano:        0,
-			TotalChats:              0,
-			DistinctModels:          0,
-			DistinctProviders:       0,
-			TotalInputTokens:        0,
-			TotalOutputTokens:       0,
-			TotalTokens:             0,
-			AvgTokensPerReq:         0,
-			TotalChatRequests:       0,
-			AvgChatDurationMs:       0,
-			FinishReasonStop:        0,
-			FinishReasonToolCalls:   0,
-			TotalToolCalls:          0,
-			ToolCallSuccess:         0,
-			ToolCallFailure:         0,
-			AvgToolDurationMs:       0,
-			ChatResolutionSuccess:   0,
-			ChatResolutionFailure:   0,
-			ChatResolutionPartial:   0,
-			ChatResolutionAbandoned: 0,
-			AvgChatResolutionScore:  0,
-			Models:                  make(map[string]uint64),
-			ToolCounts:              make(map[string]uint64),
-			ToolSuccessCounts:       make(map[string]uint64),
-			ToolFailureCounts:       make(map[string]uint64),
+			FirstSeenUnixNano:        0,
+			LastSeenUnixNano:         0,
+			TotalChats:               0,
+			DistinctModels:           0,
+			DistinctProviders:        0,
+			TotalInputTokens:         0,
+			TotalOutputTokens:        0,
+			TotalTokens:              0,
+			CacheReadInputTokens:     0,
+			CacheCreationInputTokens: 0,
+			AvgTokensPerReq:          0,
+			TotalCost:                0,
+			TotalChatRequests:        0,
+			AvgChatDurationMs:        0,
+			FinishReasonStop:         0,
+			FinishReasonToolCalls:    0,
+			TotalToolCalls:           0,
+			ToolCallSuccess:          0,
+			ToolCallFailure:          0,
+			AvgToolDurationMs:        0,
+			ChatResolutionSuccess:    0,
+			ChatResolutionFailure:    0,
+			ChatResolutionPartial:    0,
+			ChatResolutionAbandoned:  0,
+			AvgChatResolutionScore:   0,
+			Models:                   make(map[string]uint64),
+			ToolCounts:               make(map[string]uint64),
+			ToolSuccessCounts:        make(map[string]uint64),
+			ToolFailureCounts:        make(map[string]uint64),
 		}, nil
 	}
 
@@ -575,10 +610,16 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 			"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') AS failed_chats",
 			"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'partial') AS partial_chats",
 			"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'abandoned') AS abandoned_chats",
+			"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
+			"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
+			"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens",
+			"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens",
+			"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
+			"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost",
 			"countIf(startsWith(gram_urn, 'tools:')) AS total_tool_calls",
 			"countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS failed_tool_calls",
 			"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) AS avg_tool_latency_ms",
-			"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_session_duration_ms",
+			"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gen_ai.conversation.duration) != '') AS avg_session_duration_ms",
 		).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -747,14 +788,20 @@ func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummary
 
 	if !rows.Next() {
 		return &OverviewSummary{
-			TotalChats:           0,
-			ResolvedChats:        0,
-			FailedChats:          0,
-			AvgSessionDurationMs: 0,
-			AvgResolutionTimeMs:  0,
-			TotalToolCalls:       0,
-			FailedToolCalls:      0,
-			AvgLatencyMs:         0,
+			TotalChats:               0,
+			ResolvedChats:            0,
+			FailedChats:              0,
+			AvgSessionDurationMs:     0,
+			AvgResolutionTimeMs:      0,
+			TotalInputTokens:         0,
+			TotalOutputTokens:        0,
+			TotalTokens:              0,
+			CacheReadInputTokens:     0,
+			CacheCreationInputTokens: 0,
+			TotalCost:                0,
+			TotalToolCalls:           0,
+			FailedToolCalls:          0,
+			AvgLatencyMs:             0,
 		}, nil
 	}
 
@@ -778,6 +825,12 @@ func (q *Queries) getOverviewSummaryMV(arg GetOverviewSummaryParams) squirrel.Se
 		"uniqExactIfMerge(failed_chats) as failed_chats",
 		"avgIfMerge(avg_chat_duration_ms) as avg_session_duration_ms",
 		"avgIfMerge(avg_resolution_time_ms) as avg_resolution_time_ms",
+		"sumIfMerge(total_input_tokens) as total_input_tokens",
+		"sumIfMerge(total_output_tokens) as total_output_tokens",
+		"sumIfMerge(total_tokens) as total_tokens",
+		"sumIfMerge(cache_read_input_tokens) as cache_read_input_tokens",
+		"sumIfMerge(cache_creation_input_tokens) as cache_creation_input_tokens",
+		"sumIfMerge(total_cost) as total_cost",
 		"countIfMerge(total_tool_calls) as total_tool_calls",
 		"countIfMerge(tool_call_failure) as failed_tool_calls",
 		"avgIfMerge(avg_tool_duration_ms) as avg_latency_ms",
@@ -794,8 +847,14 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 		"uniqExactIf(chat_id, chat_id != '') as total_chats",
 		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
 		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') as avg_session_duration_ms",
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gen_ai.conversation.duration) != '') as avg_session_duration_ms",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') as avg_resolution_time_ms",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') as total_output_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') as total_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') as cache_read_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') as cache_creation_input_tokens",
+		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') as total_cost",
 		"countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls",
 		"countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls",
 		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_latency_ms",
@@ -847,18 +906,18 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 		"max(time_unix_nano) as end_time_unix_nano",
 		"count(*) as log_count",
 		"countIf(startsWith(gram_urn, 'tools:')) as tool_call_count",
-		// Message count: number of LLM completion events in this chat
-		"countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') as message_count",
+		// Message count: count unique LLM responses by gen_ai.response.id
+		"uniqExactIf(toString(attributes.gen_ai.response.id), toString(attributes.gen_ai.response.id) != '') as message_count",
 		// Duration in seconds (max event time - min event time)
 		"toFloat64(max(time_unix_nano) - min(time_unix_nano)) / 1000000000.0 as duration_seconds",
 		// Status: failed if any tool call returned 4xx/5xx, otherwise success
 		"if(countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) > 0, 'error', 'success') as status",
 		"anyIf(toString(attributes.user.id), toString(attributes.user.id) != '') as user_id",
 		// Model used (pick any non-empty response model from completion events)
-		"anyIf(toString(attributes.gen_ai.response.model), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND toString(attributes.gen_ai.response.model) != '') as model",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') as total_input_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') as total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') as total_tokens",
+		"anyIf(toString(attributes.gen_ai.response.model), toString(attributes.gen_ai.response.model) != '') as model",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') as total_output_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') as total_tokens",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -918,6 +977,71 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 	return chats, nil
 }
 
+// GetChatMetricsByIDsParams contains the parameters for getting metrics for specific chat IDs.
+type GetChatMetricsByIDsParams struct {
+	GramProjectID string
+	ChatIDs       []string // UUIDs of chats to get metrics for
+}
+
+// ChatMetricsRow represents token and cost metrics for a single chat.
+type ChatMetricsRow struct {
+	GramChatID        string  `ch:"gram_chat_id"`
+	TotalInputTokens  int64   `ch:"total_input_tokens"`
+	TotalOutputTokens int64   `ch:"total_output_tokens"`
+	TotalTokens       int64   `ch:"total_tokens"`
+	TotalCost         float64 `ch:"total_cost"`
+}
+
+// GetChatMetricsByIDs retrieves token and cost metrics for specific chat IDs.
+// This is used to enrich chat overview data from PostgreSQL with metrics from ClickHouse.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByIDsParams) (map[string]ChatMetricsRow, error) {
+	if len(arg.ChatIDs) == 0 {
+		return make(map[string]ChatMetricsRow), nil
+	}
+
+	println("\n\n\n", strings.Join(arg.ChatIDs, ", "), "\n\n\n")
+
+	sb := sq.Select(
+		"gram_chat_id",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') as total_output_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') as total_tokens",
+		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') as total_cost",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
+		GroupBy("gram_chat_id")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building get chat metrics by IDs query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	metricsMap := make(map[string]ChatMetricsRow)
+	for rows.Next() {
+		var metrics ChatMetricsRow
+		if err = rows.ScanStruct(&metrics); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		metricsMap[metrics.GramChatID] = metrics
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return metricsMap, nil
+}
+
 // SearchUsersParams contains the parameters for searching users with aggregated metrics.
 type SearchUsersParams struct {
 	GramProjectID    string
@@ -952,13 +1076,16 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 		// Chat metrics
 		"uniqExactIf(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats",
-		"countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_chat_requests",
+		"uniqExactIf(toString(attributes.gen_ai.response.id), toString(attributes.gen_ai.response.id) != '') AS total_chat_requests",
 
-		// Token metrics (from chat completion events)
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_input_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_tokens",
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_tokens_per_request",
+		// Token metrics (from any event with gen_ai usage data)
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
+		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost",
 
 		// Tool call metrics
 		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls",
@@ -1043,15 +1170,15 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		"uniqExactIf(toString(attributes.gen_ai.response.model), toString(attributes.gen_ai.response.model) != '') AS distinct_models",
 		"uniqExactIf(toString(attributes.gen_ai.provider.name), toString(attributes.gen_ai.provider.name) != '') AS distinct_providers",
 
-		// Token metrics (from chat completion events)
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_input_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_tokens",
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_tokens_per_request",
+		// Token metrics (from any event with gen_ai usage data)
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens",
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
 
 		// Chat request metrics
-		"countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS total_chat_requests",
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gram.resource.urn) = 'agents:chat:completion') AS avg_chat_duration_ms",
+		"uniqExactIf(toString(attributes.gen_ai.response.id), toString(attributes.gen_ai.response.id) != '') AS total_chat_requests",
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gen_ai.conversation.duration) != '') AS avg_chat_duration_ms",
 
 		// Resolution status
 		"countIf(position(toString(attributes.gen_ai.response.finish_reasons), 'stop') > 0) AS finish_reason_stop",
@@ -1071,7 +1198,7 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.evaluation.score.value)), evaluation_score_label != '') AS avg_chat_resolution_score",
 
 		// Model breakdown (map of model name -> count)
-		"sumMapIf(map(toString(attributes.gen_ai.response.model), toUInt64(1)), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND toString(attributes.gen_ai.response.model) != '') AS models",
+		"sumMapIf(map(toString(attributes.gen_ai.response.model), toUInt64(1)), toString(attributes.gen_ai.response.model) != '') AS models",
 
 		// Tool breakdowns (maps of tool URN -> count)
 		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:')) AS tool_counts",
@@ -1104,32 +1231,35 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 	if !rows.Next() {
 		// Return empty metrics if no rows
 		return &MetricsSummaryRow{
-			FirstSeenUnixNano:       0,
-			LastSeenUnixNano:        0,
-			TotalChats:              0,
-			DistinctModels:          0,
-			DistinctProviders:       0,
-			TotalInputTokens:        0,
-			TotalOutputTokens:       0,
-			TotalTokens:             0,
-			AvgTokensPerReq:         0,
-			TotalChatRequests:       0,
-			AvgChatDurationMs:       0,
-			FinishReasonStop:        0,
-			FinishReasonToolCalls:   0,
-			TotalToolCalls:          0,
-			ToolCallSuccess:         0,
-			ToolCallFailure:         0,
-			AvgToolDurationMs:       0,
-			ChatResolutionSuccess:   0,
-			ChatResolutionFailure:   0,
-			ChatResolutionPartial:   0,
-			ChatResolutionAbandoned: 0,
-			AvgChatResolutionScore:  0,
-			Models:                  make(map[string]uint64),
-			ToolCounts:              make(map[string]uint64),
-			ToolSuccessCounts:       make(map[string]uint64),
-			ToolFailureCounts:       make(map[string]uint64),
+			FirstSeenUnixNano:        0,
+			LastSeenUnixNano:         0,
+			TotalChats:               0,
+			DistinctModels:           0,
+			DistinctProviders:        0,
+			TotalInputTokens:         0,
+			TotalOutputTokens:        0,
+			TotalTokens:              0,
+			CacheReadInputTokens:     0,
+			CacheCreationInputTokens: 0,
+			AvgTokensPerReq:          0,
+			TotalCost:                0,
+			TotalChatRequests:        0,
+			AvgChatDurationMs:        0,
+			FinishReasonStop:         0,
+			FinishReasonToolCalls:    0,
+			TotalToolCalls:           0,
+			ToolCallSuccess:          0,
+			ToolCallFailure:          0,
+			AvgToolDurationMs:        0,
+			ChatResolutionSuccess:    0,
+			ChatResolutionFailure:    0,
+			ChatResolutionPartial:    0,
+			ChatResolutionAbandoned:  0,
+			AvgChatResolutionScore:   0,
+			Models:                   make(map[string]uint64),
+			ToolCounts:               make(map[string]uint64),
+			ToolSuccessCounts:        make(map[string]uint64),
+			ToolFailureCounts:        make(map[string]uint64),
 		}, nil
 	}
 
@@ -1290,11 +1420,13 @@ type HooksServerSummaryRow struct {
 	FailureRate  float64 `ch:"failure_rate"`
 }
 
-// GetHooksSummaryParams defines the parameters for getting hooks summary.
+// GetHooksSummaryParams defines the parameters for getting hooks server summary.
 type GetHooksSummaryParams struct {
-	GramProjectID string
-	TimeStart     int64
-	TimeEnd       int64
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	Filters        []AttributeFilter
+	TypesToInclude []string
 }
 
 // GetHooksSummary retrieves aggregated hooks metrics grouped by server.
@@ -1313,8 +1445,11 @@ func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("event_source = 'hook'").
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
-		Where("start_time_unix_nano <= ?", arg.TimeEnd).
-		GroupBy("server_name").
+		Where("start_time_unix_nano <= ?", arg.TimeEnd)
+
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+
+	sb = sb.GroupBy("server_name").
 		OrderBy("event_count DESC")
 
 	query, args, err := sb.ToSql()
@@ -1346,9 +1481,11 @@ func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams
 
 // GetHooksSessionCountParams defines the parameters for getting unique session count.
 type GetHooksSessionCountParams struct {
-	GramProjectID string
-	TimeStart     int64
-	TimeEnd       int64
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	Filters        []AttributeFilter
+	TypesToInclude []string
 }
 
 // GetHooksSessionCount retrieves the count of unique sessions for hooks.
@@ -1361,6 +1498,7 @@ func (q *Queries) GetHooksSessionCount(ctx context.Context, arg GetHooksSessionC
 		Where("event_source = 'hook'").
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -1399,9 +1537,11 @@ type HooksUserSummaryRow struct {
 
 // GetHooksUserSummaryParams defines the parameters for getting hooks user summary.
 type GetHooksUserSummaryParams struct {
-	GramProjectID string
-	TimeStart     int64
-	TimeEnd       int64
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	Filters        []AttributeFilter
+	TypesToInclude []string
 }
 
 // GetHooksUserSummary retrieves aggregated hooks metrics grouped by user.
@@ -1420,8 +1560,11 @@ func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSumma
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("event_source = 'hook'").
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
-		Where("start_time_unix_nano <= ?", arg.TimeEnd).
-		GroupBy("user_email").
+		Where("start_time_unix_nano <= ?", arg.TimeEnd)
+
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+
+	sb = sb.GroupBy("user_email").
 		OrderBy("event_count DESC")
 
 	query, args, err := sb.ToSql()
@@ -1460,9 +1603,11 @@ type SkillSummaryRow struct {
 
 // GetSkillsSummaryParams defines the parameters for getting skills summary.
 type GetSkillsSummaryParams struct {
-	GramProjectID string
-	TimeStart     int64
-	TimeEnd       int64
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	Filters        []AttributeFilter
+	TypesToInclude []string
 }
 
 // GetSkillsSummary retrieves aggregated skills usage metrics.
@@ -1479,8 +1624,11 @@ func (q *Queries) GetSkillsSummary(ctx context.Context, arg GetSkillsSummaryPara
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
 		Where("start_time_unix_nano <= ?", arg.TimeEnd).
-		Where("skill_name != ''").
-		GroupBy("skill_name").
+		Where("skill_name != ''")
+
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+
+	sb = sb.GroupBy("skill_name").
 		OrderBy("use_count DESC")
 
 	query, args, err := sb.ToSql()
@@ -1508,6 +1656,147 @@ func (q *Queries) GetSkillsSummary(ctx context.Context, arg GetSkillsSummaryPara
 	}
 
 	return summaries, nil
+}
+
+// HooksBreakdownRow contains cross-dimensional aggregated counts for a unique (user, server, source, tool) combination.
+type HooksBreakdownRow struct {
+	UserEmail    string `ch:"user_email"`
+	ServerName   string `ch:"server_name"`
+	HookSource   string `ch:"hook_source"`
+	ToolName     string `ch:"tool_name"`
+	EventCount   uint64 `ch:"event_count"`
+	FailureCount uint64 `ch:"failure_count"`
+}
+
+// GetHooksBreakdownParams defines the parameters for the cross-dimensional hooks breakdown query.
+type GetHooksBreakdownParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	Filters        []AttributeFilter
+	TypesToInclude []string
+}
+
+// GetHooksBreakdown retrieves cross-dimensional hook event counts grouped by (user, server, hook_source, tool).
+// This powers bar charts in the analytics dashboard without being limited to paginated trace data.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetHooksBreakdown(ctx context.Context, arg GetHooksBreakdownParams) ([]HooksBreakdownRow, error) {
+	sb := sq.Select(
+		"if(user_email = '', 'Unknown', user_email) as user_email",
+		"if(tool_source = '', 'local', tool_source) as server_name",
+		"hook_source",
+		"tool_name",
+		"count(*) as event_count",
+		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
+	).
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("event_source = 'hook'").
+		Where("start_time_unix_nano >= ?", arg.TimeStart).
+		Where("start_time_unix_nano <= ?", arg.TimeEnd)
+
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+
+	sb = sb.GroupBy("user_email", "server_name", "hook_source", "tool_name").
+		OrderBy("event_count DESC").
+		Limit(1000) // Defensive cap: top 1000 combinations ordered by volume
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building hooks breakdown query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var breakdown []HooksBreakdownRow
+	for rows.Next() {
+		var row HooksBreakdownRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("error scanning hooks breakdown row: %w", err)
+		}
+		breakdown = append(breakdown, row)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return breakdown, nil
+}
+
+// HooksTimeSeriesPoint contains event counts for a single time bucket, server, and user combination.
+type HooksTimeSeriesPoint struct {
+	BucketStartNs int64  `ch:"bucket_start"`
+	ServerName    string `ch:"server_name"`
+	UserEmail     string `ch:"user_email"`
+	EventCount    uint64 `ch:"event_count"`
+	FailureCount  uint64 `ch:"failure_count"`
+}
+
+// GetHooksTimeSeriesParams defines the parameters for the hooks time series query.
+type GetHooksTimeSeriesParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	BucketSizeNs   int64 // Bucket size in nanoseconds (e.g. 5*60*1e9 for 5 minutes)
+	Filters        []AttributeFilter
+	TypesToInclude []string
+}
+
+// GetHooksTimeSeries retrieves time-bucketed hook event counts grouped by (bucket, server, user).
+// BucketSizeNs controls the bucket granularity (e.g. 5 minutes = 5*60*1e9).
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetHooksTimeSeries(ctx context.Context, arg GetHooksTimeSeriesParams) ([]HooksTimeSeriesPoint, error) {
+	sb := sq.Select(
+		fmt.Sprintf("intDiv(start_time_unix_nano, %d) * %d as bucket_start", arg.BucketSizeNs, arg.BucketSizeNs),
+		"if(tool_source = '', 'local', tool_source) as server_name",
+		"if(user_email = '', 'Unknown', user_email) as user_email",
+		"count(*) as event_count",
+		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
+	).
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("event_source = 'hook'").
+		Where("start_time_unix_nano >= ?", arg.TimeStart).
+		Where("start_time_unix_nano <= ?", arg.TimeEnd)
+
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+
+	sb = sb.GroupBy("bucket_start", "server_name", "user_email").
+		OrderBy("bucket_start ASC").
+		Limit(10000) // Defensive cap: 288 buckets/day * ~34 server/user combos at 5min resolution
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building hooks time series query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var points []HooksTimeSeriesPoint
+	for rows.Next() {
+		var pt HooksTimeSeriesPoint
+		if err = rows.ScanStruct(&pt); err != nil {
+			return nil, fmt.Errorf("error scanning hooks time series point: %w", err)
+		}
+		points = append(points, pt)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return points, nil
 }
 
 // ListHooksTracesParams contains the parameters for listing hook traces.
@@ -1550,6 +1839,9 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 
 	// Apply arbitrary attribute filters
 	for _, filter := range arg.Filters {
+		if !validJSONPath.MatchString(filter.Path) {
+			continue // skip invalid paths to prevent injection
+		}
 		materializedCol, isMaterialized := materializedColumns[filter.Path]
 		var columnRef string
 		if isMaterialized {

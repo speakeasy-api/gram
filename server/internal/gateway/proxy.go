@@ -95,7 +95,7 @@ type InstanceToolProxyConfig struct {
 
 // PlatformExecutor handles execution of Platform tools.
 type PlatformExecutor interface {
-	ExecuteTool(ctx context.Context, plan *ToolCallPlan, requestBody io.Reader) (*PlatformResult, error)
+	ExecuteTool(ctx context.Context, plan *ToolCallPlan, env toolconfig.ToolCallEnv, requestBody io.Reader) (*PlatformResult, error)
 }
 
 // PlatformResult is the result of executing a Platform tool.
@@ -184,7 +184,7 @@ func (tp *ToolProxy) Do(
 	case ToolKindPrompt:
 		return tp.doPrompt(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Prompt)
 	case ToolKindPlatform:
-		return tp.doPlatform(ctx, logger, w, requestBody, plan, attrs)
+		return tp.doPlatform(ctx, logger, w, requestBody, env, plan, attrs)
 	case ToolKindExternalMCP:
 		return tp.doExternalMCP(ctx, logger, w, requestBody, env, plan.ExternalMCP)
 	default:
@@ -197,6 +197,7 @@ func (tp *ToolProxy) doPlatform(
 	logger *slog.Logger,
 	w http.ResponseWriter,
 	requestBody io.Reader,
+	env toolconfig.ToolCallEnv,
 	plan *ToolCallPlan,
 	attrRecorder tm.HTTPLogAttributes,
 ) error {
@@ -245,7 +246,7 @@ func (tp *ToolProxy) doPlatform(
 		}
 	}
 
-	result, err := tp.platformTools.ExecuteTool(ctx, plan, bytes.NewReader(payloadBytes))
+	result, err := tp.platformTools.ExecuteTool(ctx, plan, env, bytes.NewReader(payloadBytes))
 	if err != nil {
 		return fmt.Errorf("execute platform tool: %w", err)
 	}

@@ -1,15 +1,7 @@
 import React from "react";
-import { useStepper as useStepperContext } from "../stepper/context";
+import { useStepper as useStepperContext } from "../stepper/use-stepper";
+import { StepContext } from "./use-step";
 import { StepState } from "./types";
-
-type StepContextApi = {
-  step: number;
-  state: StepState;
-  isCurrentStep: boolean;
-  setState: (state: StepState) => void;
-};
-
-const StepContext = React.createContext<StepContextApi>(null!);
 
 type StepContextProviderProps = {
   step: number;
@@ -38,14 +30,4 @@ export const StepContextProvider: React.FC<StepContextProviderProps> = (
       {props.children}
     </StepContext.Provider>
   );
-};
-
-export const useStep = () => {
-  const ctx = React.useContext(StepContext);
-
-  if (!ctx) {
-    throw new Error("useStep must be used within a Step.Provider");
-  }
-
-  return ctx;
 };

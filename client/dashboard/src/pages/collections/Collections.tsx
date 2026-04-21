@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { CreateResourceCard } from "@/components/create-resource-card";
 import { Type } from "@/components/ui/type";
 import { Input, Stack } from "@speakeasy-api/moonshine";
@@ -25,45 +26,47 @@ export default function Collections() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Collections</Page.Section.Title>
-          <Page.Section.Description>
-            Collections allow you to create reusable configurations of multiple
-            MCP servers to install into multiple projects in one go.
-          </Page.Section.Description>
-          <Page.Section.Body>
-            <Stack direction="vertical" gap={4}>
-              <div className="flex items-center gap-3">
-                <div className="relative w-64">
-                  <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                  <Input
-                    placeholder="Search collections..."
-                    value={searchQuery}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setSearchQuery(e.target.value)
-                    }
-                    className="h-10 pr-9 pl-10"
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery("")}
-                      className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 transition-colors"
-                      aria-label="Clear search"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
+        <RequireScope scope="org:admin" level="page">
+          <Page.Section>
+            <Page.Section.Title>Collections</Page.Section.Title>
+            <Page.Section.Description>
+              Collections allow you to create reusable configurations of
+              multiple MCP servers to install into multiple projects in one go.
+            </Page.Section.Description>
+            <Page.Section.Body>
+              <Stack direction="vertical" gap={4}>
+                <div className="flex items-center gap-3">
+                  <div className="relative w-64">
+                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                    <Input
+                      placeholder="Search collections..."
+                      value={searchQuery}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setSearchQuery(e.target.value)
+                      }
+                      className="h-10 pr-9 pl-10"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery("")}
+                        className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 transition-colors"
+                        aria-label="Clear search"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <CollectionGrid
-                collections={collections}
-                searchQuery={searchQuery}
-                onCreate={handleCreateCollection}
-              />
-            </Stack>
-          </Page.Section.Body>
-        </Page.Section>
+                <CollectionGrid
+                  collections={collections}
+                  searchQuery={searchQuery}
+                  onCreate={handleCreateCollection}
+                />
+              </Stack>
+            </Page.Section.Body>
+          </Page.Section>
+        </RequireScope>
       </Page.Body>
     </Page>
   );
@@ -88,14 +91,12 @@ function CollectionGrid({
 
   if (collections.length === 0) {
     return (
-      <div className="space-y-8 pt-6">
+      <div className="space-y-4">
         {searchQuery ? (
-          <Type muted className="text-center">
-            No collections matching &ldquo;{searchQuery}&rdquo;
-          </Type>
+          <Type muted>No collections matching &ldquo;{searchQuery}&rdquo;</Type>
         ) : null}
-        <div className="flex justify-center">
-          <div className="w-full max-w-md">{createCard}</div>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          {createCard}
         </div>
       </div>
     );

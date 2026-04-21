@@ -2,6 +2,7 @@ import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import {
   invalidateAllPlugin,
@@ -11,7 +12,7 @@ import { invalidateAllPlugins } from "@gram/client/react-query/plugins";
 import { useUpdatePluginMutation } from "@gram/client/react-query/updatePlugin";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
-import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg";
+import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -28,7 +29,8 @@ export default function PluginDetail() {
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
 
   const { fetch: authFetch } = useFetcher();
-  const { data: toolsetsData } = useListToolsetsForOrg();
+  const { data: toolsetsData, isLoading: isLoadingToolsets } =
+    useListToolsets();
   const toolsets = toolsetsData?.toolsets ?? [];
 
   const invalidateAll = async () => {
@@ -150,7 +152,9 @@ export default function PluginDetail() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Title>{plugin.name}</Page.Header.Title>
+        <Page.Header.Breadcrumbs
+          substitutions={{ [pluginId ?? ""]: plugin.name }}
+        />
       </Page.Header>
       <Page.Body>
         {/* Plugin metadata */}
@@ -282,7 +286,9 @@ export default function PluginDetail() {
             <form onSubmit={handleAddServer} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">Toolset</label>
-                {toolsets.length > 0 ? (
+                {isLoadingToolsets ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : toolsets.length > 0 ? (
                   <select
                     name="toolsetId"
                     className="bg-background rounded-md border px-3 py-2 text-sm"
@@ -312,7 +318,9 @@ export default function PluginDetail() {
                 <Button
                   type="submit"
                   disabled={
-                    addServerMutation.isPending || toolsets.length === 0
+                    addServerMutation.isPending ||
+                    isLoadingToolsets ||
+                    toolsets.length === 0
                   }
                 >
                   Add

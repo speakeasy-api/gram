@@ -27,7 +27,7 @@ export default function OrgProjects() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Title>Projects</Page.Header.Title>
+        <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
         <Heading variant="h4" className="mb-2">

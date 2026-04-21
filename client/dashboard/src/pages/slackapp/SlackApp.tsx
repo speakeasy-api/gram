@@ -1,7 +1,9 @@
 import { AssetImage } from "@/components/asset-image";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { Page } from "@/components/page-layout";
-import { CompactUpload, useAssetImageUploadHandler } from "@/components/upload";
+import { RequireScope } from "@/components/require-scope";
+import { CompactUpload } from "@/components/upload";
+import { useAssetImageUploadHandler } from "@/components/useAssetImageUploadHandler";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -9,7 +11,7 @@ import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { useToolsets } from "@/pages/toolsets/Toolsets";
+import { useToolsets } from "@/pages/toolsets/useToolsets";
 import {
   useListSlackApps,
   useCreateSlackAppMutation,
@@ -274,6 +276,21 @@ function CreateSlackAppDialog({
 }
 
 export default function SlackAppsIndex() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <RequireScope scope={["mcp:read", "mcp:write"]} level="page">
+          <SlackAppsInner />
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
+}
+
+function SlackAppsInner() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { data, isLoading } = useListSlackApps(undefined, undefined, {
     retry: false,
@@ -283,57 +300,47 @@ export default function SlackAppsIndex() {
   const apps = data?.items ?? [];
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <EnterpriseGate
-          icon="slack"
-          description="Assistants are available on the Enterprise plan. Book a time to get started."
-        >
-          <Page.Section>
-            <Page.Section.Title>Assistants</Page.Section.Title>
-            <Page.Section.Description>
-              Create and manage assistants that connect your team to Gram
-              toolsets in Slack.
-            </Page.Section.Description>
-            <Page.Section.CTA>
-              {apps.length > 0 && (
-                <Button onClick={() => setDialogOpen(true)}>
-                  <Button.LeftIcon>
-                    <Icon name="plus" className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Create new Assistant</Button.Text>
-                </Button>
-              )}
-            </Page.Section.CTA>
-            <Page.Section.Body>
-              {isLoading ? (
-                <Stack align="center" justify="center" className="py-16">
-                  <Icon
-                    name="loader-circle"
-                    className="text-muted-foreground h-6 w-6 animate-spin"
-                  />
-                </Stack>
-              ) : apps.length === 0 ? (
-                <SlackAppsEmptyState onCreate={() => setDialogOpen(true)} />
-              ) : (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {apps.map((app) => (
-                    <SlackAppCard key={app.id} app={app} />
-                  ))}
-                </div>
-              )}
-            </Page.Section.Body>
-          </Page.Section>
+    <EnterpriseGate
+      icon="slack"
+      description="Assistants are available on the Enterprise plan. Book a time to get started."
+    >
+      <Page.Section>
+        <Page.Section.Title>Assistants</Page.Section.Title>
+        <Page.Section.Description>
+          Create and manage assistants that connect your team to Gram toolsets
+          in Slack.
+        </Page.Section.Description>
+        <Page.Section.CTA>
+          {apps.length > 0 && (
+            <Button onClick={() => setDialogOpen(true)}>
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Create new Assistant</Button.Text>
+            </Button>
+          )}
+        </Page.Section.CTA>
+        <Page.Section.Body>
+          {isLoading ? (
+            <Stack align="center" justify="center" className="py-16">
+              <Icon
+                name="loader-circle"
+                className="text-muted-foreground h-6 w-6 animate-spin"
+              />
+            </Stack>
+          ) : apps.length === 0 ? (
+            <SlackAppsEmptyState onCreate={() => setDialogOpen(true)} />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {apps.map((app) => (
+                <SlackAppCard key={app.id} app={app} />
+              ))}
+            </div>
+          )}
+        </Page.Section.Body>
+      </Page.Section>
 
-          <CreateSlackAppDialog
-            open={dialogOpen}
-            onOpenChange={setDialogOpen}
-          />
-        </EnterpriseGate>
-      </Page.Body>
-    </Page>
+      <CreateSlackAppDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+    </EnterpriseGate>
   );
 }

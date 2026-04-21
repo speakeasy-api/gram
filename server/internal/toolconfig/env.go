@@ -134,6 +134,23 @@ type ToolCallEnv struct {
 	GramEmail  string // Authenticated Gram user's email (empty if not applicable)
 }
 
+// Merged returns a case-insensitive view where UserConfig values override
+// SystemEnv values. Handles nil SystemEnv / UserConfig. Never returns nil.
+func (e ToolCallEnv) Merged() *CaseInsensitiveEnv {
+	merged := NewCaseInsensitiveEnv()
+	if e.SystemEnv != nil {
+		for k, v := range e.SystemEnv.All() {
+			merged.Set(k, v)
+		}
+	}
+	if e.UserConfig != nil {
+		for k, v := range e.UserConfig.All() {
+			merged.Set(k, v)
+		}
+	}
+	return merged
+}
+
 // ToNormalizedEnvKey converts a string to a normalized environment variable key
 // (lowercase snake_case).
 func ToNormalizedEnvKey(s string) string {

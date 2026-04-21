@@ -191,7 +191,7 @@ func TestSetLogo_ForbiddenWithoutBuildWriteGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProjectsService(t, true)
-	ctx = access.GrantsToContext(ctx, &access.Grants{})
+	ctx = access.GrantsToContext(ctx, nil)
 
 	result, err := ti.service.SetLogo(ctx, &projects.SetLogoPayload{
 		ApikeyToken:      nil,
@@ -212,7 +212,7 @@ func TestSetLogo_SkipsRBACWhenDisabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProjectsService(t, false)
-	ctx = access.GrantsToContext(ctx, &access.Grants{})
+	ctx = access.GrantsToContext(ctx, nil)
 
 	assetID := uuid.New()
 	result, err := ti.service.SetLogo(ctx, &projects.SetLogoPayload{

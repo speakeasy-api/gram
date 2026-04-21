@@ -312,7 +312,7 @@ INSERT INTO organization_metadata (
     id,
     name,
     slug,
-    sso_connection_id,
+    workos_id,
     whitelisted
 ) VALUES (
     $1,
@@ -324,7 +324,8 @@ INSERT INTO organization_metadata (
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     slug = EXCLUDED.slug,
-    sso_connection_id = EXCLUDED.sso_connection_id,
+    -- TODO: remove COALESCE once WorkOS org migration is complete and all orgs reliably provide workos_id.
+    workos_id = COALESCE(EXCLUDED.workos_id, organization_metadata.workos_id),
     whitelisted = CASE
         WHEN $5::boolean IS NOT NULL THEN $5::boolean
         ELSE organization_metadata.whitelisted
@@ -334,11 +335,11 @@ RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, white
 `
 
 type UpsertOrganizationMetadataParams struct {
-	ID              string
-	Name            string
-	Slug            string
-	SsoConnectionID pgtype.Text
-	Whitelisted     pgtype.Bool
+	ID          string
+	Name        string
+	Slug        string
+	WorkosID    pgtype.Text
+	Whitelisted pgtype.Bool
 }
 
 func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrganizationMetadataParams) (OrganizationMetadatum, error) {
@@ -346,7 +347,7 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		arg.ID,
 		arg.Name,
 		arg.Slug,
-		arg.SsoConnectionID,
+		arg.WorkosID,
 		arg.Whitelisted,
 	)
 	var i OrganizationMetadatum

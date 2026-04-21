@@ -1,6 +1,6 @@
 import { useTelemetry } from "@/contexts/Telemetry.tsx";
 import { cn } from "@/lib/utils.ts";
-import { useIsProjectEmpty } from "@/pages/onboarding/UploadOpenAPI.tsx";
+import { useIsProjectEmpty } from "@/pages/onboarding/upload-openapi-utils";
 import { InitialChoiceStep } from "@/pages/onboarding/Wizard.tsx";
 import { useRoutes } from "@/routes.tsx";
 import { Button, Stack } from "@speakeasy-api/moonshine";
@@ -40,7 +40,11 @@ function PageBody({
     // Nest the max-width container inside another div so that the entire page area remains scrollable
     <div
       className={cn(
-        "h-full w-full",
+        // flex-1 + min-h-0 ensures this pane occupies exactly the remaining
+        // space in PageLayout's flex column (after PageHeader). Using h-full
+        // here would resolve to 100% of PageLayout and overflow past the
+        // header, clipping content at the bottom.
+        "min-h-0 w-full flex-1",
         overflowHidden ? "flex flex-col overflow-hidden" : "overflow-y-auto",
       )}
     >

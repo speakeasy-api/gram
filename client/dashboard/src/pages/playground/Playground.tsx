@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -31,7 +32,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
-import { ChatProvider, useChatContext } from "./ChatContext";
+import { ChatProvider } from "./ChatContext";
+import { useChatContext } from "./useChatContext";
 import { ChatConfig } from "./ChatWindow";
 import { EditToolDialog, ToolUpdatePayload } from "./EditToolDialog";
 import { ManageToolsDialog } from "./ManageToolsDialog";
@@ -43,9 +45,11 @@ import { ShareChatButton } from "./ShareChatButton";
 
 export default function Playground() {
   return (
-    <ChatProvider>
-      <PlaygroundInner />
-    </ChatProvider>
+    <RequireScope scope={["mcp:read", "mcp:write", "mcp:connect"]} level="page">
+      <ChatProvider>
+        <PlaygroundInner />
+      </ChatProvider>
+    </RequireScope>
   );
 }
 

@@ -33,6 +33,30 @@ export function parseOperatorSymbol(input: string): Op | null {
 }
 
 /**
+ * Add a filter to a list, applying dedup rules:
+ * - For eq/in: replaces any existing filter on the same path+op
+ * - For not_eq/contains: appends (stacking is valid)
+ */
+export function applyFilterAdd(
+  current: ActiveLogFilter[],
+  next: { path: string; op: Op; value?: string },
+): ActiveLogFilter[] {
+  const rest =
+    next.op === Operator.Eq || next.op === Operator.In
+      ? current.filter((f) => !(f.path === next.path && f.op === next.op))
+      : current;
+  return [
+    ...rest,
+    {
+      id: crypto.randomUUID(),
+      path: next.path,
+      op: next.op,
+      value: next.value,
+    },
+  ];
+}
+
+/**
  * Try to parse a freeform filter expression like `http.response.status_code != 200`.
  * Returns an `{ key, op, value }` triple on success, or `null` when the input
  * doesn't look like a filter expression (so the caller can fall through to

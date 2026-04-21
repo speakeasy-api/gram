@@ -11,14 +11,13 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/rbactest"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestServePublic_RBAC_PrivateMCP_DeniedWithNoGrants(t *testing.T) {
@@ -28,7 +27,7 @@ func TestServePublic_RBAC_PrivateMCP_DeniedWithNoGrants(t *testing.T) {
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-denied-"+uuid.NewString()[:8])
 
 	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
-	ctx = withExactAccessGrants(t, ctx, ti)
+	ctx = rbactest.WithExactAccessGrants(t, ctx)
 
 	err := accessManager.Require(ctx, access.Check{Scope: access.ScopeMCPConnect, ResourceID: toolset.ID.String()})
 	var oopsErr *oops.ShareableError
@@ -43,7 +42,7 @@ func TestServePublic_RBAC_PrivateMCP_DeniedWithUnrelatedGrant(t *testing.T) {
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-unrelated-"+uuid.NewString()[:8])
 
 	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
-	ctx = withExactAccessGrants(t, ctx, ti, access.Grant{Scope: access.ScopeMCPConnect, Resource: uuid.NewString()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeMCPConnect, Resource: uuid.NewString()})
 
 	err := accessManager.Require(ctx, access.Check{Scope: access.ScopeMCPConnect, ResourceID: toolset.ID.String()})
 	var oopsErr *oops.ShareableError
@@ -58,7 +57,7 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithWriteGrant(t *testing.T) {
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-write-implies-connect-"+uuid.NewString()[:8])
 
 	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
-	ctx = withExactAccessGrants(t, ctx, ti, access.Grant{Scope: access.ScopeMCPWrite, Resource: toolset.ID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeMCPWrite, Resource: toolset.ID.String()})
 
 	err := accessManager.Require(ctx, access.Check{Scope: access.ScopeMCPConnect, ResourceID: toolset.ID.String()})
 	require.NoError(t, err)
@@ -71,7 +70,7 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithConnectGrant(t *testing.T) {
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-allowed-"+uuid.NewString()[:8])
 
 	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
-	ctx = withExactAccessGrants(t, ctx, ti, access.Grant{Scope: access.ScopeMCPConnect, Resource: toolset.ID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeMCPConnect, Resource: toolset.ID.String()})
 
 	err := accessManager.Require(ctx, access.Check{Scope: access.ScopeMCPConnect, ResourceID: toolset.ID.String()})
 	require.NoError(t, err)
@@ -88,37 +87,11 @@ func TestServePublic_RBAC_PublicMCP_AllowedWithoutGrants(t *testing.T) {
 	toolsetsRepo := toolsets_repo.New(ti.conn)
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "rbac-public-"+uuid.NewString()[:8])
 
-	ctx = withExactAccessGrants(t, ctx, ti)
+	ctx = rbactest.WithExactAccessGrants(t, ctx)
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
-}
-
-func withExactAccessGrants(t *testing.T, ctx context.Context, ti *testInstance, grants ...access.Grant) context.Context {
-	t.Helper()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-
-	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "mcp-rbac-grants-"+uuid.NewString())
-	for _, grant := range grants {
-		_, err := accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			PrincipalUrn:   principal,
-			Scope:          string(grant.Scope),
-			Resource:       grant.Resource,
-		})
-		require.NoError(t, err)
-	}
-
-	loadedGrants, err := access.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, []urn.Principal{principal})
-	require.NoError(t, err)
-
-	return access.GrantsToContext(ctx, loadedGrants)
 }
 
 func createPrivateMCPToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) toolsets_repo.Toolset {

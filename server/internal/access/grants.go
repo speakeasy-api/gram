@@ -15,6 +15,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const WildcardResource = "*"
+
 type RoleGrant struct {
 	Scope     string
 	Resources []string
@@ -32,12 +34,17 @@ var SystemRoleGrants = map[string][]*RoleGrant{
 		{Scope: string(ScopeMCPRead)},
 		{Scope: string(ScopeMCPWrite)},
 		{Scope: string(ScopeMCPConnect)},
+		{Scope: string(ScopeRemoteMCPRead)},
+		{Scope: string(ScopeRemoteMCPWrite)},
+		{Scope: string(ScopeRemoteMCPConnect)},
 	},
 	"member": {
 		{Scope: string(ScopeOrgRead)},
 		{Scope: string(ScopeBuildRead)},
 		{Scope: string(ScopeMCPRead)},
 		{Scope: string(ScopeMCPConnect)},
+		{Scope: string(ScopeRemoteMCPRead)},
+		{Scope: string(ScopeRemoteMCPConnect)},
 	},
 }
 
@@ -51,30 +58,19 @@ func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.
 	return nil
 }
 
-const WildcardResource = "*"
-
 type Grant struct {
 	Scope    Scope
 	Resource string
 }
 
-type Grants struct {
-	rows []Grant
-}
-
-func (g *Grants) satisfies(checks []Check) bool {
-	if g == nil {
-		return false
-	}
-
-	for _, row := range g.rows {
+func grantsSatisfy(grants []Grant, checks []Check) bool {
+	for _, row := range grants {
 		for _, check := range checks {
 			if row.Scope == check.Scope && row.Resource == check.ResourceID {
 				return true
 			}
 		}
 	}
-
 	return false
 }
 

@@ -11,48 +11,18 @@ import { getServerURL } from "@/lib/utils";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { generateObject } from "ai";
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import {
   AGENT_EXAMPLES,
   FRAMEWORKS,
-  OPENAI_AGENTS_SDK,
   SdkFramework,
   SdkLanguage,
 } from "../sdk/examples";
 import { SdkLanguageDropdown } from "../sdk/SDK";
-import { useChatMessages } from "./ChatContext";
+import { useChatMessages } from "./useChatContext";
 import { useMiniModel } from "./Openrouter";
-
-export const useAgentify = () => {
-  return useContext(AgentifyContext);
-};
-
-const AgentifyContext = createContext<{
-  lang: SdkLanguage;
-  setLang: (lang: SdkLanguage) => void;
-  framework: SdkFramework;
-  setFramework: (framework: SdkFramework) => void;
-  inProgress: boolean;
-  prompt: string | undefined;
-  setPrompt: (prompt: string | undefined) => void;
-  result: string | undefined;
-  resultLang: SdkLanguage | undefined;
-  outdated: boolean;
-  agentify: (toolsetSlug: string, environmentSlug: string) => Promise<string>;
-}>({
-  lang: "python",
-  setLang: () => {},
-  framework: OPENAI_AGENTS_SDK,
-  setFramework: () => {},
-  inProgress: false,
-  prompt: undefined,
-  setPrompt: () => {},
-  result: undefined,
-  resultLang: undefined,
-  outdated: false,
-  agentify: () => Promise.resolve(""),
-});
+import { AgentifyContext, useAgentify } from "./useAgentify";
 
 export const AgentifyProvider = ({
   children,

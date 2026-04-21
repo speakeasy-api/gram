@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -123,32 +122,12 @@ func (fbs *FSBlobStore) Write(ctx context.Context, pathname string, contentType 
 
 func (fbs *FSBlobStore) mkdirAll(filename string) error {
 	dir := filepath.Dir(filepath.Clean(filename))
-
-	segments := []string{}
-	limit := 10 // hard limit to prevent infinite loops
-	for i := range limit {
-		if dir == "" || dir == "." || dir == "/" {
-			break
-		}
-
-		segments = append(segments, dir)
-		next, _ := filepath.Split(dir)
-		if next == dir {
-			break
-		}
-		dir = next
-
-		if i == limit-1 {
-			return fmt.Errorf("too many segments: %s", filename)
-		}
+	if dir == "" || dir == "." || dir == string(filepath.Separator) {
+		return nil
 	}
-
-	for _, seg := range slices.Backward(segments) {
-		if err := fbs.Root.Mkdir(seg, 0755); err != nil && !os.IsExist(err) {
-			return fmt.Errorf("create directory %s: %w", seg, err)
-		}
+	if err := fbs.Root.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create directory %s: %w", dir, err)
 	}
-
 	return nil
 }
 

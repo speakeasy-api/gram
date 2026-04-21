@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  ToolMentionAutocomplete,
-  MentionedToolsBadges,
-  Tool,
-} from "./ToolMentions";
+import { ToolMentionAutocomplete, MentionedToolsBadges } from "./ToolMentions";
+import type { Tool } from "./tool-mention-utils";
 
 interface ChatComposerWrapperProps {
   children: React.ReactNode;

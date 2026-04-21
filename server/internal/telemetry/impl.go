@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math"
 	"sort"
@@ -30,23 +31,25 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
+	"golang.org/x/sync/errgroup"
 )
 
 const logsDisabledMsg = "logs are not enabled for this organization"
 
 type Service struct {
-	auth         *auth.Auth
-	db           *pgxpool.Pool
-	chatRepo     *chatRepo.Queries
-	hooksRepo    *hooksRepo.Queries
-	chConn       clickhouse.Conn
-	chRepo       *repo.Queries
-	logger       *slog.Logger
-	tracer       trace.Tracer
-	posthog      PosthogClient
-	chatSessions *chatsessions.Manager
-	logsEnabled  FeatureChecker
-	access       *access.Manager
+	auth                  *auth.Auth
+	db                    *pgxpool.Pool
+	chatRepo              *chatRepo.Queries
+	hooksRepo             *hooksRepo.Queries
+	chConn                clickhouse.Conn
+	chRepo                *repo.Queries
+	logger                *slog.Logger
+	tracer                trace.Tracer
+	posthog               PosthogClient
+	chatSessions          *chatsessions.Manager
+	logsEnabled           FeatureChecker
+	sessionCaptureEnabled FeatureChecker
+	access                *access.Manager
 }
 
 var _ telem_gen.Service = (*Service)(nil)
@@ -61,6 +64,7 @@ func NewService(
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
 	logsEnabled FeatureChecker,
+	sessionCaptureEnabled FeatureChecker,
 	posthogClient PosthogClient,
 	accessManager *access.Manager,
 ) *Service {
@@ -76,18 +80,19 @@ func NewService(
 	}
 
 	return &Service{
-		auth:         a,
-		db:           db,
-		chatRepo:     chatRepo.New(db),
-		hooksRepo:    hooksRepo.New(db),
-		chConn:       chConn,
-		chRepo:       chRepo,
-		logger:       logger,
-		logsEnabled:  logsEnabled,
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
-		posthog:      posthogClient,
-		chatSessions: chatSessions,
-		access:       accessManager,
+		auth:                  a,
+		db:                    db,
+		chatRepo:              chatRepo.New(db),
+		hooksRepo:             hooksRepo.New(db),
+		chConn:                chConn,
+		chRepo:                chRepo,
+		logger:                logger,
+		logsEnabled:           logsEnabled,
+		sessionCaptureEnabled: sessionCaptureEnabled,
+		tracer:                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
+		posthog:               posthogClient,
+		chatSessions:          chatSessions,
+		access:                accessManager,
 	}
 }
 
@@ -404,19 +409,22 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 
 		//nolint:gosec // Values are bounded counts that won't overflow int64
 		users[i] = &telem_gen.UserSummary{
-			UserID:              item.UserID,
-			FirstSeenUnixNano:   strconv.FormatInt(item.FirstSeenUnixNano, 10),
-			LastSeenUnixNano:    strconv.FormatInt(item.LastSeenUnixNano, 10),
-			TotalChats:          int64(item.TotalChats),
-			TotalChatRequests:   int64(item.TotalChatRequests),
-			TotalInputTokens:    item.TotalInputTokens,
-			TotalOutputTokens:   item.TotalOutputTokens,
-			TotalTokens:         item.TotalTokens,
-			AvgTokensPerRequest: sanitizeFloat64(item.AvgTokensPerReq),
-			TotalToolCalls:      int64(item.TotalToolCalls),
-			ToolCallSuccess:     int64(item.ToolCallSuccess),
-			ToolCallFailure:     int64(item.ToolCallFailure),
-			Tools:               tools,
+			UserID:                   item.UserID,
+			FirstSeenUnixNano:        strconv.FormatInt(item.FirstSeenUnixNano, 10),
+			LastSeenUnixNano:         strconv.FormatInt(item.LastSeenUnixNano, 10),
+			TotalChats:               int64(item.TotalChats),
+			TotalChatRequests:        int64(item.TotalChatRequests),
+			TotalInputTokens:         item.TotalInputTokens,
+			TotalOutputTokens:        item.TotalOutputTokens,
+			TotalTokens:              item.TotalTokens,
+			CacheReadInputTokens:     item.CacheReadInputTokens,
+			CacheCreationInputTokens: item.CacheCreationInputTokens,
+			AvgTokensPerRequest:      sanitizeFloat64(item.AvgTokensPerReq),
+			TotalCost:                sanitizeFloat64(item.TotalCost),
+			TotalToolCalls:           int64(item.TotalToolCalls),
+			ToolCallSuccess:          int64(item.ToolCallSuccess),
+			ToolCallFailure:          int64(item.ToolCallFailure),
+			Tools:                    tools,
 		}
 	}
 
@@ -488,30 +496,33 @@ func buildMetricsSummaryResult(metrics repo.MetricsSummaryRow) *telem_gen.GetMet
 	//nolint:gosec // Values are bounded counts that won't overflow int64
 	return &telem_gen.GetMetricsSummaryResult{
 		Metrics: &telem_gen.ProjectSummary{
-			FirstSeenUnixNano:       strconv.FormatInt(metrics.FirstSeenUnixNano, 10),
-			LastSeenUnixNano:        strconv.FormatInt(metrics.LastSeenUnixNano, 10),
-			TotalInputTokens:        metrics.TotalInputTokens,
-			TotalOutputTokens:       metrics.TotalOutputTokens,
-			TotalTokens:             metrics.TotalTokens,
-			AvgTokensPerRequest:     sanitizeFloat64(metrics.AvgTokensPerReq),
-			TotalChatRequests:       int64(metrics.TotalChatRequests),
-			AvgChatDurationMs:       sanitizeFloat64(metrics.AvgChatDurationMs),
-			FinishReasonStop:        int64(metrics.FinishReasonStop),
-			FinishReasonToolCalls:   int64(metrics.FinishReasonToolCalls),
-			TotalToolCalls:          int64(metrics.TotalToolCalls),
-			ToolCallSuccess:         int64(metrics.ToolCallSuccess),
-			ToolCallFailure:         int64(metrics.ToolCallFailure),
-			AvgToolDurationMs:       sanitizeFloat64(metrics.AvgToolDurationMs),
-			TotalChats:              int64(metrics.TotalChats),
-			DistinctModels:          int64(metrics.DistinctModels),
-			DistinctProviders:       int64(metrics.DistinctProviders),
-			Models:                  models,
-			Tools:                   tools,
-			ChatResolutionSuccess:   int64(metrics.ChatResolutionSuccess),
-			ChatResolutionFailure:   int64(metrics.ChatResolutionFailure),
-			ChatResolutionPartial:   int64(metrics.ChatResolutionPartial),
-			ChatResolutionAbandoned: int64(metrics.ChatResolutionAbandoned),
-			AvgChatResolutionScore:  sanitizeFloat64(metrics.AvgChatResolutionScore),
+			FirstSeenUnixNano:        strconv.FormatInt(metrics.FirstSeenUnixNano, 10),
+			LastSeenUnixNano:         strconv.FormatInt(metrics.LastSeenUnixNano, 10),
+			TotalInputTokens:         metrics.TotalInputTokens,
+			TotalOutputTokens:        metrics.TotalOutputTokens,
+			TotalTokens:              metrics.TotalTokens,
+			CacheReadInputTokens:     metrics.CacheReadInputTokens,
+			CacheCreationInputTokens: metrics.CacheCreationInputTokens,
+			AvgTokensPerRequest:      sanitizeFloat64(metrics.AvgTokensPerReq),
+			TotalCost:                sanitizeFloat64(metrics.TotalCost),
+			TotalChatRequests:        int64(metrics.TotalChatRequests),
+			AvgChatDurationMs:        sanitizeFloat64(metrics.AvgChatDurationMs),
+			FinishReasonStop:         int64(metrics.FinishReasonStop),
+			FinishReasonToolCalls:    int64(metrics.FinishReasonToolCalls),
+			TotalToolCalls:           int64(metrics.TotalToolCalls),
+			ToolCallSuccess:          int64(metrics.ToolCallSuccess),
+			ToolCallFailure:          int64(metrics.ToolCallFailure),
+			AvgToolDurationMs:        sanitizeFloat64(metrics.AvgToolDurationMs),
+			TotalChats:               int64(metrics.TotalChats),
+			DistinctModels:           int64(metrics.DistinctModels),
+			DistinctProviders:        int64(metrics.DistinctProviders),
+			Models:                   models,
+			Tools:                    tools,
+			ChatResolutionSuccess:    int64(metrics.ChatResolutionSuccess),
+			ChatResolutionFailure:    int64(metrics.ChatResolutionFailure),
+			ChatResolutionPartial:    int64(metrics.ChatResolutionPartial),
+			ChatResolutionAbandoned:  int64(metrics.ChatResolutionAbandoned),
+			AvgChatResolutionScore:   sanitizeFloat64(metrics.AvgChatResolutionScore),
 		},
 	}
 }
@@ -936,17 +947,13 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	comparisonStartPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonStart), Valid: true, InfinityModifier: pgtype.Finite}
 	comparisonEndPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonEnd), Valid: true, InfinityModifier: pgtype.Finite}
 
-	// Determine metrics mode: Check if there are chat sessions in PostgreSQL
-	sessionCount, err := s.chatRepo.GetChatSessionCount(ctx, chatRepo.GetChatSessionCountParams{
-		ProjectID: *authCtx.ProjectID,
-		TimeStart: timeStartPG,
-		TimeEnd:   timeEndPG,
-	})
+	// Determine metrics mode: Check if session capture is enabled
+	sessionCaptureEnabled, err := s.sessionCaptureEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error checking session count")
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if session capture is enabled")
 	}
 
-	sessionMode := sessionCount > 0
+	sessionMode := sessionCaptureEnabled
 	metricsMode := "tool_call"
 	if sessionMode {
 		metricsMode = "session"
@@ -1163,26 +1170,38 @@ func calculateInterval(timeStart, timeEnd int64) int64 {
 func toObservabilitySummary(summary *repo.OverviewSummary) *telem_gen.ObservabilitySummary {
 	if summary == nil {
 		return &telem_gen.ObservabilitySummary{
-			TotalChats:           0,
-			ResolvedChats:        0,
-			FailedChats:          0,
-			AvgSessionDurationMs: 0,
-			AvgResolutionTimeMs:  0,
-			TotalToolCalls:       0,
-			FailedToolCalls:      0,
-			AvgLatencyMs:         0,
+			TotalChats:               0,
+			ResolvedChats:            0,
+			FailedChats:              0,
+			AvgSessionDurationMs:     0,
+			AvgResolutionTimeMs:      0,
+			TotalInputTokens:         0,
+			TotalOutputTokens:        0,
+			TotalTokens:              0,
+			CacheReadInputTokens:     0,
+			CacheCreationInputTokens: 0,
+			TotalCost:                0,
+			TotalToolCalls:           0,
+			FailedToolCalls:          0,
+			AvgLatencyMs:             0,
 		}
 	}
 	//nolint:gosec // Values are bounded counts that won't overflow int64
 	return &telem_gen.ObservabilitySummary{
-		TotalChats:           int64(summary.TotalChats),
-		ResolvedChats:        int64(summary.ResolvedChats),
-		FailedChats:          int64(summary.FailedChats),
-		AvgSessionDurationMs: sanitizeFloat64(summary.AvgSessionDurationMs),
-		AvgResolutionTimeMs:  sanitizeFloat64(summary.AvgResolutionTimeMs),
-		TotalToolCalls:       int64(summary.TotalToolCalls),
-		FailedToolCalls:      int64(summary.FailedToolCalls),
-		AvgLatencyMs:         sanitizeFloat64(summary.AvgLatencyMs),
+		TotalChats:               int64(summary.TotalChats),
+		ResolvedChats:            int64(summary.ResolvedChats),
+		FailedChats:              int64(summary.FailedChats),
+		AvgSessionDurationMs:     sanitizeFloat64(summary.AvgSessionDurationMs),
+		AvgResolutionTimeMs:      sanitizeFloat64(summary.AvgResolutionTimeMs),
+		TotalInputTokens:         summary.TotalInputTokens,
+		TotalOutputTokens:        summary.TotalOutputTokens,
+		TotalTokens:              summary.TotalTokens,
+		CacheReadInputTokens:     summary.CacheReadInputTokens,
+		CacheCreationInputTokens: summary.CacheCreationInputTokens,
+		TotalCost:                sanitizeFloat64(summary.TotalCost),
+		TotalToolCalls:           int64(summary.TotalToolCalls),
+		FailedToolCalls:          int64(summary.FailedToolCalls),
+		AvgLatencyMs:             sanitizeFloat64(summary.AvgLatencyMs),
 	}
 }
 
@@ -1241,16 +1260,22 @@ func toTimeSeriesBuckets(buckets []repo.TimeSeriesBucket) []*telem_gen.TimeSerie
 	for i, b := range buckets {
 		//nolint:gosec // Values are bounded counts that won't overflow int64
 		result[i] = &telem_gen.TimeSeriesBucket{
-			BucketTimeUnixNano:   strconv.FormatInt(b.BucketTimeUnixNano, 10),
-			TotalChats:           int64(b.TotalChats),
-			ResolvedChats:        int64(b.ResolvedChats),
-			FailedChats:          int64(b.FailedChats),
-			PartialChats:         int64(b.PartialChats),
-			AbandonedChats:       int64(b.AbandonedChats),
-			TotalToolCalls:       int64(b.TotalToolCalls),
-			FailedToolCalls:      int64(b.FailedToolCalls),
-			AvgToolLatencyMs:     sanitizeFloat64(b.AvgToolLatencyMs),
-			AvgSessionDurationMs: sanitizeFloat64(b.AvgSessionDurationMs),
+			BucketTimeUnixNano:       strconv.FormatInt(b.BucketTimeUnixNano, 10),
+			TotalChats:               int64(b.TotalChats),
+			ResolvedChats:            int64(b.ResolvedChats),
+			FailedChats:              int64(b.FailedChats),
+			PartialChats:             int64(b.PartialChats),
+			AbandonedChats:           int64(b.AbandonedChats),
+			TotalInputTokens:         b.TotalInputTokens,
+			TotalOutputTokens:        b.TotalOutputTokens,
+			TotalTokens:              b.TotalTokens,
+			CacheReadInputTokens:     b.CacheReadInputTokens,
+			CacheCreationInputTokens: b.CacheCreationInputTokens,
+			TotalCost:                sanitizeFloat64(b.TotalCost),
+			TotalToolCalls:           int64(b.TotalToolCalls),
+			FailedToolCalls:          int64(b.FailedToolCalls),
+			AvgToolLatencyMs:         sanitizeFloat64(b.AvgToolLatencyMs),
+			AvgSessionDurationMs:     sanitizeFloat64(b.AvgSessionDurationMs),
 		}
 	}
 	return result
@@ -1488,34 +1513,116 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		return nil, err
 	}
 
-	// Get server summary
-	serverRows, err := s.chRepo.GetHooksSummary(ctx, repo.GetHooksSummaryParams{
-		GramProjectID: authCtx.ProjectID.String(),
-		TimeStart:     timeStart,
-		TimeEnd:       timeEnd,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks summary: %v", err)
+	attributeFilters := toRepoAttributeFilters(payload.Filters)
+	typesToInclude := payload.TypesToInclude
+
+	// Compute time series bucket size: 5 min for ≤24h windows, 60 min otherwise
+	const fiveMinNs = int64(5 * 60 * 1e9)
+	const sixtyMinNs = int64(60 * 60 * 1e9)
+	bucketSizeNs := sixtyMinNs
+	if timeEnd-timeStart <= int64(24*60*60*1e9) {
+		bucketSizeNs = fiveMinNs
 	}
 
-	// Get user summary
-	userRows, err := s.chRepo.GetHooksUserSummary(ctx, repo.GetHooksUserSummaryParams{
-		GramProjectID: authCtx.ProjectID.String(),
-		TimeStart:     timeStart,
-		TimeEnd:       timeEnd,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks user summary: %v", err)
-	}
+	// Run all six independent ClickHouse queries in parallel
+	var (
+		serverRows       []repo.HooksServerSummaryRow
+		userRows         []repo.HooksUserSummaryRow
+		skillRows        []repo.SkillSummaryRow
+		breakdownRows    []repo.HooksBreakdownRow
+		timeSeriesPoints []repo.HooksTimeSeriesPoint
+		sessionCount     int64
+	)
+	eg, egCtx := errgroup.WithContext(ctx)
+	projectID := authCtx.ProjectID.String()
 
-	// Get skills summary
-	skillRows, err := s.chRepo.GetSkillsSummary(ctx, repo.GetSkillsSummaryParams{
-		GramProjectID: authCtx.ProjectID.String(),
-		TimeStart:     timeStart,
-		TimeEnd:       timeEnd,
+	eg.Go(func() error {
+		var err error
+		serverRows, err = s.chRepo.GetHooksSummary(egCtx, repo.GetHooksSummaryParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks server summary: %w", err)
+		}
+		return nil
 	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting skills summary: %v", err)
+	eg.Go(func() error {
+		var err error
+		userRows, err = s.chRepo.GetHooksUserSummary(egCtx, repo.GetHooksUserSummaryParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks user summary: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		skillRows, err = s.chRepo.GetSkillsSummary(egCtx, repo.GetSkillsSummaryParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get skills summary: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		breakdownRows, err = s.chRepo.GetHooksBreakdown(egCtx, repo.GetHooksBreakdownParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks breakdown: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		timeSeriesPoints, err = s.chRepo.GetHooksTimeSeries(egCtx, repo.GetHooksTimeSeriesParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			BucketSizeNs:   bucketSizeNs,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks time series: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		sessionCount, err = s.chRepo.GetHooksSessionCount(egCtx, repo.GetHooksSessionCountParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get hooks session count: %w", err)
+		}
+		return nil
+	})
+	if err := eg.Wait(); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching hooks summary data")
 	}
 
 	// Transform server rows into response
@@ -1556,15 +1663,31 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		})
 	}
 
-	// Get unique session count
-	sessionCount, err := s.chRepo.GetHooksSessionCount(ctx, repo.GetHooksSessionCountParams{
-		GramProjectID: authCtx.ProjectID.String(),
-		TimeStart:     timeStart,
-		TimeEnd:       timeEnd,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting hooks session count: %v", err)
+	// Transform breakdown rows into response
+	breakdown := make([]*telem_gen.HooksBreakdownRow, 0, len(breakdownRows))
+	for _, row := range breakdownRows {
+		breakdown = append(breakdown, &telem_gen.HooksBreakdownRow{
+			UserEmail:    row.UserEmail,
+			ServerName:   row.ServerName,
+			HookSource:   row.HookSource,
+			ToolName:     row.ToolName,
+			EventCount:   int64(row.EventCount),   //nolint:gosec // Bounded count
+			FailureCount: int64(row.FailureCount), //nolint:gosec // Bounded count
+		})
 	}
+
+	// Transform time series points into response
+	timeSeries := make([]*telem_gen.HooksTimeSeriesPoint, 0, len(timeSeriesPoints))
+	for _, pt := range timeSeriesPoints {
+		timeSeries = append(timeSeries, &telem_gen.HooksTimeSeriesPoint{
+			BucketStartNs: strconv.FormatInt(pt.BucketStartNs, 10),
+			ServerName:    pt.ServerName,
+			UserEmail:     pt.UserEmail,
+			EventCount:    int64(pt.EventCount),   //nolint:gosec // Bounded count
+			FailureCount:  int64(pt.FailureCount), //nolint:gosec // Bounded count
+		})
+	}
+
 	totalSessions = sessionCount
 
 	return &telem_gen.GetHooksSummaryResult{
@@ -1573,6 +1696,8 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		Skills:        skills,
 		TotalEvents:   totalEvents,
 		TotalSessions: totalSessions,
+		Breakdown:     breakdown,
+		TimeSeries:    timeSeries,
 	}, nil
 }
 
@@ -1632,6 +1757,23 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 		Traces:     traces,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// GetChatMetricsByIDs retrieves token and cost metrics for specific chat IDs.
+// This is used by the chat service to enrich chat overview data with metrics from ClickHouse.
+func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, chatIDs []string) (map[string]repo.ChatMetricsRow, error) {
+	if s.chRepo == nil {
+		return make(map[string]repo.ChatMetricsRow), nil
+	}
+
+	result, err := s.chRepo.GetChatMetricsByIDs(ctx, repo.GetChatMetricsByIDsParams{
+		GramProjectID: projectID,
+		ChatIDs:       chatIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get chat metrics by ids: %w", err)
+	}
+	return result, nil
 }
 
 // toTopUsersFromPG converts PostgreSQL top users to API type.

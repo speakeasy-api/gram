@@ -47,6 +47,8 @@ INSERT INTO chat_messages (
   , user_agent
   , ip_address
   , source
+  , content_hash
+  , generation
 )
 VALUES (
     @chat_id
@@ -70,6 +72,8 @@ VALUES (
   , @user_agent
   , @ip_address
   , @source
+  , @content_hash
+  , @generation
 );
 
 -- name: ListAllChats :many
@@ -148,7 +152,29 @@ WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uu
 ORDER BY seq ASC;
 
 -- name: CountChatMessages :one
-SELECT COUNT(*) FROM chat_messages WHERE chat_id = @chat_id;
+-- Must match ListChatMessages' project_id filter, otherwise count and the
+-- list drift and the client hits "chat history mismatch" at
+-- message_capture_strategy.go.
+SELECT COUNT(*) FROM chat_messages
+WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid);
+
+-- name: GetMaxGenerationForChat :one
+SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = @chat_id;
+
+-- name: ListChatMessagesForMatch :many
+SELECT id, role, content, tool_call_id, content_hash
+FROM chat_messages
+WHERE chat_id = @chat_id AND generation = @generation
+ORDER BY seq ASC;
+
+-- name: BackfillChatMessageHash :exec
+UPDATE chat_messages SET content_hash = @content_hash WHERE id = @id AND content_hash IS NULL;
+
+-- name: GetChatChainTip :one
+SELECT generation, content_hash FROM chat_messages
+WHERE chat_id = @chat_id
+ORDER BY seq DESC
+LIMIT 1;
 
 -- name: UpdateChatTitle :exec
 UPDATE chats SET title = @title, updated_at = NOW() WHERE id = @id;

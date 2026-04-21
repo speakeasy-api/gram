@@ -66,7 +66,9 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/resources"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -179,16 +181,6 @@ func newStartCommand() *cli.Command {
 			Usage:    "The location of the assets backend to connect to",
 			EnvVars:  []string{"GRAM_ASSETS_URI"},
 			Required: true,
-		},
-		&cli.StringFlag{
-			Name:    "redis-cache-addr",
-			Usage:   "Address of the redis cache server",
-			EnvVars: []string{"GRAM_REDIS_CACHE_ADDR"},
-		},
-		&cli.StringFlag{
-			Name:    "redis-cache-password",
-			Usage:   "Password for the redis cache server",
-			EnvVars: []string{"GRAM_REDIS_CACHE_PASSWORD"},
 		},
 		&cli.StringFlag{
 			Name:     "encryption-key",
@@ -364,6 +356,7 @@ func newStartCommand() *cli.Command {
 		},
 	}
 
+	flags = append(flags, redisFlags...)
 	flags = append(flags, clickHouseFlags...)
 	flags = append(flags, functionsFlags...)
 	flags = append(flags, pulseMCPFlags...)
@@ -443,6 +436,7 @@ func newStartCommand() *cli.Command {
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
+				enableTracing: c.Bool("redis-enable-tracing"),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
@@ -587,6 +581,7 @@ func newStartCommand() *cli.Command {
 
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
+			sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
 			roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
 			if err != nil {
 				return fmt.Errorf("failed to create access role provider: %w", err)
@@ -603,7 +598,7 @@ func newStartCommand() *cli.Command {
 			telemLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, posthogClient, accessManager)
+			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, accessManager)
 
 			// Wrap cache for hooks service in local development
 			var hooksCache cache.Cache = cache.NewRedisCacheAdapter(redisClient)
@@ -611,11 +606,14 @@ func newStartCommand() *cli.Command {
 				hooksCache = hooks.NewLocalSessionCache(hooksCache, db)
 			}
 
+			captureStrategy, shutdown := chat.NewChatMessageCaptureStrategy(logger, db, assetStorage)
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
 				openRouter,
-				chat.NewChatMessageCaptureStrategy(logger, db, assetStorage),
+				captureStrategy,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
@@ -642,6 +640,7 @@ func newStartCommand() *cli.Command {
 				db,
 				telemSvc,
 				platformtoolsruntime.WithTriggerTools(triggerApp),
+				platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
 			)
 
 			mcpService := mcp.NewService(
@@ -723,6 +722,10 @@ func newStartCommand() *cli.Command {
 					SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("site-url")),
 					Environment:            c.String("environment"),
 				},
+				accessManager,
+				func(ctx context.Context, projectIDs []string) ([]string, error) {
+					return accessManager.Filter(ctx, access.ScopeBuildRead, projectIDs)
+				},
 			))
 			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, accessManager))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, accessManager))
@@ -744,6 +747,7 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), accessManager))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, accessManager))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, accessManager))
+			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, accessManager))
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, accessManager, triggerApp))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, accessManager))
@@ -762,6 +766,15 @@ func newStartCommand() *cli.Command {
 			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter, accessManager))
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
+
+			riskSignaler := background.NewThrottledSignaler(
+				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv},
+				30*time.Second,
+				logger,
+			)
+			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, accessManager, riskSignaler)
+			captureStrategy.AddObserver(riskService)
+			risk.Attach(mux, riskService)
 
 			slack.Attach(mux, slack.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
 				GramServerURL:     c.String("server-url"),

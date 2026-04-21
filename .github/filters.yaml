@@ -31,6 +31,13 @@ sdk:
   - "package.json"
   - "pnpm-lock.yaml"
 
+sdk-gen:
+  - ".speakeasy/workflow.yaml"
+  - "client/sdk/.speakeasy/gen.yaml"
+  - "mise.toml"
+  - "overlays/**"
+  - "server/gen/http/openapi3.yaml"
+
 elements:
   - "elements/**"
 

@@ -41,13 +41,12 @@ import {
 } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
-import { onboardingStepStorageKeys } from "../home/Home";
 import { ChatComposerWrapper } from "./ChatComposerWrapper";
-import { useChatContext } from "./ChatContext";
+import { useChatContext } from "./useChatContext";
 import { useChatHistory } from "./ChatHistory";
 import { MessageHistoryIndicator } from "./MessageHistoryIndicator";
 import { useModel } from "./Openrouter";
-import { Tool as MentionTool, parseMentionedTools } from "./ToolMentions";
+import { Tool as MentionTool, parseMentionedTools } from "./tool-mention-utils";
 import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
 
 type CoreTool = {
@@ -511,8 +510,6 @@ function ChatInner({
           model,
           message: msg,
         });
-
-        localStorage.setItem(onboardingStepStorageKeys.test, "true");
       }
 
       if (isToolTaggingEnabled) {
@@ -685,7 +682,7 @@ const extractStreamError = (event: { error: unknown }) => {
               if (rawError.error?.message) {
                 message = rawError.error.message;
               }
-            } catch (_e) {
+            } catch {
               if (typeof parsedBody.error.message === "string") {
                 message = parsedBody.error.message;
               }

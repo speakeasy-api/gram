@@ -1,6 +1,7 @@
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useRBAC } from "@/hooks/useRBAC";
 import { Toolset } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import {
@@ -82,6 +83,8 @@ function ModeCard({
 }
 
 export function MCPPerformanceTab({ toolset }: { toolset: Toolset }) {
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
 
@@ -102,7 +105,7 @@ export function MCPPerformanceTab({ toolset }: { toolset: Toolset }) {
   const toolSelectionMode = toolset.toolSelectionMode ?? "static";
 
   const onSelectMode = (mode: string) => {
-    if (mode === toolSelectionMode) return;
+    if (!canWrite || mode === toolSelectionMode) return;
     updateToolsetMutation.mutate({
       request: {
         slug: toolset.slug,

@@ -1,6 +1,7 @@
 import { Type } from "@/components/ui/type";
 import type { Toolset } from "@/lib/toolTypes";
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
+import { ToolFallback } from "@gram-ai/elements";
 import { useQuery } from "@tanstack/react-query";
 import { LoaderCircle } from "lucide-react";
 import {
@@ -146,58 +147,27 @@ export function PlaygroundMcpAppsProvider({
   );
 }
 
-export const PlaygroundMcpToolFallback: ToolCallMessagePartComponent = ({
-  args,
-  result,
-  status,
-  toolCallId,
-  toolName,
-}) => {
+export const PlaygroundMcpToolFallback: ToolCallMessagePartComponent = (
+  props,
+) => {
+  const { args, result, status, toolCallId, toolName } = props;
   const ctx = useContext(PlaygroundMcpAppsContext);
   const binding = ctx?.toolBindings.get(toolName);
-  const statusLabel =
-    status.type === "complete"
-      ? "Complete"
-      : status.type === "incomplete"
-        ? "Failed"
-        : "Running";
+  const hasMcpApp = !!binding?.resourceUri && status.type === "complete";
+
+  if (!hasMcpApp) {
+    return <ToolFallback {...props} />;
+  }
 
   return (
-    <div className="border-border flex w-full flex-col border-b last:border-b-0">
-      <div className="px-4 py-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <Type variant="small" className="font-medium">
-              {toolName}
-            </Type>
-            <Type muted className="text-xs">
-              {binding?.description ?? "Tool execution"}
-            </Type>
-          </div>
-          <span className="border-border bg-background text-muted-foreground rounded-full border px-2 py-1 text-[11px] font-medium tracking-[0.08em] uppercase">
-            {statusLabel}
-          </span>
-        </div>
-
-        <details className="border-border bg-background mt-3 overflow-auto rounded-xl border">
-          <summary className="text-muted-foreground cursor-pointer px-3 py-2 text-xs font-medium">
-            Request / Result
-          </summary>
-          <div className="border-border grid gap-3 border-t px-3 py-3">
-            <JsonPanel label="Request" value={args} />
-            <JsonPanel label="Result" value={result} />
-          </div>
-        </details>
-      </div>
-
-      {binding?.resourceUri && status.type === "complete" && (
-        <PlaygroundMcpAppRenderer
-          key={`${toolCallId}:${binding.resourceUri}`}
-          args={args}
-          result={result}
-          tool={binding}
-        />
-      )}
+    <div className="flex w-full flex-col">
+      <ToolFallback {...props} />
+      <PlaygroundMcpAppRenderer
+        key={`${toolCallId}:${binding.resourceUri}`}
+        args={args}
+        result={result}
+        tool={binding}
+      />
     </div>
   );
 };
@@ -759,31 +729,4 @@ function buildDirective(domains: string[] | undefined, fallback: string) {
 
 function escapeAttribute(input: string) {
   return input.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-}
-
-function JsonPanel({ label, value }: { label: string; value: unknown }) {
-  return (
-    <div className="space-y-1">
-      <Type
-        muted
-        className="text-[11px] font-medium tracking-[0.08em] uppercase"
-      >
-        {label}
-      </Type>
-      <pre className="border-border bg-muted/40 text-foreground overflow-x-auto rounded-lg border p-3 font-mono text-xs leading-5">
-        {formatJson(value)}
-      </pre>
-    </div>
-  );
-}
-
-function formatJson(value: unknown) {
-  if (value === undefined) {
-    return "undefined";
-  }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
 }

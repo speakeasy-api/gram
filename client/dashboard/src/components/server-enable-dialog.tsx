@@ -12,6 +12,7 @@ interface ServerEnableDialogProps {
   onConfirm: () => void;
   isLoading?: boolean;
   currentlyEnabled?: boolean;
+  targetIsPublic?: boolean;
 }
 
 export function ServerEnableDialog({
@@ -20,6 +21,7 @@ export function ServerEnableDialog({
   onConfirm,
   isLoading = false,
   currentlyEnabled = false,
+  targetIsPublic = false,
 }: ServerEnableDialogProps) {
   const productTier = useProductTier();
   const orgRoutes = useOrgRoutes();
@@ -50,7 +52,11 @@ export function ServerEnableDialog({
         <Dialog.Header>
           <Dialog.Title className="flex items-center gap-2">
             <Server className="h-5 w-5" />
-            {currentlyEnabled ? "Disable" : "Enable"} MCP Server
+            {currentlyEnabled
+              ? "Disable MCP Server"
+              : targetIsPublic
+                ? "Enable & Make Public"
+                : "Enable MCP Server"}
           </Dialog.Title>
         </Dialog.Header>
 
@@ -64,7 +70,9 @@ export function ServerEnableDialog({
             <Type className="text-muted-foreground">
               {currentlyEnabled
                 ? "Disabling this server will stop all requests and may affect any applications using this MCP server."
-                : "Enabling this server will allow it to receive requests. Standard usage charges may apply based on your plan."}
+                : targetIsPublic
+                  ? "This will enable the server and make it publicly accessible. Anyone with the URL can read the tools hosted by this server. Authentication is still required to use the tools."
+                  : "Enabling this server will allow it to receive requests. Standard usage charges may apply based on your plan."}
             </Type>
           )}
         </div>
@@ -90,7 +98,9 @@ export function ServerEnableDialog({
                   : "Enabling..."
                 : currentlyEnabled
                   ? "Disable Server"
-                  : "Enable Server"}
+                  : targetIsPublic
+                    ? "Enable & Make Public"
+                    : "Enable Server"}
             </Button>
           )}
         </Dialog.Footer>

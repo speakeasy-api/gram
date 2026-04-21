@@ -1,9 +1,11 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/dot-table";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
-import { useViewMode, ViewToggle } from "@/components/ui/view-toggle";
+import { ViewToggle } from "@/components/ui/view-toggle";
+import { useViewMode } from "@/components/ui/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { CommandBar } from "@/pages/catalog/CommandBar";
@@ -15,7 +17,8 @@ import { Loader2, Search, SearchXIcon, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet } from "react-router";
 import { FilterChips } from "./FilterChips";
-import { defaultFilterValues, FilterSidebar } from "./FilterSidebar";
+import { defaultFilterValues } from "./filter-defaults";
+import { FilterSidebar } from "./FilterSidebar";
 import { filterAndSortServers } from "./hooks/serverMetadata";
 import { useFilterState } from "./hooks/useFilterState";
 import { useSelectionState } from "./hooks/useSelectionState";
@@ -28,6 +31,14 @@ export function CatalogRoot() {
 }
 
 export default function Catalog() {
+  return (
+    <RequireScope scope={["build:read", "mcp:write"]} level="page">
+      <CatalogInner />
+    </RequireScope>
+  );
+}
+
+function CatalogInner() {
   const routes = useRoutes();
   const project = useProject();
   const [searchQuery, setSearchQuery] = useState("");

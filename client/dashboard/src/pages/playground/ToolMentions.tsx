@@ -2,15 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "@speakeasy-api/moonshine";
 import { Type } from "@/components/ui/type";
-
-export interface Tool {
-  id: string;
-  name: string;
-  description?: string;
-  type: "http" | "prompt";
-  httpMethod?: string;
-  path?: string;
-}
+import { type Tool, parseMentionedTools } from "./tool-mention-utils";
 
 interface ToolMentionProps {
   tools: Tool[];
@@ -18,24 +10,6 @@ interface ToolMentionProps {
   inputValue: string;
   onInputChange: (value: string) => void;
   textareaRef?: React.RefObject<HTMLTextAreaElement>;
-}
-
-export function parseMentionedTools(text: string, tools: Tool[]): string[] {
-  // Find all @toolName mentions in the text
-  const mentionPattern = /@(\w+)/g;
-  const mentions: string[] = [];
-  let match;
-
-  while ((match = mentionPattern.exec(text)) !== null) {
-    mentions.push(match[1].toLowerCase());
-  }
-
-  // Find tools that match the mentions
-  const matchedToolIds = tools
-    .filter((tool) => mentions.includes(tool.name.toLowerCase()))
-    .map((tool) => tool.id);
-
-  return [...new Set(matchedToolIds)]; // Remove duplicates
 }
 
 export function ToolMentionAutocomplete({

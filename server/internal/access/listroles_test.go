@@ -1,6 +1,7 @@
 package access
 
 import (
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -20,16 +21,16 @@ func TestService_ListRoles(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockSystemRole("role_admin", "Admin", "admin"),
 		mockRole("role_custom", "Custom Builder", "custom-builder", "Can build selected resources"),
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
-		mockMember("org_workos_test", "membership_1", "user_1", "admin"),
-		mockMember("org_workos_test", "membership_2", "user_2", "custom-builder"),
-		mockMember("org_workos_test", "membership_3", "user_3", "custom-builder"),
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
+		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"),
+		mockMember(mockidp.MockOrgID, "membership_3", "user_3", "custom-builder"),
 		// user_workos_only has never logged into Gram — should not be counted
-		mockMember("org_workos_test", "membership_workos_only", "user_workos_only", "custom-builder"),
+		mockMember(mockidp.MockOrgID, "membership_workos_only", "user_workos_only", "custom-builder"),
 	}, nil).Once()
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")

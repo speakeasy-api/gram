@@ -9,13 +9,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/rbactest"
 )
 
 func TestResources_RBAC_List_DeniedWithNoGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestResourcesService(t)
-	ctx = withExactAccessGrants(t, ctx, ti.conn)
+	ctx = rbactest.WithExactAccessGrants(t, ctx)
 
 	_, err := ti.service.ListResources(ctx, &gen.ListResourcesPayload{
 		SessionToken:     nil,
@@ -38,7 +39,7 @@ func TestResources_RBAC_List_DeniedWithUnrelatedGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: "other-project-id"})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildWrite, Resource: "other-project-id"})
 
 	_, err := ti.service.ListResources(ctx, &gen.ListResourcesPayload{
 		SessionToken:     nil,
@@ -61,7 +62,7 @@ func TestResources_RBAC_List_AllowedWithBuildReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
 
 	result, err := ti.service.ListResources(ctx, &gen.ListResourcesPayload{
 		SessionToken:     nil,
@@ -83,7 +84,7 @@ func TestResources_RBAC_List_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
 
 	result, err := ti.service.ListResources(ctx, &gen.ListResourcesPayload{
 		SessionToken:     nil,

@@ -1,12 +1,11 @@
 import { cn } from "@/lib/utils";
 import { CheckIcon, XIcon } from "lucide-react";
 import React from "react";
-import { useStepper } from "../stepper/context";
-import { StepContextProvider, useStep } from "./context";
+import { useStepper } from "../stepper/use-stepper";
+import { StepContextProvider } from "./context";
+import { useStep } from "./use-step";
 import Frame from "./frame";
 import { StepState } from "./types";
-
-export { useStep } from "./context";
 
 type StepProps = {
   children: React.ReactNode;

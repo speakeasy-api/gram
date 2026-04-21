@@ -449,3 +449,23 @@ sql:
         out: "../internal/plugins/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/remotemcp/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/remotemcp/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/risk/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/risk/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true

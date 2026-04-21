@@ -1,5 +1,22 @@
 # @gram/client
 
+## 0.32.65
+
+### Patch Changes
+
+- e56314e: Captures token and cost metrics for Claude agent sessions
+
+## 0.33.0
+
+### Minor Changes
+
+- f749a53: Add plugins feature for distributing MCP server bundles to teams and allowing zip distribution
+
+### Patch Changes
+
+- d2bf604: Adds a new project metrics summary endpoint containing new data to power the new homepage
+- be476e6: feat: use pre-aggregated summary endpoint for hooks analytics charts and KPIs
+
 ## 0.33.0
 
 ### Minor Changes

@@ -23,6 +23,7 @@ const (
 	FilePathKey                       = semconv.FilePathKey
 	HostNameKey                       = semconv.HostNameKey
 	HTTPRefererHostKey                = attribute.Key("http.request.referer_host")
+	HTTPRequestIDKey                  = attribute.Key("http.request_id")
 	HTTPRequestHeaderRefererKey       = attribute.Key("http.request.header.referer")
 	HTTPRequestHeaderContentTypeKey   = attribute.Key("http.request.header.content_type")
 	HTTPRequestHeaderUserAgentKey     = attribute.Key("http.request.header.user_agent")
@@ -189,6 +190,7 @@ const (
 	ProjectIDKey                   = attribute.Key("gram.project.id")
 	ProjectNameKey                 = attribute.Key("gram.project.name")
 	ProjectSlugKey                 = attribute.Key("gram.project.slug")
+	RiskRuleIDKey                  = attribute.Key("gram.risk.rule_id")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -214,10 +216,11 @@ const (
 	VisibilityKey                  = attribute.Key("gram.visibility")
 
 	// Hooks
-	HookEventKey       = attribute.Key("gram.hook.event")
-	HookErrorKey       = attribute.Key("gram.hook.error")
-	HookIsInterruptKey = attribute.Key("gram.hook.is_interrupt")
-	HookSourceKey      = attribute.Key("gram.hook.source")
+	HookEventKey                = attribute.Key("gram.hook.event")
+	HookErrorKey                = attribute.Key("gram.hook.error")
+	HookIsInterruptKey          = attribute.Key("gram.hook.is_interrupt")
+	HookSourceKey               = attribute.Key("gram.hook.source")
+	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")
 
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")
@@ -262,15 +265,21 @@ const (
 	GenAISystemInstructionsKey = semconv.GenAISystemInstructionsKey
 
 	// Custom GenAI keys not in official semconv (yet)
-	GenAIToolCallsKey         = attribute.Key("gen_ai.tool.calls")
-	GenAIUsageTotalTokensKey  = attribute.Key("gen_ai.usage.total_tokens")
-	GenAIConversationDuration = attribute.Key("gen_ai.conversation.duration")
+	GenAIToolCallsKey                     = attribute.Key("gen_ai.tool.calls")
+	GenAIUsageTotalTokensKey              = attribute.Key("gen_ai.usage.total_tokens")
+	GenAIConversationDuration             = attribute.Key("gen_ai.conversation.duration")
+	GenAIUsageCacheReadInputTokensKey     = attribute.Key("gen_ai.usage.cache_read.input_tokens")
+	GenAIUsageCacheCreationInputTokensKey = attribute.Key("gen_ai.usage.cache_creation.input_tokens")
+	GenAIUsageCostKey                     = attribute.Key("gen_ai.usage.cost")
 
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
 	GenAIEvaluationScoreValueKey  = attribute.Key("gen_ai.evaluation.score.value") // Numeric score (0-100)
 	GenAIEvaluationScoreLabelKey  = attribute.Key("gen_ai.evaluation.score.label") // Low cardinality label (success, failure, partial, abandoned)
 	GenAIEvaluationExplanationKey = attribute.Key("gen_ai.evaluation.explanation") // Free-form explanation
+
+	StatsToolCallCountKey  = attribute.Key("gram.stats.tool_call_count")
+	StatsMCPServerCountKey = attribute.Key("gram.stats.mcp_server_count")
 )
 
 const (
@@ -305,6 +314,13 @@ func SlogHostName(v string) slog.Attr      { return slog.String(string(HostNameK
 
 func HTTPReferrerHost(v string) attribute.KeyValue { return HTTPRefererHostKey.String(v) }
 func SlogHTTPReferrerHost(v string) slog.Attr      { return slog.String(string(HTTPRefererHostKey), v) }
+
+func HTTPRequestID(v string) attribute.KeyValue {
+	return HTTPRequestIDKey.String(v)
+}
+func SlogHTTPRequestID(v string) slog.Attr {
+	return slog.String(string(HTTPRequestIDKey), v)
+}
 
 func HTTPRequestHeaderReferer(v string) attribute.KeyValue {
 	return HTTPRequestHeaderRefererKey.String(v)
@@ -370,6 +386,13 @@ func HTTPServerRequestDuration(v float64) attribute.KeyValue {
 }
 func SlogHTTPServerRequestDuration(v float64) slog.Attr {
 	return slog.Float64(string(HTTPServerRequestDurationKey), v)
+}
+
+func HookServerNameOverrideID(v string) attribute.KeyValue {
+	return HookServerNameOverrideIDKey.String(v)
+}
+func SlogHookServerNameOverrideID(v string) slog.Attr {
+	return slog.String(string(HookServerNameOverrideIDKey), v)
 }
 
 func ServerAddress(v string) attribute.KeyValue { return ServerAddressKey.String(v) }
@@ -833,6 +856,9 @@ func SlogProjectSlug(v string) slog.Attr      { return slog.String(string(Projec
 func ProjectName(v string) attribute.KeyValue { return ProjectNameKey.String(v) }
 func SlogProjectName(v string) slog.Attr      { return slog.String(string(ProjectNameKey), v) }
 
+func RiskRuleID(v string) attribute.KeyValue { return RiskRuleIDKey.String(v) }
+func SlogRiskRuleID(v string) slog.Attr      { return slog.String(string(RiskRuleIDKey), v) }
+
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }
 
@@ -1139,6 +1165,25 @@ func SlogGenAIEvaluationExplanation(v string) slog.Attr {
 	return slog.String(string(GenAIEvaluationExplanationKey), v)
 }
 
+func GenAIUsageCacheReadInputTokens(v int) attribute.KeyValue {
+	return GenAIUsageCacheReadInputTokensKey.Int(v)
+}
+func SlogGenAIUsageCacheReadInputTokens(v int) slog.Attr {
+	return slog.Int(string(GenAIUsageCacheReadInputTokensKey), v)
+}
+
+func GenAIUsageCacheCreationInputTokens(v int) attribute.KeyValue {
+	return GenAIUsageCacheCreationInputTokensKey.Int(v)
+}
+func SlogGenAIUsageCacheCreationInputTokens(v int) slog.Attr {
+	return slog.Int(string(GenAIUsageCacheCreationInputTokensKey), v)
+}
+
+func GenAIUsageCost(v float64) attribute.KeyValue { return GenAIUsageCostKey.Float64(v) }
+func SlogGenAIUsageCost(v float64) slog.Attr {
+	return slog.Float64(string(GenAIUsageCostKey), v)
+}
+
 func TimeUnixNano(v int64) attribute.KeyValue { return TimeUnixNanoKey.Int64(v) }
 func SlogTimeUnixNano(v int64) slog.Attr      { return slog.Int64(string(TimeUnixNanoKey), v) }
 
@@ -1152,3 +1197,9 @@ func SlogLogSeverityText(v string) slog.Attr      { return slog.String(string(Lo
 
 func LogBody(v string) attribute.KeyValue { return LogBodyKey.String(v) }
 func SlogLogBody(v string) slog.Attr      { return slog.String(string(LogBodyKey), v) }
+
+func StatsToolCallCount(v int) attribute.KeyValue { return StatsToolCallCountKey.Int(v) }
+func SlogStatsToolCallCount(v int) slog.Attr      { return slog.Int(string(StatsToolCallCountKey), v) }
+
+func StatsMCPServerCount(v int) attribute.KeyValue { return StatsMCPServerCountKey.Int(v) }
+func SlogStatsMCPServerCount(v int) slog.Attr      { return slog.Int(string(StatsMCPServerCountKey), v) }

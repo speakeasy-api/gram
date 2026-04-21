@@ -1,8 +1,7 @@
 import { Page } from "@/components/page-layout";
-import {
-  InsightsConfig,
-  useInsightsState,
-} from "@/components/insights-sidebar";
+import { InsightsConfig } from "@/components/insights-sidebar";
+import { useInsightsState } from "@/components/insights-context";
+import { RequireScope } from "@/components/require-scope";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -539,6 +538,14 @@ function parseLocalDate(dateStr: string): Date {
 }
 
 export default function ObservabilityOverview() {
+  return (
+    <RequireScope scope="build:read" level="page">
+      <ObservabilityOverviewInner />
+    </RequireScope>
+  );
+}
+
+function ObservabilityOverviewInner() {
   const [searchParams, setSearchParams] = useSearchParams();
   const client = useGramContext();
 

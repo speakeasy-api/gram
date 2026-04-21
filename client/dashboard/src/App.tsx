@@ -20,13 +20,12 @@ import {
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
 import { CommandPalette } from "./components/command-palette";
-import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
-import {
-  CommandPaletteProvider,
-  useCommandPalette,
-} from "./contexts/CommandPalette";
-import { SdkProvider, useSlugs } from "./contexts/Sdk.tsx";
-import { TelemetryProvider } from "./contexts/Telemetry.tsx";
+import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
+import { useCommandPalette } from "./contexts/CommandPalette";
+import { CommandPaletteProvider } from "./contexts/CommandPaletteProvider";
+import { useSlugs } from "./contexts/Sdk.tsx";
+import { SdkProvider } from "./contexts/SdkProvider.tsx";
+import { TelemetryProvider } from "./contexts/TelemetryProvider.tsx";
 import { RBACDevToolbar } from "./components/dev-toolbar";
 import { usePageTitle } from "./hooks/use-page-title";
 import CliCallback from "./pages/cli/CliCallback";
