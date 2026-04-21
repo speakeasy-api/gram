@@ -7,6 +7,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/logs"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,7 +28,12 @@ func TestExecuteSearchLogs_IgnoresInjectedAuthFields(t *testing.T) {
 
 	from := "2026-04-08T09:00:00Z"
 	var out bytes.Buffer
-	err := tool.Call(context.Background(), bytes.NewBufferString(`{
+	err := tool.Call(context.Background(), toolconfig.ToolCallEnv{
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
+		OAuthToken: "",
+		GramEmail:  "",
+	}, bytes.NewBufferString(`{
 		"apikeyToken":"api-key",
 		"sessionToken":"session",
 		"projectSlugInput":"other-project",

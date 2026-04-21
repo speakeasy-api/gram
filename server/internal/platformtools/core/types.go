@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -76,5 +77,5 @@ func (d ToolDescriptor) ToToolEntry() *types.ToolEntry {
 
 type PlatformToolExecutor interface {
 	Descriptor() ToolDescriptor
-	Call(ctx context.Context, payload io.Reader, wr io.Writer) error
+	Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error
 }
