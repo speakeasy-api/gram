@@ -116,6 +116,19 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		model = DefaultChatModel
 	}
 
+	// Resolve unsupported models to a supported model from the same provider
+	if resolved := ResolveModel(model); resolved != "" {
+		if resolved != model {
+			c.logger.WarnContext(ctx, "requested model not in allowlist, falling back to supported model",
+				attr.SlogGenAIRequestModel(model),
+				attr.SlogGenAIResponseModel(resolved),
+			)
+			model = resolved
+		}
+	} else {
+		return nil, fmt.Errorf("model %s is not allowed and no fallback is available for its provider", model)
+	}
+
 	// Build request body
 	reqBody := OpenAIChatRequest{
 		Model:          model,
