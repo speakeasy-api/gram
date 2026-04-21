@@ -2,4 +2,4 @@
 "dashboard": patch
 ---
 
-Thread `toolconfig.ToolCallEnv` through `PlatformToolExecutor.Call` so platform tools can read per-call env (OAuth token, user/system env, Gram email). Add eight Slack Web API platform tools under `server/internal/platformtools/slack/` registered via the existing factory list; unused until the assistants runtime wiring lands.
+Add eight Slack platform tools: read channel messages, read thread messages, read user profile, search channels, search messages and files, search users, send message, and schedule message.
