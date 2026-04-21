@@ -17,14 +17,14 @@ const (
 	ToolNameSearchLogs             = "platform_search_logs"
 	ToolNameListTriggers           = "platform_list_triggers"
 	ToolNameConfigureTrigger       = "platform_configure_trigger"
-	ToolNameReadChannelMessages    = "platform_read_channel_messages"
-	ToolNameReadThreadMessages     = "platform_read_thread_messages"
-	ToolNameReadUserProfile        = "platform_read_user_profile"
-	ToolNameSearchChannels         = "platform_search_channels"
-	ToolNameSearchMessagesAndFiles = "platform_search_messages_and_files"
-	ToolNameSearchUsers            = "platform_search_users"
-	ToolNameScheduleMessage        = "platform_schedule_message"
-	ToolNameSendMessage            = "platform_send_message"
+	ToolNameReadChannelMessages    = "platform_slack_read_channel_messages"
+	ToolNameReadThreadMessages     = "platform_slack_read_thread_messages"
+	ToolNameReadUserProfile        = "platform_slack_read_user_profile"
+	ToolNameSearchChannels         = "platform_slack_search_channels"
+	ToolNameSearchMessagesAndFiles = "platform_slack_search_messages_and_files"
+	ToolNameSearchUsers            = "platform_slack_search_users"
+	ToolNameScheduleMessage        = "platform_slack_schedule_message"
+	ToolNameSendMessage            = "platform_slack_send_message"
 )
 
 type Dependencies struct {

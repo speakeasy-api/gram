@@ -25,14 +25,14 @@ const (
 	slackTokenEnvVar     = "SLACK_TOKEN"
 	sourceSlack          = "slack"
 
-	toolNameReadChannelMessages    = "platform_read_channel_messages"
-	toolNameReadThreadMessages     = "platform_read_thread_messages"
-	toolNameReadUserProfile        = "platform_read_user_profile"
-	toolNameSearchChannels         = "platform_search_channels"
-	toolNameSearchMessagesAndFiles = "platform_search_messages_and_files"
-	toolNameSearchUsers            = "platform_search_users"
-	toolNameScheduleMessage        = "platform_schedule_message"
-	toolNameSendMessage            = "platform_send_message"
+	toolNameReadChannelMessages    = "platform_slack_read_channel_messages"
+	toolNameReadThreadMessages     = "platform_slack_read_thread_messages"
+	toolNameReadUserProfile        = "platform_slack_read_user_profile"
+	toolNameSearchChannels         = "platform_slack_search_channels"
+	toolNameSearchMessagesAndFiles = "platform_slack_search_messages_and_files"
+	toolNameSearchUsers            = "platform_slack_search_users"
+	toolNameScheduleMessage        = "platform_slack_schedule_message"
+	toolNameSendMessage            = "platform_slack_send_message"
 )
 
 var defaultSearchChannelTypes = []string{"public_channel"}
