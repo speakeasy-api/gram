@@ -20,7 +20,10 @@ export default function OrgHome() {
         <Page.Header.Title>Home</Page.Header.Title>
       </Page.Header>
       <Page.Body>
-        <RequireScope scope={["build:read", "org:admin"]} level="page">
+        <RequireScope
+          scope={["org:read", "build:read", "org:admin"]}
+          level="page"
+        >
           <OrgHomeInner />
         </RequireScope>
       </Page.Body>

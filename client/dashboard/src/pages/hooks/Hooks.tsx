@@ -2,6 +2,7 @@ import { EditServerNameDialog } from "./EditServerNameDialog";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-sidebar";
+import { RequireScope } from "@/components/require-scope";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
 import { ErrorAlert } from "@/components/ui/alert";
@@ -220,7 +221,11 @@ function safeBase64Decode(str: string): string | null {
 const perPage = 100;
 
 export default function HooksPage() {
-  return <HooksContent />;
+  return (
+    <RequireScope scope={["build:read", "build:write"]} level="page">
+      <HooksContent />
+    </RequireScope>
+  );
 }
 
 function HooksContent() {

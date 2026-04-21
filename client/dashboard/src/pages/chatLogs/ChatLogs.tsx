@@ -1,4 +1,5 @@
 import { InsightsConfig } from "@/components/insights-sidebar";
+import { RequireScope } from "@/components/require-scope";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
@@ -124,6 +125,14 @@ function isValidPreset(value: string | null): value is DateRangePreset {
 }
 
 export default function ChatLogs() {
+  return (
+    <RequireScope scope="build:read" level="page">
+      <ChatLogsInner />
+    </RequireScope>
+  );
+}
+
+function ChatLogsInner() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedChat, setSelectedChat] =
     useState<ChatOverviewWithResolutions | null>(null);

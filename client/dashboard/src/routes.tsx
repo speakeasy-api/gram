@@ -58,7 +58,11 @@ import PolicyCenter from "./pages/security/PolicyCenter";
 import Team from "./pages/team/Team";
 import AcceptInvite from "./pages/invite/AcceptInvite";
 import SourceDetails from "./pages/sources/SourceDetails";
-import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
+import {
+  AddFromCatalogGate,
+  SourcesPage,
+  SourcesRoot,
+} from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
@@ -236,7 +240,7 @@ const ROUTE_STRUCTURE = {
       addFromCatalog: {
         title: "Add from Catalog",
         url: "add-from-catalog",
-        component: CatalogRoot,
+        component: AddFromCatalogGate,
         indexComponent: Catalog,
       },
     },
@@ -299,6 +303,7 @@ const ROUTE_STRUCTURE = {
   environments: {
     title: "Environments",
     url: "environments",
+    icon: "blocks",
     component: EnvironmentsRoot,
     indexComponent: Environments,
     subPages: {

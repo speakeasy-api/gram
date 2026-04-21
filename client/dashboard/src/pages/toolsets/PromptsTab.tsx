@@ -1,13 +1,16 @@
 import { CreateThingCard } from "@/components/create-thing-card";
+import { EmptyState } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Cards } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { PromptTemplate } from "@gram/client/models/components";
 import { useUpdateToolsetMutation } from "@gram/client/react-query";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { PromptTemplateCard } from "../prompts/Prompts";
+import { ToolsetsGraphic } from "./ToolsetsEmptyState";
 import { usePrompts } from "../prompts/usePrompts";
 import { PromptSelectPopover } from "../prompts/PromptSelectPopover";
 
@@ -53,6 +56,28 @@ export function PromptsTabContent({
     });
   };
 
+  const hasPrompts = toolsetPrompts && toolsetPrompts.length > 0;
+
+  if (!hasPrompts) {
+    return (
+      <EmptyState
+        heading="No prompts yet"
+        description="Add prompt templates to this MCP server."
+        nonEmptyProjectCTA={
+          <RequireScope scope="mcp:write" level="component">
+            <Stack gap={2} direction="horizontal">
+              <routes.prompts.newPrompt.Link>
+                <Button size="sm">Create Prompt</Button>
+              </routes.prompts.newPrompt.Link>
+            </Stack>
+          </RequireScope>
+        }
+        graphic={<ToolsetsGraphic />}
+        graphicClassName="scale-90"
+      />
+    );
+  }
+
   return (
     <>
       <Cards isLoading={!toolset}>
@@ -65,35 +90,38 @@ export function PromptsTabContent({
           />
         ))}
       </Cards>
-      <Stack
-        gap={3}
-        direction={"horizontal"}
-        align={"center"}
-        className="w-full max-w-4xl"
-      >
-        {allPrompts && allPrompts?.length > 0 && (
-          <>
-            <PromptSelectPopover
-              open={promptSelectPopoverOpen}
-              setOpen={setPromptSelectPopoverOpen}
-              onSelect={(prompt) => addPromptToToolset(prompt)}
-            >
-              {/* For some reason the popover doesnt show up in the right place without this div */}
-              <div className="w-full">
-                <CreateThingCard className="mb-0!">
-                  + Add Prompt
-                </CreateThingCard>
-              </div>
-            </PromptSelectPopover>
-            <Type muted>or</Type>
-          </>
-        )}
-        <div className="w-full">
-          <routes.prompts.newPrompt.Link>
-            <CreateThingCard className="mb-0!">+ Create Prompt</CreateThingCard>
-          </routes.prompts.newPrompt.Link>
-        </div>
-      </Stack>
+      <RequireScope scope="mcp:write" level="section">
+        <Stack
+          gap={3}
+          direction={"horizontal"}
+          align={"center"}
+          className="w-full max-w-4xl"
+        >
+          {allPrompts && allPrompts?.length > 0 && (
+            <>
+              <PromptSelectPopover
+                open={promptSelectPopoverOpen}
+                setOpen={setPromptSelectPopoverOpen}
+                onSelect={(prompt) => addPromptToToolset(prompt)}
+              >
+                <div className="w-full">
+                  <CreateThingCard className="mb-0!">
+                    + Add Prompt
+                  </CreateThingCard>
+                </div>
+              </PromptSelectPopover>
+              <Type muted>or</Type>
+            </>
+          )}
+          <div className="w-full">
+            <routes.prompts.newPrompt.Link>
+              <CreateThingCard className="mb-0!">
+                + Create Prompt
+              </CreateThingCard>
+            </routes.prompts.newPrompt.Link>
+          </div>
+        </Stack>
+      </RequireScope>
     </>
   );
 }

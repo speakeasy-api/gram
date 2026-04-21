@@ -1,5 +1,6 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsConfig } from "@/components/insights-sidebar";
+import { RequireScope } from "@/components/require-scope";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
@@ -200,7 +201,11 @@ function MCPServerFilter({
 }
 
 export default function LogsPage() {
-  return <LogsContent />;
+  return (
+    <RequireScope scope="build:read" level="page">
+      <LogsContent />
+    </RequireScope>
+  );
 }
 
 function LogsContent() {
