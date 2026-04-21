@@ -288,7 +288,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		enabled = *payload.Enabled
 	}
 
-	snapshotBefore, _ := s.policyToType(ctx, current)
+	snapshotBefore := policyRowSnapshot(current)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -307,8 +307,6 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
 	}
 
-	snapshotAfter, _ := s.policyToType(ctx, row)
-
 	if err := audit.LogRiskPolicyUpdate(ctx, dbtx, audit.LogRiskPolicyUpdateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
@@ -318,7 +316,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		RiskPolicyID:     row.ID,
 		RiskPolicyName:   row.Name,
 		SnapshotBefore:   snapshotBefore,
-		SnapshotAfter:    snapshotAfter,
+		SnapshotAfter:    policyRowSnapshot(row),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy update").Log(ctx, s.logger)
 	}
@@ -619,6 +617,22 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		PendingMessages: pendingMessages,
 		TotalMessages:   totalMessages,
 	}, nil
+}
+
+// policyRowSnapshot returns a lightweight representation of a risk policy row
+// suitable for audit log snapshots. Unlike policyToType it avoids extra DB
+// queries for message counts, keeping transactions short.
+func policyRowSnapshot(row repo.RiskPolicy) map[string]any {
+	return map[string]any{
+		"id":         row.ID.String(),
+		"project_id": row.ProjectID.String(),
+		"name":       row.Name,
+		"sources":    row.Sources,
+		"enabled":    row.Enabled,
+		"version":    row.Version,
+		"created_at": row.CreatedAt.Time.Format(time.RFC3339),
+		"updated_at": row.UpdatedAt.Time.Format(time.RFC3339),
+	}
 }
 
 func validatePolicyName(name string) error {
