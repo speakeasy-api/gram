@@ -2088,6 +2088,15 @@ function HooksAnalytics({
   const hasServers = (summaryData?.servers.length ?? 0) > 0;
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!expandedChart) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpandedChart(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [expandedChart]);
+
   type FilterAxisConfig = Partial<Record<"user" | "server", "dataset" | "row">>;
 
   const makeFilterHandler = useCallback(
