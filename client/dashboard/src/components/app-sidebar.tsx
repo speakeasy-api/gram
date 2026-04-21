@@ -15,7 +15,7 @@ import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Stack } from "@speakeasy-api/moonshine";
-import { Building2Icon, MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
+import { MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 import { Link } from "react-router";

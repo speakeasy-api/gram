@@ -1,7 +1,7 @@
 import { McpIcon } from "@/components/ui/mcp-icon";
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import React, { useMemo } from "react";
-import { Link, Outlet, useLocation, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
 import Billing from "./pages/billing/Billing";
@@ -57,23 +57,17 @@ import SecurityOverview from "./pages/security/SecurityOverview";
 import PolicyCenter from "./pages/security/PolicyCenter";
 import Team from "./pages/team/Team";
 import AcceptInvite from "./pages/invite/AcceptInvite";
-import { RequireScope } from "./components/require-scope";
 import SourceDetails from "./pages/sources/SourceDetails";
-import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
+import {
+  AddFromCatalogGate,
+  SourcesPage,
+  SourcesRoot,
+} from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
-
-/** Wrapper that gates the shared Catalog behind build:write when accessed via sources/add-from-catalog. */
-function AddFromCatalogGate() {
-  return (
-    <RequireScope scope="build:write" level="page">
-      <Outlet />
-    </RequireScope>
-  );
-}
 
 type AppRouteBasic = {
   title: string;

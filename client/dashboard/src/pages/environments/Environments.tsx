@@ -83,8 +83,8 @@ function EnvironmentsInner() {
           Create re-usable environment configurations and share amongst multiple
           MCP servers
         </Page.Section.Description>
-        {environments.length > 0 && (
-          <Page.Section.CTA>
+        <Page.Section.CTA>
+          {environments.length > 0 && (
             <RequireScope scope="build:write" level="component">
               <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
                 <Button.LeftIcon>
@@ -93,8 +93,8 @@ function EnvironmentsInner() {
                 <Button.Text>New Environment</Button.Text>
               </Button>
             </RequireScope>
-          </Page.Section.CTA>
-        )}
+          )}
+        </Page.Section.CTA>
         <Page.Section.Body>
           {environments.length === 0 ? (
             <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">

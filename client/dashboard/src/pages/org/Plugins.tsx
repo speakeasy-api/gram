@@ -146,16 +146,16 @@ export default function Plugins() {
             hooks together. Assign plugins to roles and publish them to Claude
             Code and Cursor marketplaces via GitHub.
           </Page.Section.Description>
-          {(data?.plugins ?? []).length > 0 && (
-            <Page.Section.CTA>
+          <Page.Section.CTA>
+            {(data?.plugins ?? []).length > 0 && (
               <Button onClick={() => setIsCreateDialogOpen(true)}>
                 <Button.LeftIcon>
                   <Plus className="h-4 w-4" />
                 </Button.LeftIcon>
                 <Button.Text>New Plugin</Button.Text>
               </Button>
-            </Page.Section.CTA>
-          )}
+            )}
+          </Page.Section.CTA>
           <Page.Section.Body>
             {(data?.plugins ?? []).length === 0 ? (
               <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
