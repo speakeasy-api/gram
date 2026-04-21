@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 780aacc8473e317968e5ec3803100b5e
+  docChecksum: 0f67c9a442912b6760bf2cd8e62295e6
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
-  releaseVersion: 0.32.73
-  configChecksum: 2b15f0fc70ff3ff80baf504664c134f2
+  releaseVersion: 0.32.74
+  configChecksum: 975e8468465031b10d3fa24ac1a2930e
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -388,7 +388,7 @@ trackedFiles:
   docs/models/components/listriskresultsbyuserresult.md:
     last_write_checksum: sha1:b25718a245e7ce13e06bc117041ab4cbc973e847
   docs/models/components/listriskresultsresult.md:
-    last_write_checksum: sha1:e352151c211030e6dd3e570d556e799d10947dae
+    last_write_checksum: sha1:961b1f6310c4a2833c2e5ebd2ac18832bb1fdc1b
   docs/models/components/listrolegrant.md:
     last_write_checksum: sha1:bfad22ce5eaa361749f3314f6f832c8bd96037e5
   docs/models/components/listrolegrantscope.md:
@@ -2087,11 +2087,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:ded6f551bcfc35055cee3530c78f0f25f8696b0f
+    last_write_checksum: sha1:5daf7111832f73c75e5ef7bdafa06c8c2ae83a4b
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:4d99019f003c3bef2345131e068b67b0539ca9d2
+    last_write_checksum: sha1:2f8d5fd1efe1dc5d313dfb6242bd5bb688e815d4
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2695,7 +2695,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:be181a5065a7a7438b5c733f6542f94d92540d99
+    last_write_checksum: sha1:7bcb43e027a8a8ce1db603614bd86207b46ce861
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -3208,7 +3208,7 @@ trackedFiles:
   src/models/components/listriskresultsbyuserresult.ts:
     last_write_checksum: sha1:d014618f9496589219156f3e7567f05cefef7eb1
   src/models/components/listriskresultsresult.ts:
-    last_write_checksum: sha1:ab0a92122402f7f52868daf952000325bd0bf178
+    last_write_checksum: sha1:acba2ae827736be693e540bb9c50a07b98959e73
   src/models/components/listrolegrant.ts:
     last_write_checksum: sha1:5dd084f35b18043b91b586b122a398cfdd3d9414
   src/models/components/listrolesresult.ts:
@@ -7581,7 +7581,7 @@ examples:
           limit: 100
       responses:
         "200":
-          application/json: {"results": []}
+          application/json: {"results": [], "total_count": 76092}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

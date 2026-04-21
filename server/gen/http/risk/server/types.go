@@ -131,6 +131,8 @@ type UpdateRiskPolicyResponseBody struct {
 type ListRiskResultsResponseBody struct {
 	// The list of risk results.
 	Results []*RiskResultResponseBody `form:"results" json:"results" xml:"results"`
+	// Total number of findings across all enabled policies.
+	TotalCount int64 `form:"total_count" json:"total_count" xml:"total_count"`
 }
 
 // ListRiskResultsByChatResponseBody is the type of the "risk" service
@@ -2187,7 +2189,9 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 // NewListRiskResultsResponseBody builds the HTTP response body from the result
 // of the "listRiskResults" endpoint of the "risk" service.
 func NewListRiskResultsResponseBody(res *risk.ListRiskResultsResult) *ListRiskResultsResponseBody {
-	body := &ListRiskResultsResponseBody{}
+	body := &ListRiskResultsResponseBody{
+		TotalCount: res.TotalCount,
+	}
 	if res.Results != nil {
 		body.Results = make([]*RiskResultResponseBody, len(res.Results))
 		for i, val := range res.Results {

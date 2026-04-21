@@ -46,6 +46,21 @@ func (q *Queries) BumpRiskPolicyVersion(ctx context.Context, arg BumpRiskPolicyV
 	return i, err
 }
 
+const countAllFindings = `-- name: CountAllFindings :one
+SELECT COUNT(*)::BIGINT
+FROM risk_results rr
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+WHERE rr.project_id = $1
+  AND rr.found IS TRUE
+`
+
+func (q *Queries) CountAllFindings(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countAllFindings, projectID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countAnalyzedMessages = `-- name: CountAnalyzedMessages :one
 SELECT COUNT(DISTINCT rr.chat_message_id)::BIGINT
 FROM risk_results rr

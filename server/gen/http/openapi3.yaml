@@ -23075,8 +23075,13 @@ components:
                     items:
                         $ref: '#/components/schemas/RiskResult'
                     description: The list of risk results.
+                total_count:
+                    type: integer
+                    description: Total number of findings across all enabled policies.
+                    format: int64
             required:
                 - results
+                - total_count
         ListRoleGrant:
             type: object
             properties:

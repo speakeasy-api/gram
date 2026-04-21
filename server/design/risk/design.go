@@ -303,7 +303,8 @@ var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {
 
 var ListRiskResultsResult = Type("ListRiskResultsResult", func() {
 	Attribute("results", ArrayOf(shared.RiskResult), "The list of risk results.")
-	Required("results")
+	Attribute("total_count", Int64, "Total number of findings across all enabled policies.")
+	Required("results", "total_count")
 })
 
 var ListRiskResultsByChatResult = Type("ListRiskResultsByChatResult", func() {

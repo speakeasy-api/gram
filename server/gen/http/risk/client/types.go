@@ -131,6 +131,8 @@ type UpdateRiskPolicyResponseBody struct {
 type ListRiskResultsResponseBody struct {
 	// The list of risk results.
 	Results []*RiskResultResponseBody `form:"results,omitempty" json:"results,omitempty" xml:"results,omitempty"`
+	// Total number of findings across all enabled policies.
+	TotalCount *int64 `form:"total_count,omitempty" json:"total_count,omitempty" xml:"total_count,omitempty"`
 }
 
 // ListRiskResultsByChatResponseBody is the type of the "risk" service
@@ -2967,7 +2969,9 @@ func NewDeleteRiskPolicyGatewayError(body *DeleteRiskPolicyGatewayErrorResponseB
 // NewListRiskResultsResultOK builds a "risk" service "listRiskResults"
 // endpoint result from a HTTP "OK" response.
 func NewListRiskResultsResultOK(body *ListRiskResultsResponseBody) *risk.ListRiskResultsResult {
-	v := &risk.ListRiskResultsResult{}
+	v := &risk.ListRiskResultsResult{
+		TotalCount: *body.TotalCount,
+	}
 	v.Results = make([]*types.RiskResult, len(body.Results))
 	for i, val := range body.Results {
 		if val == nil {
@@ -3943,6 +3947,9 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 func ValidateListRiskResultsResponseBody(body *ListRiskResultsResponseBody) (err error) {
 	if body.Results == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("results", "body"))
+	}
+	if body.TotalCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_count", "body"))
 	}
 	for _, e := range body.Results {
 		if e != nil {

@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -13,15 +14,27 @@ export type ListRiskResultsResult = {
    * The list of risk results.
    */
   results: Array<RiskResult>;
+  /**
+   * Total number of findings across all enabled policies.
+   */
+  totalCount: number;
 };
 
 /** @internal */
 export const ListRiskResultsResult$inboundSchema: z.ZodMiniType<
   ListRiskResultsResult,
   unknown
-> = z.object({
-  results: z.array(RiskResult$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    results: z.array(RiskResult$inboundSchema),
+    total_count: z.int(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "total_count": "totalCount",
+    });
+  }),
+);
 
 export function listRiskResultsResultFromJSON(
   jsonString: string,

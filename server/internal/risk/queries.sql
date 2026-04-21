@@ -93,6 +93,13 @@ WHERE project_id = @project_id
   AND risk_policy_version = @risk_policy_version
   AND found IS TRUE;
 
+-- name: CountAllFindings :one
+SELECT COUNT(*)::BIGINT
+FROM risk_results rr
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+WHERE rr.project_id = @project_id
+  AND rr.found IS TRUE;
+
 -- name: FetchUnanalyzedMessageIDs :many
 SELECT cm.id
 FROM chat_messages cm

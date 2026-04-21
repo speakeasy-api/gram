@@ -175,6 +175,8 @@ type ListRiskResultsPayload struct {
 type ListRiskResultsResult struct {
 	// The list of risk results.
 	Results []*types.RiskResult
+	// Total number of findings across all enabled policies.
+	TotalCount int64
 }
 
 // TriggerRiskAnalysisPayload is the payload type of the risk service

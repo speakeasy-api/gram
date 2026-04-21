@@ -12,7 +12,8 @@ import {
 import { useRoutes } from "@/routes";
 import { Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useSearchParams } from "react-router";
 import { keepPreviousData } from "@tanstack/react-query";
 import {
   useRiskListResults,
@@ -34,7 +35,21 @@ export default function SecurityOverview() {
 
 function SecurityOverviewContent() {
   const routes = useRoutes();
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedChatId = searchParams.get("chat_id");
+  const setSelectedChatId = useCallback(
+    (chatId: string | null) => {
+      setSearchParams((prev) => {
+        if (chatId) {
+          prev.set("chat_id", chatId);
+        } else {
+          prev.delete("chat_id");
+        }
+        return prev;
+      });
+    },
+    [setSearchParams],
+  );
   const [chatsLimit, setChatsLimit] = useState(10);
   const [usersLimit, setUsersLimit] = useState(10);
   const [findingsLimit, setFindingsLimit] = useState(10);
@@ -113,7 +128,7 @@ function SecurityOverviewContent() {
     );
   }
 
-  const totalFindings = results.length;
+  const totalFindings = resultsData?.totalCount ?? 0;
   const totalScanned = policies.reduce(
     (max, p) => Math.max(max, p.totalMessages - p.pendingMessages),
     0,
