@@ -11,7 +11,7 @@ func TestCollectionsService_AttachServer_AllowsOriginBackedToolsets(t *testing.T
 	t.Parallel()
 
 	ctx, ti := newTestCollectionsService(t)
-	toolset := createOriginBackedMCPEnabledToolset(
+	toolset := createMCPEnabledToolset(
 		t,
 		ctx,
 		ti,
@@ -43,7 +43,7 @@ func TestCollectionsService_ListServers_PreservesOriginLineage(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestCollectionsService(t)
-	toolset := createOriginBackedMCPEnabledToolset(
+	toolset := createMCPEnabledToolset(
 		t,
 		ctx,
 		ti,

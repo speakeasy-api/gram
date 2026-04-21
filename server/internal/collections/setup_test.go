@@ -89,45 +89,7 @@ func newTestCollectionsService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-func createMCPEnabledToolset(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.Toolset {
-	t.Helper()
-
-	created, err := ti.toolsets.CreateToolset(ctx, &tgen.CreateToolsetPayload{
-		SessionToken:           nil,
-		ApikeyToken:            nil,
-		Name:                   name,
-		Description:            nil,
-		ToolUrns:               []string{},
-		ResourceUrns:           nil,
-		DefaultEnvironmentSlug: nil,
-		ProjectSlugInput:       nil,
-	})
-	require.NoError(t, err)
-
-	mcpEnabled := true
-	updated, err := ti.toolsets.UpdateToolset(ctx, &tgen.UpdateToolsetPayload{
-		SessionToken:           nil,
-		ApikeyToken:            nil,
-		Slug:                   created.Slug,
-		Name:                   nil,
-		Description:            nil,
-		DefaultEnvironmentSlug: nil,
-		ToolUrns:               nil,
-		ResourceUrns:           nil,
-		PromptTemplateNames:    nil,
-		McpSlug:                nil,
-		McpIsPublic:            nil,
-		McpEnabled:             &mcpEnabled,
-		CustomDomainID:         nil,
-		ProjectSlugInput:       nil,
-	})
-	require.NoError(t, err)
-	require.True(t, *updated.McpEnabled)
-
-	return updated
-}
-
-func createOriginBackedMCPEnabledToolset(
+func createMCPEnabledToolset(
 	t *testing.T,
 	ctx context.Context,
 	ti *testInstance,
@@ -136,6 +98,13 @@ func createOriginBackedMCPEnabledToolset(
 ) *types.Toolset {
 	t.Helper()
 
+	var origin *types.ToolsetOrigin
+	if registrySpecifier != "" {
+		origin = &types.ToolsetOrigin{
+			RegistrySpecifier: registrySpecifier,
+		}
+	}
+
 	created, err := ti.toolsets.CreateToolset(ctx, &tgen.CreateToolsetPayload{
 		SessionToken:           nil,
 		ApikeyToken:            nil,
@@ -144,10 +113,8 @@ func createOriginBackedMCPEnabledToolset(
 		ToolUrns:               []string{},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
-		Origin: &types.ToolsetOrigin{
-			RegistrySpecifier: registrySpecifier,
-		},
-		ProjectSlugInput: nil,
+		Origin:                 origin,
+		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
 

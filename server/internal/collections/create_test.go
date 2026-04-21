@@ -40,7 +40,7 @@ func TestCollectionsService_Create_WithToolsetIds(t *testing.T) {
 
 	ctx, ti := newTestCollectionsService(t)
 
-	ts := createMCPEnabledToolset(t, ctx, ti, "Attach Me")
+	ts := createMCPEnabledToolset(t, ctx, ti, "Attach Me", "")
 
 	result, err := ti.service.Create(ctx, &gen.CreatePayload{
 		Name:                 "Collection With Toolsets",
