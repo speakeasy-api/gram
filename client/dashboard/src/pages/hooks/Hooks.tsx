@@ -1413,18 +1413,18 @@ const stackTotalPlugin = {
 const STACKED_BAR_PLUGINS = [stackTotalPlugin];
 
 function StackedBarChart({
-  title,
   labels,
   datasets,
   handleFilter,
+  expanded = false,
 }: {
-  title: string;
   labels: string[];
   datasets: StackedBarDataset[];
   handleFilter?: (datasetLabel: string, rowLabel: string) => void;
+  expanded?: boolean;
 }) {
-  const barHeight = 24;
-  const spacerHeight = 8;
+  const barHeight = expanded ? 36 : 24;
+  const spacerHeight = expanded ? 12 : 8;
   const containerHeight = Math.max(
     120,
     labels.length * (barHeight + spacerHeight) + 60,
@@ -1464,15 +1464,12 @@ function StackedBarChart({
   if (labels.length === 0) return null;
 
   return (
-    <div className="border-border bg-card space-y-4 rounded-lg border p-4">
-      <h3 className="text font-semibold">{title}</h3>
-      <div style={{ height: containerHeight }}>
-        <Bar
-          plugins={STACKED_BAR_PLUGINS}
-          data={{ labels, datasets }}
-          options={options}
-        />
-      </div>
+    <div style={{ height: containerHeight }}>
+      <Bar
+        plugins={STACKED_BAR_PLUGINS}
+        data={{ labels, datasets }}
+        options={options}
+      />
     </div>
   );
 }
@@ -1482,12 +1479,18 @@ function UsersPerServerChart({
   breakdown,
   serverNameMappings,
   handleFilter,
+  expandedChart,
+  onExpand,
 }: {
   title: string;
   breakdown: HooksBreakdownRow[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   handleFilter?: (userEmail: string, serverName: string) => void;
+  expandedChart: string | null;
+  onExpand: (id: string | null) => void;
 }) {
+  const chartId = "users-per-server";
+  const expanded = expandedChart === chartId;
   const { labels, datasets } = useMemo(() => {
     const serverMap = new Map<string, Map<string, number>>();
     const userSet = new Set<string>();
@@ -1538,12 +1541,19 @@ function UsersPerServerChart({
   }, [breakdown, serverNameMappings.rawToDisplay]);
 
   return (
-    <StackedBarChart
+    <ChartCard
       title={title}
-      labels={labels}
-      datasets={datasets}
-      handleFilter={handleFilter}
-    />
+      chartId={chartId}
+      expandedChart={expandedChart}
+      onExpand={onExpand}
+    >
+      <StackedBarChart
+        labels={labels}
+        datasets={datasets}
+        handleFilter={handleFilter}
+        expanded={expanded}
+      />
+    </ChartCard>
   );
 }
 
@@ -1551,11 +1561,17 @@ function UserEventCountsChart({
   title,
   breakdown,
   handleFilter,
+  expandedChart,
+  onExpand,
 }: {
   title: string;
   breakdown: HooksBreakdownRow[];
   handleFilter?: (datasetLabel: string, userEmail: string) => void;
+  expandedChart: string | null;
+  onExpand: (id: string | null) => void;
 }) {
+  const chartId = "user-event-counts";
+  const expanded = expandedChart === chartId;
   const { labels, datasets } = useMemo(() => {
     const userMap = new Map<string, number>();
     for (const row of breakdown) {
@@ -1583,12 +1599,19 @@ function UserEventCountsChart({
   }, [breakdown]);
 
   return (
-    <StackedBarChart
+    <ChartCard
       title={title}
-      labels={labels}
-      datasets={datasets}
-      handleFilter={handleFilter}
-    />
+      chartId={chartId}
+      expandedChart={expandedChart}
+      onExpand={onExpand}
+    >
+      <StackedBarChart
+        labels={labels}
+        datasets={datasets}
+        handleFilter={handleFilter}
+        expanded={expanded}
+      />
+    </ChartCard>
   );
 }
 
