@@ -818,7 +818,6 @@ CREATE TABLE IF NOT EXISTS assistants (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 120),
   model TEXT NOT NULL CHECK (model <> '' AND CHAR_LENGTH(model) <= 200),
   instructions TEXT NOT NULL,
-  toolsets_json JSONB NOT NULL DEFAULT '[]'::jsonb,
   warm_ttl_seconds BIGINT NOT NULL DEFAULT 300 CHECK (warm_ttl_seconds >= 0 AND warm_ttl_seconds <= 3600),
   max_concurrency BIGINT NOT NULL DEFAULT 1 CHECK (max_concurrency >= 1 AND max_concurrency <= 100),
   status TEXT NOT NULL CHECK (status IN ('active', 'paused')) DEFAULT 'active',
@@ -835,6 +834,27 @@ CREATE TABLE IF NOT EXISTS assistants (
 CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_name_key
 ON assistants (project_id, name)
 WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS assistant_toolsets (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  assistant_id uuid NOT NULL,
+  toolset_id uuid NOT NULL,
+  environment_id uuid,
+  project_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT assistant_toolsets_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_toolsets_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_toolsets_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_toolsets_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_toolsets_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_toolsets_assistant_id_toolset_id_key UNIQUE (assistant_id, toolset_id)
+);
+
+CREATE INDEX IF NOT EXISTS assistant_toolsets_assistant_id_idx ON assistant_toolsets (assistant_id);
+CREATE INDEX IF NOT EXISTS assistant_toolsets_toolset_id_idx ON assistant_toolsets (toolset_id);
 
 CREATE TABLE IF NOT EXISTS assistant_threads (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

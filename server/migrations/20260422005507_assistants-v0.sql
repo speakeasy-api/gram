@@ -6,7 +6,6 @@ CREATE TABLE "assistants" (
   "name" text NOT NULL,
   "model" text NOT NULL,
   "instructions" text NOT NULL,
-  "toolsets_json" jsonb NOT NULL DEFAULT '[]',
   "warm_ttl_seconds" bigint NOT NULL DEFAULT 300,
   "max_concurrency" bigint NOT NULL DEFAULT 1,
   "status" text NOT NULL DEFAULT 'active',
@@ -108,3 +107,23 @@ CREATE TABLE "assistant_thread_events" (
 CREATE UNIQUE INDEX "assistant_thread_events_assistant_id_event_id_key" ON "assistant_thread_events" ("assistant_id", "event_id") WHERE (deleted IS FALSE);
 -- Create index "assistant_thread_events_thread_status_created_at_idx" to table: "assistant_thread_events"
 CREATE INDEX "assistant_thread_events_thread_status_created_at_idx" ON "assistant_thread_events" ("assistant_thread_id", "status", "created_at") WHERE (deleted IS FALSE);
+-- Create "assistant_toolsets" table
+CREATE TABLE "assistant_toolsets" (
+  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
+  "assistant_id" uuid NOT NULL,
+  "toolset_id" uuid NOT NULL,
+  "environment_id" uuid NULL,
+  "project_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY ("id"),
+  CONSTRAINT "assistant_toolsets_assistant_id_toolset_id_key" UNIQUE ("assistant_id", "toolset_id"),
+  CONSTRAINT "assistant_toolsets_assistant_id_fkey" FOREIGN KEY ("assistant_id") REFERENCES "assistants" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "assistant_toolsets_environment_id_fkey" FOREIGN KEY ("environment_id") REFERENCES "environments" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_toolsets_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "assistant_toolsets_toolset_id_fkey" FOREIGN KEY ("toolset_id") REFERENCES "toolsets" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
+);
+-- Create index "assistant_toolsets_assistant_id_idx" to table: "assistant_toolsets"
+CREATE INDEX "assistant_toolsets_assistant_id_idx" ON "assistant_toolsets" ("assistant_id");
+-- Create index "assistant_toolsets_toolset_id_idx" to table: "assistant_toolsets"
+CREATE INDEX "assistant_toolsets_toolset_id_idx" ON "assistant_toolsets" ("toolset_id");

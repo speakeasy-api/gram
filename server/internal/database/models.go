@@ -63,7 +63,6 @@ type Assistant struct {
 	Name           string
 	Model          string
 	Instructions   string
-	ToolsetsJson   []byte
 	WarmTtlSeconds int64
 	MaxConcurrency int64
 	Status         string
@@ -123,6 +122,16 @@ type AssistantThreadEvent struct {
 	AssistantID           uuid.UUID
 	AssistantThreadID     uuid.UUID
 	Deleted               bool
+}
+
+type AssistantToolset struct {
+	ID            uuid.UUID
+	AssistantID   uuid.UUID
+	ToolsetID     uuid.UUID
+	EnvironmentID uuid.NullUUID
+	ProjectID     uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
 }
 
 type AuditLog struct {
