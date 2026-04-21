@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
 
@@ -23,14 +26,16 @@ import (
 type AnalyzeBatch struct {
 	logger  *slog.Logger
 	tracer  trace.Tracer
+	metrics *riskMetrics
 	db      *pgxpool.Pool
 	scanner *Scanner
 }
 
-func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *AnalyzeBatch {
+func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool) *AnalyzeBatch {
 	return &AnalyzeBatch{
 		logger:  logger,
 		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
+		metrics: newRiskMetrics(meterProvider, logger),
 		db:      db,
 		scanner: NewScanner(),
 	}
@@ -54,6 +59,12 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if len(args.MessageIDs) == 0 {
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
+
+	start := time.Now()
+	defer func() {
+		outcome := o11y.OutcomeFromError(err)
+		a.metrics.RecordScan(ctx, args.OrganizationID, outcome, len(args.MessageIDs), time.Since(start))
+	}()
 
 	ctx, span := a.tracer.Start(ctx, "risk.analyzeBatch", trace.WithAttributes(
 		attribute.String("risk.project_id", args.ProjectID.String()),
@@ -127,6 +138,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 
 		for _, f := range findings {
 			findingsCount++
+			a.metrics.RecordFindingConfidence(ctx, args.OrganizationID, f.RuleID, 1.0)
 			resultID, err := uuid.NewV7()
 			if err != nil {
 				return nil, fmt.Errorf("generate result id: %w", err)

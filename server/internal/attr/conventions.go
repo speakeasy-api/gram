@@ -189,6 +189,7 @@ const (
 	ProjectIDKey                   = attribute.Key("gram.project.id")
 	ProjectNameKey                 = attribute.Key("gram.project.name")
 	ProjectSlugKey                 = attribute.Key("gram.project.slug")
+	RiskRuleIDKey                  = attribute.Key("gram.risk.rule_id")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -262,12 +263,12 @@ const (
 	GenAISystemInstructionsKey = semconv.GenAISystemInstructionsKey
 
 	// Custom GenAI keys not in official semconv (yet)
-	GenAIToolCallsKey                      = attribute.Key("gen_ai.tool.calls")
-	GenAIUsageTotalTokensKey               = attribute.Key("gen_ai.usage.total_tokens")
-	GenAIConversationDuration              = attribute.Key("gen_ai.conversation.duration")
-	GenAIUsageCacheReadInputTokensKey      = attribute.Key("gen_ai.usage.cache_read.input_tokens")
-	GenAIUsageCacheCreationInputTokensKey  = attribute.Key("gen_ai.usage.cache_creation.input_tokens")
-	GenAIUsageCostKey                      = attribute.Key("gen_ai.usage.cost")
+	GenAIToolCallsKey                     = attribute.Key("gen_ai.tool.calls")
+	GenAIUsageTotalTokensKey              = attribute.Key("gen_ai.usage.total_tokens")
+	GenAIConversationDuration             = attribute.Key("gen_ai.conversation.duration")
+	GenAIUsageCacheReadInputTokensKey     = attribute.Key("gen_ai.usage.cache_read.input_tokens")
+	GenAIUsageCacheCreationInputTokensKey = attribute.Key("gen_ai.usage.cache_creation.input_tokens")
+	GenAIUsageCostKey                     = attribute.Key("gen_ai.usage.cost")
 
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
@@ -835,6 +836,9 @@ func SlogProjectSlug(v string) slog.Attr      { return slog.String(string(Projec
 
 func ProjectName(v string) attribute.KeyValue { return ProjectNameKey.String(v) }
 func SlogProjectName(v string) slog.Attr      { return slog.String(string(ProjectNameKey), v) }
+
+func RiskRuleID(v string) attribute.KeyValue { return RiskRuleIDKey.String(v) }
+func SlogRiskRuleID(v string) slog.Attr      { return slog.String(string(RiskRuleIDKey), v) }
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }
