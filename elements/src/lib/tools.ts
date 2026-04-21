@@ -4,7 +4,7 @@ import {
   Tool,
   makeAssistantTool,
 } from "@assistant-ui/react";
-import { JSONSchema7, ToolSet, type ToolCallOptions } from "ai";
+import { jsonSchema, JSONSchema7, ToolSet, type ToolCallOptions } from "ai";
 import { FC } from "react";
 import z from "zod";
 
@@ -34,6 +34,50 @@ export const getEnabledTools = (tools: Record<string, Tool>) => {
       ([, tool]) => !tool.disabled && tool.type !== "backend",
     ),
   );
+};
+
+/**
+ * Builds an AI SDK ToolSet from FrontendTool definitions, preserving the
+ * `execute` function so streamText can run the tool inline. This lets the
+ * AI SDK's multi-step loop (`stopWhen: stepCountIs(...)`) continue after a
+ * frontend tool call instead of returning control to the runtime.
+ *
+ * Approval is handled inside the wrapped execute (see `defineFrontendTool`),
+ * so callers should NOT pass the result through `wrapToolsWithApproval` —
+ * doing so would prompt the user twice.
+ */
+export const frontendToolsToExecutableAISDKTools = (
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  frontendTools: Record<string, FrontendTool<any, any>> | undefined,
+): ToolSet => {
+  if (!frontendTools) return {} as ToolSet;
+  return Object.fromEntries(
+    Object.entries(frontendTools).flatMap(([name, tool]) => {
+      const def = tool.unstable_tool as unknown as {
+        description?: string;
+        parameters?: unknown;
+        disabled?: boolean;
+        type?: string;
+        execute?: (...args: unknown[]) => unknown;
+      };
+      if (!def?.execute) return [];
+      if (def.disabled || def.type === "backend") return [];
+      const schema =
+        def.parameters instanceof z.ZodType
+          ? z.toJSONSchema(def.parameters)
+          : def.parameters;
+      return [
+        [
+          name,
+          {
+            ...(def.description ? { description: def.description } : {}),
+            inputSchema: jsonSchema(schema as JSONSchema7),
+            execute: def.execute,
+          },
+        ],
+      ];
+    }),
+  ) as unknown as ToolSet;
 };
 
 /**

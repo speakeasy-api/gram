@@ -1,4 +1,3 @@
-import { FrontendTools } from "@/components/FrontendTools";
 import { ROOT_SELECTOR } from "@/constants/tailwind";
 import {
   isLocalThreadId,
@@ -11,9 +10,8 @@ import { initErrorTracking, trackError } from "@/lib/errorTracking";
 import { MODELS } from "@/lib/models";
 import {
   clearFrontendToolApprovalConfig,
-  getEnabledTools,
+  frontendToolsToExecutableAISDKTools,
   setFrontendToolApprovalConfig,
-  toAISDKTools,
   wrapToolsWithApproval,
   type ApprovalHelpers,
   type FrontendTool,
@@ -24,14 +22,10 @@ import { ElementsConfig, Model } from "@/types";
 import { Plugin } from "@/types/plugins";
 import {
   AssistantRuntimeProvider,
-  AssistantTool,
   useAssistantState,
   unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
 } from "@assistant-ui/react";
-import {
-  frontendTools as convertFrontendToolsToAISDKTools,
-  useChatRuntime,
-} from "@assistant-ui/react-ai-sdk";
+import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -323,11 +317,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           setCurrentChatId(chatId);
         }
 
-        const context = runtimeRef.current?.thread.getModelContext();
-        const frontendTools = toAISDKTools(
-          getEnabledTools(context?.tools ?? {}),
-        );
-
         // Include Gram-Chat-ID header for chat persistence and Gram-Environment for environment selection
         const headersWithChatId = {
           ...validHeaders,
@@ -359,18 +348,20 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           console.log("Using custom language model", config.languageModel);
         }
 
-        // Combine tools - MCP tools only available when not using custom model
-        const combinedTools: ToolSet = {
-          ...mcpTools,
-          ...convertFrontendToolsToAISDKTools(frontendTools),
-        } as ToolSet;
-
-        // Wrap tools that require approval
-        const tools = wrapToolsWithApproval(
-          combinedTools,
+        // Frontend tools self-wrap approval inside `defineFrontendTool`, so we
+        // route MCP tools through `wrapToolsWithApproval` and merge the frontend
+        // tools (with execute attached) afterwards. This keeps streamText's
+        // multi-step loop alive after a frontend tool call.
+        const wrappedMCPTools = wrapToolsWithApproval(
+          (mcpTools ?? {}) as ToolSet,
           config.tools?.toolsRequiringApproval,
           getApprovalHelpers(),
         );
+
+        const tools: ToolSet = {
+          ...wrappedMCPTools,
+          ...frontendToolsToExecutableAISDKTools(config.tools?.frontendTools),
+        };
 
         // Stream the response
         const modelToUse = config.languageModel
@@ -456,6 +447,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     [
       config.languageModel,
       config.tools?.toolsRequiringApproval,
+      config.tools?.frontendTools,
       model,
       systemPrompt,
       mcpTools,
@@ -483,8 +475,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     }),
     [config, model, isExpanded, isOpen, plugins, mcpTools],
   );
-
-  const frontendTools = config.tools?.frontendTools ?? {};
 
   // Create combined executable tools for direct tool execution (ActionButton)
   // Uses a simplified type that focuses on the execute function
@@ -514,7 +504,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         headers={auth.headers}
         contextValue={contextValue}
         runtimeRef={runtimeRef}
-        frontendTools={frontendTools}
         localIdToUuidMap={localIdToUuidMapRef.current}
         currentRemoteIdRef={currentRemoteIdRef}
         executableTools={executableTools}
@@ -531,7 +520,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       transport={transport}
       contextValue={contextValue}
       runtimeRef={runtimeRef}
-      frontendTools={frontendTools}
       executableTools={executableTools}
       currentChatId={currentChatId}
     >
@@ -555,8 +543,6 @@ interface ElementsProviderWithHistoryProps {
   headers: Record<string, string>;
   contextValue: React.ContextType<typeof ElementsContext>;
   runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>;
   localIdToUuidMap: Map<string, string>;
   currentRemoteIdRef: React.RefObject<string | null>;
   executableTools: ExecutableToolSet;
@@ -592,7 +578,6 @@ const ElementsProviderWithHistory = ({
   headers,
   contextValue,
   runtimeRef,
-  frontendTools,
   localIdToUuidMap,
   currentRemoteIdRef,
   executableTools,
@@ -661,7 +646,6 @@ const ElementsProviderWithHistory = ({
               >
                 {children}
               </div>
-              <FrontendTools tools={frontendTools} />
             </ToolExecutionProvider>
           </ElementsContext.Provider>
         </ChatIdContext.Provider>
@@ -676,8 +660,6 @@ interface ElementsProviderWithoutHistoryProps {
   transport: ChatTransport<UIMessage>;
   contextValue: React.ContextType<typeof ElementsContext>;
   runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>;
   executableTools: ExecutableToolSet;
   currentChatId: string | null;
 }
@@ -687,7 +669,6 @@ const ElementsProviderWithoutHistory = ({
   transport,
   contextValue,
   runtimeRef,
-  frontendTools,
   executableTools,
   currentChatId,
 }: ElementsProviderWithoutHistoryProps) => {
@@ -713,7 +694,6 @@ const ElementsProviderWithoutHistory = ({
             >
               {children}
             </div>
-            <FrontendTools tools={frontendTools} />
           </ToolExecutionProvider>
         </ElementsContext.Provider>
       </ChatIdContext.Provider>
