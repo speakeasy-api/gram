@@ -848,21 +848,23 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 			if r.ToolsetIsPublic {
 				mcpMeta := mcpmetarepo.New(s.db)
 				metadata, metaErr := mcpMeta.GetMetadataForToolset(ctx, r.ToolsetID)
-				if metaErr == nil {
-					envConfigs, envErr := mcpMeta.ListEnvironmentConfigs(ctx, metadata.ID)
-					if envErr == nil {
-						for _, ec := range envConfigs {
-							if ec.ProvidedBy == "user" {
-								displayName := ec.VariableName
-								if dn := conv.FromPGText[string](ec.HeaderDisplayName); dn != nil {
-									displayName = *dn
-								}
-								serverInfo.EnvConfigs = append(serverInfo.EnvConfigs, ServerEnvConfig{
-									VariableName: ec.VariableName,
-									DisplayName:  displayName,
-								})
-							}
+				if metaErr != nil {
+					return nil, oops.E(oops.CodeUnexpected, metaErr, "load mcp metadata for toolset").Log(ctx, s.logger)
+				}
+				envConfigs, envErr := mcpMeta.ListEnvironmentConfigs(ctx, metadata.ID)
+				if envErr != nil {
+					return nil, oops.E(oops.CodeUnexpected, envErr, "load environment configs for toolset").Log(ctx, s.logger)
+				}
+				for _, ec := range envConfigs {
+					if ec.ProvidedBy == "user" {
+						displayName := ec.VariableName
+						if dn := conv.FromPGText[string](ec.HeaderDisplayName); dn != nil {
+							displayName = *dn
 						}
+						serverInfo.EnvConfigs = append(serverInfo.EnvConfigs, ServerEnvConfig{
+							VariableName: ec.VariableName,
+							DisplayName:  displayName,
+						})
 					}
 				}
 			}
