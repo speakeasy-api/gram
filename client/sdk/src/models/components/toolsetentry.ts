@@ -29,6 +29,7 @@ import {
   ServerVariable$inboundSchema,
 } from "./servervariable.js";
 import { ToolEntry, ToolEntry$inboundSchema } from "./toolentry.js";
+import { ToolsetOrigin, ToolsetOrigin$inboundSchema } from "./toolsetorigin.js";
 
 export type ToolsetEntry = {
   /**
@@ -79,6 +80,7 @@ export type ToolsetEntry = {
    * The organization ID this toolset belongs to
    */
   organizationId: string;
+  origin?: ToolsetOrigin | undefined;
   /**
    * The project ID this toolset belongs to
    */
@@ -148,6 +150,7 @@ export const ToolsetEntry$inboundSchema: z.ZodMiniType<ToolsetEntry, unknown> =
       mcp_slug: z.optional(z.string()),
       name: z.string(),
       organization_id: z.string(),
+      origin: z.optional(ToolsetOrigin$inboundSchema),
       project_id: z.string(),
       prompt_templates: z.array(PromptTemplateEntry$inboundSchema),
       resource_urns: z.array(z.string()),

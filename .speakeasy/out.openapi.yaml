@@ -20453,6 +20453,8 @@ components:
         name:
           type: string
           description: The name of the toolset
+        origin:
+          $ref: '#/components/schemas/ToolsetOrigin'
         project_slug_input:
           type: string
         resource_urns:
@@ -20481,6 +20483,8 @@ components:
         name:
           type: string
           description: The name of the toolset
+        origin:
+          $ref: '#/components/schemas/ToolsetOrigin'
         resource_urns:
           type: array
           items:
@@ -21215,6 +21219,10 @@ components:
           items:
             $ref: '#/components/schemas/ExternalMCPTool'
           description: Tools available on the server
+        toolset_id:
+          type: string
+          description: ID of the attached toolset when this server is listed from a Collection
+          format: uuid
         version:
           type: string
           description: Semantic version of the server
@@ -26559,6 +26567,8 @@ components:
         organization_id:
           type: string
           description: The organization ID this toolset belongs to
+        origin:
+          $ref: '#/components/schemas/ToolsetOrigin'
         project_id:
           type: string
           description: The project ID this toolset belongs to
@@ -26678,6 +26688,8 @@ components:
         organization_id:
           type: string
           description: The organization ID this toolset belongs to
+        origin:
+          $ref: '#/components/schemas/ToolsetOrigin'
         project_id:
           type: string
           description: The project ID this toolset belongs to
@@ -26762,6 +26774,14 @@ components:
         - id
         - toolset_id
         - environment_id
+    ToolsetOrigin:
+      type: object
+      properties:
+        registry_specifier:
+          type: string
+          description: The globally unique registry specifier this toolset originated from
+      required:
+        - registry_specifier
     TopServer:
       type: object
       properties:

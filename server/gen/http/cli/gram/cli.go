@@ -7259,7 +7259,7 @@ func toolsetsCreateToolsetUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets create-toolset --body '{\n      \"default_environment_slug\": \"aaa\",\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"resource_urns\": [\n         \"abc123\"\n      ],\n      \"tool_urns\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets create-toolset --body '{\n      \"default_environment_slug\": \"aaa\",\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"origin\": {\n         \"registry_specifier\": \"abc123\"\n      },\n      \"resource_urns\": [\n         \"abc123\"\n      ],\n      \"tool_urns\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func toolsetsListToolsetsUsage() {

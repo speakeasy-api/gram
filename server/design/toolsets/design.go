@@ -331,6 +331,7 @@ var CreateToolsetForm = Type("CreateToolsetForm", func() {
 	Attribute("tool_urns", ArrayOf(String), "List of tool URNs to include in the toolset")
 	Attribute("resource_urns", ArrayOf(String), "List of resource URNs to include in the toolset")
 	Attribute("default_environment_slug", shared.Slug, "The slug of the environment to use as the default for the toolset")
+	Attribute("origin", shared.ToolsetOrigin, "Optional registry lineage for toolsets installed from an external MCP catalog")
 	security.ProjectPayload()
 	Required("name")
 })
