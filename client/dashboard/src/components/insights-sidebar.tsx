@@ -92,7 +92,7 @@ export function InsightsTrigger({ className }: { className?: string }) {
       aria-label={isExpanded ? "Close AI Insights" : "Open AI Insights"}
       aria-pressed={isExpanded}
       className={cn(
-        "border-border hover:bg-accent inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
+        "border-border hover:bg-accent hover:text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
         isExpanded && "bg-accent text-accent-foreground",
         INSIGHTS_AI_RAINBOW_BORDER_CLASS,
         className,

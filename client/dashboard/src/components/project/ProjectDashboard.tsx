@@ -11,17 +11,10 @@ import { useAuditLogs, useGetProjectOverview } from "@gram/client/react-query";
 import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
 import { cn } from "@/lib/utils";
 import { subDays } from "date-fns";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Badge, Button, Card, Icon } from "@speakeasy-api/moonshine";
 import { Wand2 } from "lucide-react";
 import {
-  InsightsConfig,
   INSIGHTS_AI_RAINBOW_CLASS,
   type InsightsConfigOptions,
 } from "@/components/insights-sidebar";
@@ -73,29 +66,30 @@ export function ProjectDashboard() {
   const {
     isExpanded: isInsightsExpanded,
     setIsExpanded: setInsightsExpanded,
+    setOverride: setInsightsOverride,
     sendPrompt: sendInsightsPrompt,
   } = useInsightsState();
-  const [exploreConfig, setExploreConfig] =
-    useState<InsightsConfigOptions | null>(null);
 
   const exploreWithAI = useCallback(
     (opts: InsightsConfigOptions) => {
-      setExploreConfig(opts);
+      // Apply the override synchronously so it lands in the same commit as
+      // setIsExpanded + sendPrompt. Routing through <InsightsConfig> adds a
+      // useEffect-deferred setOverride, which (a) loses the chart contextInfo
+      // on the first runtime.append call and (b) triggered a click-outside
+      // crash via the unmount→cleanup chain.
+      setInsightsOverride(opts);
       setInsightsExpanded(true);
-      // Auto-send the chart's canonical question so the user lands in a
-      // running conversation — the welcome-screen suggestion fallback alone
-      // isn't shown once the thread has prior messages.
       const firstPrompt = opts.suggestions?.[0]?.prompt;
       if (firstPrompt) sendInsightsPrompt(firstPrompt);
     },
-    [setInsightsExpanded, sendInsightsPrompt],
+    [setInsightsOverride, setInsightsExpanded, sendInsightsPrompt],
   );
 
   // Clear the per-chart override when the panel is closed so the next opening
   // (e.g. via the header trigger) falls back to the page defaults.
   useEffect(() => {
-    if (!isInsightsExpanded) setExploreConfig(null);
-  }, [isInsightsExpanded]);
+    if (!isInsightsExpanded) setInsightsOverride(null);
+  }, [isInsightsExpanded, setInsightsOverride]);
 
   const timeWindowContext = useMemo(
     () =>
@@ -105,7 +99,6 @@ export function ProjectDashboard() {
 
   return (
     <Page.Section>
-      {exploreConfig && <InsightsConfig {...exploreConfig} />}
       <Page.Section.Title>Project Overview</Page.Section.Title>
       <Page.Section.Description>
         <Badge variant="neutral">
