@@ -1,4 +1,7 @@
 import type { ModelMessage } from "ai";
+import { MODELS } from "./models";
+
+type KnownModelId = (typeof MODELS)[number];
 
 /**
  * Fraction-of-limit at which compaction kicks in. Below this, messages pass
@@ -22,11 +25,12 @@ export const DEFAULT_KEEP_RECENT = 4;
 export const DEFAULT_CONTEXT_LIMIT = 200_000;
 
 /**
- * Known input-token ceilings per model (nominal upstream maximum). Values are
- * kept intentionally conservative; users can override via
- * ElementsConfig.contextCompaction.maxTokens if needed.
+ * Known input-token ceilings per model (nominal upstream maximum). Keyed by
+ * MODELS so TypeScript catches drift — adding a model id here that isn't in
+ * MODELS, or misspelling an id, is a compile error. Coverage is intentionally
+ * partial: models without an explicit entry fall back to DEFAULT_CONTEXT_LIMIT.
  */
-const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+const MODEL_CONTEXT_LIMITS: Partial<Record<KnownModelId, number>> = {
   // Anthropic (1M tier where available, else 200K)
   "anthropic/claude-opus-4.6": 1_000_000,
   "anthropic/claude-opus-4.5": 1_000_000,
@@ -68,7 +72,7 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
  * DEFAULT_CONTEXT_LIMIT if unknown.
  */
 export function getModelContextLimit(modelId: string): number {
-  return MODEL_CONTEXT_LIMITS[modelId] ?? DEFAULT_CONTEXT_LIMIT;
+  return MODEL_CONTEXT_LIMITS[modelId as KnownModelId] ?? DEFAULT_CONTEXT_LIMIT;
 }
 
 /**

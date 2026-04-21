@@ -21,6 +21,17 @@ describe("truncateTextToByteCap", () => {
     expect(out).not.toContain("MIDDLE");
   });
 
+  it("output always stays at or under maxBytes (notice included in budget)", () => {
+    // Regression test — earlier version appended the notice *without*
+    // reserving budget for it, so the output overshot maxBytes by ~100.
+    for (const maxBytes of [256, 512, 1024, 4096]) {
+      const text = "x".repeat(50_000);
+      const out = truncateTextToByteCap(text, maxBytes);
+      const outBytes = new TextEncoder().encode(out).byteLength;
+      expect(outBytes).toBeLessThanOrEqual(maxBytes);
+    }
+  });
+
   it("passes through when maxBytes <= 0 (disabled)", () => {
     const text = "x".repeat(10_000);
     expect(truncateTextToByteCap(text, 0)).toBe(text);

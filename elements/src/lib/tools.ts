@@ -174,15 +174,24 @@ export function truncateTextToByteCap(text: string, maxBytes: number): string {
   const encoded = new TextEncoder().encode(original);
   if (encoded.byteLength <= maxBytes) return original;
 
-  const headBytes = Math.max(0, Math.floor(maxBytes * BYTE_CAP_HEAD_FRACTION));
-  const tailBytes = Math.max(0, maxBytes - headBytes);
+  // Reserve room for the notice up-front so final output stays under maxBytes.
+  // Without this deduction, output would be head + notice + tail ≈ maxBytes
+  // + ~100 bytes, which silently overshoots the cap.
+  const notice = `\n\n[…tool output truncated from ${encoded.byteLength} bytes to ${maxBytes}; ask a narrower question to see more…]\n\n`;
+  const noticeBytes = new TextEncoder().encode(notice).byteLength;
+  const availableBytes = Math.max(0, maxBytes - noticeBytes);
+
+  const headBytes = Math.max(
+    0,
+    Math.floor(availableBytes * BYTE_CAP_HEAD_FRACTION),
+  );
+  const tailBytes = Math.max(0, availableBytes - headBytes);
   const decoder = new TextDecoder("utf-8", { fatal: false });
   const head = decoder.decode(encoded.slice(0, headBytes));
   const tail =
     tailBytes > 0
       ? decoder.decode(encoded.slice(encoded.byteLength - tailBytes))
       : "";
-  const notice = `\n\n[…tool output truncated from ${encoded.byteLength} bytes to ${maxBytes}; ask a narrower question to see more…]\n\n`;
 
   return tail ? `${head}${notice}${tail}` : `${head}${notice}`;
 }
