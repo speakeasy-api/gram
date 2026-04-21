@@ -202,3 +202,56 @@ func roles(rows []repo.ChatMessage) []string {
 	}
 	return out
 }
+
+// An assistant response that carries both narrative text and tool_calls must
+// land as two chained rows — text-only then tool-calls-only — so the stored
+// shape matches what NormalizeAssistantMessages produces on replay.
+func TestCaptureMessage_SplitsAssistantResponseWithBothTextAndToolCalls(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, orgID := newTestChatContext(t)
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	req := makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("Check weather"))
+	resp := openrouter.CompletionResponse{
+		Content:   "I'll check the weather.",
+		Model:     "test-model",
+		MessageID: "msg-split",
+		ToolCalls: []openrouter.ToolCall{{
+			Index: 0,
+			ID:    "tool_abc",
+			Type:  "function",
+			Function: openrouter.ToolCallFunction{
+				Name:      "get_weather",
+				Arguments: `{"city":"SF"}`,
+			},
+		}},
+		Usage: openrouter.Usage{
+			PromptTokens:     10,
+			CompletionTokens: 5,
+			TotalTokens:      15,
+		},
+	}
+
+	runTurn(t, ctx, s, req, resp)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	require.Len(t, rows, 3)
+	require.Equal(t, []string{"user", "assistant", "assistant"}, roles(rows))
+
+	text := rows[1]
+	require.Equal(t, "I'll check the weather.", text.Content)
+	require.Empty(t, text.ToolCalls, "text-only row carries no tool_calls")
+	require.Equal(t, int64(0), text.PromptTokens)
+	require.Equal(t, int64(0), text.CompletionTokens)
+
+	tools := rows[2]
+	require.Empty(t, tools.Content)
+	require.NotEmpty(t, tools.ToolCalls, "tool-only row carries tool_calls JSON")
+	require.Equal(t, int64(10), tools.PromptTokens)
+	require.Equal(t, int64(5), tools.CompletionTokens)
+	require.Equal(t, int64(15), tools.TotalTokens)
+
+	require.NotEqual(t, text.ContentHash, tools.ContentHash, "chained hashes differ")
+}

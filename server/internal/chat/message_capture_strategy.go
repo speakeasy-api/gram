@@ -327,34 +327,10 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 		return err
 	}
 
-	assistantParams := repo.CreateChatMessageParams{
-		ChatID:           request.ChatID,
-		Role:             "assistant",
-		ProjectID:        projectID,
-		Content:          response.Content,
-		ContentRaw:       nil,
-		ContentAssetUrl:  conv.ToPGTextEmpty(""),
-		StorageError:     conv.ToPGTextEmpty(""),
-		Model:            conv.ToPGText(response.Model),
-		MessageID:        conv.ToPGText(response.MessageID),
-		ToolCallID:       conv.ToPGTextEmpty(""), // Empty for assistant messages
-		UserID:           conv.ToPGText(request.UserID),
-		ExternalUserID:   conv.ToPGText(request.ExternalUserID),
-		FinishReason:     conv.PtrToPGText(response.FinishReason),
-		ToolCalls:        toolCallsJSON,
-		PromptTokens:     int64(response.Usage.PromptTokens),
-		CompletionTokens: int64(response.Usage.CompletionTokens),
-		TotalTokens:      int64(response.Usage.TotalTokens),
-		Origin:           conv.ToPGText(origin),
-		UserAgent:        conv.ToPGText(userAgent),
-		IpAddress:        conv.ToPGText(ipAddress),
-		Source:           conv.ToPGText(string(request.UsageSource)),
-		ContentHash:      hashAssistantResponse(session.parentHash, response.Content),
-		Generation:       session.generation,
-	}
+	assistantRows := buildAssistantRows(request, response, projectID, toolCallsJSON, origin, userAgent, ipAddress, session.parentHash, session.generation)
 
 	if len(session.pendingRows) == 0 {
-		if _, err := s.repo.CreateChatMessage(ctx, []repo.CreateChatMessageParams{assistantParams}); err != nil {
+		if _, err := s.repo.CreateChatMessage(ctx, assistantRows); err != nil {
 			s.logger.ErrorContext(ctx, "failed to store chat message", attr.SlogError(err))
 			return fmt.Errorf("store chat message: %w", err)
 		}
@@ -366,11 +342,88 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 	// assistant row atomically so either the whole turn lands or none of it
 	// does. A partial write would orphan the assistant and force divergence
 	// detection to open a new generation on the next turn.
-	if err := s.flushTurnAtomically(ctx, session.pendingRows, assistantParams); err != nil {
+	if err := s.flushTurnAtomically(ctx, session.pendingRows, assistantRows); err != nil {
 		return err
 	}
 	s.notifyObservers(ctx, projectID)
 	return nil
+}
+
+// buildAssistantRows turns a single completion response into 1 or 2 chained
+// assistant rows. When the response carries both text content and tool_calls,
+// it splits into a text-only row followed by a tool-calls-only row so the
+// stored shape matches what NormalizeAssistantMessages produces on replay.
+// Tokens and finish_reason land on the final row to keep per-turn accounting
+// on a single row.
+func buildAssistantRows(
+	request openrouter.CompletionRequest,
+	response openrouter.CompletionResponse,
+	projectID uuid.UUID,
+	toolCallsJSON []byte,
+	origin, userAgent, ipAddress string,
+	parentHash []byte,
+	generation int32,
+) []repo.CreateChatMessageParams {
+	hasText := response.Content != ""
+	hasTools := len(toolCallsJSON) > 0
+
+	base := repo.CreateChatMessageParams{
+		ChatID:           request.ChatID,
+		Role:             "assistant",
+		ProjectID:        projectID,
+		Content:          "",
+		ContentRaw:       nil,
+		ContentAssetUrl:  conv.ToPGTextEmpty(""),
+		StorageError:     conv.ToPGTextEmpty(""),
+		Model:            conv.ToPGText(response.Model),
+		MessageID:        conv.ToPGText(response.MessageID),
+		ToolCallID:       conv.ToPGTextEmpty(""),
+		UserID:           conv.ToPGText(request.UserID),
+		ExternalUserID:   conv.ToPGText(request.ExternalUserID),
+		FinishReason:     conv.ToPGTextEmpty(""),
+		ToolCalls:        nil,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+		Origin:           conv.ToPGText(origin),
+		UserAgent:        conv.ToPGText(userAgent),
+		IpAddress:        conv.ToPGText(ipAddress),
+		Source:           conv.ToPGText(string(request.UsageSource)),
+		ContentHash:      nil,
+		Generation:       generation,
+	}
+
+	finishReason := conv.PtrToPGText(response.FinishReason)
+	promptTokens := int64(response.Usage.PromptTokens)
+	completionTokens := int64(response.Usage.CompletionTokens)
+	totalTokens := int64(response.Usage.TotalTokens)
+
+	if hasText && hasTools {
+		text := base
+		text.Content = response.Content
+		text.ContentHash = hashAssistantResponse(parentHash, response.Content)
+
+		tools := base
+		tools.ToolCalls = toolCallsJSON
+		tools.FinishReason = finishReason
+		tools.PromptTokens = promptTokens
+		tools.CompletionTokens = completionTokens
+		tools.TotalTokens = totalTokens
+		tools.ContentHash = hashAssistantResponse(text.ContentHash, "")
+
+		return []repo.CreateChatMessageParams{text, tools}
+	}
+
+	only := base
+	only.Content = response.Content
+	only.ToolCalls = toolCallsJSON
+	only.FinishReason = finishReason
+	only.PromptTokens = promptTokens
+	only.CompletionTokens = completionTokens
+	only.TotalTokens = totalTokens
+	only.ContentHash = hashAssistantResponse(parentHash, response.Content)
+
+	return []repo.CreateChatMessageParams{only}
 }
 
 // resolveSession returns the session produced by StartOrResumeChat. If the
@@ -407,9 +460,9 @@ func (s *ChatMessageCaptureStrategy) resolveSession(ctx context.Context, raw ope
 }
 
 // flushTurnAtomically writes the pending user rows (via storeMessages, which
-// also handles asset-storage upload) and the assistant row inside a single
+// also handles asset-storage upload) and the assistant rows inside a single
 // Postgres transaction.
-func (s *ChatMessageCaptureStrategy) flushTurnAtomically(ctx context.Context, pending []chatMessageRow, assistant repo.CreateChatMessageParams) error {
+func (s *ChatMessageCaptureStrategy) flushTurnAtomically(ctx context.Context, pending []chatMessageRow, assistants []repo.CreateChatMessageParams) error {
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to begin transaction for catch-up flush", attr.SlogError(err))
@@ -422,7 +475,7 @@ func (s *ChatMessageCaptureStrategy) flushTurnAtomically(ctx context.Context, pe
 	}
 
 	txRepo := repo.New(dbtx)
-	if _, err := txRepo.CreateChatMessage(ctx, []repo.CreateChatMessageParams{assistant}); err != nil {
+	if _, err := txRepo.CreateChatMessage(ctx, assistants); err != nil {
 		s.logger.ErrorContext(ctx, "failed to store assistant chat message", attr.SlogError(err))
 		return fmt.Errorf("store assistant chat message: %w", err)
 	}
