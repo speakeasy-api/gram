@@ -619,19 +619,22 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	}, nil
 }
 
-// policyRowSnapshot returns a lightweight representation of a risk policy row
-// suitable for audit log snapshots. Unlike policyToType it avoids extra DB
-// queries for message counts, keeping transactions short.
-func policyRowSnapshot(row repo.RiskPolicy) map[string]any {
-	return map[string]any{
-		"id":         row.ID.String(),
-		"project_id": row.ProjectID.String(),
-		"name":       row.Name,
-		"sources":    row.Sources,
-		"enabled":    row.Enabled,
-		"version":    row.Version,
-		"created_at": row.CreatedAt.Time.Format(time.RFC3339),
-		"updated_at": row.UpdatedAt.Time.Format(time.RFC3339),
+// policyRowSnapshot returns a *types.RiskPolicy suitable for audit log
+// snapshots. Unlike policyToType it skips the extra DB queries for message
+// counts, keeping transactions short. Count fields are set to -1 to indicate
+// they were not computed.
+func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
+	return &types.RiskPolicy{
+		ID:              row.ID.String(),
+		ProjectID:       row.ProjectID.String(),
+		Name:            row.Name,
+		Sources:         row.Sources,
+		Enabled:         row.Enabled,
+		Version:         row.Version,
+		CreatedAt:       row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:       row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages: -1,
+		TotalMessages:   -1,
 	}
 }
 
