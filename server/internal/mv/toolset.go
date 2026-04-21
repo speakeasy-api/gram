@@ -357,8 +357,10 @@ func DescribeToolset(
 	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
 	activeDeploymentID, err := deploymentRepo.GetActiveDeploymentID(ctx, pid)
 	if err != nil {
-		// We only log this because we only need to know this for the cache
-		logger.ErrorContext(ctx, "failed to get active deployment id", attr.SlogError(err))
+		// Informational: only used to scope the cache key. Missing on a project
+		// with no deployments yet, which is fine — tools still resolve from the
+		// toolset version below.
+		logger.DebugContext(ctx, "no active deployment id", attr.SlogError(err))
 	}
 
 	// Get tool URNs and resource URNs from latest toolset version
