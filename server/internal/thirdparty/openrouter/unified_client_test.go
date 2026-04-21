@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -1192,72 +1193,47 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 		"response_format should not be set when JSONSchema is nil")
 }
 
-func TestResolveModel(t *testing.T) {
+func firstAllowedModelForProvider(prefix string) string {
+	var models []string
+	for m := range allowList {
+		if strings.HasPrefix(m, prefix) {
+			models = append(models, m)
+		}
+	}
+	sort.Strings(models)
+	return models[0]
+}
+
+func TestResolveModel_AllowedModelReturnedAsIs(t *testing.T) {
 	t.Parallel()
+	require.Equal(t, "openai/gpt-5.4", ResolveModel("openai/gpt-5.4"))
+}
 
-	tests := []struct {
-		name     string
-		model    string
-		expected string
-	}{
-		{
-			name:     "allowed model returned as-is",
-			model:    "openai/gpt-5.4",
-			expected: "openai/gpt-5.4",
-		},
-		{
-			name:  "unsupported openai model falls back to first alphabetical openai model",
-			model: "openai/gpt-4",
-			expected: func() string {
-				// Determine expected by sorting openai models from the allowlist
-				var models []string
-				for m := range allowList {
-					if len(m) > 7 && m[:7] == "openai/" {
-						models = append(models, m)
-					}
-				}
-				sort.Strings(models)
-				return models[0]
-			}(),
-		},
-		{
-			name:  "unsupported anthropic model falls back",
-			model: "anthropic/claude-2",
-			expected: func() string {
-				var models []string
-				for m := range allowList {
-					if len(m) > 10 && m[:10] == "anthropic/" {
-						models = append(models, m)
-					}
-				}
-				sort.Strings(models)
-				return models[0]
-			}(),
-		},
-		{
-			name:     "unknown provider returns empty",
-			model:    "fakeprovider/some-model",
-			expected: "",
-		},
-		{
-			name:     "bare model name without slash returns empty",
-			model:    "gpt-4",
-			expected: "",
-		},
-		{
-			name:     "empty model returns empty",
-			model:    "",
-			expected: "",
-		},
-	}
+func TestResolveModel_UnsupportedOpenAIFallback(t *testing.T) {
+	t.Parallel()
+	expected := firstAllowedModelForProvider("openai/")
+	require.Equal(t, expected, ResolveModel("openai/gpt-4"))
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			result := ResolveModel(tt.model)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+func TestResolveModel_UnsupportedAnthropicFallback(t *testing.T) {
+	t.Parallel()
+	expected := firstAllowedModelForProvider("anthropic/")
+	require.Equal(t, expected, ResolveModel("anthropic/claude-2"))
+}
+
+func TestResolveModel_UnknownProviderReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "", ResolveModel("fakeprovider/some-model"))
+}
+
+func TestResolveModel_BareModelNameReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "", ResolveModel("gpt-4"))
+}
+
+func TestResolveModel_EmptyModelReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "", ResolveModel(""))
 }
 
 func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
@@ -1307,14 +1283,14 @@ func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
 		UsageSource: billing.ModelUsageSourcePlayground,
 	}
 
-	resp, err := client.GetCompletion(context.Background(), req)
+	resp, err := client.GetCompletion(t.Context(), req)
 	require.NoError(t, err, "unsupported model should fall back, not error")
 	require.NotNil(t, resp)
 
 	// The server should have received a supported openai model, not gpt-4
-	assert.True(t, IsModelAllowed(receivedModel),
+	require.True(t, IsModelAllowed(receivedModel),
 		"server should receive a model from the allowlist, got: %s", receivedModel)
-	assert.True(t, len(receivedModel) > 7 && receivedModel[:7] == "openai/",
+	require.True(t, strings.HasPrefix(receivedModel, "openai/"),
 		"fallback model should be from the same provider (openai), got: %s", receivedModel)
 }
 
