@@ -1,4 +1,5 @@
 import { cn, Icon, type IconName } from "@speakeasy-api/moonshine";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { getValueColor, ThresholdConfig } from "./chartUtils";
 
 type AccentColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
@@ -14,6 +15,7 @@ export type MetricCardProps = {
   comparisonLabel?: string;
   accentColor?: AccentColor;
   subtext?: string;
+  tooltip?: string;
 };
 
 const accentColorsMap: Record<AccentColor, string> = {
@@ -36,6 +38,7 @@ export function MetricCard({
   comparisonLabel,
   accentColor,
   subtext,
+  tooltip,
 }: MetricCardProps) {
   const formatValue = (v: number) => {
     switch (format) {
@@ -74,7 +77,20 @@ export function MetricCard({
       )}
     >
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-semibold">{title}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-semibold">{title}</span>
+          {tooltip && (
+            <SimpleTooltip tooltip={tooltip}>
+              <button
+                type="button"
+                aria-label={`About ${title}`}
+                className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
+              >
+                <Icon name="info" className="size-3.5" />
+              </button>
+            </SimpleTooltip>
+          )}
+        </div>
         {icon && (
           <div className="bg-muted/50 rounded-lg p-2">
             <Icon name={icon} className="text-muted-foreground size-4" />

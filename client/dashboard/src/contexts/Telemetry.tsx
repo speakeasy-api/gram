@@ -98,6 +98,31 @@ export function useCaptureUserAuthorizationEvent({
   }, [email, projectSlug, organizationSlug, telemetry]);
 }
 
+export function useCaptureEnterpriseGateViewed({
+  email,
+  organizationId,
+  organizationName,
+  organizationSlug,
+}: {
+  email: string;
+  organizationId: string;
+  organizationName: string;
+  organizationSlug: string;
+}) {
+  const telemetry = useTelemetry();
+
+  useEffect(() => {
+    if (!email) return;
+    if (!organizationId) return;
+    telemetry.capture("enterprise_gate_viewed", {
+      email,
+      organization_id: organizationId,
+      organization_name: organizationName,
+      organization_slug: organizationSlug,
+    });
+  }, [email, organizationId, organizationName, organizationSlug, telemetry]);
+}
+
 export function useRegisterChatTelemetry({
   chatId,
   chatUrl,

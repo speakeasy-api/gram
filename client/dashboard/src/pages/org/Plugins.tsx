@@ -1,7 +1,6 @@
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -19,6 +18,7 @@ import {
 } from "@gram/client/react-query/publishStatus";
 import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
+import { Plus, Puzzle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, Outlet, useNavigate } from "react-router";
@@ -154,72 +154,18 @@ export default function Plugins() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Title>Plugins</Page.Header.Title>
+        <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        {(data?.plugins ?? []).length === 0 ? (
-          <div className="flex flex-col items-center justify-center px-4 py-16">
-            <div className="w-full max-w-md space-y-6 text-center">
-              <div className="flex flex-col items-center gap-4">
-                <div className="bg-muted flex size-16 items-center justify-center rounded-full">
-                  <Icon
-                    name="puzzle"
-                    className="text-muted-foreground size-8"
-                  />
-                </div>
-                <div>
-                  <Heading variant="h4" className="mb-2">
-                    No plugins yet
-                  </Heading>
-                  <Type muted small>
-                    Create distributable plugin bundles that package MCP servers
-                    and hooks together. Assign plugins to roles and publish them
-                    to Claude Code and Cursor marketplaces via GitHub.
-                  </Type>
-                </div>
-              </div>
-              <Button onClick={() => setIsCreateDialogOpen(true)}>
-                Create Your First Plugin
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <Heading variant="h4" className="mb-2">
-              Plugins
-            </Heading>
-            <Type muted small className="mb-6">
-              Create distributable plugin bundles that package MCP servers and
-              hooks together. Assign plugins to roles and publish them to Claude
-              Code and Cursor marketplaces via GitHub.
-              {publishStatus?.connected && publishStatus.repoUrl && (
-                <>
-                  {" "}
-                  Published to{" "}
-                  <a
-                    href={publishStatus.repoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline"
-                  >
-                    {publishStatus.repoOwner}/{publishStatus.repoName}
-                  </a>
-                  .
-                </>
-              )}
-            </Type>
-            <Stack
-              direction="horizontal"
-              justify="space-between"
-              align="center"
-              className="mb-4"
-            >
-              <SearchBar
-                value={search}
-                onChange={setSearch}
-                placeholder="Search plugins"
-                className="w-64"
-              />
+        <Page.Section>
+          <Page.Section.Title>Plugins</Page.Section.Title>
+          <Page.Section.Description>
+            Create distributable plugin bundles that package MCP servers and
+            hooks together. Assign plugins to roles and publish them to Claude
+            Code and Cursor marketplaces via GitHub.
+          </Page.Section.Description>
+          <Page.Section.CTA>
+            {(data?.plugins ?? []).length > 0 && (
               <Stack direction="horizontal" gap={2}>
                 {publishStatus?.configured && (
                   <Button
@@ -243,17 +189,58 @@ export default function Plugins() {
                   </Button>
                 )}
                 <Button onClick={() => setIsCreateDialogOpen(true)}>
-                  New Plugin
+                  <Button.LeftIcon>
+                    <Plus className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>New Plugin</Button.Text>
                 </Button>
               </Stack>
-            </Stack>
-            <Table
-              columns={columns}
-              data={filteredPlugins}
-              rowKey={(row) => row.id}
-            />
-          </>
-        )}
+            )}
+          </Page.Section.CTA>
+          <Page.Section.Body>
+            {(data?.plugins ?? []).length === 0 ? (
+              <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+                <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+                  <Puzzle className="text-muted-foreground h-6 w-6" />
+                </div>
+                <Type variant="subheading" className="mb-1">
+                  No plugins yet
+                </Type>
+                <Type small muted className="mb-4 max-w-md text-center">
+                  Add your first plugin to start distributing MCP servers and
+                  hooks to Claude Code and Cursor.
+                </Type>
+                <Button onClick={() => setIsCreateDialogOpen(true)}>
+                  <Button.LeftIcon>
+                    <Plus className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>New Plugin</Button.Text>
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Stack
+                  direction="horizontal"
+                  justify="space-between"
+                  align="center"
+                  className="mb-4"
+                >
+                  <SearchBar
+                    value={search}
+                    onChange={setSearch}
+                    placeholder="Search plugins"
+                    className="w-64"
+                  />
+                </Stack>
+                <Table
+                  columns={columns}
+                  data={filteredPlugins}
+                  rowKey={(row) => row.id}
+                />
+              </>
+            )}
+          </Page.Section.Body>
+        </Page.Section>
 
         {/* Create Dialog */}
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>

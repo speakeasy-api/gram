@@ -1,9 +1,19 @@
 import { Button } from "@/components/ui/button";
+import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useCaptureEnterpriseGateViewed } from "@/contexts/Telemetry";
 import { LogOutIcon } from "lucide-react";
 
 export default function BookDemo() {
   const client = useSdkClient();
+  const { session } = useSessionData();
+
+  useCaptureEnterpriseGateViewed({
+    email: session?.user.email ?? "",
+    organizationId: session?.organization?.id ?? "",
+    organizationName: session?.organization?.name ?? "",
+    organizationSlug: session?.organization?.slug ?? "",
+  });
 
   const handleLogout = async () => {
     await client.auth.logout();

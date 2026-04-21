@@ -14,6 +14,14 @@ function ContentErrorFallback({ error }: ContentErrorFallbackProps) {
   // Log error to our error handler for consistent logging
   handleError(error, { silent: true });
 
+  // Extract request URL from SDK errors (GramError / ServiceError)
+  const requestUrl =
+    "rawResponse" in error &&
+    error.rawResponse instanceof Response &&
+    error.rawResponse.url
+      ? error.rawResponse.url
+      : undefined;
+
   return (
     <Card className="m-8 w-full max-w-lg py-8">
       <Card.Header>
@@ -32,6 +40,11 @@ function ContentErrorFallback({ error }: ContentErrorFallbackProps) {
           <p className="text-muted-foreground font-mono text-sm">
             {error.message}
           </p>
+          {requestUrl && (
+            <p className="text-muted-foreground mt-2 font-mono text-xs break-all">
+              {requestUrl}
+            </p>
+          )}
         </div>
       </Card.Content>
       <Card.Footer className="justify-start">

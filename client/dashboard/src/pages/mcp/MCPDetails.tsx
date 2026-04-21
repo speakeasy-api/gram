@@ -28,9 +28,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import { RequireScope } from "@/components/require-scope";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useToolset } from "@/hooks/toolTypes";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
@@ -153,6 +155,14 @@ function MCPLoading() {
 }
 
 export function MCPDetailPage() {
+  return (
+    <RequireScope scope={["mcp:read", "mcp:write"]} level="page">
+      <MCPDetailPageInner />
+    </RequireScope>
+  );
+}
+
+function MCPDetailPageInner() {
   const { toolsetSlug } = useParams();
   const routes = useRoutes();
 
@@ -263,9 +273,11 @@ export function MCPDetailPage() {
         >
           <div className="flex items-end justify-between">
             <Stack gap={2}>
-              <div className="ml-1 flex gap-3">
+              <div className="ml-1 flex items-end gap-3">
                 <Heading variant="h1">{toolset.name}</Heading>
-                <div className="mt-auto mb-1">{statusBadge}</div>
+                <div className="mb-1 flex items-center gap-2">
+                  {statusBadge}
+                </div>
               </div>
               <div className="ml-1 flex items-center gap-2">
                 <Type className="text-muted-foreground max-w-2xl truncate">
@@ -353,15 +365,21 @@ export function MCPDetailPage() {
             </TabsContent>
 
             <TabsContent value="authentication" className="mt-0 w-full">
-              <MCPAuthenticationTab toolset={toolset} />
+              <RequireScope scope="mcp:write" level="page">
+                <MCPAuthenticationTab toolset={toolset} />
+              </RequireScope>
             </TabsContent>
 
             <TabsContent value="performance" className="mt-0 w-full">
-              <MCPPerformanceTab toolset={toolset} />
+              <RequireScope scope="mcp:write" level="page">
+                <MCPPerformanceTab toolset={toolset} />
+              </RequireScope>
             </TabsContent>
 
             <TabsContent value="settings" className="mt-0 w-full">
-              <MCPSettingsTab toolset={toolset} />
+              <RequireScope scope="mcp:write" level="page">
+                <MCPSettingsTab toolset={toolset} />
+              </RequireScope>
             </TabsContent>
           </div>
         </Tabs>
@@ -405,6 +423,8 @@ const STATUS_OPTIONS: {
 ];
 
 export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<ServerStatus | null>(null);
@@ -421,8 +441,8 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   const environments = environmentsData?.environments ?? [];
   const { data: mcpMetadataData, isLoading: mcpMetadataLoading } =
     useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
-      throwOnError: false,
       retry: false,
+      throwOnError: false, // Expected 404 when no metadata exists
     });
   const mcpMetadata = mcpMetadataData?.metadata;
 
@@ -563,8 +583,8 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   return (
     <>
       <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-        <DropdownMenuTrigger asChild>
-          <Button variant="primary">
+        <DropdownMenuTrigger asChild disabled={!canWrite}>
+          <Button variant="primary" disabled={!canWrite}>
             <Button.Text>{currentLabel}</Button.Text>
             <Button.RightIcon>
               <ChevronDown className="h-4 w-4" />
@@ -711,6 +731,8 @@ function ServerInstructionsSection({
   form: UseMcpMetadataMetadataFormResult;
   isLoading: boolean;
 }) {
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("mcp:write");
   const charCount = form.instructionsHandlers.value?.length ?? 0;
   const overLimit = charCount > INSTRUCTIONS_SOFT_LIMIT;
 
@@ -722,6 +744,7 @@ function ServerInstructionsSection({
           className="min-h-[150px] w-full"
           value={form.instructionsHandlers.value ?? ""}
           onChange={form.instructionsHandlers.onChange}
+          disabled={!canWrite}
         />
         {charCount > 0 && (
           <span
@@ -735,23 +758,25 @@ function ServerInstructionsSection({
           </span>
         )}
       </div>
-      <Stack direction="horizontal" gap={2} justify="end">
-        <GenerateInstructionsButton toolset={toolset} form={form} />
-        <Button
-          onClick={async () => {
-            try {
-              await form.saveAsync();
-              toast.success("Server instructions saved.");
-            } catch {
-              toast.error("Failed to save instructions.");
-            }
-          }}
-          disabled={isLoading || !form.instructionsDirty}
-          size="sm"
-        >
-          <Button.Text>Save</Button.Text>
-        </Button>
-      </Stack>
+      {canWrite && (
+        <Stack direction="horizontal" gap={2} justify="end">
+          <GenerateInstructionsButton toolset={toolset} form={form} />
+          <Button
+            onClick={async () => {
+              try {
+                await form.saveAsync();
+                toast.success("Server instructions saved.");
+              } catch {
+                toast.error("Failed to save instructions.");
+              }
+            }}
+            disabled={isLoading || !form.instructionsDirty}
+            size="sm"
+          >
+            <Button.Text>Save</Button.Text>
+          </Button>
+        </Stack>
+      )}
     </Stack>
   );
 }
@@ -827,6 +852,8 @@ Respond with ONLY the server instructions as plain text. Do not wrap in JSON or 
  * Tools Tab - Manage tools in the MCP server
  */
 function MCPToolsTab({ toolset }: { toolset: Toolset }) {
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const client = useSdkClient();
@@ -982,17 +1009,21 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
         >
           <Heading variant="h3">Tools</Heading>
           <Stack direction="horizontal" gap={2}>
-            <routes.customTools.Link>
-              <Button variant="secondary" size="sm">
-                <Button.Text>Custom Tools</Button.Text>
+            {canWrite && (
+              <routes.customTools.Link>
+                <Button variant="secondary" size="sm">
+                  <Button.Text>Custom Tools</Button.Text>
+                </Button>
+              </routes.customTools.Link>
+            )}
+            {canWrite && (
+              <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
+                <Button.LeftIcon>
+                  <Icon name="plus" className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Add Tools</Button.Text>
               </Button>
-            </routes.customTools.Link>
-            <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
-              <Button.LeftIcon>
-                <Icon name="plus" className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Add Tools</Button.Text>
-            </Button>
+            )}
           </Stack>
         </Stack>
       )}
@@ -1026,14 +1057,15 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
         <ToolList
           tools={toolsToDisplay}
           toolset={fullToolset}
-          onToolUpdate={handleToolUpdate}
-          onToolsRemove={handleToolsRemove}
+          onToolUpdate={canWrite ? handleToolUpdate : undefined}
+          onToolsRemove={canWrite ? handleToolsRemove : undefined}
           onTestInPlayground={handleTestInPlayground}
+          readOnly={!canWrite}
         />
       ) : (
         <ToolsetEmptyState
           toolsetSlug={toolset.slug}
-          onAddTools={() => setAddToolsDialogOpen(true)}
+          onAddTools={canWrite ? () => setAddToolsDialogOpen(true) : undefined}
         />
       )}
 
@@ -1121,6 +1153,8 @@ function MCPPromptsTab({ toolset }: { toolset: Toolset }) {
  * Settings Tab - Visibility, Slug, Custom Domain, Actions, Danger Zone
  */
 function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("mcp:write");
   const telemetry = useTelemetry();
   const queryClient = useQueryClient();
   const productTier = useProductTier();
@@ -1259,32 +1293,35 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     setMcpSlug(value);
   };
 
-  const linkDomainButton = domain && domain.activated && domain.verified && (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="secondary"
-          size="sm"
-          className="mr-2"
-          disabled={updateToolsetMutation.isPending}
-          onClick={() => {
-            updateToolsetMutation.mutate({
-              request: {
-                slug: toolset.slug,
-                updateToolsetRequestBody: {
-                  customDomainId: domain.id,
-                  mcpSlug: mcpSlug,
+  const linkDomainButton = canWrite &&
+    domain &&
+    domain.activated &&
+    domain.verified && (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mr-2"
+            disabled={updateToolsetMutation.isPending}
+            onClick={() => {
+              updateToolsetMutation.mutate({
+                request: {
+                  slug: toolset.slug,
+                  updateToolsetRequestBody: {
+                    customDomainId: domain.id,
+                    mcpSlug: mcpSlug,
+                  },
                 },
-              },
-            });
-          }}
-        >
-          Link Domain
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{domain.domain}</TooltipContent>
-    </Tooltip>
-  );
+              });
+            }}
+          >
+            Link Domain
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{domain.domain}</TooltipContent>
+      </Tooltip>
+    );
 
   // Account for legacy Pro tier which can still access custom domains
   const canAccessCustomDomain = !productTier.includes("base");
@@ -1293,19 +1330,21 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     domain && canAccessCustomDomain && !toolset.customDomainId ? (
       linkDomainButton
     ) : (
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => {
-          if (!canAccessCustomDomain) {
-            setIsCustomDomainModalOpen(true);
-          } else {
-            routes.settings.goTo();
-          }
-        }}
-      >
-        Configure
-      </Button>
+      <RequireScope scope="build:write" level="component">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            if (!canAccessCustomDomain) {
+              setIsCustomDomainModalOpen(true);
+            } else {
+              routes.settings.goTo();
+            }
+          }}
+        >
+          Configure
+        </Button>
+      </RequireScope>
     );
 
   const anyChanges = mcpSlug !== toolset.mcpSlug;
@@ -1368,6 +1407,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
                   onChange={handleMcpSlugChange}
                   maxLength={40}
                   requiredPrefix={`${orgSlug}-`}
+                  disabled={!canWrite}
                 />
               ) : (
                 <Input
@@ -1376,7 +1416,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
                   value={mcpSlug}
                   onChange={handleMcpSlugChange}
                   maxLength={40}
-                  disabled={!toolset.customDomainId}
+                  disabled={!toolset.customDomainId || !canWrite}
                 />
               )}
               <Stack
@@ -1416,9 +1456,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         </Block>
       </PageSection>
 
-      {!toolset.toolUrns?.some((u) => u.startsWith("tools:externalmcp:")) && (
-        <MCPPublishingSection toolset={toolset} />
-      )}
+      <MCPPublishingSection toolset={toolset} />
 
       <PageSection
         heading="Actions"
@@ -1456,17 +1494,19 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         <Type muted small className="mb-4">
           Permanently delete this MCP server. This action cannot be undone.
         </Type>
-        <Button
-          variant="destructive-primary"
-          size="md"
-          onClick={() => setIsDeleteDialogOpen(true)}
-          disabled={isDeleteDialogOpen}
-        >
-          <Button.LeftIcon>
-            <Trash2 className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Delete MCP Server</Button.Text>
-        </Button>
+        <RequireScope scope="mcp:write" level="component">
+          <Button
+            variant="destructive-primary"
+            size="md"
+            onClick={() => setIsDeleteDialogOpen(true)}
+            disabled={isDeleteDialogOpen}
+          >
+            <Button.LeftIcon>
+              <Trash2 className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Delete MCP Server</Button.Text>
+          </Button>
+        </RequireScope>
       </div>
 
       <Dialog
@@ -1548,6 +1588,11 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
     for (let i = 0; i < collections.length; i++) {
       const servers = serveQueries[i]?.data?.servers ?? [];
       for (const server of servers) {
+        if (server.toolsetId === toolset.id) {
+          ids.add(collections[i].id);
+          break;
+        }
+
         const parts = server.registrySpecifier?.split("/") ?? [];
         const slug = parts[parts.length - 1];
         if (slug === toolset.mcpSlug) {
@@ -1558,7 +1603,7 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
     }
 
     return ids;
-  }, [collections, serveQueries, toolset.mcpSlug]);
+  }, [collections, serveQueries, toolset.id, toolset.mcpSlug]);
 
   const effectiveSelected = selectedIds ?? publishedCollectionIds;
 

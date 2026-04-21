@@ -17,6 +17,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import { AVAILABLE_MODELS } from "@/lib/models";
 import { Tool, getToolSourceLabel } from "@/lib/toolTypes";
 import {
   ChevronDownIcon,
@@ -458,73 +459,11 @@ export function PlaygroundConfigPanel({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="anthropic/claude-opus-4.6">
-                      Claude Opus 4.6 (Expensive)
-                    </SelectItem>
-                    <SelectItem value="anthropic/claude-sonnet-4.6">
-                      Claude Sonnet 4.6
-                    </SelectItem>
-                    <SelectItem value="anthropic/claude-sonnet-4.5">
-                      Claude Sonnet 4.5
-                    </SelectItem>
-                    <SelectItem value="anthropic/claude-opus-4.5">
-                      Claude Opus 4.5 (Expensive)
-                    </SelectItem>
-                    <SelectItem value="anthropic/claude-haiku-4.5">
-                      Claude Haiku 4.5
-                    </SelectItem>
-                    <SelectItem value="anthropic/claude-opus-4.1">
-                      Claude Opus 4.1 (Expensive)
-                    </SelectItem>
-                    <SelectItem value="anthropic/claude-sonnet-4">
-                      Claude Sonnet 4
-                    </SelectItem>
-                    <SelectItem value="openai/gpt-5.4">GPT-5.4</SelectItem>
-                    <SelectItem value="openai/gpt-5.4-mini">
-                      GPT-5.4 Mini
-                    </SelectItem>
-                    <SelectItem value="openai/gpt-5.1">GPT-5.1</SelectItem>
-                    <SelectItem value="openai/gpt-5.1-codex">
-                      GPT-5.1 Codex
-                    </SelectItem>
-                    <SelectItem value="openai/gpt-5">GPT-5</SelectItem>
-                    <SelectItem value="openai/gpt-4.1">GPT-4.1</SelectItem>
-                    <SelectItem value="openai/o4-mini">o4-mini</SelectItem>
-                    <SelectItem value="openai/o3">o3</SelectItem>
-                    <SelectItem value="google/gemini-3.1-pro-preview">
-                      Gemini 3.1 Pro Preview
-                    </SelectItem>
-                    <SelectItem value="google/gemini-2.5-pro">
-                      Gemini 2.5 Pro
-                    </SelectItem>
-                    <SelectItem value="google/gemini-2.5-flash">
-                      Gemini 2.5 Flash
-                    </SelectItem>
-                    <SelectItem value="deepseek/deepseek-r1">
-                      DeepSeek R1
-                    </SelectItem>
-                    <SelectItem value="deepseek/deepseek-v3.2">
-                      DeepSeek V3.2
-                    </SelectItem>
-                    <SelectItem value="meta-llama/llama-4-maverick">
-                      Llama 4 Maverick
-                    </SelectItem>
-                    <SelectItem value="x-ai/grok-4">Grok 4</SelectItem>
-                    <SelectItem value="qwen/qwen3-coder">
-                      Qwen3 Coder
-                    </SelectItem>
-                    <SelectItem value="moonshotai/kimi-k2.5">
-                      Kimi K2.5
-                    </SelectItem>
-                    <SelectItem value="mistralai/mistral-medium-3.1">
-                      Mistral Medium 3.1
-                    </SelectItem>
-                    <SelectItem value="mistralai/codestral-2508">
-                      Codestral 2508
-                    </SelectItem>
-                    <SelectItem value="mistralai/devstral-small">
-                      Devstral Small
-                    </SelectItem>
+                    {AVAILABLE_MODELS.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

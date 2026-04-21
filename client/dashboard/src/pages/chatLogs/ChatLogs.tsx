@@ -1,4 +1,5 @@
 import { InsightsConfig } from "@/components/insights-sidebar";
+import { RequireScope } from "@/components/require-scope";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Page } from "@/components/page-layout";
@@ -18,7 +19,7 @@ import {
 } from "@gram/client/react-query";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { ChatDetailPanel } from "./ChatDetailPanel";
 import { ChatLogsFilters } from "./ChatLogsFilters";
@@ -124,6 +125,14 @@ function isValidPreset(value: string | null): value is DateRangePreset {
 }
 
 export default function ChatLogs() {
+  return (
+    <RequireScope scope="build:read" level="page">
+      <ChatLogsInner />
+    </RequireScope>
+  );
+}
+
+function ChatLogsInner() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedChat, setSelectedChat] =
     useState<ChatOverviewWithResolutions | null>(null);
@@ -168,6 +177,7 @@ export default function ChatLogs() {
   const urlFrom = searchParams.get("from");
   const urlTo = searchParams.get("to");
   const urlSearch = searchParams.get("search");
+  const urlChatId = searchParams.get("chatId");
   const urlStatus = searchParams.get("status");
   const urlSort = searchParams.get("sort") as SortField | null;
   const urlOrder = searchParams.get("order") as SortOrder | null;
@@ -312,6 +322,19 @@ export default function ChatLogs() {
   const total = lastTotalRef.current;
   const hasMore =
     total > 0 ? offset + chats.length < total : chats.length === limit;
+
+  // Auto-select a chat if chatId is in the URL (e.g. from risk findings deep-link)
+  const autoSelectedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!urlChatId || chats.length === 0) return;
+    // Skip if we already auto-selected this exact chatId
+    if (autoSelectedRef.current === urlChatId) return;
+    const match = chats.find((c) => c.id === urlChatId);
+    if (match) {
+      setSelectedChat(match);
+      autoSelectedRef.current = urlChatId;
+    }
+  }, [urlChatId, chats, setSelectedChat]);
 
   // Format date range for copilot context
   const dateRangeContext = useMemo(() => {

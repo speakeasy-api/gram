@@ -1,4 +1,4 @@
-h1:cHhpvlHmx7lYzq/6Ph1KoUYPicAaobI6QH8AbPLALKw=
+h1:haqjz0i6zfILraJY7gKJ+rZPgXLceu5vaqP9Q0FZ5I8=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -128,3 +128,6 @@ h1:cHhpvlHmx7lYzq/6Ph1KoUYPicAaobI6QH8AbPLALKw=
 20260416141416_plugin-github-connections.sql h1:UxBty5xL0eB85EQppPsgxBYViWXlK7tuxxSGXN2vvD4=
 20260420113615_add-risk-analysis-tables.sql h1:tB3yFAemLIQhp8EDIkc7wpOHgMbAhXqqWlVJa3rt4F8=
 20260420113616_chat-messages-add-content-hash-generation.sql h1:Rt1fiQWyYM/Pe9EY2pM5dbPVyb868GWyBM3agIsy/88=
+20260420143421_toolset-origins.sql h1:yLbPI5ctXeUU0VexNHHS7Fo/OMgNaUtejXYkEjLsiC0=
+20260420202925_deployment_statuses_add_deployment_id_seq_idx.sql h1:dNfWksegaAmbABFiujqRrszOPmfVFEAP/WcVemqkNJ4=
+20260421144856_mcp_frontends_and_slugs.sql h1:fbORD+IZdxSN92kt9hQnULHmUcJSFnK9aHU2EUAoO2Q=

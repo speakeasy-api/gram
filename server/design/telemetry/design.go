@@ -1292,8 +1292,9 @@ var HooksTimeSeriesPointType = Type("HooksTimeSeriesPoint", func() {
 	Attribute("server_name", String, "Server name")
 	Attribute("user_email", String, "User email address")
 	Attribute("event_count", Int64, "Number of events in this bucket")
+	Attribute("failure_count", Int64, "Number of failed hook events in this bucket")
 
-	Required("bucket_start_ns", "server_name", "user_email", "event_count")
+	Required("bucket_start_ns", "server_name", "user_email", "event_count", "failure_count")
 })
 
 var SkillSummaryType = Type("SkillSummary", func() {

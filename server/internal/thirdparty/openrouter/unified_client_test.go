@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -1189,6 +1191,107 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 	// Verify that response_format was NOT set
 	assert.Nil(t, receivedRequestBody.ResponseFormat,
 		"response_format should not be set when JSONSchema is nil")
+}
+
+func firstAllowedModelForProvider(prefix string) string {
+	var models []string
+	for m := range allowList {
+		if strings.HasPrefix(m, prefix) {
+			models = append(models, m)
+		}
+	}
+	sort.Strings(models)
+	return models[0]
+}
+
+func TestResolveModel_AllowedModelReturnedAsIs(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "openai/gpt-5.4", ResolveModel("openai/gpt-5.4"))
+}
+
+func TestResolveModel_UnsupportedOpenAIFallback(t *testing.T) {
+	t.Parallel()
+	expected := firstAllowedModelForProvider("openai/")
+	require.Equal(t, expected, ResolveModel("openai/gpt-4"))
+}
+
+func TestResolveModel_UnsupportedAnthropicFallback(t *testing.T) {
+	t.Parallel()
+	expected := firstAllowedModelForProvider("anthropic/")
+	require.Equal(t, expected, ResolveModel("anthropic/claude-2"))
+}
+
+func TestResolveModel_UnknownProviderReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	require.Empty(t, ResolveModel("fakeprovider/some-model"))
+}
+
+func TestResolveModel_BareModelNameReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	require.Empty(t, ResolveModel("gpt-4"))
+}
+
+func TestResolveModel_EmptyModelReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	require.Empty(t, ResolveModel(""))
+}
+
+func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
+	t.Parallel()
+
+	// Track which model the server receives
+	var receivedModel string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody OpenAIChatRequest
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
+		receivedModel = reqBody.Model
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(fmt.Appendf(nil, `{
+			"id": "msg_fallback",
+			"model": "%s",
+			"choices": [{"message": {"role": "assistant", "content": "Hello"}, "finish_reason": "stop"}],
+			"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+		}`, reqBody.Model))
+	}))
+	defer server.Close()
+
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	client := NewUnifiedClient(
+		slog.Default(),
+		guardianPolicy,
+		&mockProvisioner{apiKey: "test-api-key"},
+		&mockMessageCaptureStrategy{},
+		&mockUsageTrackingStrategy{},
+		&mockChatTitleGenerator{},
+		&mockChatResolutionAnalyzer{},
+		&mockTelemetryLogger{},
+	)
+	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
+
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   projectID.String(),
+		Messages:    []or.ChatMessages{CreateMessageUser("Hello")},
+		Model:       "openai/gpt-4", // unsupported model
+		ChatID:      uuid.New(),
+		UsageSource: billing.ModelUsageSourcePlayground,
+	}
+
+	resp, err := client.GetCompletion(t.Context(), req)
+	require.NoError(t, err, "unsupported model should fall back, not error")
+	require.NotNil(t, resp)
+
+	// The server should have received a supported openai model, not gpt-4
+	require.True(t, IsModelAllowed(receivedModel),
+		"server should receive a model from the allowlist, got: %s", receivedModel)
+	require.True(t, strings.HasPrefix(receivedModel, "openai/"),
+		"fallback model should be from the same provider (openai), got: %s", receivedModel)
 }
 
 // testTransport is a custom http.RoundTripper that redirects all requests to the test server

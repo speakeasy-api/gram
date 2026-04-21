@@ -1,0 +1,6 @@
+version: v2.11.2
+
+plugins:
+  - module: github.com/speakeasy-api/gram
+    import: github.com/speakeasy-api/gram/glint
+    path: ..

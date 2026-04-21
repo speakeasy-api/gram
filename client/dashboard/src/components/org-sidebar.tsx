@@ -1,4 +1,4 @@
-import { NavButton, NavMenu } from "@/components/nav-menu";
+import { NavButton } from "@/components/nav-menu";
 import { RequireScope } from "@/components/require-scope";
 import {
   Sidebar,
@@ -30,16 +30,16 @@ function ScopeGatedNavItem({
   scope: Scope | Scope[];
 }) {
   return (
-    <SidebarMenuItem>
-      <RequireScope scope={scope} level="component" className="w-full">
+    <RequireScope scope={scope} level="section">
+      <SidebarMenuItem>
         <NavButton
           title={item.title}
           href={item.href()}
           active={item.active}
           Icon={item.Icon}
         />
-      </RequireScope>
-    </SidebarMenuItem>
+      </SidebarMenuItem>
+    </RequireScope>
   );
 }
 
@@ -67,7 +67,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenu>
               <ScopeGatedNavItem
                 item={orgRoutes.home}
-                scope={["build:read", "org:admin"]}
+                scope={["org:read", "build:read", "org:admin"]}
               />
             </SidebarMenu>
           </SidebarGroupContent>
@@ -75,7 +75,12 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarGroup>
           <SidebarGroupLabel>explore</SidebarGroupLabel>
           <SidebarGroupContent>
-            <NavMenu items={[orgRoutes.collections]} />
+            <SidebarMenu>
+              <ScopeGatedNavItem
+                item={orgRoutes.collections}
+                scope="org:admin"
+              />
+            </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
@@ -141,6 +146,10 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenu>
               <ScopeGatedNavItem
                 item={orgRoutes.auditLogs}
+                scope={["org:read", "org:admin"]}
+              />
+              <ScopeGatedNavItem
+                item={orgRoutes.identity}
                 scope={["org:read", "org:admin"]}
               />
               {isRbacEnabled && (

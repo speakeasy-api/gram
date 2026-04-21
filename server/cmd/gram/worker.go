@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
@@ -36,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -425,6 +427,7 @@ func newWorkerCommand() *cli.Command {
 
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
+			sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
 
 			// Create ClickHouse client and telemetry service for resolution events
 			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
@@ -446,17 +449,27 @@ func newWorkerCommand() *cli.Command {
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, posthogClient, accessManager)
+			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, sessionCaptureEnabled, posthogClient, accessManager)
 
 			/**
 			 * BEGIN -- MCP service setup for agent client
 			 */
 
+			captureStrategy, shutdown := chat.NewChatMessageCaptureStrategy(logger, db, assetStorage)
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			riskSignaler := background.NewThrottledSignaler(
+				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv},
+				30*time.Second,
+				logger,
+			)
+			captureStrategy.AddObserver(risk.NewObserver(logger, db, riskSignaler))
+
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
 				openRouter,
-				chat.NewChatMessageCaptureStrategy(logger, db, assetStorage),
+				captureStrategy,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},

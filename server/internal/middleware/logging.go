@@ -49,9 +49,16 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
+			requestID := conv.TruncateString(r.Header.Get("X-Request-ID"), 64)
+
 			spanCtx := trace.SpanContextFromContext(ctx)
 			if spanCtx.HasTraceID() {
 				w.Header().Set("x-trace-id", spanCtx.TraceID().String())
+			}
+
+			if requestID != "" {
+				w.Header().Set("x-request-id", requestID)
+				trace.SpanFromContext(ctx).SetAttributes(attr.HTTPRequestID(requestID))
 			}
 
 			start := time.Now()
@@ -63,6 +70,7 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 			}
 
 			requestContext := &contextvalues.RequestContext{
+				ReqID:       requestID,
 				ReqURL:      r.URL.String(),
 				Host:        r.Host,
 				Method:      r.Method,
@@ -78,6 +86,9 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 				attr.SlogHTTPRequestMethod(r.Method),
 				attr.SlogURLOriginal(r.URL.String()),
 				attr.SlogHostName(r.Host),
+			}
+			if requestContext.ReqID != "" {
+				attrs = append(attrs, attr.SlogHTTPRequestID(requestContext.ReqID))
 			}
 			if requestContext.Referer != "" {
 				attrs = append(attrs, attr.SlogHTTPRequestHeaderReferer(requestContext.Referer))

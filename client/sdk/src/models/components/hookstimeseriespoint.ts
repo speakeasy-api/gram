@@ -21,6 +21,10 @@ export type HooksTimeSeriesPoint = {
    */
   eventCount: number;
   /**
+   * Number of failed hook events in this bucket
+   */
+  failureCount: number;
+  /**
    * Server name
    */
   serverName: string;
@@ -38,6 +42,7 @@ export const HooksTimeSeriesPoint$inboundSchema: z.ZodMiniType<
   z.object({
     bucket_start_ns: z.string(),
     event_count: z.int(),
+    failure_count: z.int(),
     server_name: z.string(),
     user_email: z.string(),
   }),
@@ -45,6 +50,7 @@ export const HooksTimeSeriesPoint$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "bucket_start_ns": "bucketStartNs",
       "event_count": "eventCount",
+      "failure_count": "failureCount",
       "server_name": "serverName",
       "user_email": "userEmail",
     });

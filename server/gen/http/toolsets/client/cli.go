@@ -25,7 +25,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"aaa\",\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"resource_urns\": [\n         \"abc123\"\n      ],\n      \"tool_urns\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"aaa\",\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"origin\": {\n         \"registry_specifier\": \"abc123\"\n      },\n      \"resource_urns\": [\n         \"abc123\"\n      ],\n      \"tool_urns\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
@@ -76,6 +76,9 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 		for i, val := range body.ResourceUrns {
 			v.ResourceUrns[i] = val
 		}
+	}
+	if body.Origin != nil {
+		v.Origin = marshalToolsetOriginRequestBodyToTypesToolsetOrigin(body.Origin)
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

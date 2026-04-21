@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { dateTimeFormatters } from "@/lib/dates";
@@ -178,7 +179,9 @@ const HeadingSection = () => {
   return (
     <div className="flex items-center justify-between">
       <Heading variant="h1">Deployment Overview</Heading>
-      <RedeployButton />
+      <RequireScope scope="build:write" level="section">
+        <RedeployButton />
+      </RequireScope>
     </div>
   );
 };

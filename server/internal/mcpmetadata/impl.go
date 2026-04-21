@@ -218,9 +218,9 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+		return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").Log(ctx, s.logger, attr.SlogToolsetSlug(string(payload.ToolsetSlug)))
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, s.logger, attr.SlogToolsetSlug(string(payload.ToolsetSlug)))
 	}
 
 	record, err := s.repo.GetMetadataForToolset(ctx, toolset.ID)
@@ -267,9 +267,9 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").Log(ctx, logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+		return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").Log(ctx, logger, attr.SlogToolsetSlug(string(payload.ToolsetSlug)))
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, logger, attr.SlogToolsetSlug(string(payload.ToolsetSlug)))
 	}
 
 	logger = logger.With(

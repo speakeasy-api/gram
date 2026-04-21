@@ -152,6 +152,9 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 		Example("1.0.0")
 	})
 	Attribute("description", String, "Description of what the server does")
+	Attribute("toolset_id", String, "ID of the attached toolset when this server is listed from a Collection", func() {
+		Format(FormatUUID)
+	})
 	Attribute("registry_id", String, "ID of the external MCP registry this server came from", func() {
 		Format(FormatUUID)
 	})
