@@ -2142,10 +2142,11 @@ function HooksAnalytics({
       {/* KPI Cards */}
       <div
         className={cn(
-          "grid gap-3",
+          "grid gap-3 transition-all duration-200 ease-in-out",
           compact
             ? "grid-cols-2 md:grid-cols-3"
             : "grid-cols-2 md:grid-cols-3 lg:grid-cols-5",
+          expandedChart && "hidden",
         )}
       >
         {summaryIsError && !summaryData ? (
