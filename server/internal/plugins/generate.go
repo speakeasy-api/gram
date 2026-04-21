@@ -31,6 +31,9 @@ type GenerateConfig struct {
 	OrgEmail string
 	// Base server URL (e.g. https://app.getgram.ai).
 	ServerURL string
+	// APIKey is the plaintext Gram API key to inject into MCP server configs.
+	// If empty, configs will use placeholder variables instead.
+	APIKey string
 }
 
 // GeneratePluginPackages produces the complete file map for a plugin distribution
@@ -103,7 +106,7 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 			if desc == "" {
 				desc = "—"
 			}
-			b.WriteString(fmt.Sprintf("| %s | %s | %d |\n", p.Name, desc, len(p.Servers)))
+			fmt.Fprintf(&b, "| %s | %s | %d |\n", p.Name, desc, len(p.Servers))
 		}
 		b.WriteString("\n")
 	}
@@ -162,11 +165,18 @@ func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 }
 
 func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {
-	userConfig := map[string]userConfigEntry{
-		"GRAM_API_KEY": {
-			Description: "Your Gram API key for authenticating MCP server connections",
-			Sensitive:   true,
-		},
+	var userConfig map[string]userConfigEntry
+	authValue := "Bearer ${user_config.GRAM_API_KEY}"
+
+	if cfg.APIKey != "" {
+		authValue = "Bearer " + cfg.APIKey
+	} else {
+		userConfig = map[string]userConfigEntry{
+			"GRAM_API_KEY": {
+				Description: "Your Gram API key for authenticating MCP server connections",
+				Sensitive:   true,
+			},
+		}
 	}
 
 	pluginJSON, err := marshalJSON(claudePluginMeta{
@@ -188,7 +198,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 			Type: "http",
 			URL:  s.MCPURL,
 			Headers: map[string]string{
-				"Authorization": "Bearer ${user_config.GRAM_API_KEY}",
+				"Authorization": authValue,
 			},
 		}
 	}
@@ -220,12 +230,17 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 	}
 	files[path.Join(subdir, ".cursor-plugin/plugin.json")] = pluginJSON
 
+	authValue := "Bearer ${env:GRAM_API_KEY}"
+	if cfg.APIKey != "" {
+		authValue = "Bearer " + cfg.APIKey
+	}
+
 	mcpServers := make(map[string]cursorMCPServer)
 	for _, s := range p.Servers {
 		mcpServers[s.DisplayName] = cursorMCPServer{
 			URL: s.MCPURL,
 			Headers: map[string]string{
-				"Authorization": "Bearer ${env:GRAM_API_KEY}",
+				"Authorization": authValue,
 			},
 		}
 	}

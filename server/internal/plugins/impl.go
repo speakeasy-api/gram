@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -34,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -63,6 +66,7 @@ type Service struct {
 	access    *access.Manager
 	github    *GitHubConfig
 	serverURL string
+	keyPrefix string
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -75,9 +79,22 @@ func NewService(
 	sessions *sessions.Manager,
 	accessManager *access.Manager,
 	github *GitHubConfig,
+	env string,
 	serverURL string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
+
+	var keyEnv string
+	switch env {
+	case "local":
+		keyEnv = "local"
+	case "dev":
+		keyEnv = "test"
+	case "prod":
+		keyEnv = "live"
+	default:
+		keyEnv = "local"
+	}
 
 	return &Service{
 		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/plugins"),
@@ -88,6 +105,7 @@ func NewService(
 		access:    accessManager,
 		github:    github,
 		serverURL: serverURL,
+		keyPrefix: fmt.Sprintf("gram_%s_", keyEnv),
 	}
 }
 
@@ -682,7 +700,13 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeBadRequest, nil, "no plugins with servers to publish")
 	}
 
+	apiKey, err := s.createPluginAPIKey(ctx, ac.ActiveOrganizationID, ac.UserID, *ac.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "create plugin api key").Log(ctx, s.logger)
+	}
+
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+	cfg.APIKey = apiKey
 
 	files, err := GeneratePluginPackages(pluginInfos, cfg)
 	if err != nil {
@@ -731,6 +755,38 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", s.github.Org, repoName)
 	return &gen.PublishPluginsResult{RepoURL: repoURL}, nil
+}
+
+// createPluginAPIKey creates a consumer-scoped API key for plugin distribution.
+func (s *Service) createPluginAPIKey(ctx context.Context, orgID, userID string, projectID uuid.UUID) (string, error) {
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return "", fmt.Errorf("generate token: %w", err)
+	}
+	token := hex.EncodeToString(tokenBytes)
+	fullKey := s.keyPrefix + token
+
+	keyHash, err := auth.GetAPIKeyHash(fullKey)
+	if err != nil {
+		return "", fmt.Errorf("hash key: %w", err)
+	}
+
+	keyName := fmt.Sprintf("plugins-%s", time.Now().UTC().Format("20060102-150405"))
+
+	_, err = keysrepo.New(s.db).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+		OrganizationID:  orgID,
+		Name:            keyName,
+		KeyHash:         keyHash,
+		KeyPrefix:       s.keyPrefix + token[:5],
+		Scopes:          []string{"consumer"},
+		CreatedByUserID: userID,
+		ProjectID:       uuid.NullUUID{UUID: projectID, Valid: true},
+	})
+	if err != nil {
+		return "", fmt.Errorf("create api key: %w", err)
+	}
+
+	return fullKey, nil
 }
 
 // --- Internal helpers ---
@@ -787,6 +843,7 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug string) Gen
 		OrgName:   orgSlug,
 		OrgEmail:  "",
 		ServerURL: s.serverURL,
+		APIKey:    "",
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {

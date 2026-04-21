@@ -745,7 +745,7 @@ func newStartCommand() *cli.Command {
 					InstallationID: installationID,
 				}
 			}
-			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, accessManager, pluginsGitHub, c.String("server-url")))
+			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, accessManager, pluginsGitHub, c.String("environment"), c.String("server-url")))
 			// access depends on productfeatures for the RBAC feature gate, so inject
 			// the concrete checks here instead of importing access in that package.
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, accessManager, func(ctx context.Context, organizationID string) error {
