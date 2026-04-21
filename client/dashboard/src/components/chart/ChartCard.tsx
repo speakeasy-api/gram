@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { Maximize2, Minimize2 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -16,7 +17,12 @@ export function ChartCard({
 }) {
   const isExpanded = expandedChart === chartId;
   return (
-    <div className="border-border bg-card space-y-4 rounded-lg border p-4">
+    <div
+      className={cn(
+        "border-border bg-card space-y-4 rounded-lg border p-4 transition-all duration-200 ease-in-out",
+        expandedChart && !isExpanded && "hidden",
+      )}
+    >
       <div className="flex items-center justify-between">
         <h3 className="text font-semibold">{title}</h3>
         <button

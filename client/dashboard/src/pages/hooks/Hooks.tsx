@@ -2200,92 +2200,86 @@ function HooksAnalytics({
                 : "grid-cols-1 lg:grid-cols-2",
           )}
         >
-          {timeSeries.length > 0 &&
-            (!expandedChart || expandedChart === "server-usage") && (
-              <ChartCard
-                title="Server Usage"
-                chartId="server-usage"
-                expandedChart={expandedChart}
-                onExpand={setExpandedChart}
-              >
-                <ServerUsageTimeSeries
-                  timeSeries={timeSeries}
-                  from={from}
-                  to={to}
-                  serverNameMappings={serverNameMappings}
-                  expanded={expandedChart === "server-usage"}
-                />
-              </ChartCard>
-            )}
-          {hasServers &&
-            (!expandedChart || expandedChart === "users-per-server") && (
-              <UsersPerServerChart
-                title="Users per Server"
-                breakdown={breakdown}
+          {timeSeries.length > 0 && (
+            <ChartCard
+              title="Server Usage"
+              chartId="server-usage"
+              expandedChart={expandedChart}
+              onExpand={setExpandedChart}
+            >
+              <ServerUsageTimeSeries
+                timeSeries={timeSeries}
+                from={from}
+                to={to}
                 serverNameMappings={serverNameMappings}
-                handleFilter={makeFilterHandler({
-                  server: "row",
-                  user: "dataset",
-                })}
-                expandedChart={expandedChart}
-                onExpand={setExpandedChart}
+                expanded={expandedChart === "server-usage"}
               />
-            )}
+            </ChartCard>
+          )}
+          {hasServers && (
+            <UsersPerServerChart
+              title="Users per Server"
+              breakdown={breakdown}
+              serverNameMappings={serverNameMappings}
+              handleFilter={makeFilterHandler({
+                server: "row",
+                user: "dataset",
+              })}
+              expandedChart={expandedChart}
+              onExpand={setExpandedChart}
+            />
+          )}
 
-          {timeSeries.length > 0 &&
-            (!expandedChart || expandedChart === "user-usage") && (
-              <ChartCard
-                title="User Usage"
-                chartId="user-usage"
-                expandedChart={expandedChart}
-                onExpand={setExpandedChart}
-              >
-                <UserUsageTimeSeries
-                  timeSeries={timeSeries}
-                  from={from}
-                  to={to}
-                  expanded={expandedChart === "user-usage"}
-                />
-              </ChartCard>
-            )}
-          {hasServers &&
-            (!expandedChart || expandedChart === "user-event-counts") && (
-              <UserEventCountsChart
-                title="User Event Counts"
-                breakdown={breakdown}
-                handleFilter={makeFilterHandler({ user: "row" })}
-                expandedChart={expandedChart}
-                onExpand={setExpandedChart}
+          {timeSeries.length > 0 && (
+            <ChartCard
+              title="User Usage"
+              chartId="user-usage"
+              expandedChart={expandedChart}
+              onExpand={setExpandedChart}
+            >
+              <UserUsageTimeSeries
+                timeSeries={timeSeries}
+                from={from}
+                to={to}
+                expanded={expandedChart === "user-usage"}
               />
-            )}
+            </ChartCard>
+          )}
+          {hasServers && (
+            <UserEventCountsChart
+              title="User Event Counts"
+              breakdown={breakdown}
+              handleFilter={makeFilterHandler({ user: "row" })}
+              expandedChart={expandedChart}
+              onExpand={setExpandedChart}
+            />
+          )}
 
-          {timeSeries.length > 0 &&
-            (!expandedChart || expandedChart === "errors-over-time") && (
-              <ChartCard
-                title="Errors Over Time"
-                chartId="errors-over-time"
-                expandedChart={expandedChart}
-                onExpand={setExpandedChart}
-              >
-                <ErrorsOverTimeChart
-                  timeSeries={timeSeries}
-                  from={from}
-                  to={to}
-                  serverNameMappings={serverNameMappings}
-                  expanded={expandedChart === "errors-over-time"}
-                />
-              </ChartCard>
-            )}
-          {hasServers &&
-            (!expandedChart || expandedChart === "errors-per-server") && (
-              <ServerErrorRateChart
-                title="Errors per Server and Tool"
-                breakdown={breakdown}
+          {timeSeries.length > 0 && (
+            <ChartCard
+              title="Errors Over Time"
+              chartId="errors-over-time"
+              expandedChart={expandedChart}
+              onExpand={setExpandedChart}
+            >
+              <ErrorsOverTimeChart
+                timeSeries={timeSeries}
+                from={from}
+                to={to}
                 serverNameMappings={serverNameMappings}
-                expandedChart={expandedChart}
-                onExpand={setExpandedChart}
+                expanded={expandedChart === "errors-over-time"}
               />
-            )}
+            </ChartCard>
+          )}
+          {hasServers && (
+            <ServerErrorRateChart
+              title="Errors per Server and Tool"
+              breakdown={breakdown}
+              serverNameMappings={serverNameMappings}
+              expandedChart={expandedChart}
+              onExpand={setExpandedChart}
+            />
+          )}
         </div>
       )}
     </div>
