@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -26,8 +27,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var _ gen.Service = (*Service)(nil)
@@ -149,7 +152,13 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "generate policy id").Log(ctx, s.logger)
 	}
 
-	row, err := s.repo.CreateRiskPolicy(ctx, repo.CreateRiskPolicyParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	row, err := repo.New(dbtx).CreateRiskPolicy(ctx, repo.CreateRiskPolicyParams{
 		ID:             id,
 		ProjectID:      *authCtx.ProjectID,
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -159,6 +168,22 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
+	}
+
+	if err := audit.LogRiskPolicyCreate(ctx, dbtx, audit.LogRiskPolicyCreateEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		RiskPolicyID:     row.ID,
+		RiskPolicyName:   row.Name,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy create").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy create").Log(ctx, s.logger)
 	}
 
 	// Trigger the drain workflow for the new policy.
@@ -263,7 +288,15 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		enabled = *payload.Enabled
 	}
 
-	row, err := s.repo.UpdateRiskPolicy(ctx, repo.UpdateRiskPolicyParams{
+	snapshotBefore := policyRowSnapshot(current)
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	row, err := repo.New(dbtx).UpdateRiskPolicy(ctx, repo.UpdateRiskPolicyParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
 		Name:      payload.Name,
@@ -272,6 +305,24 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
+	}
+
+	if err := audit.LogRiskPolicyUpdate(ctx, dbtx, audit.LogRiskPolicyUpdateEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		RiskPolicyID:     row.ID,
+		RiskPolicyName:   row.Name,
+		SnapshotBefore:   snapshotBefore,
+		SnapshotAfter:    policyRowSnapshot(row),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy update").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy update").Log(ctx, s.logger)
 	}
 
 	// Signal the drain workflow — it reads the current enabled/version
@@ -299,13 +350,44 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		return oops.C(oops.CodeInvalid)
 	}
 
+	// Fetch before delete so we can log the policy name.
+	existing, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
 	// Soft-delete only — list queries already filter out results for deleted
 	// policies via the risk_policies join, so orphaned rows are harmless.
-	if err := s.repo.DeleteRiskPolicy(ctx, repo.DeleteRiskPolicyParams{
+	if err := repo.New(dbtx).DeleteRiskPolicy(ctx, repo.DeleteRiskPolicyParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete risk policy").Log(ctx, s.logger)
+	}
+
+	if err := audit.LogRiskPolicyDelete(ctx, dbtx, audit.LogRiskPolicyDeleteEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		RiskPolicyID:     id,
+		RiskPolicyName:   existing.Name,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log risk policy delete").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit risk policy delete").Log(ctx, s.logger)
 	}
 
 	return nil
@@ -484,6 +566,18 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 		return oops.E(oops.CodeUnexpected, err, "bump policy version").Log(ctx, s.logger)
 	}
 
+	if err := audit.LogRiskPolicyTrigger(ctx, s.db, audit.LogRiskPolicyTriggerEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		RiskPolicyID:     policy.ID,
+		RiskPolicyName:   policy.Name,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log risk policy trigger").Log(ctx, s.logger)
+	}
+
 	if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
 		ProjectID:    policy.ProjectID,
 		RiskPolicyID: policy.ID,
@@ -523,6 +617,25 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		PendingMessages: pendingMessages,
 		TotalMessages:   totalMessages,
 	}, nil
+}
+
+// policyRowSnapshot returns a *types.RiskPolicy suitable for audit log
+// snapshots. Unlike policyToType it skips the extra DB queries for message
+// counts, keeping transactions short. Count fields are set to -1 to indicate
+// they were not computed.
+func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
+	return &types.RiskPolicy{
+		ID:              row.ID.String(),
+		ProjectID:       row.ProjectID.String(),
+		Name:            row.Name,
+		Sources:         row.Sources,
+		Enabled:         row.Enabled,
+		Version:         row.Version,
+		CreatedAt:       row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:       row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages: -1,
+		TotalMessages:   -1,
+	}
 }
 
 func validatePolicyName(name string) error {
