@@ -41,6 +41,7 @@ import PluginDetail from "./pages/org/PluginDetail";
 import OrgAuditLogs from "./pages/org/OrgAuditLogs";
 import OrgDomains from "./pages/org/OrgDomains";
 import OrgHome from "./pages/org/OrgHome";
+import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgLogs from "./pages/org/OrgLogs";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
@@ -615,6 +616,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "audit-logs",
     icon: "history",
     component: OrgAuditLogs,
+  },
+  identity: {
+    title: "Identity",
+    url: "identity",
+    icon: "fingerprint",
+    component: OrgIdentity,
   },
   access: {
     title: "Roles & Permissions",

@@ -22378,6 +22378,10 @@ components:
           type: integer
           description: Number of events in this bucket
           format: int64
+        failure_count:
+          type: integer
+          description: Number of failed hook events in this bucket
+          format: int64
         server_name:
           type: string
           description: Server name
@@ -22390,6 +22394,7 @@ components:
         - server_name
         - user_email
         - event_count
+        - failure_count
     HooksUserSummary:
       type: object
       properties:

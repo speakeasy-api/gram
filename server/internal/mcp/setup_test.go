@@ -119,6 +119,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
+	sessionCaptureEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
@@ -133,6 +134,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager,
 		chatSessions,
 		logsEnabled,
+		sessionCaptureEnabled,
 		posthog,
 		accessManager,
 	)
