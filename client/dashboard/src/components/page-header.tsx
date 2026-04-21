@@ -176,7 +176,7 @@ function PageHeaderBreadcrumbs({
     <PageHeader.Title className={cn(fullWidth ? "max-w-full" : "", className)}>
       <div className="ml-auto flex items-center gap-2 normal-case">
         {visibleElements.map((elem, index) => (
-          <React.Fragment key={elem.url}>
+          <React.Fragment key={`${elem.url}-${index}`}>
             {elem.isCurrentPage || elem.disableLink ? (
               <span
                 className={
