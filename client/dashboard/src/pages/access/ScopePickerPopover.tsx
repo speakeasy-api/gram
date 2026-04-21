@@ -808,7 +808,7 @@ function HttpMethodGroupPanel({
       </div>
       {[...toolsByMethod.entries()].map(([method, tools]) => {
         const isExpanded = expanded.has(method);
-        const compoundIds = tools.map((t) => `${t.serverSlug}:${t.id}`);
+        const compoundIds = tools.map((t) => `${t.serverSlug}:${t.name}`);
         const selectedCount = compoundIds.filter((id) =>
           resources.includes(id),
         ).length;
@@ -877,7 +877,7 @@ function HttpMethodGroupPanel({
                 className="border-border bg-background max-h-[180px] overflow-y-auto border-t"
               >
                 {tools.map((tool) => {
-                  const compoundId = `${tool.serverSlug}:${tool.id}`;
+                  const compoundId = `${tool.serverSlug}:${tool.name}`;
                   const isChecked = resources.includes(compoundId);
                   return (
                     <button

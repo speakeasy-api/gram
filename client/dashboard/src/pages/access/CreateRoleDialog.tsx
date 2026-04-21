@@ -66,15 +66,11 @@ function inferCustomTab(
 
   const resourceSet = new Set(resources);
 
-  // Build annotation → compound IDs and server → tool names lookup
+  // Build annotation → compound IDs lookup
   const annotationIds = new Map<AnnotationHint, Set<string>>();
-  const namesByServer = new Map<string, Set<string>>();
 
   for (const ts of toolsets) {
-    const names = new Set<string>();
-    namesByServer.set(ts.slug, names);
     for (const tool of ts.tools) {
-      names.add(tool.name);
       for (const hint of ANNOTATION_HINTS) {
         if (tool.annotations?.[hint] === true) {
           let s = annotationIds.get(hint);
@@ -102,19 +98,9 @@ function inferCustomTab(
     return { tab: "auto-groups", annotations: matched };
   }
 
-  // Check if any resource suffix doesn't match a tool name — indicates HTTP method tab
-  // (HTTP method tab uses serverSlug:toolId, while All tools uses serverSlug:toolName)
-  for (const r of resources) {
-    const i = r.indexOf(":");
-    if (i < 0) continue;
-    const slug = r.substring(0, i);
-    const suffix = r.substring(i + 1);
-    const names = namesByServer.get(slug);
-    if (names && !names.has(suffix)) {
-      return { tab: "http-method" };
-    }
-  }
-
+  // All tabs now use serverSlug:toolName, so we can't distinguish between
+  // "select", "http-method", and "collection" tabs from IDs alone.
+  // Default to "select" — the user's tool selections are preserved correctly.
   return { tab: "select" };
 }
 
@@ -162,8 +148,9 @@ export function CreateRoleDialog({
     }));
   }, [scopesData]);
 
-  // Pre-populate fields when editing
-  if (editingRole && !initialized) {
+  // Pre-populate fields when editing — wait for async data so inferCustomTab
+  // and autoExpanded work correctly.
+  if (editingRole && !initialized && scopesData && toolsetsData) {
     setName(editingRole.name);
     setDescription(editingRole.description);
     const roleGrants = grantsFromRole(editingRole);

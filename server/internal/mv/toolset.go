@@ -140,7 +140,7 @@ func DescribeToolsetEntry(
 			if _, ok := seen[def.Name]; ok {
 				continue
 			}
-			seen[def.ID.String()] = true
+			seen[def.Name] = true
 
 			name := conv.Default(urnToVariedName[def.ToolUrn.String()], def.Name)
 
