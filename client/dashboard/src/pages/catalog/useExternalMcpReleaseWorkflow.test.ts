@@ -500,12 +500,17 @@ describe("useExternalMcpReleaseWorkflow", () => {
       );
     });
 
-    it("only deploys servers that are not already installed", async () => {
+    it("deploys all servers, including already-installed ones, using name-derived slugs", async () => {
       mockLatest.mockReturnValue({
         data: {
           deployment: {
             id: "latest-dep",
-            externalMcps: [{ registryServerSpecifier: "org/existing" }],
+            externalMcps: [
+              {
+                registryServerSpecifier: "org/existing",
+                slug: "existing",
+              },
+            ],
           },
         },
         isLoading: false,
@@ -535,7 +540,13 @@ describe("useExternalMcpReleaseWorkflow", () => {
             nonBlocking: true,
             upsertExternalMcps: [
               expect.objectContaining({
+                name: "Existing Copy",
+                slug: "existing-copy",
+                registryServerSpecifier: "org/existing",
+              }),
+              expect.objectContaining({
                 name: "New",
+                slug: "new",
                 registryServerSpecifier: "org/new",
               }),
             ],
@@ -546,16 +557,16 @@ describe("useExternalMcpReleaseWorkflow", () => {
       );
     });
 
-    it("skips deployment when the collection server's toolset already exists in the target project", async () => {
+    it("creates a fork deployment for a collection-backed server that already has a toolset in the project", async () => {
       mockListToolsets.mockReturnValue({
         data: {
           toolsets: [{ id: "toolset-123" }],
         },
         isLoading: false,
       } as ReturnType<typeof useListToolsets>);
-      mockToolsetsCreate.mockResolvedValue({ slug: "forked-server" });
-      mockToolsetsUpdateBySlug.mockResolvedValue({});
-      mockToolsetsGetBySlug.mockResolvedValue({ mcpSlug: "forked-mcp" });
+      mockEvolveDeployment.mockResolvedValue({
+        deployment: { id: "dep-new" },
+      });
 
       const servers = [
         makeServer({
@@ -574,13 +585,59 @@ describe("useExternalMcpReleaseWorkflow", () => {
         await state.startDeployment();
       });
 
-      expect(mockEvolveDeployment).not.toHaveBeenCalled();
+      expect(mockEvolveDeployment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          evolveForm: expect.objectContaining({
+            upsertExternalMcps: [
+              expect.objectContaining({
+                name: "Pulumi MCP Server Copy",
+                slug: "pulumi-mcp-server-copy",
+                registryServerSpecifier:
+                  "local-dev-org.registry/pulumi-mcp-server",
+              }),
+            ],
+          }),
+        }),
+        undefined,
+        undefined,
+      );
+      expect(result.current.phase).toBe("deploying");
+    });
 
-      await vi.waitFor(() => {
+    it("errors when a name's slug collides with an existing attachment", async () => {
+      mockLatest.mockReturnValue({
+        data: {
+          deployment: {
+            id: "latest-dep",
+            externalMcps: [
+              {
+                registryServerSpecifier: "org/unrelated",
+                slug: "my-server",
+              },
+            ],
+          },
+        },
+        isLoading: false,
+      } as ReturnType<typeof useLatestDeployment>);
+
+      const servers = [
+        makeServer({ title: "My Server", registrySpecifier: "org/my-server" }),
+      ];
+      const { result } = renderHook(() =>
+        useExternalMcpReleaseWorkflow({ servers }),
+      );
+
+      await act(async () => {
         const state = result.current;
-        if (state.phase !== "complete") throw new Error("unexpected phase");
-        expect(state.toolsetStatuses[0].status).toBe("completed");
+        if (state.phase !== "configure") throw new Error("unexpected phase");
+        await state.startDeployment();
       });
+
+      expect(mockEvolveDeployment).not.toHaveBeenCalled();
+      expect(result.current.phase).toBe("error");
+      const state = result.current;
+      if (state.phase !== "error") throw new Error("unexpected phase");
+      expect(state.error).toMatch(/slug "my-server" already exists/);
     });
 
     it("transitions to complete when no deployment ID returned", async () => {
@@ -756,15 +813,24 @@ describe("useExternalMcpReleaseWorkflow", () => {
       expect(state.toolsetStatuses[0].mcpSlug).toBe("mcp-my-server");
     });
 
-    it("creates a fork without redeploying when the server is already installed", async () => {
+    it("creates a fork by deploying a new attachment under a distinct slug", async () => {
       mockLatest.mockReturnValue({
         data: {
           deployment: {
-            externalMcps: [{ registryServerSpecifier: "org/my-server" }],
+            id: "latest-dep",
+            externalMcps: [
+              {
+                registryServerSpecifier: "org/my-server",
+                slug: "my-server",
+              },
+            ],
           },
         },
         isLoading: false,
       } as ReturnType<typeof useLatestDeployment>);
+      mockEvolveDeployment.mockResolvedValue({
+        deployment: { id: "dep-fork" },
+      });
       mockToolsetsCreate.mockResolvedValue({ slug: "my-server-fork" });
       mockToolsetsUpdateBySlug.mockResolvedValue({});
       mockToolsetsGetBySlug.mockResolvedValue({
@@ -777,8 +843,9 @@ describe("useExternalMcpReleaseWorkflow", () => {
           registrySpecifier: "org/my-server",
         }),
       ];
-      const { result } = renderHook(() =>
-        useExternalMcpReleaseWorkflow({ servers }),
+      const { result, rerender } = renderHook(
+        ({ servers }) => useExternalMcpReleaseWorkflow({ servers }),
+        { initialProps: { servers } },
       );
 
       await act(async () => {
@@ -787,7 +854,27 @@ describe("useExternalMcpReleaseWorkflow", () => {
         await state.startDeployment();
       });
 
-      expect(mockEvolveDeployment).not.toHaveBeenCalled();
+      expect(mockEvolveDeployment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          evolveForm: expect.objectContaining({
+            upsertExternalMcps: [
+              expect.objectContaining({
+                name: "My Server Copy",
+                slug: "my-server-copy",
+                registryServerSpecifier: "org/my-server",
+              }),
+            ],
+          }),
+        }),
+        undefined,
+        undefined,
+      );
+
+      // Simulate deployment completion so toolset creation runs
+      mockDeployment.mockReturnValue({
+        data: { status: "completed" },
+      } as ReturnType<typeof useDeployment>);
+      rerender({ servers });
 
       await vi.waitFor(() => {
         const state = result.current;
@@ -803,7 +890,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
             origin: {
               registrySpecifier: "org/my-server",
             },
-            toolUrns: ["tools:externalmcp:my-server:proxy"],
+            toolUrns: ["tools:externalmcp:my-server-copy:proxy"],
           },
         },
         undefined,

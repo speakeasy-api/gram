@@ -129,7 +129,11 @@ function buildInitialToolsetStatuses(
 }
 
 function buildToolUrns(config: ServerConfig): string[] {
-  const slug = generateSlug(config.server.registrySpecifier);
+  // The slug must match the one we send to evolveDeployment so the resulting
+  // external_mcp_attachment row resolves the URNs. Deriving from the user-chosen
+  // name (rather than the server specifier) is what lets a fork own a distinct
+  // attachment from the original install.
+  const slug = generateSlug(config.name);
 
   if (!config.server.tools) {
     return [`tools:externalmcp:${slug}:proxy`];
@@ -180,6 +184,15 @@ export function useExternalMcpReleaseWorkflow({
     () =>
       new Set((toolsetsResult?.toolsets ?? []).map((toolset) => toolset.id)),
     [toolsetsResult?.toolsets],
+  );
+  const existingSlugs = useMemo(
+    () =>
+      new Set<string>(
+        (latestDeployment?.externalMcps ?? [])
+          .map((mcp) => mcp.slug)
+          .filter((slug): slug is string => !!slug),
+      ),
+    [latestDeployment?.externalMcps],
   );
   const isServerAlreadyInstalled = useCallback(
     (server: Server) =>
@@ -499,13 +512,21 @@ export function useExternalMcpReleaseWorkflow({
   const startDeployment = useCallback(async () => {
     if (!canDeploy) return;
 
-    const deploymentConfigs = serverConfigs.filter(
-      (config) => !isServerAlreadyInstalled(config.server),
+    // Install-as-fork: every selected server (whether this is a fresh install
+    // or a fork of an already-installed one) must go through evolveDeployment
+    // so its attachment row exists under the slug we bake into its tool URNs.
+    // That slug is derived from the user-chosen name, so the only way two
+    // configs clash with an already-deployed attachment is if the user picks a
+    // name whose slug matches one already in use — surface that as an error.
+    const collidingConfig = serverConfigs.find((config) =>
+      existingSlugs.has(generateSlug(config.name)),
     );
-
-    if (deploymentConfigs.length === 0) {
-      setToolsetStatuses(buildInitialToolsetStatuses(serverConfigs));
-      setPhase("complete");
+    if (collidingConfig) {
+      const collidingSlug = generateSlug(collidingConfig.name);
+      setError(
+        `A server with slug "${collidingSlug}" already exists in this project. Rename "${collidingConfig.name}" to disambiguate.`,
+      );
+      setPhase("error");
       return;
     }
 
@@ -523,20 +544,17 @@ export function useExternalMcpReleaseWorkflow({
           evolveForm: {
             deploymentId: latestDeployment?.id,
             nonBlocking: true,
-            upsertExternalMcps: deploymentConfigs.map((config) => {
-              const slug = generateSlug(config.server.registrySpecifier);
-              return {
-                registryId: config.server.registryId,
-                organizationMcpCollectionRegistryId:
-                  config.server.organizationMcpCollectionRegistryId,
-                name: config.name,
-                slug,
-                registryServerSpecifier: config.server.registrySpecifier,
-                selectedRemotes:
-                  config.selectedRemotes?.map((r) => r.url) ??
-                  config.server.remotes?.map((r) => r.url),
-              };
-            }),
+            upsertExternalMcps: serverConfigs.map((config) => ({
+              registryId: config.server.registryId,
+              organizationMcpCollectionRegistryId:
+                config.server.organizationMcpCollectionRegistryId,
+              name: config.name,
+              slug: generateSlug(config.name),
+              registryServerSpecifier: config.server.registrySpecifier,
+              selectedRemotes:
+                config.selectedRemotes?.map((r) => r.url) ??
+                config.server.remotes?.map((r) => r.url),
+            })),
           },
         },
         undefined,
@@ -557,7 +575,7 @@ export function useExternalMcpReleaseWorkflow({
   }, [
     canDeploy,
     client,
-    isServerAlreadyInstalled,
+    existingSlugs,
     latestDeployment?.id,
     projectSlug,
     serverConfigs,
