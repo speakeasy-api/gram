@@ -1683,7 +1683,8 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 			BucketStartNs: strconv.FormatInt(pt.BucketStartNs, 10),
 			ServerName:    pt.ServerName,
 			UserEmail:     pt.UserEmail,
-			EventCount:    int64(pt.EventCount), //nolint:gosec // Bounded count
+			EventCount:    int64(pt.EventCount),   //nolint:gosec // Bounded count
+			FailureCount:  int64(pt.FailureCount), //nolint:gosec // Bounded count
 		})
 	}
 

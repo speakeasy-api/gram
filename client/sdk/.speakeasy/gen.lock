@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 4cdb54d413bc60b462ce20530ba997fe
+  docChecksum: 6ec0de614e55e1dda7da0e00965fa7ff
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
-  releaseVersion: 0.32.67
-  configChecksum: ff7211f9e331018d8770aec5ecf6f730
+  releaseVersion: 0.32.68
+  configChecksum: 44c2920bf036b54e5a7cba5b749cefa6
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -304,7 +304,7 @@ trackedFiles:
   docs/models/components/hookstatus.md:
     last_write_checksum: sha1:842ea50d39d893d742df1d249f3cb13d9b510fc6
   docs/models/components/hookstimeseriespoint.md:
-    last_write_checksum: sha1:1ba2c237d29898bff4b89f9ec8df12b484c5020f
+    last_write_checksum: sha1:7417d6276d1004eea90e19a2d67a447bc1fea3e6
   docs/models/components/hooksusersummary.md:
     last_write_checksum: sha1:527d021e36b1f44fd86ee89dfd9814d2046e6797
   docs/models/components/hooktracesummary.md:
@@ -1979,11 +1979,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:69219da7b93cb4ab6c3a790978d0fa61e3447b81
+    last_write_checksum: sha1:351969eacbebff1b3111ededf0fbeb7bc2ec282a
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:36129cf8bd6fc6f86e07a6a859e1f4b0cfaca3bb
+    last_write_checksum: sha1:895f997e64a45fff30bd492ed8ec3dfd26eb25d0
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2567,7 +2567,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:fc4b04751985f5a6fc6d43e79fa9e79589d18232
+    last_write_checksum: sha1:b3150ab7fc0b3d03db960d599b5756641826bba5
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2960,7 +2960,7 @@ trackedFiles:
   src/models/components/hooksserversummary.ts:
     last_write_checksum: sha1:654233f904a052364881cbe25a2092a9fe85eb4c
   src/models/components/hookstimeseriespoint.ts:
-    last_write_checksum: sha1:7cf6ae5e186508fcf084f1bd78afa889beee3944
+    last_write_checksum: sha1:cc2d0fdbc0eebdba5f83720371ef3c46784327a3
   src/models/components/hooksusersummary.ts:
     last_write_checksum: sha1:3eeb9121e84176a2d5134fbf9b129ab0c6096933
   src/models/components/hooktracesummary.ts:
