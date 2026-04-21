@@ -135,18 +135,18 @@ function IdentityCard({
   );
 }
 
-function RequireSamlRow() {
-  const [requireSaml, setRequireSaml] = useState(false);
+function RequireSsoRow() {
+  const [requireSso, setRequireSso] = useState(false);
   return (
     <div className="border-border bg-muted/30 flex items-center justify-between gap-4 border-t p-4">
       <Type variant="body" className="font-medium">
-        Require workspace members to login with SAML to access this workspace
+        Require workspace members to login with SSO to access this workspace
       </Type>
       <Switch
-        checked={requireSaml}
-        onCheckedChange={setRequireSaml}
+        checked={requireSso}
+        onCheckedChange={setRequireSso}
         disabled
-        aria-label="Require workspace members to login with SAML"
+        aria-label="Require workspace members to login with SSO"
       />
     </div>
   );
@@ -180,7 +180,7 @@ function OrgIdentityInner() {
         learnMoreText="Learn more about SAML SSO"
         learnMoreHref="https://www.speakeasy.com/docs"
       >
-        <RequireSamlRow />
+        <RequireSsoRow />
       </IdentityCard>
       <IdentityCard
         heading="Directory Sync"
