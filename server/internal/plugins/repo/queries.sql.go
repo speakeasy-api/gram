@@ -359,7 +359,8 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.toolset_id,
-  t.mcp_slug AS toolset_mcp_slug
+  t.mcp_slug AS toolset_mcp_slug,
+  t.mcp_is_public AS toolset_is_public
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
@@ -379,6 +380,7 @@ type ListPluginsWithServersForProjectRow struct {
 	ServerSortOrder   int32
 	ToolsetID         uuid.UUID
 	ToolsetMcpSlug    pgtype.Text
+	ToolsetIsPublic   bool
 }
 
 // Used during plugin generation: returns all active plugin servers joined with
@@ -403,6 +405,7 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectI
 			&i.ServerSortOrder,
 			&i.ToolsetID,
 			&i.ToolsetMcpSlug,
+			&i.ToolsetIsPublic,
 		); err != nil {
 			return nil, err
 		}

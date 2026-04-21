@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -819,11 +820,38 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		}
 
 		if mcpSlug := conv.FromPGText[string](r.ToolsetMcpSlug); mcpSlug != nil {
-			pb.servers = append(pb.servers, PluginServerInfo{
+			serverInfo := PluginServerInfo{
 				DisplayName: r.ServerDisplayName,
 				Policy:      r.ServerPolicy,
 				MCPURL:      fmt.Sprintf("%s/mcp/%s", s.serverURL, *mcpSlug),
-			})
+				IsPublic:    r.ToolsetIsPublic,
+				EnvConfigs:  nil,
+			}
+
+			// For public servers, load user-facing environment configs.
+			if r.ToolsetIsPublic {
+				mcpMeta := mcpmetarepo.New(s.db)
+				metadata, metaErr := mcpMeta.GetMetadataForToolset(ctx, r.ToolsetID)
+				if metaErr == nil {
+					envConfigs, envErr := mcpMeta.ListEnvironmentConfigs(ctx, metadata.ID)
+					if envErr == nil {
+						for _, ec := range envConfigs {
+							if ec.ProvidedBy == "user" {
+								displayName := ec.VariableName
+								if dn := conv.FromPGText[string](ec.HeaderDisplayName); dn != nil {
+									displayName = *dn
+								}
+								serverInfo.EnvConfigs = append(serverInfo.EnvConfigs, ServerEnvConfig{
+									VariableName: ec.VariableName,
+									DisplayName:  displayName,
+								})
+							}
+						}
+					}
+				}
+			}
+
+			pb.servers = append(pb.servers, serverInfo)
 		}
 	}
 

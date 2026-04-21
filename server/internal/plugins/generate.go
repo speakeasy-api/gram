@@ -9,12 +9,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
+// ServerEnvConfig represents a user-facing environment variable required by a server.
+type ServerEnvConfig struct {
+	VariableName string
+	DisplayName  string // Shown to the user in Claude's userConfig prompt
+}
+
 // PluginServerInfo contains the resolved information for a single MCP server.
 type PluginServerInfo struct {
 	DisplayName string
 	Policy      string
 	// Resolved MCP URL (e.g. https://app.getgram.ai/mcp/{slug}).
 	MCPURL string
+	// IsPublic indicates whether the toolset is publicly accessible (no Gram API key needed).
+	IsPublic bool
+	// EnvConfigs are user-facing environment variables for public servers.
+	EnvConfigs []ServerEnvConfig
 }
 
 // PluginInfo contains the data needed to generate packages for a single plugin.
@@ -165,18 +175,34 @@ func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 }
 
 func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {
-	var userConfig map[string]userConfigEntry
-	authValue := "Bearer ${user_config.GRAM_API_KEY}"
+	// Collect userConfig entries across all servers that need user-provided values.
+	userConfig := make(map[string]userConfigEntry)
 
-	if cfg.APIKey != "" {
-		authValue = "Bearer " + cfg.APIKey
-	} else {
-		userConfig = map[string]userConfigEntry{
-			"GRAM_API_KEY": {
-				Description: "Your Gram API key for authenticating MCP server connections",
-				Sensitive:   true,
-			},
+	// Determine if any private server needs a Gram API key prompt.
+	needsGramKeyPrompt := false
+	for _, s := range p.Servers {
+		if !s.IsPublic && cfg.APIKey == "" {
+			needsGramKeyPrompt = true
 		}
+		// Public servers may need user-provided env vars.
+		for _, ec := range s.EnvConfigs {
+			userConfig[ec.VariableName] = userConfigEntry{
+				Description: ec.DisplayName,
+				Sensitive:   true,
+			}
+		}
+	}
+
+	if needsGramKeyPrompt {
+		userConfig["GRAM_API_KEY"] = userConfigEntry{
+			Description: "Your Gram API key for authenticating MCP server connections",
+			Sensitive:   true,
+		}
+	}
+
+	var userConfigPtr map[string]userConfigEntry
+	if len(userConfig) > 0 {
+		userConfigPtr = userConfig
 	}
 
 	pluginJSON, err := marshalJSON(claudePluginMeta{
@@ -185,7 +211,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 		Version:     "0.1.0",
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
-		UserConfig:  userConfig,
+		UserConfig:  userConfigPtr,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -194,12 +220,25 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 
 	mcpServers := make(map[string]claudeMCPServer)
 	for _, s := range p.Servers {
+		headers := make(map[string]string)
+
+		if s.IsPublic {
+			// Public servers use env config variables for auth.
+			for _, ec := range s.EnvConfigs {
+				headers[ec.DisplayName] = "${user_config." + ec.VariableName + "}"
+			}
+		} else if cfg.APIKey != "" {
+			// Private server with injected key.
+			headers["Authorization"] = "Bearer " + cfg.APIKey
+		} else {
+			// Private server without key — prompt user.
+			headers["Authorization"] = "Bearer ${user_config.GRAM_API_KEY}"
+		}
+
 		mcpServers[s.DisplayName] = claudeMCPServer{
-			Type: "http",
-			URL:  s.MCPURL,
-			Headers: map[string]string{
-				"Authorization": authValue,
-			},
+			Type:    "http",
+			URL:     s.MCPURL,
+			Headers: headers,
 		}
 	}
 	mcpJSON, err := marshalJSON(claudeMCPConfig{MCPServers: mcpServers})
@@ -230,18 +269,23 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 	}
 	files[path.Join(subdir, ".cursor-plugin/plugin.json")] = pluginJSON
 
-	authValue := "Bearer ${env:GRAM_API_KEY}"
-	if cfg.APIKey != "" {
-		authValue = "Bearer " + cfg.APIKey
-	}
-
 	mcpServers := make(map[string]cursorMCPServer)
 	for _, s := range p.Servers {
+		headers := make(map[string]string)
+
+		if s.IsPublic {
+			for _, ec := range s.EnvConfigs {
+				headers[ec.DisplayName] = "${env:" + ec.VariableName + "}"
+			}
+		} else if cfg.APIKey != "" {
+			headers["Authorization"] = "Bearer " + cfg.APIKey
+		} else {
+			headers["Authorization"] = "Bearer ${env:GRAM_API_KEY}"
+		}
+
 		mcpServers[s.DisplayName] = cursorMCPServer{
-			URL: s.MCPURL,
-			Headers: map[string]string{
-				"Authorization": authValue,
-			},
+			URL:     s.MCPURL,
+			Headers: headers,
 		}
 	}
 	mcpJSON, err := marshalJSON(cursorMCPConfig{MCPServers: mcpServers})
