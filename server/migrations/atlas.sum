@@ -1,4 +1,4 @@
-h1:+jyiA/7z+ml4Ywn+05/AfjJLHukoUnlmUlO6ZRqGFjo=
+h1:RJm188Kba4J7cfD/Zjt0b+HW4L7khaz3ZsdnZIMBXYM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -129,3 +129,4 @@ h1:+jyiA/7z+ml4Ywn+05/AfjJLHukoUnlmUlO6ZRqGFjo=
 20260420113616_chat-messages-add-content-hash-generation.sql h1:4PwJKipKdhpuXXnSMl4cCXC0SEnx3rbzLYY29+NV44s=
 20260420143421_toolset-origins.sql h1:hsU/rOPgf/f8q2pysWDOXS45nuRzznedocFeZuimAJM=
 20260420202925_deployment_statuses_add_deployment_id_seq_idx.sql h1:Hv4GhzFjP6u0Ye+azHZv2Zyf0T0OT9L2zxZtmr7LD1I=
+20260421144856_mcp_frontends_and_slugs.sql h1:hs2Zsds5ZtnHqfjc3F1Hz3uMMpD16MwDBWvfNYPWMP0=
