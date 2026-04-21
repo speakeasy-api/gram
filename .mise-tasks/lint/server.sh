@@ -14,6 +14,7 @@ fi
 
 if [ ! -x ./bin/gcl ] || [ -n "$(find ../glint .custom-gcl.yml ../go.mod ../go.sum -newer ./bin/gcl -type f 2>/dev/null)" ]; then
     golangci-lint custom --destination ./bin --name gcl
+    ./bin/gcl cache clean
 fi
 
 exec ./bin/gcl run --max-issues-per-linter=0 "${args[@]}" ./...
