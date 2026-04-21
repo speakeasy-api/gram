@@ -1,6 +1,6 @@
 import type { ElementsConfig } from "@gram-ai/elements";
 import { Chat, GramElementsProvider } from "@gram-ai/elements";
-import { useThreadRuntime } from "@assistant-ui/react";
+import { useAssistantRuntime } from "@assistant-ui/react";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Wand2, ChevronRight, Sparkles, Terminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -342,16 +342,34 @@ function PendingPromptBridge({
   pending: { text: string; nonce: number } | null;
   onConsume: () => void;
 }) {
-  const runtime = useThreadRuntime();
+  const assistantRuntime = useAssistantRuntime();
   const firedNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!pending || !runtime) return;
+    if (!pending || !assistantRuntime) return;
     if (firedNonceRef.current === pending.nonce) return;
     firedNonceRef.current = pending.nonce;
-    runtime.append(pending.text);
+
+    const { text } = pending;
+    // Switch to a brand-new thread before appending. This sidesteps the
+    // assistant-ui MessageRepository id-collision error
+    // ("A message with the same id already exists in the parent tree")
+    // that triggers when a second Explore click tries to append into a
+    // thread that still holds messages from the previous chart's
+    // conversation. It also matches the intended product UX: each Explore
+    // CTA starts a fresh focused chat with the new contextInfo.
+    assistantRuntime.threads
+      .switchToNewThread()
+      .then(() => {
+        assistantRuntime.thread.append(text);
+      })
+      .catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error("Failed to send Explore prompt:", err);
+      });
+
     onConsume();
-  }, [pending, runtime, onConsume]);
+  }, [pending, assistantRuntime, onConsume]);
 
   return null;
 }
