@@ -461,7 +461,7 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 }
 
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, COALESCE(NULLIF(c.user_id, ''), cm.user_id) AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, COALESCE(NULLIF(c.external_user_id, ''), cm.external_user_id, c.user_id, cm.user_id) AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -642,7 +642,7 @@ func (q *Queries) ListRiskResultsByProject(ctx context.Context, arg ListRiskResu
 }
 
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, COALESCE(NULLIF(c.user_id, ''), cm.user_id) AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, COALESCE(NULLIF(c.external_user_id, ''), cm.external_user_id, c.user_id, cm.user_id) AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -723,7 +723,7 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 }
 
 const listRiskResultsByProjectFound = `-- name: ListRiskResultsByProjectFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, COALESCE(NULLIF(c.user_id, ''), cm.user_id) AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, COALESCE(NULLIF(c.external_user_id, ''), cm.external_user_id, c.user_id, cm.user_id) AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -805,7 +805,7 @@ const listRiskResultsGroupedByChat = `-- name: ListRiskResultsGroupedByChat :man
 SELECT
     cm.chat_id
   , c.title AS chat_title
-  , COALESCE(NULLIF(c.user_id, ''), cm.user_id) AS chat_user_id
+  , COALESCE(NULLIF(c.external_user_id, ''), cm.external_user_id, c.user_id, cm.user_id) AS chat_user_id
   , COUNT(*)::BIGINT AS findings_count
   , MAX(rr.created_at)::TIMESTAMPTZ AS latest_detected
 FROM risk_results rr
@@ -814,7 +814,7 @@ LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE
-GROUP BY cm.chat_id, c.title, COALESCE(NULLIF(c.user_id, ''), cm.user_id)
+GROUP BY cm.chat_id, c.title, COALESCE(NULLIF(c.external_user_id, ''), cm.external_user_id, c.user_id, cm.user_id)
 ORDER BY latest_detected DESC
 LIMIT $2
 `
@@ -860,7 +860,7 @@ func (q *Queries) ListRiskResultsGroupedByChat(ctx context.Context, arg ListRisk
 
 const listRiskResultsGroupedByUser = `-- name: ListRiskResultsGroupedByUser :many
 SELECT
-    COALESCE(NULLIF(c.user_id, ''), cm.user_id) AS chat_user_id
+    COALESCE(NULLIF(c.external_user_id, ''), cm.external_user_id, c.user_id, cm.user_id) AS chat_user_id
   , COUNT(*)::BIGINT AS findings_count
   , COUNT(DISTINCT cm.chat_id)::BIGINT AS chats_count
   , MAX(rr.created_at)::TIMESTAMPTZ AS latest_detected
@@ -870,7 +870,7 @@ LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE
-GROUP BY COALESCE(NULLIF(c.user_id, ''), cm.user_id)
+GROUP BY COALESCE(NULLIF(c.external_user_id, ''), cm.external_user_id, c.user_id, cm.user_id)
 ORDER BY latest_detected DESC
 LIMIT $2
 `

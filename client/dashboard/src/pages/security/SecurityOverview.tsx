@@ -19,7 +19,6 @@ import {
   useRiskListResults,
   useRiskListPolicies,
   useRiskListResultsByChat,
-  useRiskListResultsByUser,
 } from "@gram/client/react-query/index.js";
 import { RULE_CATEGORY_META } from "./policy-data";
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
@@ -51,7 +50,6 @@ function SecurityOverviewContent() {
     [setSearchParams],
   );
   const [chatsLimit, setChatsLimit] = useState(10);
-  const [usersLimit, setUsersLimit] = useState(10);
   const [findingsLimit, setFindingsLimit] = useState(10);
 
   const { data: policiesData, isLoading: policiesLoading } =
@@ -70,25 +68,14 @@ function SecurityOverviewContent() {
   } = useRiskListResultsByChat({ limit: chatsLimit }, undefined, {
     placeholderData: keepPreviousData,
   });
-  const {
-    data: userSummaryData,
-    isLoading: userSummaryLoading,
-    isFetching: userSummaryFetching,
-  } = useRiskListResultsByUser({ limit: usersLimit }, undefined, {
-    placeholderData: keepPreviousData,
-  });
 
   const policies = policiesData?.policies ?? [];
   const results = resultsData?.results ?? [];
   const recentChats = chatSummaryData?.chats ?? [];
-  const recentUsers = userSummaryData?.users ?? [];
 
   // Only show full-page loading on initial load, not on limit changes
   const isInitialLoading =
-    policiesLoading ||
-    resultsLoading ||
-    chatSummaryLoading ||
-    userSummaryLoading;
+    policiesLoading || resultsLoading || chatSummaryLoading;
 
   if (isInitialLoading) {
     return (
@@ -134,8 +121,7 @@ function SecurityOverviewContent() {
     0,
   );
 
-  const hasData =
-    recentUsers.length > 0 || recentChats.length > 0 || results.length > 0;
+  const hasData = recentChats.length > 0 || results.length > 0;
 
   return (
     <>
@@ -176,54 +162,6 @@ function SecurityOverviewContent() {
 
           {hasData ? (
             <>
-              {recentUsers.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="mb-2 text-sm font-semibold">By User</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>User</TableHead>
-                        <TableHead>Chats</TableHead>
-                        <TableHead>Findings</TableHead>
-                        <TableHead>Latest Detected</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {recentUsers.map((user) => (
-                        <TableRow key={user.userId ?? "unknown"}>
-                          <TableCell className="text-xs">
-                            {user.userId ?? "Unknown"}
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {user.chatsCount}
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {user.findingsCount}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-xs">
-                            {user.latestDetected
-                              ? new Date(user.latestDetected).toLocaleString()
-                              : "-"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  {recentUsers.length >= usersLimit && (
-                    <div className="mt-2 flex justify-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={userSummaryFetching}
-                        onClick={() => setUsersLimit((l) => l + 100)}
-                      >
-                        {userSummaryFetching ? "Loading..." : "Load More"}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {recentChats.length > 0 && (
                 <div className="mt-6">
                   <h3 className="mb-2 text-sm font-semibold">Recent Chats</h3>
