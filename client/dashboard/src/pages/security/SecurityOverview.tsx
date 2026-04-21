@@ -13,6 +13,7 @@ import { useRoutes } from "@/routes";
 import { Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import {
   useRiskListResults,
   useRiskListPolicies,
@@ -44,17 +45,23 @@ function SecurityOverviewContent() {
     data: resultsData,
     isLoading: resultsLoading,
     isFetching: resultsFetching,
-  } = useRiskListResults({ limit: findingsLimit });
+  } = useRiskListResults({ limit: findingsLimit }, undefined, {
+    placeholderData: keepPreviousData,
+  });
   const {
     data: chatSummaryData,
     isLoading: chatSummaryLoading,
     isFetching: chatSummaryFetching,
-  } = useRiskListResultsByChat({ limit: chatsLimit });
+  } = useRiskListResultsByChat({ limit: chatsLimit }, undefined, {
+    placeholderData: keepPreviousData,
+  });
   const {
     data: userSummaryData,
     isLoading: userSummaryLoading,
     isFetching: userSummaryFetching,
-  } = useRiskListResultsByUser({ limit: usersLimit });
+  } = useRiskListResultsByUser({ limit: usersLimit }, undefined, {
+    placeholderData: keepPreviousData,
+  });
 
   const policies = policiesData?.policies ?? [];
   const results = resultsData?.results ?? [];
