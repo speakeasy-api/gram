@@ -57,6 +57,7 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 			}
 
 			if requestID != "" {
+				w.Header().Set("x-request-id", requestID)
 				trace.SpanFromContext(ctx).SetAttributes(attr.HTTPRequestID(requestID))
 			}
 
