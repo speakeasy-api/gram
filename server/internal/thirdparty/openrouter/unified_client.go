@@ -120,8 +120,8 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 	if resolved := ResolveModel(model); resolved != "" {
 		if resolved != model {
 			c.logger.WarnContext(ctx, "requested model not in allowlist, falling back to supported model",
-				slog.String("requested_model", model),
-				slog.String("resolved_model", resolved),
+				attr.SlogGenAIRequestModel(model),
+				attr.SlogGenAIResponseModel(resolved),
 			)
 			model = resolved
 		}
