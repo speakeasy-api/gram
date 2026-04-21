@@ -116,6 +116,8 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		model = DefaultChatModel
 	}
 
+	SanitizeAssistantContent(req.Messages)
+
 	// Build request body
 	reqBody := OpenAIChatRequest{
 		Model:          model,

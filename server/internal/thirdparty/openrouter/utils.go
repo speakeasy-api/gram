@@ -5,6 +5,24 @@ import (
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 )
 
+// SanitizeAssistantContent nulls out the content string on any assistant
+// message that also carries tool_calls. OpenRouter's OpenAI→Anthropic
+// converter on the Azure path drops tool_calls when content is a non-null
+// string, producing a tool_result with no matching tool_use on the next turn.
+// The known-good shape across providers is content:null + tool_calls populated.
+func SanitizeAssistantContent(msgs []or.ChatMessages) {
+	for i := range msgs {
+		if msgs[i].Type != or.ChatMessagesTypeAssistant {
+			continue
+		}
+		asst := msgs[i].ChatAssistantMessage
+		if asst == nil || len(asst.ToolCalls) == 0 {
+			continue
+		}
+		asst.Content = optionalnullable.From[or.ChatAssistantMessageContent](nil)
+	}
+}
+
 func CreateMessageUser(content string) or.ChatMessages {
 	return or.CreateChatMessagesUser(or.ChatUserMessage{
 		Role:    or.ChatUserMessageRoleUser,
