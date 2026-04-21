@@ -764,7 +764,7 @@ func (s *Service) createPluginAPIKey(ctx context.Context, ac *contextvalues.Auth
 	}
 
 	keyName := fmt.Sprintf("plugins-%s", time.Now().UTC().Format("20060102-150405"))
-	scopes := []string{"consumer"}
+	scopes := []string{auth.APIKeyScopeConsumer.String()}
 	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -819,6 +819,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		servers []PluginServerInfo
 	}
 	pluginMap := make(map[uuid.UUID]*pluginBuild)
+	mcpMeta := mcpmetarepo.New(s.db)
 
 	for _, r := range rows {
 		pb, ok := pluginMap[r.PluginID]
@@ -846,7 +847,6 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 
 			// For public servers, load user-facing environment configs.
 			if r.ToolsetIsPublic {
-				mcpMeta := mcpmetarepo.New(s.db)
 				metadata, metaErr := mcpMeta.GetMetadataForToolset(ctx, r.ToolsetID)
 				if metaErr != nil {
 					return nil, oops.E(oops.CodeUnexpected, metaErr, "load mcp metadata for toolset").Log(ctx, s.logger)
