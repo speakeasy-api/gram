@@ -94,6 +94,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 scope={["mcp:read", "mcp:write"]}
               />
               <ScopeGatedNavItem item={routes.clis} scope="build:read" />
+              <ScopeGatedNavItem item={routes.plugins} scope="build:read" />
               <ScopeGatedNavItem
                 item={routes.plugins}
                 scope={["build:read", "build:write"]}

@@ -1,9 +1,9 @@
-speakeasyVersion: 1.730.1
+speakeasyVersion: 1.761.5
 sources:
     Gram-Internal:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:71196408fc1f8f2484d8f3e52c2ce91e53d638a6c2e405cf38be3b0997419e82
-        sourceBlobDigest: sha256:46848db214c1988305b3687cd43c5f0ee56f8af6ea365ca197d63aa02e7ad317
+        sourceRevisionDigest: sha256:5509c7bda46f380ef8decd893c47f50a9159f3016d379c801e1756586a9b641e
+        sourceBlobDigest: sha256:056b77259613ff1d7976a039c89f80b148566603814f1c76390850b33b42ebc4
         tags:
             - latest
             - 0.0.1
