@@ -309,7 +309,7 @@ const ROUTE_STRUCTURE = {
   environments: {
     title: "Environments",
     url: "environments",
-    icon: "key",
+    icon: "blocks",
     component: EnvironmentsRoot,
     indexComponent: Environments,
     subPages: {

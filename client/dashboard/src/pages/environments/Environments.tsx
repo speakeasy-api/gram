@@ -9,10 +9,11 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { Environment } from "@gram/client/models/components/environment.js";
 import { useCreateEnvironmentMutation } from "@gram/client/react-query/index.js";
-import { Plus } from "lucide-react";
+import { Blocks, Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
 import { Button } from "@speakeasy-api/moonshine";
+import { Type } from "@/components/ui/type";
 import { handleAPIError } from "@/lib/errors";
 import { useEnvironments } from "./useEnvironments";
 export function EnvironmentsRoot() {
@@ -82,22 +83,50 @@ function EnvironmentsInner() {
           Create re-usable environment configurations and share amongst multiple
           MCP servers
         </Page.Section.Description>
-        <Page.Section.CTA>
-          <RequireScope scope="build:write" level="component">
-            <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
-              <Button.LeftIcon>
-                <Plus className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>New Environment</Button.Text>
-            </Button>
-          </RequireScope>
-        </Page.Section.CTA>
+        {environments.length > 0 && (
+          <Page.Section.CTA>
+            <RequireScope scope="build:write" level="component">
+              <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
+                <Button.LeftIcon>
+                  <Plus className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>New Environment</Button.Text>
+              </Button>
+            </RequireScope>
+          </Page.Section.CTA>
+        )}
         <Page.Section.Body>
-          <Cards>
-            {environments.map((environment) => (
-              <EnvironmentCard key={environment.id} environment={environment} />
-            ))}
-          </Cards>
+          {environments.length === 0 ? (
+            <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+              <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+                <Blocks className="text-muted-foreground h-6 w-6" />
+              </div>
+              <Type variant="subheading" className="mb-1">
+                No environments yet
+              </Type>
+              <Type small muted className="mb-4 max-w-md text-center">
+                Environments let you store configuration and secrets that can be
+                shared across multiple MCP servers.
+              </Type>
+              <RequireScope scope="build:write" level="component">
+                <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
+                  <Button.LeftIcon>
+                    <Plus className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>New Environment</Button.Text>
+                </Button>
+              </RequireScope>
+            </div>
+          ) : (
+            <Cards>
+              {environments.map((environment) => (
+                <EnvironmentCard
+                  key={environment.id}
+                  environment={environment}
+                />
+              ))}
+            </Cards>
+          )}
         </Page.Section.Body>
       </Page.Section>
       <InputDialog
