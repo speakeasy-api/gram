@@ -1,16 +1,14 @@
 import { Outlet, useOutletContext, useParams } from "react-router";
-
-import { SkillsPlaceholder } from "./SkillsPlaceholder";
+import { PageTabsTrigger, Tabs, TabsList } from "@/components/ui/tabs";
 
 import { Button } from "@/components/ui/button";
-import { PageTabsTrigger, Tabs, TabsList } from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
-import type { SkillEntry } from "@gram/client/models/components";
-import { useListSkills } from "@gram/client/react-query";
-import { Icon } from "@speakeasy-api/moonshine";
 import { DownloadIcon } from "lucide-react";
+import { Icon } from "@speakeasy-api/moonshine";
 import { Link } from "react-router";
-
+import type { SkillEntry } from "@gram/client/models/components";
+import { SkillsPlaceholder } from "./SkillsPlaceholder";
+import { Type } from "@/components/ui/type";
+import { useListSkills } from "@gram/client/react-query";
 import { useRoutes } from "@/routes";
 
 type SkillDetailContext = {
@@ -199,8 +197,6 @@ export function SkillDefinitionPage() {
 }
 
 export function SkillVersionsPage() {
-  const { skill } = useSkillDetail();
-
   return <SkillsPlaceholder title="Versions" description="Not implemented" />;
 }
 
@@ -209,8 +205,6 @@ export function SkillActivityPage() {
 }
 
 export function SkillInstallPage() {
-  const { skill } = useSkillDetail();
-
   return <SkillsPlaceholder title="Install" description="Not implemented" />;
 }
 

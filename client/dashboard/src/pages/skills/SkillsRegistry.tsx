@@ -12,7 +12,6 @@ import { useViewMode } from "@/components/ui/use-view-mode";
 
 export default function SkillsRegistry() {
   const [viewMode, setViewMode] = useViewMode();
-  const routes = useRoutes();
   const { data, isPending, error } = useListSkills();
 
   const skills = data?.skills ?? [];
