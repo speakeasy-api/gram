@@ -44,6 +44,7 @@ import { Icon } from "@speakeasy-api/moonshine";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { formatChartLabel } from "@/components/chart/chartUtils";
+import { useExpandedChart } from "@/hooks/useExpandedChart";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   BarElement,
@@ -806,6 +807,7 @@ function HooksInnerContent({
     [customRange, dateRange],
   );
   const [isLogsVisible, setIsLogsVisible] = useState(false);
+  const { expandedChart, setExpandedChart } = useExpandedChart();
 
   return (
     <>
@@ -925,6 +927,8 @@ function HooksInnerContent({
                   summaryData={summaryData}
                   summaryPending={summaryPending}
                   summaryIsError={summaryIsError}
+                  expandedChart={expandedChart}
+                  onExpandedChartChange={setExpandedChart}
                 />
               )}
             </div>
@@ -2046,6 +2050,8 @@ function HooksAnalytics({
   summaryData,
   summaryPending,
   summaryIsError,
+  expandedChart,
+  onExpandedChartChange: setExpandedChart,
 }: {
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
@@ -2056,6 +2062,8 @@ function HooksAnalytics({
   summaryData: GetHooksSummaryResult | undefined;
   summaryPending: boolean;
   summaryIsError: boolean;
+  expandedChart: string | null;
+  onExpandedChartChange: (id: string | null) => void;
 }) {
   const breakdown = summaryData?.breakdown ?? [];
   const timeSeries = summaryData?.timeSeries ?? [];
@@ -2086,16 +2094,6 @@ function HooksAnalytics({
   }, [summaryData]);
 
   const hasServers = (summaryData?.servers.length ?? 0) > 0;
-  const [expandedChart, setExpandedChart] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!expandedChart) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setExpandedChart(null);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [expandedChart]);
 
   type FilterAxisConfig = Partial<Record<"user" | "server", "dataset" | "row">>;
 
