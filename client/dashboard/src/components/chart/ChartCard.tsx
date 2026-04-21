@@ -7,15 +7,18 @@ export function ChartCard({
   chartId,
   expandedChart,
   onExpand,
+  hasData = true,
   children,
 }: {
   title: string;
   chartId: string;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  hasData?: boolean;
   children: ReactNode;
 }) {
   const isExpanded = expandedChart === chartId;
+  const showExpandButton = hasData || (isExpanded && !hasData);
   return (
     <div
       className={cn(
@@ -25,17 +28,19 @@ export function ChartCard({
     >
       <div className="flex items-center justify-between">
         <h3 className="text font-semibold">{title}</h3>
-        <button
-          onClick={() => onExpand(isExpanded ? null : chartId)}
-          className="text-muted-foreground hover:text-foreground rounded p-0.5 transition-colors"
-          aria-label={isExpanded ? "Minimize chart" : "Expand chart"}
-        >
-          {isExpanded ? (
-            <Minimize2 className="size-4" />
-          ) : (
-            <Maximize2 className="size-4" />
-          )}
-        </button>
+        {showExpandButton && (
+          <button
+            onClick={() => onExpand(isExpanded ? null : chartId)}
+            className="text-muted-foreground hover:text-foreground rounded p-0.5 transition-colors"
+            aria-label={isExpanded ? "Minimize chart" : "Expand chart"}
+          >
+            {isExpanded ? (
+              <Minimize2 className="size-4" />
+            ) : (
+              <Maximize2 className="size-4" />
+            )}
+          </button>
+        )}
       </div>
       {children}
     </div>

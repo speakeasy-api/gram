@@ -1560,6 +1560,7 @@ function UsersPerServerChart({
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
+      hasData={labels.length > 0}
     >
       <StackedBarChart
         labels={labels}
@@ -1618,6 +1619,7 @@ function UserEventCountsChart({
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
+      hasData={labels.length > 0}
     >
       <StackedBarChart
         labels={labels}
@@ -1726,6 +1728,7 @@ function ServerErrorRateChart({
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
+      hasData={labels.length > 0}
     >
       {labels.length === 0 ? (
         <div className="text-muted-foreground flex h-16 items-center justify-center text-sm">
