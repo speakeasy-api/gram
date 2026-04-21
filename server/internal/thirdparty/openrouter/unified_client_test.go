@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -1189,6 +1190,132 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 	// Verify that response_format was NOT set
 	assert.Nil(t, receivedRequestBody.ResponseFormat,
 		"response_format should not be set when JSONSchema is nil")
+}
+
+func TestResolveModel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		model    string
+		expected string
+	}{
+		{
+			name:     "allowed model returned as-is",
+			model:    "openai/gpt-5.4",
+			expected: "openai/gpt-5.4",
+		},
+		{
+			name:  "unsupported openai model falls back to first alphabetical openai model",
+			model: "openai/gpt-4",
+			expected: func() string {
+				// Determine expected by sorting openai models from the allowlist
+				var models []string
+				for m := range allowList {
+					if len(m) > 7 && m[:7] == "openai/" {
+						models = append(models, m)
+					}
+				}
+				sort.Strings(models)
+				return models[0]
+			}(),
+		},
+		{
+			name:  "unsupported anthropic model falls back",
+			model: "anthropic/claude-2",
+			expected: func() string {
+				var models []string
+				for m := range allowList {
+					if len(m) > 10 && m[:10] == "anthropic/" {
+						models = append(models, m)
+					}
+				}
+				sort.Strings(models)
+				return models[0]
+			}(),
+		},
+		{
+			name:     "unknown provider returns empty",
+			model:    "fakeprovider/some-model",
+			expected: "",
+		},
+		{
+			name:     "bare model name without slash returns empty",
+			model:    "gpt-4",
+			expected: "",
+		},
+		{
+			name:     "empty model returns empty",
+			model:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := ResolveModel(tt.model)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
+	t.Parallel()
+
+	// Track which model the server receives
+	var receivedModel string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody OpenAIChatRequest
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
+		receivedModel = reqBody.Model
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(fmt.Appendf(nil, `{
+			"id": "msg_fallback",
+			"model": "%s",
+			"choices": [{"message": {"role": "assistant", "content": "Hello"}, "finish_reason": "stop"}],
+			"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+		}`, reqBody.Model))
+	}))
+	defer server.Close()
+
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	client := NewUnifiedClient(
+		slog.Default(),
+		guardianPolicy,
+		&mockProvisioner{apiKey: "test-api-key"},
+		&mockMessageCaptureStrategy{},
+		&mockUsageTrackingStrategy{},
+		&mockChatTitleGenerator{},
+		&mockChatResolutionAnalyzer{},
+		&mockTelemetryLogger{},
+	)
+	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
+
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   projectID.String(),
+		Messages:    []or.ChatMessages{CreateMessageUser("Hello")},
+		Model:       "openai/gpt-4", // unsupported model
+		ChatID:      uuid.New(),
+		UsageSource: billing.ModelUsageSourcePlayground,
+	}
+
+	resp, err := client.GetCompletion(context.Background(), req)
+	require.NoError(t, err, "unsupported model should fall back, not error")
+	require.NotNil(t, resp)
+
+	// The server should have received a supported openai model, not gpt-4
+	assert.True(t, IsModelAllowed(receivedModel),
+		"server should receive a model from the allowlist, got: %s", receivedModel)
+	assert.True(t, len(receivedModel) > 7 && receivedModel[:7] == "openai/",
+		"fallback model should be from the same provider (openai), got: %s", receivedModel)
 }
 
 // testTransport is a custom http.RoundTripper that redirects all requests to the test server
