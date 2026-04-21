@@ -91,6 +91,15 @@ export function ProjectDashboard() {
     if (!isInsightsExpanded) setInsightsOverride(null);
   }, [isInsightsExpanded, setInsightsOverride]);
 
+  // Also clear on unmount: otherwise navigating away with the sidebar still
+  // open leaves a stale chart-specific override in InsightsProvider state,
+  // which would leak into pages that don't mount their own <InsightsConfig>.
+  // Kept as a separate effect so the cleanup fires only on unmount, not on
+  // every isInsightsExpanded transition.
+  useEffect(() => {
+    return () => setInsightsOverride(null);
+  }, [setInsightsOverride]);
+
   const timeWindowContext = useMemo(
     () =>
       `The user is on the Project Overview dashboard. The selected period is the last 7 days (from ${from.toISOString()} to ${to.toISOString()}).`,
