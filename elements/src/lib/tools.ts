@@ -157,6 +157,119 @@ export interface ApprovalHelpers {
 }
 
 /**
+ * Default head/tail split (bytes) when a tool result exceeds the cap. Head keeps
+ * early context (e.g. the preamble of a log query); tail keeps the most recent
+ * lines, which are usually the most relevant.
+ */
+const BYTE_CAP_HEAD_FRACTION = 0.9;
+
+/**
+ * Truncates a single string to maxBytes using a head + tail preserving strategy
+ * when it exceeds the cap. Returns the original string when under the cap.
+ */
+export function truncateTextToByteCap(text: string, maxBytes: number): string {
+  if (maxBytes <= 0) return text;
+  const original = text;
+  // Work in UTF-8 bytes to match what OpenRouter counts.
+  const encoded = new TextEncoder().encode(original);
+  if (encoded.byteLength <= maxBytes) return original;
+
+  const headBytes = Math.max(0, Math.floor(maxBytes * BYTE_CAP_HEAD_FRACTION));
+  const tailBytes = Math.max(0, maxBytes - headBytes);
+  const decoder = new TextDecoder("utf-8", { fatal: false });
+  const head = decoder.decode(encoded.slice(0, headBytes));
+  const tail =
+    tailBytes > 0
+      ? decoder.decode(encoded.slice(encoded.byteLength - tailBytes))
+      : "";
+  const notice = `\n\n[…tool output truncated from ${encoded.byteLength} bytes to ${maxBytes}; ask a narrower question to see more…]\n\n`;
+
+  return tail ? `${head}${notice}${tail}` : `${head}${notice}`;
+}
+
+/**
+ * Walks the shape returned by MCP/AI-SDK tool executors and truncates any
+ * over-sized text payload in place. Handles:
+ *   - plain strings
+ *   - { content: Array<{ type, text?, ... }>, isError? }
+ * Other shapes pass through untouched.
+ */
+export function capToolResultBytes(result: unknown, maxBytes: number): unknown {
+  if (maxBytes <= 0) return result;
+
+  if (typeof result === "string") {
+    return truncateTextToByteCap(result, maxBytes);
+  }
+
+  if (result && typeof result === "object" && "content" in result) {
+    const r = result as {
+      content?: unknown;
+      isError?: boolean;
+      [k: string]: unknown;
+    };
+    if (Array.isArray(r.content)) {
+      const cappedContent = r.content.map((chunk) => {
+        if (
+          chunk &&
+          typeof chunk === "object" &&
+          (chunk as { type?: unknown }).type === "text" &&
+          typeof (chunk as { text?: unknown }).text === "string"
+        ) {
+          return {
+            ...(chunk as Record<string, unknown>),
+            text: truncateTextToByteCap(
+              (chunk as { text: string }).text,
+              maxBytes,
+            ),
+          };
+        }
+        return chunk;
+      });
+      return { ...r, content: cappedContent };
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Wraps tools so that oversized results are truncated before they reach the
+ * conversation history. Tools whose result fits under the cap pass through
+ * untouched. Composes cleanly before or after wrapToolsWithApproval.
+ */
+export function wrapToolsWithByteCap(
+  tools: ToolSet,
+  maxBytes: number | undefined,
+): ToolSet {
+  if (!maxBytes || maxBytes <= 0) {
+    return tools;
+  }
+
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, tool]) => {
+      const originalExecute = tool.execute;
+      if (!originalExecute) {
+        return [name, tool];
+      }
+
+      return [
+        name,
+        {
+          ...tool,
+          execute: async (args: unknown, options?: ToolCallOptions) => {
+            const result = await originalExecute(
+              args,
+              options as Parameters<typeof originalExecute>[1],
+            );
+            return capToolResultBytes(result, maxBytes);
+          },
+        },
+      ];
+    }),
+  ) as ToolSet;
+}
+
+/**
  * Wraps tools with approval logic based on the approval config.
  */
 export function wrapToolsWithApproval(
