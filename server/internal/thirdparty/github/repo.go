@@ -105,12 +105,7 @@ func (c *Client) PushFiles(ctx context.Context, installationID int64, owner, rep
 		return "", fmt.Errorf("get ref: %w", err)
 	}
 
-	commitTreeSHA, err := c.getCommitTree(ctx, installationID, owner, repo, headSHA)
-	if err != nil {
-		return "", fmt.Errorf("get commit tree: %w", err)
-	}
-
-	treeSHA, err := c.createTree(ctx, installationID, owner, repo, commitTreeSHA, files)
+	treeSHA, err := c.createTree(ctx, installationID, owner, repo, files)
 	if err != nil {
 		return "", fmt.Errorf("create tree: %w", err)
 	}
@@ -150,30 +145,7 @@ func (c *Client) getRef(ctx context.Context, installationID int64, owner, repo, 
 	return result.Object.SHA, nil
 }
 
-func (c *Client) getCommitTree(ctx context.Context, installationID int64, owner, repo, commitSHA string) (string, error) {
-	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "commits", commitSHA)
-	resp, err := c.doAPI(ctx, installationID, http.MethodGet, url, nil)
-	if err != nil {
-		return "", err
-	}
-	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status %d: %s", resp.StatusCode, truncatedBody(resp))
-	}
-
-	var result struct {
-		Tree struct {
-			SHA string `json:"sha"`
-		} `json:"tree"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode commit: %w", err)
-	}
-	return result.Tree.SHA, nil
-}
-
-func (c *Client) createTree(ctx context.Context, installationID int64, owner, repo, baseTreeSHA string, files map[string][]byte) (string, error) {
+func (c *Client) createTree(ctx context.Context, installationID int64, owner, repo string, files map[string][]byte) (string, error) {
 	treeEntries := make([]map[string]string, 0, len(files))
 	for path, content := range files {
 		mode := "100644"
@@ -188,9 +160,10 @@ func (c *Client) createTree(ctx context.Context, installationID int64, owner, re
 		})
 	}
 
+	// Omit base_tree to build a clean tree from scratch. This ensures
+	// deleted plugins are removed rather than orphaned in the repo.
 	payload := map[string]any{
-		"base_tree": baseTreeSHA,
-		"tree":      treeEntries,
+		"tree": treeEntries,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

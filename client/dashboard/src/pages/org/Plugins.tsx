@@ -328,7 +328,7 @@ export default function Plugins() {
               </Dialog.Description>
               <Dialog.Description>
                 At least one user in your organization will need to be given
-                access to connect the generated repository with Claude/Cusor.
+                access to connect the generated repository with Claude/Cursor.
               </Dialog.Description>
             </Dialog.Header>
             <form

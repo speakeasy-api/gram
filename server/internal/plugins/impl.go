@@ -714,7 +714,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeUnexpected, err, "generate plugin packages").Log(ctx, s.logger)
 	}
 
-	repoName := ac.OrganizationSlug + "-plugins"
+	repoName := ac.OrganizationSlug + "-" + *ac.ProjectSlug + "-plugins"
 
 	if err := s.github.Client.CreateRepo(ctx, s.github.InstallationID, s.github.Org, repoName, true); err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "create github repo").Log(ctx, s.logger)
