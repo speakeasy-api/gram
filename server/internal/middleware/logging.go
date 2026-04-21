@@ -49,7 +49,7 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
-			requestID := r.Header.Get("X-Request-ID")
+			requestID := conv.TruncateString(r.Header.Get("X-Request-ID"), 64)
 
 			spanCtx := trace.SpanContextFromContext(ctx)
 			if spanCtx.HasTraceID() {
