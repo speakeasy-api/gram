@@ -17,7 +17,7 @@ export default function OrgHome() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Title>Home</Page.Header.Title>
+        <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
         <RequireScope

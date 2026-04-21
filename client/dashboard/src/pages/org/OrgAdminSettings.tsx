@@ -165,7 +165,7 @@ export default function OrgAdminSettings() {
     return (
       <Page>
         <Page.Header>
-          <Page.Header.Title>Super Admin</Page.Header.Title>
+          <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
           <Type muted>You do not have access to this page.</Type>
@@ -177,7 +177,7 @@ export default function OrgAdminSettings() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Title>Super Admin</Page.Header.Title>
+        <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
         <OrgAdminSettingsInner />
