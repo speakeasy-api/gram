@@ -56,6 +56,86 @@ type Asset struct {
 	Deleted       bool
 }
 
+type Assistant struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Name           string
+	Model          string
+	Instructions   string
+	WarmTtlSeconds int64
+	MaxConcurrency int64
+	Status         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type AssistantRuntime struct {
+	ID                  uuid.UUID
+	AssistantThreadID   uuid.UUID
+	AssistantID         uuid.UUID
+	ProjectID           uuid.UUID
+	Backend             string
+	State               string
+	WarmUntil           pgtype.Timestamptz
+	LeaseOwner          pgtype.Text
+	LastHeartbeatAt     pgtype.Timestamptz
+	BackendMetadataJson []byte
+	EndedAt             pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	Ended               bool
+}
+
+type AssistantThread struct {
+	ID            uuid.UUID
+	AssistantID   uuid.UUID
+	ProjectID     uuid.UUID
+	CorrelationID string
+	ChatID        uuid.UUID
+	SourceKind    string
+	SourceRefJson []byte
+	LastEventAt   pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
+}
+
+type AssistantThreadEvent struct {
+	ID                    uuid.UUID
+	AssistantThreadID     uuid.UUID
+	AssistantID           uuid.UUID
+	ProjectID             uuid.UUID
+	TriggerInstanceID     uuid.NullUUID
+	EventID               string
+	CorrelationID         string
+	Status                string
+	NormalizedPayloadJson []byte
+	SourcePayloadJson     []byte
+	Attempts              int64
+	LastError             pgtype.Text
+	ProcessedAt           pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
+type AssistantToolset struct {
+	ID            uuid.UUID
+	AssistantID   uuid.UUID
+	ToolsetID     uuid.UUID
+	EnvironmentID uuid.NullUUID
+	ProjectID     uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
 type AuditLog struct {
 	ID                 uuid.UUID
 	Seq                int64
