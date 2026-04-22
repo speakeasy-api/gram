@@ -737,7 +737,8 @@ export function ToolList({
 
   useEffect(() => {
     setExpandedGroups(new Set(groups.map((_, i) => i)));
-  }, [groups]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset expanded state when group count changes, not when tools within groups change
+  }, [groups.length]);
 
   // For normal mode (remove tools from toolset)
   const [selectedForRemoval, setSelectedForRemoval] = useState<Set<string>>(
