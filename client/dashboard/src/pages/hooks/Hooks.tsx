@@ -1879,14 +1879,18 @@ function ServerUsageTimeSeries({
   from,
   to,
   serverNameMappings,
-  expanded = false,
+  expandedChart,
+  onExpand,
 }: {
   timeSeries: HooksTimeSeriesPoint[];
   from: Date;
   to: Date;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
-  expanded?: boolean;
+  expandedChart: string | null;
+  onExpand: (id: string | null) => void;
 }) {
+  const chartId = "server-usage";
+  const expanded = expandedChart === chartId;
   const timeRangeMs = to.getTime() - from.getTime();
   const { labels, tooltipLabels, datasets } = useMemo(
     () =>
@@ -1903,12 +1907,20 @@ function ServerUsageTimeSeries({
     [timeSeries, timeRangeMs, serverNameMappings.rawToDisplay],
   );
   return (
-    <MultiLineChart
-      labels={labels}
-      tooltipLabels={tooltipLabels}
-      datasets={datasets}
-      height={expanded ? 500 : 200}
-    />
+    <ChartCard
+      title="Server Usage"
+      chartId={chartId}
+      expandedChart={expandedChart}
+      onExpand={onExpand}
+      hasData={labels.length > 0}
+    >
+      <MultiLineChart
+        labels={labels}
+        tooltipLabels={tooltipLabels}
+        datasets={datasets}
+        height={expanded ? 500 : 200}
+      />
+    </ChartCard>
   );
 }
 
@@ -1916,13 +1928,17 @@ function UserUsageTimeSeries({
   timeSeries,
   from,
   to,
-  expanded = false,
+  expandedChart,
+  onExpand,
 }: {
   timeSeries: HooksTimeSeriesPoint[];
   from: Date;
   to: Date;
-  expanded?: boolean;
+  expandedChart: string | null;
+  onExpand: (id: string | null) => void;
 }) {
+  const chartId = "user-usage";
+  const expanded = expandedChart === chartId;
   const timeRangeMs = to.getTime() - from.getTime();
   const { labels, tooltipLabels, datasets } = useMemo(
     () =>
@@ -1930,12 +1946,20 @@ function UserUsageTimeSeries({
     [timeSeries, timeRangeMs],
   );
   return (
-    <MultiLineChart
-      labels={labels}
-      tooltipLabels={tooltipLabels}
-      datasets={datasets}
-      height={expanded ? 500 : 200}
-    />
+    <ChartCard
+      title="User Usage"
+      chartId={chartId}
+      expandedChart={expandedChart}
+      onExpand={onExpand}
+      hasData={labels.length > 0}
+    >
+      <MultiLineChart
+        labels={labels}
+        tooltipLabels={tooltipLabels}
+        datasets={datasets}
+        height={expanded ? 500 : 200}
+      />
+    </ChartCard>
   );
 }
 
@@ -2223,20 +2247,14 @@ function HooksAnalytics({
           )}
         >
           {timeSeries.length > 0 && (
-            <ChartCard
-              title="Server Usage"
-              chartId="server-usage"
+            <ServerUsageTimeSeries
+              timeSeries={timeSeries}
+              from={from}
+              to={to}
+              serverNameMappings={serverNameMappings}
               expandedChart={expandedChart}
               onExpand={setExpandedChart}
-            >
-              <ServerUsageTimeSeries
-                timeSeries={timeSeries}
-                from={from}
-                to={to}
-                serverNameMappings={serverNameMappings}
-                expanded={expandedChart === "server-usage"}
-              />
-            </ChartCard>
+            />
           )}
           {hasServers && (
             <UsersPerServerChart
@@ -2253,19 +2271,13 @@ function HooksAnalytics({
           )}
 
           {timeSeries.length > 0 && (
-            <ChartCard
-              title="User Usage"
-              chartId="user-usage"
+            <UserUsageTimeSeries
+              timeSeries={timeSeries}
+              from={from}
+              to={to}
               expandedChart={expandedChart}
               onExpand={setExpandedChart}
-            >
-              <UserUsageTimeSeries
-                timeSeries={timeSeries}
-                from={from}
-                to={to}
-                expanded={expandedChart === "user-usage"}
-              />
-            </ChartCard>
+            />
           )}
           {hasServers && (
             <UserEventCountsChart
