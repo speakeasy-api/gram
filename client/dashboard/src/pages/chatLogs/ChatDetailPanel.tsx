@@ -180,7 +180,8 @@ function MessageItem({
   collapseNonRisk?: boolean;
 }) {
   const hasRisk = riskResults && riskResults.length > 0;
-  const isCollapsed = collapseNonRisk && !hasRisk;
+  const [expanded, setExpanded] = useState(false);
+  const isCollapsed = collapseNonRisk && !hasRisk && !expanded;
 
   const parsedToolCalls: ToolCall[] | null = useMemo(() => {
     if (!message.toolCalls) return null;
@@ -207,13 +208,18 @@ function MessageItem({
         : "";
 
     return (
-      <div className="text-muted-foreground flex items-center gap-2 py-1 text-xs">
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="text-muted-foreground hover:bg-muted/50 flex w-full items-center gap-2 rounded px-1 py-1 text-xs transition-colors"
+      >
+        <Icon name="chevron-right" className="size-3 shrink-0" />
         <span className="capitalize">{label}</span>
         {message.createdAt && (
           <span>{format(new Date(message.createdAt), "HH:mm:ss")}</span>
         )}
         {preview && <span className="truncate opacity-60">{preview}...</span>}
-      </div>
+      </button>
     );
   }
 
