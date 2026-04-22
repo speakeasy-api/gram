@@ -1268,8 +1268,9 @@ var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
 	Attribute("total_sessions", Int64, "Total number of unique sessions")
 	Attribute("breakdown", ArrayOf(HooksBreakdownRowType), "Cross-dimensional pivot: (user, server, source, tool) x counts")
 	Attribute("time_series", ArrayOf(HooksTimeSeriesPointType), "Time-bucketed event counts by server and user")
+	Attribute("skill_time_series", ArrayOf(SkillTimeSeriesPointType), "Time-bucketed event counts by skill")
 
-	Required("servers", "users", "skills", "total_events", "total_sessions", "breakdown", "time_series")
+	Required("servers", "users", "skills", "total_events", "total_sessions", "breakdown", "time_series", "skill_time_series")
 })
 
 var HooksBreakdownRowType = Type("HooksBreakdownRow", func() {
@@ -1295,6 +1296,16 @@ var HooksTimeSeriesPointType = Type("HooksTimeSeriesPoint", func() {
 	Attribute("failure_count", Int64, "Number of failed hook events in this bucket")
 
 	Required("bucket_start_ns", "server_name", "user_email", "event_count", "failure_count")
+})
+
+var SkillTimeSeriesPointType = Type("SkillTimeSeriesPoint", func() {
+	Description("A single time-series bucket for skill usage activity")
+
+	Attribute("bucket_start_ns", String, "Bucket start time in Unix nanoseconds (string for JS int64 precision)")
+	Attribute("skill_name", String, "Skill name")
+	Attribute("event_count", Int64, "Number of skill use events in this bucket")
+
+	Required("bucket_start_ns", "skill_name", "event_count")
 })
 
 var SkillSummaryType = Type("SkillSummary", func() {
