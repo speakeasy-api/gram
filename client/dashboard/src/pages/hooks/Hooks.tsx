@@ -1987,7 +1987,7 @@ function ServerUsageTimeSeries({
         labels={labels}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
-        height={expanded ? 500 : 200}
+        height={expanded ? 600 : 260}
       />
     </ChartCard>
   );
@@ -2026,7 +2026,7 @@ function UserUsageTimeSeries({
         labels={labels}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
-        height={expanded ? 500 : 200}
+        height={expanded ? 600 : 260}
       />
     </ChartCard>
   );
@@ -2135,7 +2135,7 @@ function ErrorsOverTimeChart({
           labels={labels}
           tooltipLabels={tooltipLabels}
           datasets={datasets}
-          height={expanded ? 500 : 200}
+          height={expanded ? 600 : 260}
           tooltipAfterBody={(idx) => {
             const servers = perServerByIndex[idx];
             if (!servers || servers.length === 0) return [];
