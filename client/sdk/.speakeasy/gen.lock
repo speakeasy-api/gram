@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: b44ea8fbf05f84d05496056a01f6e919
+  docChecksum: a8c10ce42194134a716a6cd603d02d5d
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
-  releaseVersion: 0.32.71
-  configChecksum: 4ea3860fab36d709176c499bac53999b
+  releaseVersion: 0.32.70
+  configChecksum: cfc96886f6a717b254973c2177af2b21
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -178,7 +178,7 @@ trackedFiles:
   docs/models/components/createslackappresult.md:
     last_write_checksum: sha1:d00f027a09bfb53e3493126343f20cf5899765f2
   docs/models/components/createtoolsetrequestbody.md:
-    last_write_checksum: sha1:6413aeb4482c72ada977215ba9599509551de263
+    last_write_checksum: sha1:b158b0aa9edef6e0ab2fed323753c3a472a7dad5
   docs/models/components/createtriggerinstanceform.md:
     last_write_checksum: sha1:22d7903f7e2c251da7993588bfe16cfb92471346
   docs/models/components/createtriggerinstanceformstatus.md:
@@ -226,7 +226,7 @@ trackedFiles:
   docs/models/components/externalmcpremote.md:
     last_write_checksum: sha1:b0f27d78c3a4213bf0b487ca3eed7d0a5d235015
   docs/models/components/externalmcpserver.md:
-    last_write_checksum: sha1:7badca5b01b5c041de3b1e4223c6537af86ab518
+    last_write_checksum: sha1:2c24221b11f3c9ac7d273ef35ff2791e6ed88b87
   docs/models/components/externalmcptool.md:
     last_write_checksum: sha1:719b8eb5236a84fd95fcc4c72d4f4eeaa77c065d
   docs/models/components/externalmcptooldefinition.md:
@@ -688,17 +688,19 @@ trackedFiles:
   docs/models/components/toolcallsummary.md:
     last_write_checksum: sha1:cdf37acd4c46e9be93f4131a7f13a64ed4c50a32
   docs/models/components/toolentry.md:
-    last_write_checksum: sha1:244949176ee868bfc5ff546f0ca163103acbd04c
+    last_write_checksum: sha1:6e30e93e231fc9a01cfbfcd1be2356d7f1d000ab
   docs/models/components/toolentrytype.md:
     last_write_checksum: sha1:0c8b16c0060fb589e98937032b9b288afdb82440
   docs/models/components/toolmetric.md:
     last_write_checksum: sha1:bcb67ef196ad7c4ef453f5bb187dd420decb9d48
   docs/models/components/toolset.md:
-    last_write_checksum: sha1:65457526dec00ecb3317d6cb3bde1a89fbc218da
+    last_write_checksum: sha1:5725e86544ddb46c678d5db4d98f8e205ca26c3a
   docs/models/components/toolsetentry.md:
-    last_write_checksum: sha1:410975ea82b8782b4afc6548cfa05267ca9a30be
+    last_write_checksum: sha1:5a00688fe13621349ae44f35054e8264d913553a
   docs/models/components/toolsetenvironmentlink.md:
     last_write_checksum: sha1:48dc95f4a9a0777d3dffc3b13d2b1e8aed31ab5b
+  docs/models/components/toolsetorigin.md:
+    last_write_checksum: sha1:92eb8de286573b7ea9040f179c1a7c3ccbcdb9d8
   docs/models/components/toolusage.md:
     last_write_checksum: sha1:8e7c7baf87404355b4ba6b0cc6ae83b688cfa009
   docs/models/components/toolvariation.md:
@@ -2063,11 +2065,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:76e2b8480d63e1381d825072b39b2c78d6ee4484
+    last_write_checksum: sha1:5b9b3f426aaea6e15d71349dc50720f6da865f0d
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:2e6362fb286e9e3d2cabf63694a606abfc588adc
+    last_write_checksum: sha1:161943275f93ea1941e7ef23c85fb4a92fa4df21
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2667,7 +2669,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:deda690181f44ab7b3e8e44dde59240cf3d6c7c2
+    last_write_checksum: sha1:1b20eb39ff36369a4863a577ddf7c3d62b333f99
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2883,7 +2885,7 @@ trackedFiles:
     last_write_checksum: sha1:d460739d1b550566abe9431334331869459be357
   src/models/components/createtoolsetrequestbody.ts:
     id: ebd90f49d668
-    last_write_checksum: sha1:45237a8f0f74e9ebcba334548fc3c9e649835618
+    last_write_checksum: sha1:5f7afa13e507ca58bcc3eabf5863d2a6a56f9df1
     pristine_git_object: 65537d15a113721717594d87976f1d5ab6a7a2da
   src/models/components/createtriggerinstanceform.ts:
     last_write_checksum: sha1:542f18a62640b3a1ede8959c0321096b8c6697dd
@@ -2957,7 +2959,7 @@ trackedFiles:
     last_write_checksum: sha1:4d97b661fee50acb5578cb59c9be41eeb8b93a10
   src/models/components/externalmcpserver.ts:
     id: 17ea92ac12e8
-    last_write_checksum: sha1:4df936194fc57bc05d14d3d329c7747f03f198db
+    last_write_checksum: sha1:5d022a71305e904032b391cfa4b76b3011024b2e
     pristine_git_object: 2a5d08551bb3547337d6d0b692ee56f0f830e5e7
   src/models/components/externalmcptool.ts:
     last_write_checksum: sha1:55574649b1ec65964750666d902ac9bd87c5e989
@@ -3073,7 +3075,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:de9ebfd53f02700fcb9f9aeddb6feeec60fe570c
+    last_write_checksum: sha1:34b789c948fca79067d506ffc056828572ea537f
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3525,22 +3527,24 @@ trackedFiles:
     pristine_git_object: 228edbe83abf771d6a654e54a6212ddcce12c88b
   src/models/components/toolentry.ts:
     id: 82f49d8e8ee1
-    last_write_checksum: sha1:10a5647b5ca76b072c26288ba88dadbda5588bf1
+    last_write_checksum: sha1:e4c0cd3fce56465e819eec12d839ad85a77eba7e
     pristine_git_object: dbe7be3a944b5e248c5807473d505c3476ba7e52
   src/models/components/toolmetric.ts:
     last_write_checksum: sha1:ca1d07131744d819aab5576b42801d6764c38528
   src/models/components/toolset.ts:
     id: dba8195a7f5f
-    last_write_checksum: sha1:49322890098524835c88cf654a26d9189d343e73
+    last_write_checksum: sha1:95c6a0b3cc03740e6b3811feeba5a24dfcf379b7
     pristine_git_object: 3b4743bbb66a98251cb9a6b87bef530dc0aabbb5
   src/models/components/toolsetentry.ts:
     id: ee0bfdcf358d
-    last_write_checksum: sha1:9cbe804961f3916f555843c570e99cb657c6ae4d
+    last_write_checksum: sha1:5eba79fcdfb5e48bed46992aee6f78f47138f636
     pristine_git_object: 5a56e0f4123c406a0be19a8a7fcaf409d84ff3d4
   src/models/components/toolsetenvironmentlink.ts:
     id: 312be9e6e8b7
     last_write_checksum: sha1:3ea9d6b7ed8a3e716d1f4ec1d923d7036d94f9c0
     pristine_git_object: 66ad8899e8dc3dc340de1b5aac637f902001893e
+  src/models/components/toolsetorigin.ts:
+    last_write_checksum: sha1:66796e5f480fe7770279ff4b34c9e0c7022fa7ee
   src/models/components/toolusage.ts:
     last_write_checksum: sha1:afa11676e6aca32a23cae82bbc3472152265112c
   src/models/components/toolvariation.ts:

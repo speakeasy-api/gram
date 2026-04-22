@@ -269,6 +269,13 @@ export interface ElementsConfig {
   tools?: ToolsConfig;
 
   /**
+   * Configuration for automatic conversation compaction when the estimated
+   * input size approaches the model's context window. Defaults are safe for
+   * all models; override per-page to tighten or disable.
+   */
+  contextCompaction?: ContextCompactionConfig;
+
+  /**
    * Configuration for chat history and thread persistence.
    * When enabled, conversations are saved and the thread list is shown.
    *
@@ -690,6 +697,54 @@ export interface ToolsConfig {
    * }
    */
   toolsToInclude?: ToolsFilter;
+
+  /**
+   * Maximum UTF-8 byte size for any single tool call's result. Results larger
+   * than this are truncated with a head+tail preserving strategy and a notice
+   * suffix before being added to the conversation. Prevents one greedy tool
+   * call (e.g. a wide log search) from filling the model's context window.
+   *
+   * Omit or set to 0 to disable.
+   *
+   * @example
+   * tools: {
+   *   maxOutputBytes: 50_000, // ~12.5K tokens per tool call
+   * }
+   */
+  maxOutputBytes?: number;
+}
+
+/**
+ * Configuration for automatic compaction of older conversation turns when the
+ * estimated input size approaches the model's context window. Prevents
+ * upstream 400 "prompt too long" errors without losing the system prompt or
+ * the most recent turns.
+ */
+export interface ContextCompactionConfig {
+  /**
+   * Hard ceiling (in tokens) for the outbound request. Overrides the built-in
+   * per-model map. Use this when you know your upstream provider enforces a
+   * smaller limit than the model's nominal maximum.
+   */
+  maxTokens?: number;
+
+  /**
+   * Fraction of the model ceiling at which compaction kicks in. Defaults to
+   * 0.7 — leaves room for the assistant's response and some slack for the
+   * chars/4 token heuristic's error.
+   */
+  compactAtFraction?: number;
+
+  /**
+   * Number of most-recent messages preserved verbatim during compaction.
+   * Defaults to 4 (covers the current turn + its immediate predecessor).
+   */
+  keepRecent?: number;
+
+  /**
+   * Disable compaction entirely. Useful in tests and for opting out per-page.
+   */
+  disabled?: boolean;
 }
 
 export interface WelcomeConfig {

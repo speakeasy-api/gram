@@ -57,6 +57,10 @@ export type ExternalMCPServer = {
    */
   tools?: Array<ExternalMCPTool> | undefined;
   /**
+   * ID of the attached toolset when this server is listed from a Collection
+   */
+  toolsetId?: string | undefined;
+  /**
    * Semantic version of the server
    */
   version: string;
@@ -77,6 +81,7 @@ export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
     remotes: z.optional(z.array(ExternalMCPRemote$inboundSchema)),
     title: z.optional(z.string()),
     tools: z.optional(z.array(ExternalMCPTool$inboundSchema)),
+    toolset_id: z.optional(z.string()),
     version: z.string(),
   }),
   z.transform((v) => {
@@ -86,6 +91,7 @@ export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
         "organizationMcpCollectionRegistryId",
       "registry_id": "registryId",
       "registry_specifier": "registrySpecifier",
+      "toolset_id": "toolsetId",
     });
   }),
 );
