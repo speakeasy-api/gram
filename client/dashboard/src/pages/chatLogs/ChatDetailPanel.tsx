@@ -567,10 +567,13 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
           </Badge>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80">
+      <PopoverContent
+        align="start"
+        className="max-h-[70vh] w-80 overflow-y-auto"
+      >
         <div className="space-y-3">
           <div className="text-sm font-semibold">Risk Findings</div>
-          <div className="divide-border max-h-60 divide-y overflow-y-auto">
+          <div className="divide-border divide-y">
             {results.map((r) => (
               <div key={r.id} className="py-2 first:pt-0 last:pb-0">
                 <div className="flex items-center gap-2">
