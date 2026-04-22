@@ -22935,8 +22935,8 @@ components:
                     enum:
                         - org:read
                         - org:admin
-                        - build:read
-                        - build:write
+                        - project:read
+                        - project:write
                         - mcp:read
                         - mcp:write
                         - mcp:connect
@@ -22947,8 +22947,8 @@ components:
                         enum:
                             - org:read
                             - org:admin
-                            - build:read
-                            - build:write
+                            - project:read
+                            - project:write
                             - mcp:read
                             - mcp:write
                             - mcp:connect
@@ -25135,8 +25135,8 @@ components:
                     enum:
                         - org:read
                         - org:admin
-                        - build:read
-                        - build:write
+                        - project:read
+                        - project:write
                         - mcp:read
                         - mcp:write
                         - mcp:connect
@@ -25161,8 +25161,8 @@ components:
                     enum:
                         - org:read
                         - org:admin
-                        - build:read
-                        - build:write
+                        - project:read
+                        - project:write
                         - mcp:read
                         - mcp:write
                         - mcp:connect

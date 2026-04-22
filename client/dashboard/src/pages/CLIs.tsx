@@ -11,7 +11,7 @@ export default function CLIs() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope="build:read" level="page">
+        <RequireScope scope="project:read" level="page">
           <Page.Section>
             <Page.Section.Title>Skills</Page.Section.Title>
             <Page.Section.Description>

@@ -37,7 +37,7 @@ func TestManagerRequire_requiresAuthContext(t *testing.T) {
 
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
-	err := manager.Require(t.Context(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := manager.Require(t.Context(), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
@@ -48,7 +48,7 @@ func TestManagerRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
 
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache)
 
-	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	require.NoError(t, err)
 }
 
@@ -58,7 +58,7 @@ func TestManagerRequire_mapsDeniedToForbidden(t *testing.T) {
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), nil)
 
-	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := manager.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -69,7 +69,7 @@ func TestManagerRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
-	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
@@ -81,7 +81,7 @@ func TestManagerRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{err: errors.New("boom")}, workos.NewStubClient(), cache.NoopCache)
 
-	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
@@ -129,9 +129,9 @@ func TestManagerFilter_returnsAllowedSubset(t *testing.T) {
 	t.Parallel()
 
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Resource: "proj_123"}})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeProjectRead, Resource: "proj_123"}})
 
-	resourceIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
+	resourceIDs, err := manager.Filter(ctx, ScopeProjectRead, []string{"proj_123", "proj_456"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj_123"}, resourceIDs)
 }
@@ -140,9 +140,9 @@ func TestManagerRequire_rejectsInvalidCheck(t *testing.T) {
 	t.Parallel()
 
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Resource: WildcardResource}})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeProjectRead, Resource: WildcardResource}})
 
-	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: ""})
+	err := manager.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: ""})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
@@ -153,7 +153,7 @@ func TestManagerRequire_requiresChecks(t *testing.T) {
 	t.Parallel()
 
 	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Resource: WildcardResource}})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeProjectRead, Resource: WildcardResource}})
 
 	err := manager.Require(ctx)
 	var oopsErr *oops.ShareableError
@@ -183,7 +183,7 @@ func TestManagerRequire_skipsForAPIKeyAuth(t *testing.T) {
 		APIKeyScopes:          nil,
 	})
 
-	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := manager.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	require.NoError(t, err)
 }
 
@@ -208,7 +208,7 @@ func TestManagerFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 		APIKeyScopes:          nil,
 	})
 
-	resourceIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
+	resourceIDs, err := manager.Filter(ctx, ScopeProjectRead, []string{"proj_123", "proj_456"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
 }
@@ -318,7 +318,7 @@ func scopeOverrideCtx(t *testing.T, isAdmin bool, accountType string) context.Co
 		APIKeyScopes:          nil,
 		IsAdmin:               isAdmin,
 	})
-	return contextvalues.SetRBACScopeOverride(ctx, "build:read")
+	return contextvalues.SetRBACScopeOverride(ctx, "project:read")
 }
 
 // TestCanUseOverride_devPlusAdmin verifies that an admin in a dev environment

@@ -202,7 +202,7 @@ function MCPServerFilter({
 
 export default function LogsPage() {
   return (
-    <RequireScope scope="build:read" level="page">
+    <RequireScope scope="project:read" level="page">
       <LogsContent />
     </RequireScope>
   );

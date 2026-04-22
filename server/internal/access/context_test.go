@@ -22,14 +22,14 @@ func TestLoadIntoContext_LoadsUserGrants(t *testing.T) {
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeBuildRead, WildcardResource)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeProjectRead, WildcardResource)
 
 	ctx, err := manager.PrepareContext(ctx)
 	require.NoError(t, err)
 
 	_, ok = GrantsFromContext(ctx)
 	require.True(t, ok)
-	require.NoError(t, manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}))
+	require.NoError(t, manager.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}))
 }
 
 func TestLoadIntoContext_SkipsNonSessionAuth(t *testing.T) {
@@ -62,7 +62,7 @@ func TestLoadIntoContext_SkipsNonEnterpriseOrgs(t *testing.T) {
 	authCtx.AccountType = "pro"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeBuildRead, WildcardResource)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeProjectRead, WildcardResource)
 
 	ctx, err := manager.PrepareContext(ctx)
 	require.NoError(t, err)

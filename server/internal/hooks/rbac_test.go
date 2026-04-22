@@ -38,7 +38,7 @@ func TestHooks_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeProjectRead, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.List(ctx, &gen.ListPayload{
 		ApikeyToken:      nil,
@@ -57,7 +57,7 @@ func TestHooks_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeProjectWrite, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.List(ctx, &gen.ListPayload{
 		ApikeyToken:      nil,
@@ -71,7 +71,7 @@ func TestHooks_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildRead, Resource: uuid.NewString()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeProjectRead, Resource: uuid.NewString()})
 
 	_, err := ti.service.List(ctx, &gen.ListPayload{
 		ApikeyToken:      nil,
@@ -110,7 +110,7 @@ func TestHooks_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeProjectRead, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.Upsert(ctx, &gen.UpsertPayload{
 		ApikeyToken:      nil,
@@ -133,7 +133,7 @@ func TestHooks_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeProjectWrite, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.Upsert(ctx, &gen.UpsertPayload{
 		ApikeyToken:      nil,

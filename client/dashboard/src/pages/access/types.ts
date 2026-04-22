@@ -1,12 +1,6 @@
-/** The system-defined scopes. Flat — no implied hierarchy. */
-export type Scope =
-  | "org:read"
-  | "org:admin"
-  | "build:read"
-  | "build:write"
-  | "mcp:read"
-  | "mcp:write"
-  | "mcp:connect";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
+
+export { Scope };
 
 /** What kind of resource a scope protects. */
 export type ResourceType = "org" | "project" | "mcp";

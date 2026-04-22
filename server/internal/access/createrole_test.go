@@ -66,7 +66,7 @@ func TestService_CreateRole(t *testing.T) {
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1", "project-2"}},
+			{Scope: string(ScopeProjectRead), Resources: []string{"project-1", "project-2"}},
 			{Scope: string(ScopeMCPConnect), Resources: nil},
 		},
 		MemberIds: []string{"user_1", "user_2"},
@@ -98,7 +98,7 @@ func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(ScopeProjectRead), Resources: []string{"project-1"}},
 		},
 	})
 	require.Error(t, err)
@@ -124,7 +124,7 @@ func TestService_CreateRole_ContinuesAfterConflictWhenRoleAlreadyExists(t *testi
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(ScopeProjectRead), Resources: []string{"project-1"}},
 		},
 	})
 	require.NoError(t, err)
@@ -145,7 +145,7 @@ func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {
 		Name:        "!!!",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(ScopeProjectRead), Resources: []string{"project-1"}},
 		},
 	})
 	require.Error(t, err)
@@ -176,7 +176,7 @@ func TestService_CreateRole_AuditLog(t *testing.T) {
 		Name:        "Audit Builder",
 		Description: "Tracks audit writes",
 		Grants: []*gen.RoleGrant{{
-			Scope:     string(ScopeBuildRead),
+			Scope:     string(ScopeProjectRead),
 			Resources: []string{"project-1"},
 		}},
 	})
@@ -228,7 +228,7 @@ func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
 		Name:        "Broken Builder",
 		Description: "Will fail grant sync",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(ScopeProjectRead), Resources: []string{"project-1"}},
 		},
 		MemberIds: []string{"user_1", "user_2"},
 	})

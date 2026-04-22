@@ -37,8 +37,8 @@ func TestService_ListRoles(t *testing.T) {
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_3", "user3@test.com", "User 3", "user_3", "membership_3")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "admin"), ScopeOrgAdmin, WildcardResource)
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeBuildRead, "project-1")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeBuildRead, "project-2")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeProjectRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeProjectRead, "project-2")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeMCPConnect, WildcardResource)
 
 	result, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
@@ -73,6 +73,6 @@ func TestService_ListRoles(t *testing.T) {
 	for _, grant := range customRole.Grants {
 		grantsByScope[grant.Scope] = grant
 	}
-	require.ElementsMatch(t, []string{"project-1", "project-2"}, grantsByScope[string(ScopeBuildRead)].Resources)
+	require.ElementsMatch(t, []string{"project-1", "project-2"}, grantsByScope[string(ScopeProjectRead)].Resources)
 	require.Nil(t, grantsByScope[string(ScopeMCPConnect)].Resources)
 }

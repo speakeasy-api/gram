@@ -14,8 +14,8 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export const Scope = {
   OrgRead: "org:read",
   OrgAdmin: "org:admin",
-  BuildRead: "build:read",
-  BuildWrite: "build:write",
+  ProjectRead: "project:read",
+  ProjectWrite: "project:write",
   McpRead: "mcp:read",
   McpWrite: "mcp:write",
   McpConnect: "mcp:connect",

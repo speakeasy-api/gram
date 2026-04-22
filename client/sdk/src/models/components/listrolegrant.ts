@@ -15,8 +15,8 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export const ListRoleGrantScope = {
   OrgRead: "org:read",
   OrgAdmin: "org:admin",
-  BuildRead: "build:read",
-  BuildWrite: "build:write",
+  ProjectRead: "project:read",
+  ProjectWrite: "project:write",
   McpRead: "mcp:read",
   McpWrite: "mcp:write",
   McpConnect: "mcp:connect",
@@ -29,8 +29,8 @@ export type ListRoleGrantScope = ClosedEnum<typeof ListRoleGrantScope>;
 export const SubScopes = {
   OrgRead: "org:read",
   OrgAdmin: "org:admin",
-  BuildRead: "build:read",
-  BuildWrite: "build:write",
+  ProjectRead: "project:read",
+  ProjectWrite: "project:write",
   McpRead: "mcp:read",
   McpWrite: "mcp:write",
   McpConnect: "mcp:connect",
