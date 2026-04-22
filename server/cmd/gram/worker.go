@@ -463,10 +463,7 @@ func newWorkerCommand() *cli.Command {
 				30*time.Second,
 				logger,
 			)
-			shutdownFuncs = append(shutdownFuncs, func(_ context.Context) error {
-				riskSignaler.Shutdown()
-				return nil
-			})
+			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
 			captureStrategy.AddObserver(risk.NewObserver(logger, db, riskSignaler))
 
 			completionsClient := openrouter.NewUnifiedClient(

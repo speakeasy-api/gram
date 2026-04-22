@@ -772,10 +772,7 @@ func newStartCommand() *cli.Command {
 				30*time.Second,
 				logger,
 			)
-			shutdownFuncs = append(shutdownFuncs, func(_ context.Context) error {
-				riskSignaler.Shutdown()
-				return nil
-			})
+			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
 			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, accessManager, riskSignaler)
 			captureStrategy.AddObserver(riskService)
 			risk.Attach(mux, riskService)

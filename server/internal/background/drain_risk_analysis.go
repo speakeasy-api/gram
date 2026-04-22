@@ -259,7 +259,8 @@ func (t *ThrottledSignaler) SignalNewMessages(ctx context.Context, params DrainR
 
 // Shutdown flushes any pending throttled signals. Call during graceful shutdown
 // to prevent losing trailing signals when a pod restarts.
-func (t *ThrottledSignaler) Shutdown() {
+func (t *ThrottledSignaler) Shutdown(_ context.Context) error {
 	t.logger.InfoContext(context.Background(), "flushing pending risk analysis signals")
 	t.throttle.Flush()
+	return nil
 }
