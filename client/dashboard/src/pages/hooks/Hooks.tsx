@@ -1944,13 +1944,15 @@ function ErrorsOverTimeChart({
   from,
   to,
   serverNameMappings,
-  expanded = false,
+  expandedChart,
+  onExpand,
 }: {
   timeSeries: HooksTimeSeriesPoint[];
   from: Date;
   to: Date;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
-  expanded?: boolean;
+  expandedChart: string | null;
+  onExpand: (id: string | null) => void;
 }) {
   const timeRangeMs = to.getTime() - from.getTime();
   const { labels, tooltipLabels, datasets, hasErrors, perServerByIndex } =
@@ -2020,26 +2022,35 @@ function ErrorsOverTimeChart({
       };
     }, [timeSeries, timeRangeMs, serverNameMappings.rawToDisplay]);
 
-  if (!hasErrors) {
-    return (
-      <div className="text-muted-foreground flex h-[200px] items-center justify-center text-sm">
-        No errors in this period
-      </div>
-    );
-  }
+  const chartId = "errors-over-time";
+  const expanded = expandedChart === chartId;
 
   return (
-    <MultiLineChart
-      labels={labels}
-      tooltipLabels={tooltipLabels}
-      datasets={datasets}
-      height={expanded ? 500 : 200}
-      tooltipAfterBody={(idx) => {
-        const servers = perServerByIndex[idx];
-        if (!servers || servers.length === 0) return [];
-        return servers.map((s) => `${s.name}: ${s.count}`);
-      }}
-    />
+    <ChartCard
+      title="Errors Over Time"
+      chartId={chartId}
+      expandedChart={expandedChart}
+      onExpand={onExpand}
+      hasData={hasErrors}
+    >
+      {!hasErrors ? (
+        <div className="text-muted-foreground flex h-[200px] items-center justify-center text-sm">
+          No errors in this period
+        </div>
+      ) : (
+        <MultiLineChart
+          labels={labels}
+          tooltipLabels={tooltipLabels}
+          datasets={datasets}
+          height={expanded ? 500 : 200}
+          tooltipAfterBody={(idx) => {
+            const servers = perServerByIndex[idx];
+            if (!servers || servers.length === 0) return [];
+            return servers.map((s) => `${s.name}: ${s.count}`);
+          }}
+        />
+      )}
+    </ChartCard>
   );
 }
 
@@ -2267,20 +2278,14 @@ function HooksAnalytics({
           )}
 
           {timeSeries.length > 0 && (
-            <ChartCard
-              title="Errors Over Time"
-              chartId="errors-over-time"
+            <ErrorsOverTimeChart
+              timeSeries={timeSeries}
+              from={from}
+              to={to}
+              serverNameMappings={serverNameMappings}
               expandedChart={expandedChart}
               onExpand={setExpandedChart}
-            >
-              <ErrorsOverTimeChart
-                timeSeries={timeSeries}
-                from={from}
-                to={to}
-                serverNameMappings={serverNameMappings}
-                expanded={expandedChart === "errors-over-time"}
-              />
-            </ChartCard>
+            />
           )}
           {hasServers && (
             <ServerErrorRateChart
