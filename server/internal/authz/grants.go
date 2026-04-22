@@ -159,13 +159,13 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
-		sel, err := selectorFromRow(row.Selectors, row.Resource)
+		selectors, err := selectorFromRow(row.Selectors, row.Resource)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").Log(ctx, logger)
 		}
 		grantRows = append(grantRows, Grant{
 			Scope:    Scope(row.Scope),
-			Selector: sel,
+			Selector: selectors,
 		})
 	}
 

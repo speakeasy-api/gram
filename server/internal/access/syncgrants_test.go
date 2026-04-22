@@ -48,9 +48,9 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 
 	got := make([]string, 0, len(rows))
 	for _, row := range rows {
-		sel, err := selectorFromRow(row.Selectors, row.Resource)
+		selectors, err := selectorFromRow(row.Selectors, row.Resource)
 		require.NoError(t, err)
-		got = append(got, row.Scope+"|"+sel.ResourceID())
+		got = append(got, row.Scope+"|"+selectors.ResourceID())
 	}
 	require.ElementsMatch(t, []string{
 		string(authz.ScopeProjectRead) + "|" + authz.WildcardResource,
