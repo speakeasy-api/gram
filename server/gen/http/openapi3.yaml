@@ -13284,114 +13284,6 @@ paths:
             x-speakeasy-name-override: byChat
             x-speakeasy-react-hook:
                 name: RiskListResultsByChat
-    /rpc/risk.results.byUser:
-        get:
-            description: List risk results grouped by user for the current project.
-            operationId: listRiskResultsByUser
-            parameters:
-                - allowEmptyValue: true
-                  description: Maximum number of users to return.
-                  in: query
-                  name: limit
-                  schema:
-                    default: 10
-                    description: Maximum number of users to return.
-                    format: int64
-                    type: integer
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListRiskResultsByUserResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: listRiskResultsByUser risk
-            tags:
-                - risk
-            x-speakeasy-group: risk.results
-            x-speakeasy-name-override: byUser
-            x-speakeasy-react-hook:
-                name: RiskListResultsByUser
     /rpc/risk.results.list:
         get:
             description: List risk analysis results for the current project.
@@ -23067,16 +22959,6 @@ components:
                     description: Risk results grouped by chat.
             required:
                 - chats
-        ListRiskResultsByUserResult:
-            type: object
-            properties:
-                users:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/RiskUserSummary'
-                    description: Risk results grouped by user.
-            required:
-                - users
         ListRiskResultsResult:
             type: object
             properties:
@@ -25259,28 +25141,6 @@ components:
                 - chat_message_id
                 - source
                 - created_at
-        RiskUserSummary:
-            type: object
-            properties:
-                chats_count:
-                    type: integer
-                    description: Number of chats with findings for this user.
-                    format: int64
-                findings_count:
-                    type: integer
-                    description: Number of findings for this user.
-                    format: int64
-                latest_detected:
-                    type: string
-                    description: When the most recent finding was detected.
-                    format: date-time
-                user_id:
-                    type: string
-                    description: The user identifier.
-            required:
-                - findings_count
-                - chats_count
-                - latest_detected
         Role:
             type: object
             properties:

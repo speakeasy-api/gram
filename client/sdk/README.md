@@ -344,7 +344,6 @@ run();
 ### [Risk.Results](docs/sdks/results/README.md)
 
 * [byChat](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
-* [byUser](docs/sdks/results/README.md#byuser) - listRiskResultsByUser risk
 * [list](docs/sdks/results/README.md#list) - listRiskResults risk
 
 ### [Slack](docs/sdks/slack/README.md)
@@ -578,7 +577,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskPoliciesTrigger`](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
 - [`riskPoliciesUpdate`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
 - [`riskResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
-- [`riskResultsByUser`](docs/sdks/results/README.md#byuser) - listRiskResultsByUser risk
 - [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`slackConfigureSlackApp`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
 - [`slackCreateSlackApp`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
@@ -799,7 +797,6 @@ To learn about this feature and how to get started, check
 - [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk
 - [`useRiskListResults`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`useRiskListResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
-- [`useRiskListResultsByUser`](docs/sdks/results/README.md#byuser) - listRiskResultsByUser risk
 - [`useRiskPoliciesDeleteMutation`](docs/sdks/policies/README.md#delete) - deleteRiskPolicy risk
 - [`useRiskPoliciesGet`](docs/sdks/policies/README.md#get) - getRiskPolicy risk
 - [`useRiskPoliciesStatus`](docs/sdks/policies/README.md#status) - getRiskPolicyStatus risk

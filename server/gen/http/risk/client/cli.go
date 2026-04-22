@@ -326,48 +326,6 @@ func BuildListRiskResultsByChatPayload(riskListRiskResultsByChatLimit string, ri
 	return v, nil
 }
 
-// BuildListRiskResultsByUserPayload builds the payload for the risk
-// listRiskResultsByUser endpoint from CLI flags.
-func BuildListRiskResultsByUserPayload(riskListRiskResultsByUserLimit string, riskListRiskResultsByUserApikeyToken string, riskListRiskResultsByUserSessionToken string, riskListRiskResultsByUserProjectSlugInput string) (*risk.ListRiskResultsByUserPayload, error) {
-	var err error
-	var limit int
-	{
-		if riskListRiskResultsByUserLimit != "" {
-			var v int64
-			v, err = strconv.ParseInt(riskListRiskResultsByUserLimit, 10, strconv.IntSize)
-			limit = int(v)
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for limit, must be INT")
-			}
-		}
-	}
-	var apikeyToken *string
-	{
-		if riskListRiskResultsByUserApikeyToken != "" {
-			apikeyToken = &riskListRiskResultsByUserApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if riskListRiskResultsByUserSessionToken != "" {
-			sessionToken = &riskListRiskResultsByUserSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if riskListRiskResultsByUserProjectSlugInput != "" {
-			projectSlugInput = &riskListRiskResultsByUserProjectSlugInput
-		}
-	}
-	v := &risk.ListRiskResultsByUserPayload{}
-	v.Limit = limit
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
 // BuildGetRiskPolicyStatusPayload builds the payload for the risk
 // getRiskPolicyStatus endpoint from CLI flags.
 func BuildGetRiskPolicyStatusPayload(riskGetRiskPolicyStatusID string, riskGetRiskPolicyStatusApikeyToken string, riskGetRiskPolicyStatusSessionToken string, riskGetRiskPolicyStatusProjectSlugInput string) (*risk.GetRiskPolicyStatusPayload, error) {

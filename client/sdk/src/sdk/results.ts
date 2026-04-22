@@ -3,7 +3,6 @@
  */
 
 import { riskResultsByChat } from "../funcs/riskResultsByChat.js";
-import { riskResultsByUser } from "../funcs/riskResultsByUser.js";
 import { riskResultsList } from "../funcs/riskResultsList.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -23,25 +22,6 @@ export class Results extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListRiskResultsByChatResult> {
     return unwrapAsync(riskResultsByChat(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * listRiskResultsByUser risk
-   *
-   * @remarks
-   * List risk results grouped by user for the current project.
-   */
-  async byUser(
-    request?: operations.ListRiskResultsByUserRequest | undefined,
-    security?: operations.ListRiskResultsByUserSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ListRiskResultsByUserResult> {
-    return unwrapAsync(riskResultsByUser(
       this,
       request,
       security,

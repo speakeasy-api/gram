@@ -83,7 +83,7 @@ func UsageCommands() []string {
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|delete-server)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|list-risk-results-by-user|get-risk-policy-status|trigger-risk-analysis)",
+		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|get-risk-policy-status|trigger-risk-analysis)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -883,12 +883,6 @@ func ParseEndpoint(
 		riskListRiskResultsByChatSessionTokenFlag     = riskListRiskResultsByChatFlags.String("session-token", "", "")
 		riskListRiskResultsByChatProjectSlugInputFlag = riskListRiskResultsByChatFlags.String("project-slug-input", "", "")
 
-		riskListRiskResultsByUserFlags                = flag.NewFlagSet("list-risk-results-by-user", flag.ExitOnError)
-		riskListRiskResultsByUserLimitFlag            = riskListRiskResultsByUserFlags.String("limit", "10", "")
-		riskListRiskResultsByUserApikeyTokenFlag      = riskListRiskResultsByUserFlags.String("apikey-token", "", "")
-		riskListRiskResultsByUserSessionTokenFlag     = riskListRiskResultsByUserFlags.String("session-token", "", "")
-		riskListRiskResultsByUserProjectSlugInputFlag = riskListRiskResultsByUserFlags.String("project-slug-input", "", "")
-
 		riskGetRiskPolicyStatusFlags                = flag.NewFlagSet("get-risk-policy-status", flag.ExitOnError)
 		riskGetRiskPolicyStatusIDFlag               = riskGetRiskPolicyStatusFlags.String("id", "REQUIRED", "")
 		riskGetRiskPolicyStatusApikeyTokenFlag      = riskGetRiskPolicyStatusFlags.String("apikey-token", "", "")
@@ -1405,7 +1399,6 @@ func ParseEndpoint(
 	riskDeleteRiskPolicyFlags.Usage = riskDeleteRiskPolicyUsage
 	riskListRiskResultsFlags.Usage = riskListRiskResultsUsage
 	riskListRiskResultsByChatFlags.Usage = riskListRiskResultsByChatUsage
-	riskListRiskResultsByUserFlags.Usage = riskListRiskResultsByUserUsage
 	riskGetRiskPolicyStatusFlags.Usage = riskGetRiskPolicyStatusUsage
 	riskTriggerRiskAnalysisFlags.Usage = riskTriggerRiskAnalysisUsage
 
@@ -2092,9 +2085,6 @@ func ParseEndpoint(
 
 			case "list-risk-results-by-chat":
 				epf = riskListRiskResultsByChatFlags
-
-			case "list-risk-results-by-user":
-				epf = riskListRiskResultsByUserFlags
 
 			case "get-risk-policy-status":
 				epf = riskGetRiskPolicyStatusFlags
@@ -2844,9 +2834,6 @@ func ParseEndpoint(
 			case "list-risk-results-by-chat":
 				endpoint = c.ListRiskResultsByChat()
 				data, err = riskc.BuildListRiskResultsByChatPayload(*riskListRiskResultsByChatLimitFlag, *riskListRiskResultsByChatApikeyTokenFlag, *riskListRiskResultsByChatSessionTokenFlag, *riskListRiskResultsByChatProjectSlugInputFlag)
-			case "list-risk-results-by-user":
-				endpoint = c.ListRiskResultsByUser()
-				data, err = riskc.BuildListRiskResultsByUserPayload(*riskListRiskResultsByUserLimitFlag, *riskListRiskResultsByUserApikeyTokenFlag, *riskListRiskResultsByUserSessionTokenFlag, *riskListRiskResultsByUserProjectSlugInputFlag)
 			case "get-risk-policy-status":
 				endpoint = c.GetRiskPolicyStatus()
 				data, err = riskc.BuildGetRiskPolicyStatusPayload(*riskGetRiskPolicyStatusIDFlag, *riskGetRiskPolicyStatusApikeyTokenFlag, *riskGetRiskPolicyStatusSessionTokenFlag, *riskGetRiskPolicyStatusProjectSlugInputFlag)
@@ -6335,7 +6322,6 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    delete-risk-policy: Delete a risk analysis policy.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-by-chat: List risk results grouped by chat session for the current project.`)
-	fmt.Fprintln(os.Stderr, `    list-risk-results-by-user: List risk results grouped by user for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy-status: Get the analysis status of a risk policy including progress and workflow state.`)
 	fmt.Fprintln(os.Stderr, `    trigger-risk-analysis: Manually trigger risk analysis for a policy, starting or signaling the drain workflow.`)
 	fmt.Fprintln(os.Stderr)
@@ -6510,30 +6496,6 @@ func riskListRiskResultsByChatUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results-by-chat --limit 1 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func riskListRiskResultsByUserUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-results-by-user", os.Args[0])
-	fmt.Fprint(os.Stderr, " -limit INT")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List risk results grouped by user for the current project.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -limit INT: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results-by-user --limit 1 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskGetRiskPolicyStatusUsage() {

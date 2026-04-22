@@ -31,8 +31,6 @@ type Service interface {
 	ListRiskResults(context.Context, *ListRiskResultsPayload) (res *ListRiskResultsResult, err error)
 	// List risk results grouped by chat session for the current project.
 	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
-	// List risk results grouped by user for the current project.
-	ListRiskResultsByUser(context.Context, *ListRiskResultsByUserPayload) (res *ListRiskResultsByUserResult, err error)
 	// Get the analysis status of a risk policy including progress and workflow
 	// state.
 	GetRiskPolicyStatus(context.Context, *GetRiskPolicyStatusPayload) (res *types.RiskPolicyStatus, err error)
@@ -61,7 +59,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "listRiskResultsByUser", "getRiskPolicyStatus", "triggerRiskAnalysis"}
+var MethodNames = [9]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskPolicyStatus", "triggerRiskAnalysis"}
 
 // CreateRiskPolicyPayload is the payload type of the risk service
 // createRiskPolicy method.
@@ -137,23 +135,6 @@ type ListRiskResultsByChatPayload struct {
 type ListRiskResultsByChatResult struct {
 	// Risk results grouped by chat.
 	Chats []*types.RiskChatSummary
-}
-
-// ListRiskResultsByUserPayload is the payload type of the risk service
-// listRiskResultsByUser method.
-type ListRiskResultsByUserPayload struct {
-	ApikeyToken      *string
-	SessionToken     *string
-	ProjectSlugInput *string
-	// Maximum number of users to return.
-	Limit int
-}
-
-// ListRiskResultsByUserResult is the result type of the risk service
-// listRiskResultsByUser method.
-type ListRiskResultsByUserResult struct {
-	// Risk results grouped by user.
-	Users []*types.RiskUserSummary
 }
 
 // ListRiskResultsPayload is the payload type of the risk service
