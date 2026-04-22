@@ -41,7 +41,7 @@ func TestServePublic_RBAC_PrivateMCP_DeniedWithUnrelatedGrant(t *testing.T) {
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-unrelated-"+uuid.NewString()[:8])
 
 	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeMCPConnect, Selector: access.ForResource(uuid.NewString())})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeMCPConnect, uuid.NewString()))
 
 	err := authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
 	var oopsErr *oops.ShareableError
@@ -56,7 +56,7 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithWriteGrant(t *testing.T) {
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-write-implies-connect-"+uuid.NewString()[:8])
 
 	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeMCPWrite, Selector: access.ForResource(toolset.ID.String())})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeMCPWrite, toolset.ID.String()))
 
 	err := authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithConnectGrant(t *testing.T) {
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-allowed-"+uuid.NewString()[:8])
 
 	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeMCPConnect, Selector: access.ForResource(toolset.ID.String())})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeMCPConnect, toolset.ID.String()))
 
 	err := authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
 	require.NoError(t, err)

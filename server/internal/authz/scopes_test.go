@@ -34,70 +34,70 @@ func TestCheckExpand_mcpConnect(t *testing.T) {
 func TestGrantsHasAccess_orgAdminSatisfiesOrgRead(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{{Scope: ScopeOrgAdmin, Selector: ForResource("org_123")}}
+	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
 	require.True(t, grantsSatisfy(g, Check{Scope: ScopeOrgRead, ResourceID: "org_123"}.expand()))
 }
 
 func TestGrantsHasAccess_orgReadDoesNotSatisfyOrgAdmin(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{{Scope: ScopeOrgRead, Selector: ForResource("org_123")}}
+	g := []Grant{NewGrant(ScopeOrgRead, "org_123")}
 	require.False(t, grantsSatisfy(g, Check{Scope: ScopeOrgAdmin, ResourceID: "org_123"}.expand()))
 }
 
 func TestGrantsHasAccess_buildWriteSatisfiesBuildRead(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{{Scope: ScopeBuildWrite, Selector: ForResource("proj_123")}}
+	g := []Grant{NewGrant(ScopeBuildWrite, "proj_123")}
 	require.True(t, grantsSatisfy(g, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"}.expand()))
 }
 
 func TestGrantsHasAccess_buildReadDoesNotSatisfyBuildWrite(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{{Scope: ScopeBuildRead, Selector: ForResource("proj_123")}}
+	g := []Grant{NewGrant(ScopeBuildRead, "proj_123")}
 	require.False(t, grantsSatisfy(g, Check{Scope: ScopeBuildWrite, ResourceID: "proj_123"}.expand()))
 }
 
 func TestGrantsHasAccess_orgAdminDoesNotSatisfyBuildRead(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{{Scope: ScopeOrgAdmin, Selector: ForResource("org_123")}}
+	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
 	require.False(t, grantsSatisfy(g, Check{Scope: ScopeBuildRead, ResourceID: "org_123"}.expand()))
 }
 
 func TestGrantsHasAccess_mcpConnectDoesNotSatisfyMCPRead(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{{Scope: ScopeMCPConnect, Selector: ForResource("tool_a")}}
+	g := []Grant{NewGrant(ScopeMCPConnect, "tool_a")}
 	require.False(t, grantsSatisfy(g, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.expand()))
 }
 
 func TestGrantsHasAccess_mcpReadSatisfiesMCPConnect(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{{Scope: ScopeMCPRead, Selector: ForResource("tool_a")}}
+	g := []Grant{NewGrant(ScopeMCPRead, "tool_a")}
 	require.True(t, grantsSatisfy(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand()))
 }
 
 func TestGrantsHasAccess_mcpWriteSatisfiesMCPConnect(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{{Scope: ScopeMCPWrite, Selector: ForResource("tool_a")}}
+	g := []Grant{NewGrant(ScopeMCPWrite, "tool_a")}
 	require.True(t, grantsSatisfy(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand()))
 }
 
 func TestGrantsHasAccess_mcpWriteSatisfiesMCPRead(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{{Scope: ScopeMCPWrite, Selector: ForResource("tool_a")}}
+	g := []Grant{NewGrant(ScopeMCPWrite, "tool_a")}
 	require.True(t, grantsSatisfy(g, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.expand()))
 }
 
 func TestGrantsHasAccess_rootWildcardSatisfiesAnyScope(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{{Scope: ScopeRoot, Selector: ForResource(WildcardResource)}}
+	g := []Grant{NewGrant(ScopeRoot, WildcardResource)}
 	require.True(t, grantsSatisfy(g, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"}.expand()))
 	require.True(t, grantsSatisfy(g, Check{Scope: ScopeOrgAdmin, ResourceID: "org_456"}.expand()))
 	require.True(t, grantsSatisfy(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand()))
@@ -106,7 +106,7 @@ func TestGrantsHasAccess_rootWildcardSatisfiesAnyScope(t *testing.T) {
 func TestGrantsHasAccess_wrongResourceNotSatisfied(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{{Scope: ScopeOrgAdmin, Selector: ForResource("org_123")}}
+	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
 	require.False(t, grantsSatisfy(g, Check{Scope: ScopeOrgRead, ResourceID: "org_999"}.expand()))
 }
 

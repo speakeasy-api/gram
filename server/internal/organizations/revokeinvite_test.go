@@ -104,7 +104,7 @@ func TestService_RevokeInvite_AllowsOrgAdminGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource(authCtx.ActiveOrganizationID)})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	ti.orgs.On("GetInvitation", mock.Anything, "test-invitation-id").Return(&thirdpartyworkos.Invitation{
 		ID:             "test-invitation-id",
@@ -137,7 +137,7 @@ func TestService_RevokeInvite_ForbiddenWithGrantForDifferentOrganization(t *test
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource("org_other")})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, "org_other"))
 
 	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{InvitationID: "any-invitation-id"})
 	var oopsErr *oops.ShareableError

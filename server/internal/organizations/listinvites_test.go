@@ -87,7 +87,7 @@ func TestService_ListInvites_AllowsOrgReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgRead, Selector: access.ForResource(authCtx.ActiveOrganizationID)})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgRead, authCtx.ActiveOrganizationID))
 
 	ti.orgs.On("ListInvitations", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Invitation{}, nil).Once()
 
@@ -104,7 +104,7 @@ func TestService_ListInvites_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) 
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource(authCtx.ActiveOrganizationID)})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	ti.orgs.On("ListInvitations", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Invitation{}, nil).Once()
 
@@ -130,7 +130,7 @@ func TestService_ListInvites_ForbiddenWithGrantForDifferentOrganization(t *testi
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource("org_other")})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, "org_other"))
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
 	var oopsErr *oops.ShareableError

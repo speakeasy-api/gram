@@ -81,9 +81,9 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	ctx = withAccessGrants(t, ctx, conn,
-		access.Grant{Scope: access.ScopeBuildRead, Selector: access.ForResource(authCtx.ProjectID.String())},
-		access.Grant{Scope: access.ScopeBuildWrite, Selector: access.ForResource(authCtx.ProjectID.String())},
-		access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource(authCtx.ActiveOrganizationID)},
+		access.NewGrant(access.ScopeBuildRead, authCtx.ProjectID.String()),
+		access.NewGrant(access.ScopeBuildWrite, authCtx.ProjectID.String()),
+		access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
 	)
 
 	// Create test asset storage for testing
@@ -138,7 +138,7 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope authz.Scope, resource string) {
 	t.Helper()
 
-	selectors, err := access.ForResource(resource).MarshalJSON()
+	selectors, err := access.NewSelector(scope, resource).MarshalJSON()
 	require.NoError(t, err)
 
 	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{

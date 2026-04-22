@@ -86,8 +86,8 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	ctx = withAccessGrants(t, ctx, conn,
-		access.Grant{Scope: access.ScopeOrgRead, Selector: access.ForResource(authCtx.ActiveOrganizationID)},
-		access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource(authCtx.ActiveOrganizationID)},
+		access.NewGrant(access.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
 	)
 
 	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), "https://app.getgram.ai")

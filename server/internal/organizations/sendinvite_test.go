@@ -112,7 +112,7 @@ func TestService_SendInvite_AllowsOrgAdminGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource(authCtx.ActiveOrganizationID)})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	expiresAt := time.Now().UTC().Add(7 * 24 * time.Hour).Format(time.RFC3339)
 	createdAt := time.Now().UTC().Format(time.RFC3339)
@@ -149,7 +149,7 @@ func TestService_SendInvite_ForbiddenWithGrantForDifferentOrganization(t *testin
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource("org_other")})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, "org_other"))
 
 	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "x@example.com"})
 	var oopsErr *oops.ShareableError

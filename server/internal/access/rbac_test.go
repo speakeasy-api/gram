@@ -32,7 +32,7 @@ func TestService_ListRoles_AllowsOrgReadGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgRead, Selector: ForResource(testAccessAuthContext(t, ctx).ActiveOrganizationID)})
+	ctx = withRBACGrants(t, ctx, NewGrant(ScopeOrgRead, testAccessAuthContext(t, ctx).ActiveOrganizationID))
 
 	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockSystemRole("role_admin", "Admin", "admin"),
@@ -63,7 +63,7 @@ func TestService_GetRole_AllowsOrgReadGrant(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgRead, Selector: ForResource(authCtx.ActiveOrganizationID)})
+	ctx = withRBACGrants(t, ctx, NewGrant(ScopeOrgRead, authCtx.ActiveOrganizationID))
 
 	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockRole("role_custom", "Custom Builder", "custom-builder", "Can build selected resources"),
@@ -94,7 +94,7 @@ func TestService_ListScopes_AllowsOrgReadGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgRead, Selector: ForResource(testAccessAuthContext(t, ctx).ActiveOrganizationID)})
+	ctx = withRBACGrants(t, ctx, NewGrant(ScopeOrgRead, testAccessAuthContext(t, ctx).ActiveOrganizationID))
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.NoError(t, err)
@@ -118,7 +118,7 @@ func TestService_ListMembers_AllowsOrgReadGrant(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgRead, Selector: ForResource(authCtx.ActiveOrganizationID)})
+	ctx = withRBACGrants(t, ctx, NewGrant(ScopeOrgRead, authCtx.ActiveOrganizationID))
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 
@@ -153,7 +153,7 @@ func TestService_CreateRole_AllowsOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgAdmin, Selector: ForResource(testAccessAuthContext(t, ctx).ActiveOrganizationID)})
+	ctx = withRBACGrants(t, ctx, NewGrant(ScopeOrgAdmin, testAccessAuthContext(t, ctx).ActiveOrganizationID))
 
 	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
 		Name:        "Allowed",
@@ -190,7 +190,7 @@ func TestService_UpdateRole_AllowsOrgAdminGrant(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgAdmin, Selector: ForResource(authCtx.ActiveOrganizationID)})
+	ctx = withRBACGrants(t, ctx, NewGrant(ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 	name := "Updated"
 
 	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
@@ -229,7 +229,7 @@ func TestService_DeleteRole_AllowsOrgAdminGrant(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgAdmin, Selector: ForResource(authCtx.ActiveOrganizationID)})
+	ctx = withRBACGrants(t, ctx, NewGrant(ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
@@ -258,7 +258,7 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgAdmin, Selector: ForResource(authCtx.ActiveOrganizationID)})
+	ctx = withRBACGrants(t, ctx, NewGrant(ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockRole("role_builder", "Builder", "custom-builder", ""),

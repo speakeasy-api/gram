@@ -107,7 +107,7 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 		}
 
 		if grant.Resources == nil {
-			selectors, err := ForResource(WildcardResource).MarshalJSON()
+			selectors, err := NewSelector(Scope(grant.Scope), WildcardResource).MarshalJSON()
 			if err != nil {
 				return fmt.Errorf("marshal wildcard selector for %q: %w", grant.Scope, err)
 			}
@@ -125,7 +125,7 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 		}
 
 		for _, resource := range grant.Resources {
-			selectors, err := ForResource(resource).MarshalJSON()
+			selectors, err := NewSelector(Scope(grant.Scope), resource).MarshalJSON()
 			if err != nil {
 				return fmt.Errorf("marshal selector for resource %q: %w", resource, err)
 			}
@@ -159,7 +159,7 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
-		selectors, err := selectorFromRow(row.Selectors, row.Resource)
+		selectors, err := selectorFromRow(row.Selectors, Scope(row.Scope), row.Resource)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").Log(ctx, logger)
 		}

@@ -57,20 +57,6 @@ func TestSelector_Matches_nilGrantMatchesAnything(t *testing.T) {
 	require.True(t, grant.Matches(Selector{"resource_id": "proj_123"}))
 }
 
-func TestForResource_wildcard(t *testing.T) {
-	t.Parallel()
-
-	s := ForResource("*")
-	require.Equal(t, Selector{"resource_id": "*"}, s)
-}
-
-func TestForResource_specific(t *testing.T) {
-	t.Parallel()
-
-	s := ForResource("proj_123")
-	require.Equal(t, Selector{"resource_id": "proj_123"}, s)
-}
-
 func TestSelector_ResourceID_present(t *testing.T) {
 	t.Parallel()
 
@@ -96,7 +82,7 @@ func TestSelector_MarshalJSON_nil(t *testing.T) {
 	var s Selector
 	b, err := json.Marshal(s)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"resource_id":"*"}`, string(b))
+	require.JSONEq(t, `{"resource_kind":"*","resource_id":"*"}`, string(b))
 }
 
 func TestSelector_MarshalJSON_withKeys(t *testing.T) {
@@ -116,4 +102,77 @@ func TestSelector_UnmarshalJSON(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "proj_123", s["resource_id"])
 	require.Equal(t, "t1", s["tool_id"])
+}
+
+func TestResourceKindForScope_buildScopes(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "project", ResourceKindForScope(ScopeBuildRead))
+	require.Equal(t, "project", ResourceKindForScope(ScopeBuildWrite))
+}
+
+func TestResourceKindForScope_mcpScopes(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPRead))
+	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPWrite))
+	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPConnect))
+}
+
+func TestResourceKindForScope_remoteMCPScopes(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "mcp", ResourceKindForScope(ScopeRemoteMCPRead))
+	require.Equal(t, "mcp", ResourceKindForScope(ScopeRemoteMCPWrite))
+	require.Equal(t, "mcp", ResourceKindForScope(ScopeRemoteMCPConnect))
+}
+
+func TestResourceKindForScope_orgScopes(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "org", ResourceKindForScope(ScopeOrgRead))
+	require.Equal(t, "org", ResourceKindForScope(ScopeOrgAdmin))
+}
+
+func TestResourceKindForScope_rootScope(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "*", ResourceKindForScope(ScopeRoot))
+}
+
+func TestNewSelector_includesResourceKind(t *testing.T) {
+	t.Parallel()
+
+	s := NewSelector(ScopeBuildRead, "proj_123")
+	require.Equal(t, Selector{"resource_kind": "project", "resource_id": "proj_123"}, s)
+}
+
+func TestNewSelector_wildcardResource(t *testing.T) {
+	t.Parallel()
+
+	s := NewSelector(ScopeOrgAdmin, WildcardResource)
+	require.Equal(t, Selector{"resource_kind": "org", "resource_id": "*"}, s)
+}
+
+func TestNewGrant_combinesScopeAndSelector(t *testing.T) {
+	t.Parallel()
+
+	g := NewGrant(ScopeMCPConnect, "tool_a")
+	require.Equal(t, ScopeMCPConnect, g.Scope)
+	require.Equal(t, Selector{"resource_kind": "mcp", "resource_id": "tool_a"}, g.Selector)
+}
+
+func TestSelector_Matches_resourceKindMismatchFails(t *testing.T) {
+	t.Parallel()
+
+	grant := Selector{"resource_kind": "project", "resource_id": "proj_123"}
+	require.False(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "proj_123"}))
+}
+
+func TestSelector_Matches_resourceKindWildcardMatchesAny(t *testing.T) {
+	t.Parallel()
+
+	grant := Selector{"resource_kind": "*", "resource_id": "*"}
+	require.True(t, grant.Matches(Selector{"resource_kind": "project", "resource_id": "proj_123"}))
+	require.True(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "tool_a"}))
 }

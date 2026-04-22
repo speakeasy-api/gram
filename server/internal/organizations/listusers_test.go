@@ -62,7 +62,7 @@ func TestService_ListUsers_AllowsOrgReadGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgRead, Selector: access.ForResource(authCtx.ActiveOrganizationID)})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgRead, authCtx.ActiveOrganizationID))
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestService_ListUsers_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource(authCtx.ActiveOrganizationID)})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	require.NoError(t, err)
@@ -107,7 +107,7 @@ func TestService_ListUsers_ForbiddenWithGrantForDifferentOrganization(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource("org_other")})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, "org_other"))
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	var oopsErr *oops.ShareableError

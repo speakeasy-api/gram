@@ -7,8 +7,9 @@ type Check struct {
 }
 
 // selector converts the check into a Selector for matching against grants.
+// Derives resource_kind from the check's scope.
 func (c Check) selector() Selector {
-	return ForResource(c.ResourceID)
+	return NewSelector(c.Scope, c.ResourceID)
 }
 
 // expand returns all scope variants that would satisfy this check: the check's

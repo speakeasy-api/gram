@@ -37,7 +37,7 @@ func TestEnvironments_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildRead, Selector: access.ForResource(authCtx.ProjectID.String())})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeBuildRead, authCtx.ProjectID.String()))
 
 	_, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
@@ -55,7 +55,7 @@ func TestEnvironments_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildWrite, Selector: access.ForResource(authCtx.ProjectID.String())})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeBuildWrite, authCtx.ProjectID.String()))
 
 	_, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
@@ -68,7 +68,7 @@ func TestEnvironments_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestEnvironmentService(t)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildRead, Selector: access.ForResource(uuid.NewString())})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeBuildRead, uuid.NewString()))
 
 	_, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
@@ -107,7 +107,7 @@ func TestEnvironments_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildRead, Selector: access.ForResource(authCtx.ProjectID.String())})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeBuildRead, authCtx.ProjectID.String()))
 
 	_, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
 		SessionToken:     nil,
@@ -131,7 +131,7 @@ func TestEnvironments_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildWrite, Selector: access.ForResource(authCtx.ProjectID.String())})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeBuildWrite, authCtx.ProjectID.String()))
 
 	_, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
 		SessionToken:     nil,

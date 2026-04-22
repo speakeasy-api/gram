@@ -127,10 +127,7 @@ func TestCreateServer_RBACForbidden(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{
-		Scope:    access.ScopeRemoteMCPRead,
-		Selector: access.ForResource(authCtx.ProjectID.String()),
-	})
+	ctx = withExactAccessGrants(t, ctx, ti.conn, access.NewGrant(access.ScopeRemoteMCPRead, authCtx.ProjectID.String()))
 
 	payload := &gen.CreateServerPayload{
 		SessionToken:     nil,
