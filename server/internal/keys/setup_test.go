@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -78,7 +77,7 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 	ctx = withDefaultOrgAdminGrant(t, ctx, conn)
 
-	authzEngine := authz.NewEngine(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authz.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine)
 	keyAuth := auth.NewKeyAuth(conn, logger, billingClient)
 

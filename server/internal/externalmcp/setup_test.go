@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -72,7 +71,7 @@ func newTestExternalMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
-	authzEngine := authz.NewEngine(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authz.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, mcpRegistryClient, authzEngine, func(ctx context.Context, resourceID string) error {
 		return authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeBuildRead, ResourceID: resourceID})
 	})

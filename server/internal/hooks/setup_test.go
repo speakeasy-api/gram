@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -76,7 +75,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 
 	// Pass nil for telemetry logger, temporalEnv, productFeatures, and chatTitleGenerator in tests
-	authzEngine := authz.NewEngine(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authz.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, nil, authzEngine, nil, nil)
 
 	return ctx, &testInstance{

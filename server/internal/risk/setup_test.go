@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -88,7 +87,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 
 	sig := &signalerStub{}
 
-	authzEngine := authz.NewEngine(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authz.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig)
 

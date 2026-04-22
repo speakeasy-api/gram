@@ -9,7 +9,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
-	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -81,7 +80,7 @@ func newTestCustomDomainsService(t *testing.T) (context.Context, *serviceTestIns
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	temporal := &stubTemporalClient{}
-	authzEngine := authz.NewEngine(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authz.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	svc := customdomains.NewService(logger, tracerProvider, conn, sessionManager, temporal, authzEngine)
 
 	return ctx, &serviceTestInstance{service: svc, conn: conn, sessionManager: sessionManager, temporal: temporal, repo: cdrepo.New(conn)}

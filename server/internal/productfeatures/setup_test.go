@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -71,7 +70,7 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	authzEngine := authz.NewEngine(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authz.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, authzEngine, func(ctx context.Context, organizationID string) error {
 		return authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: organizationID})
 	}, func(ctx context.Context, organizationID string) error {

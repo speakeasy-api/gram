@@ -10,7 +10,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/rbactest"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -163,7 +162,7 @@ func TestService_RemoveUser_AllowsOrgAdminGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
 	ti.orgs.On("DeleteOrganizationMembership", mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -175,7 +174,7 @@ func TestService_RemoveUser_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = rbactest.WithExactAccessGrants(t, ctx)
+	ctx = authz.WithExactGrants(t, ctx)
 
 	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{UserID: "any-user-id"})
 	var oopsErr *oops.ShareableError
@@ -187,7 +186,7 @@ func TestService_RemoveUser_ForbiddenWithGrantForDifferentOrganization(t *testin
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: "org_other"})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: "org_other"})
 
 	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{UserID: "any-user-id"})
 	var oopsErr *oops.ShareableError

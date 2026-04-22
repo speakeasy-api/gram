@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
-	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -109,7 +108,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
 
-	authzEngine := authz.NewEngine(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authz.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	toolsSvc := tools.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine)

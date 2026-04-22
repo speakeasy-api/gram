@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -58,12 +57,6 @@ type testInstance struct {
 	sessionManager *sessions.Manager
 }
 
-type stubFeatureChecker struct{}
-
-func (s stubFeatureChecker) IsFeatureEnabled(_ context.Context, _ string, _ productfeatures.Feature) (bool, error) {
-	return true, nil
-}
-
 func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
@@ -96,7 +89,7 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, stubFeatureChecker{}, workos.NewStubClient(), cache.NoopCache), "https://app.getgram.ai")
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authz.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), "https://app.getgram.ai")
 
 	return ctx, &testInstance{
 		service:        svc,

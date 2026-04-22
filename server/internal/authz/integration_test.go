@@ -28,7 +28,7 @@ func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	engine := NewEngine(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	err = engine.Require(ctx,
 		Check{Scope: ScopeBuildRead, ResourceID: "proj:123"},
@@ -60,7 +60,7 @@ func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	engine := NewEngine(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	projectIDs, err := engine.Filter(ctx, ScopeBuildRead, []string{"proj:123", "proj:456"})
 	require.NoError(t, err)

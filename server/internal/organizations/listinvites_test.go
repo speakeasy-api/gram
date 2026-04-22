@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/rbactest"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/mock"
@@ -87,7 +86,7 @@ func TestService_ListInvites_AllowsOrgReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID})
 
 	ti.orgs.On("ListInvitations", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Invitation{}, nil).Once()
 
@@ -104,7 +103,7 @@ func TestService_ListInvites_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) 
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
 	ti.orgs.On("ListInvitations", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Invitation{}, nil).Once()
 
@@ -117,7 +116,7 @@ func TestService_ListInvites_ForbiddenWithoutOrgReadGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = rbactest.WithExactAccessGrants(t, ctx)
+	ctx = authz.WithExactGrants(t, ctx)
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
 	var oopsErr *oops.ShareableError
@@ -130,7 +129,7 @@ func TestService_ListInvites_ForbiddenWithGrantForDifferentOrganization(t *testi
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: "org_other"})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: "org_other"})
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
 	var oopsErr *oops.ShareableError

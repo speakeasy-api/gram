@@ -971,15 +971,6 @@ func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organ
 	}, nil
 }
 
-// roleGrantsFromListRoleGrants converts the ListRoleGrant type to the RoleGrant type.
-func roleGrantsFromListRoleGrants(grants []*gen.ListRoleGrant) []*gen.RoleGrant {
-	out := make([]*gen.RoleGrant, 0, len(grants))
-	for _, grant := range grants {
-		out = append(out, &gen.RoleGrant{Scope: grant.Scope, Resources: grant.Resources})
-	}
-	return out
-}
-
 func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 	scoped := authz.GrantsFromRows(grants)
 	out := make([]*gen.ListRoleGrant, 0, len(scoped))

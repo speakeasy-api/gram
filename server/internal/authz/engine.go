@@ -14,15 +14,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-type FeatureChecker interface {
-	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
-}
+type IsRBACEnabled func(ctx context.Context, organizationID string) (bool, error)
 
 // MembershipFetcher retrieves a WorkOS membership for a user+org pair.
 type MembershipFetcher interface {
@@ -58,13 +55,13 @@ func (r roleSlugCache) AdditionalCacheKeys() []string {
 type Engine struct {
 	logger     *slog.Logger
 	db         accessrepo.DBTX
-	features   FeatureChecker
+	isEnabled  IsRBACEnabled
 	isDev      bool
 	membership MembershipFetcher
 	roleCache  cache.TypedCacheObject[roleSlugCache]
 }
 
-func NewEngine(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker, membership MembershipFetcher, roleCache cache.Cache, opts ...EngineOpts) *Engine {
+func NewEngine(logger *slog.Logger, db accessrepo.DBTX, isEnabled IsRBACEnabled, membership MembershipFetcher, roleCache cache.Cache, opts ...EngineOpts) *Engine {
 	var devMode bool
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
@@ -73,7 +70,7 @@ func NewEngine(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker,
 	return &Engine{
 		logger:     logger.With(attr.SlogComponent("authz")),
 		db:         db,
-		features:   features,
+		isEnabled:  isEnabled,
 		isDev:      devMode,
 		membership: membership,
 		roleCache:  cache.NewTypedObjectCache[roleSlugCache](logger.With(attr.SlogCacheNamespace("authz-role-slug")), roleCache, cache.SuffixNone),
@@ -119,7 +116,7 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 
-	enabled, err := e.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	enabled, err := e.isEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		e.logger.WarnContext(ctx, "failed to check RBAC feature flag, skipping grant loading",
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
@@ -346,7 +343,7 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	enabled, err := e.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureRBAC)
+	enabled, err := e.isEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, e.logger)
 	}

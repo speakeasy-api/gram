@@ -8,7 +8,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/rbactest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -62,7 +61,7 @@ func TestService_ListUsers_AllowsOrgReadGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID})
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	require.NoError(t, err)
@@ -83,7 +82,7 @@ func TestService_ListUsers_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	require.NoError(t, err)
@@ -94,7 +93,7 @@ func TestService_ListUsers_ForbiddenWithoutOrgReadGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = rbactest.WithExactAccessGrants(t, ctx)
+	ctx = authz.WithExactGrants(t, ctx)
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	var oopsErr *oops.ShareableError
@@ -107,7 +106,7 @@ func TestService_ListUsers_ForbiddenWithGrantForDifferentOrganization(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: "org_other"})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: "org_other"})
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	var oopsErr *oops.ShareableError

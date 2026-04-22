@@ -135,7 +135,7 @@ func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
 
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, stubFeatureChecker{enabled: false}, ti.roles, nil)
+	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, authz.RBACAlwaysDisabled, ti.roles, nil)
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)

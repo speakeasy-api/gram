@@ -428,6 +428,7 @@ func newWorkerCommand() *cli.Command {
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 			sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
+			rbacEnabled := authz.IsRBACEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureRBAC))
 
 			// Create ClickHouse client and telemetry service for resolution events
 			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
@@ -440,7 +441,7 @@ func newWorkerCommand() *cli.Command {
 			authzEngine := authz.NewEngine(
 				logger,
 				db,
-				productFeatures,
+				rbacEnabled,
 				workos.NewStubClient(),
 				cache.NewRedisCacheAdapter(redisClient),
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},

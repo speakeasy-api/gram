@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -28,14 +27,6 @@ import (
 var (
 	infra *testenv.Environment
 )
-
-type stubFeatureChecker struct {
-	enabled bool
-}
-
-func (s stubFeatureChecker) IsFeatureEnabled(_ context.Context, _ string, _ productfeatures.Feature) (bool, error) {
-	return s.enabled, nil
-}
 
 type noopFeatureCacheWriter struct{}
 
@@ -94,41 +85,13 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	roles := newMockRoleProvider(t)
 
-	svc := NewService(logger, tracerProvider, conn, sessionManager, roles, authz.NewEngine(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache), noopFeatureCacheWriter{})
+	svc := NewService(logger, tracerProvider, conn, sessionManager, roles, authz.NewEngine(logger, conn, authz.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), noopFeatureCacheWriter{})
 
 	return ctx, &testInstance{
 		service: svc,
 		conn:    conn,
 		roles:   roles,
 	}
-}
-
-func enterpriseTestCtx(ctx context.Context) context.Context {
-	sessionID := "session_test"
-	return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-		ActiveOrganizationID:  "org_test",
-		UserID:                "user_test",
-		ExternalUserID:        "",
-		APIKeyID:              "",
-		SessionID:             &sessionID,
-		ProjectID:             nil,
-		OrganizationSlug:      "",
-		Email:                 nil,
-		AccountType:           "enterprise",
-		HasActiveSubscription: false,
-		Whitelisted:           false,
-		ProjectSlug:           nil,
-		APIKeyScopes:          nil,
-	})
-}
-
-func newTestDB(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-
-	conn, err := infra.CloneTestDatabase(t, "testdb")
-	require.NoError(t, err)
-
-	return conn
 }
 
 func seedOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) {

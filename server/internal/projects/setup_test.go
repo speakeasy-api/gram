@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -53,14 +52,6 @@ type testInstance struct {
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	assetStorage   assets.BlobStore
-}
-
-type stubFeatureChecker struct {
-	enabled bool
-}
-
-func (s stubFeatureChecker) IsFeatureEnabled(_ context.Context, _ string, _ productfeatures.Feature) (bool, error) {
-	return s.enabled, nil
 }
 
 func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *testInstance) {
@@ -98,7 +89,9 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 	// Create test asset storage for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
 
-	svc := projects.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, stubFeatureChecker{enabled: enableRBAC}, workos.NewStubClient(), cache.NoopCache))
+	svc := projects.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, func(context.Context, string) (bool, error) {
+		return enableRBAC, nil
+	}, workos.NewStubClient(), cache.NoopCache))
 
 	return ctx, &testInstance{
 		service:        svc,

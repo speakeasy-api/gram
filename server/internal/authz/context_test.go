@@ -16,7 +16,7 @@ func TestPrepareContext_loadsUserGrants(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -39,7 +39,7 @@ func TestPrepareContext_skipsNonSessionAuth(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -59,7 +59,7 @@ func TestPrepareContext_skipsNonEnterpriseOrgs(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
