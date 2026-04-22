@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -16,6 +17,12 @@ import (
 )
 
 const apiBase = "https://api.github.com"
+
+// validGitHubUsername matches GitHub's username rules: 1-39 chars, starting
+// with an alphanumeric, alphanumeric or hyphen thereafter. Enforced before
+// using the value in URL construction to prevent path traversal via
+// url.JoinPath, which resolves ../ segments in path elements.
+var validGitHubUsername = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$`)
 
 // maxErrBodyLen limits how much of a GitHub API error response is included
 // in error messages to avoid leaking sensitive details into logs.
@@ -76,6 +83,10 @@ func (c *Client) CreateRepo(ctx context.Context, installationID int64, org, name
 // AddCollaborator invites a GitHub user as a collaborator on the repo with
 // the given permission level ("pull", "push", or "admin").
 func (c *Client) AddCollaborator(ctx context.Context, installationID int64, owner, repo, username, permission string) error {
+	if !validGitHubUsername.MatchString(username) {
+		return fmt.Errorf("add collaborator: invalid username")
+	}
+
 	payload := map[string]any{
 		"permission": permission,
 	}

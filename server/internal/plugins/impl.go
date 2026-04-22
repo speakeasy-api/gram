@@ -33,17 +33,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
-	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
-	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var validPrincipalURN = regexp.MustCompile(`^(\*|role:[a-zA-Z0-9_-]+|user:[a-zA-Z0-9_-]+)$`)
+
+// GitHub usernames: 1-39 chars, starts with alphanumeric, alphanumeric or hyphen.
+// Strict enough to prevent path traversal in API URL construction.
+var validGitHubUsername = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$`)
 
 // GitHubPublisher is the interface for creating repos and pushing files to GitHub.
 type GitHubPublisher interface {
@@ -689,6 +693,10 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 
 	if len(pluginInfos) == 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "no plugins with servers to publish")
+	}
+
+	if payload.GithubUsername != nil && *payload.GithubUsername != "" && !validGitHubUsername.MatchString(*payload.GithubUsername) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid github username")
 	}
 
 	apiKey, err := s.createPluginAPIKey(ctx, ac)
