@@ -18,7 +18,7 @@ export function ChartCard({
   children: ReactNode;
 }) {
   const isExpanded = expandedChart === chartId;
-  const showExpandButton = hasData || (isExpanded && !hasData);
+  const showExpandButton = hasData || isExpanded;
   return (
     <div
       className={cn(
