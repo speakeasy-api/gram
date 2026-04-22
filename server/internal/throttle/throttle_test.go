@@ -75,7 +75,9 @@ func TestThrottle_FlushFiresPending(t *testing.T) {
 	th.Flush()
 
 	require.Equal(t, int64(1), fired.Load(), "flush should fire the pending trailing callback")
-	require.Equal(t, "a", lastValue.Load().(string))
+	val, ok := lastValue.Load().(string)
+	require.True(t, ok, "expected string value")
+	require.Equal(t, "a", val)
 
 	// After flush, the throttle should be clean and accept new leading calls.
 	require.True(t, th.Do("a"), "should fire again after flush")
