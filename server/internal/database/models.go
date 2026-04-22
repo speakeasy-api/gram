@@ -83,10 +83,12 @@ type AssistantRuntime struct {
 	LeaseOwner          pgtype.Text
 	LastHeartbeatAt     pgtype.Timestamptz
 	BackendMetadataJson []byte
+	EndedAt             pgtype.Timestamptz
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
 	Deleted             bool
+	Ended               bool
 }
 
 type AssistantThread struct {

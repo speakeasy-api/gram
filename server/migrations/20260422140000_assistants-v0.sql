@@ -59,10 +59,12 @@ CREATE TABLE "assistant_runtimes" (
   "lease_owner" text NULL,
   "last_heartbeat_at" timestamptz NULL,
   "backend_metadata_json" jsonb NOT NULL DEFAULT '{}',
+  "ended_at" timestamptz NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "deleted_at" timestamptz NULL,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+  "ended" boolean NOT NULL GENERATED ALWAYS AS (ended_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
   CONSTRAINT "assistant_runtimes_assistant_id_fkey" FOREIGN KEY ("assistant_id") REFERENCES "assistants" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "assistant_runtimes_assistant_thread_id_fkey" FOREIGN KEY ("assistant_thread_id") REFERENCES "assistant_threads" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
@@ -70,7 +72,7 @@ CREATE TABLE "assistant_runtimes" (
   CONSTRAINT "assistant_runtimes_backend_check" CHECK ((backend <> ''::text) AND (char_length(backend) <= 50))
 );
 -- Create index "assistant_runtimes_assistant_thread_id_active_key" to table: "assistant_runtimes"
-CREATE UNIQUE INDEX "assistant_runtimes_assistant_thread_id_active_key" ON "assistant_runtimes" ("assistant_thread_id") WHERE ((deleted IS FALSE) AND (state = ANY (ARRAY['starting'::text, 'active'::text])));
+CREATE UNIQUE INDEX "assistant_runtimes_assistant_thread_id_active_key" ON "assistant_runtimes" ("assistant_thread_id") WHERE ((deleted IS FALSE) AND (ended IS FALSE));
 -- Create index "assistant_runtimes_project_id_assistant_id_state_idx" to table: "assistant_runtimes"
 CREATE INDEX "assistant_runtimes_project_id_assistant_id_state_idx" ON "assistant_runtimes" ("project_id", "assistant_id", "state") WHERE (deleted IS FALSE);
 -- Create "assistant_thread_events" table
