@@ -395,17 +395,6 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 
 const riskPageSize = 50
 
-func parseCursor(raw *string) (uuid.NullUUID, error) {
-	if raw == nil || *raw == "" {
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
-	}
-	c, err := uuid.Parse(*raw)
-	if err != nil {
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("parse cursor: %w", err)
-	}
-	return uuid.NullUUID{UUID: c, Valid: true}, nil
-}
-
 func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResultsPayload) (*gen.ListRiskResultsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -416,7 +405,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		return nil, err
 	}
 
-	cursor, err := parseCursor(payload.Cursor)
+	cursor, err := conv.PtrToNullUUID(payload.Cursor)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor").Log(ctx, s.logger)
 	}
@@ -445,7 +434,7 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 		return nil, err
 	}
 
-	cursor, err := parseCursor(payload.Cursor)
+	cursor, err := conv.PtrToNullUUID(payload.Cursor)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor").Log(ctx, s.logger)
 	}
