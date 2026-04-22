@@ -62,7 +62,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>project</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <ScopeGatedNavItem item={routes.home} scope="build:read" />
+              <ScopeGatedNavItem item={routes.home} scope="project:read" />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -72,11 +72,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenu>
               <ScopeGatedNavItem
                 item={routes.sources}
-                scope={["build:read", "build:write"]}
+                scope={["project:read", "project:write"]}
               />
               <ScopeGatedNavItem
                 item={routes.catalog}
-                scope={["build:read", "mcp:write"]}
+                scope={["project:read", "mcp:write"]}
               />
               <ScopeGatedNavItem
                 item={routes.playground}
@@ -92,7 +92,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               {featuresData?.skillsCaptureEnabled && (
                 <ScopeGatedNavItem item={routes.skills} scope="build:read" />
               )}
-              <ScopeGatedNavItem item={routes.elements} scope="build:read" />
+              <ScopeGatedNavItem item={routes.elements} scope="project:read" />
               <ScopeGatedNavItem
                 item={routes.mcp}
                 scope={["mcp:read", "mcp:write"]}
@@ -101,13 +101,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={routes.slackApps}
                 scope={["mcp:read", "mcp:write"]}
               />
+
               <ScopeGatedNavItem
                 item={routes.plugins}
-                scope={["build:read", "build:write"]}
+                scope={["project:read", "project:write"]}
               />
               <ScopeGatedNavItem
                 item={routes.environments}
-                scope={["build:read", "build:write"]}
+                scope={["project:read", "project:write"]}
               />
             </SidebarMenu>
           </SidebarGroupContent>
@@ -118,16 +119,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenu>
               <ScopeGatedNavItem
                 item={routes.observability}
-                scope="build:read"
+                scope="project:read"
               />
-              <ScopeGatedNavItem item={routes.logs} scope="build:read" />
+              <ScopeGatedNavItem item={routes.logs} scope="project:read" />
               <ScopeGatedNavItem
                 item={routes.chatSessions}
-                scope="build:read"
+                scope="project:read"
               />
               <ScopeGatedNavItem
                 item={routes.hooks}
-                scope={["build:read", "build:write"]}
+                scope={["project:read", "project:write"]}
               />
             </SidebarMenu>
           </SidebarGroupContent>
@@ -138,11 +139,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenu>
               <ScopeGatedNavItem
                 item={routes.riskOverview}
-                scope="build:read"
+                scope="project:read"
               />
               <ScopeGatedNavItem
                 item={routes.policyCenter}
-                scope={["build:read", "build:write"]}
+                scope={["project:read", "project:write"]}
               />
             </SidebarMenu>
           </SidebarGroupContent>
@@ -151,7 +152,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>settings</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <ScopeGatedNavItem item={routes.settings} scope="build:write" />
+              <ScopeGatedNavItem item={routes.settings} scope="project:write" />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

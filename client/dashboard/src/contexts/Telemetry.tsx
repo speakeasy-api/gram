@@ -95,7 +95,7 @@ export function useCaptureUserAuthorizationEvent({
       organization_slug: organizationSlug,
       slug: `${organizationSlug}/${projectSlug}`,
     });
-  }, [email, projectSlug, organizationSlug, telemetry]);
+  }, [email, projectId, projectSlug, organizationSlug, telemetry]);
 }
 
 export function useCaptureEnterpriseGateViewed({
@@ -204,5 +204,5 @@ export function useRegisterProjectForTelemetry({
       organization_slug: organizationSlug,
       slug: `${organizationSlug}/${projectSlug}`,
     });
-  }, [projectSlug, organizationSlug, telemetry]);
+  }, [projectId, projectSlug, organizationSlug, telemetry]);
 }

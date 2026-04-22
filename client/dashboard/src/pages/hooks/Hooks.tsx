@@ -236,7 +236,7 @@ const perPage = 100;
 
 export default function HooksPage() {
   return (
-    <RequireScope scope={["build:read", "build:write"]} level="page">
+    <RequireScope scope={["project:read", "project:write"]} level="page">
       <HooksContent />
     </RequireScope>
   );
@@ -1259,7 +1259,7 @@ function HookTraceRow({
         {displayServerName || "local"}
       </span>
     );
-  }, [displayServerName, toolName, skillName]);
+  }, [displayServerName, serverName, toolName, skillName]);
 
   const statusConfig = useMemo(() => {
     if (trace.hookStatus === "failure") {

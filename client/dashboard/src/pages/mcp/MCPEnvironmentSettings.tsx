@@ -512,9 +512,13 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   };
 
   // Check if there are any unsaved changes (including unmapped required vars and user edits)
-  const hasAnyUnsavedChanges = useMemo(() => {
-    return envVars.some(hasUnsavedChanges);
-  }, [envVars, editingState, environmentConfigs, selectedEnvironmentView]);
+  const hasAnyUnsavedChanges = useMemo(
+    () => {
+      return envVars.some(hasUnsavedChanges);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hasUnsavedChanges is an inline fn; its reactive deps are listed explicitly
+    [envVars, editingState, environmentConfigs, selectedEnvironmentView],
+  );
 
   // Save all variables with unsaved changes
   const handleSaveAll = async () => {

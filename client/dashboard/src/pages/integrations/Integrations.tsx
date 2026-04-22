@@ -38,7 +38,7 @@ export default function Integrations() {
     if (!createIntegrationDialogOpen) {
       refetch();
     }
-  }, [createIntegrationDialogOpen]);
+  }, [createIntegrationDialogOpen, refetch]);
 
   return (
     <Page>

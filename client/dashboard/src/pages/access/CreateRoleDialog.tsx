@@ -503,6 +503,7 @@ export function CreateRoleDialog({
                                   {isChecked && !isSystemRole && (
                                     <ScopePickerPopover
                                       resourceType={scopeDef.resourceType}
+                                      scope={scopeDef.slug}
                                       resources={grant.resources}
                                       onChangeResources={(resources) =>
                                         setGrantResources(

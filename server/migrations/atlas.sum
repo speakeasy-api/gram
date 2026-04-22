@@ -1,4 +1,4 @@
-h1:xjReEVM9QLnshQ+Ypm2ysMwrHjXYU9R/6GwmoJJJLCc=
+h1:pS5J+9wHMBTaPUUjxcL4HqgEhwFlE3q+YLJ1paD/WXM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -134,3 +134,6 @@ h1:xjReEVM9QLnshQ+Ypm2ysMwrHjXYU9R/6GwmoJJJLCc=
 20260420143421_toolset-origins.sql h1:SQTmomCyPcjKfMeIXh9f+u4kbbMKakAJpIqBGvUIJHo=
 20260420202925_deployment_statuses_add_deployment_id_seq_idx.sql h1:SDSX9DJd7u2aU31zpCz54erMnzqzkiqpy/dsaSfPfds=
 20260421144856_mcp_frontends_and_slugs.sql h1:lwbr6ZlV3kHxxMVy9qD08rEYxVHuE02E6ZU3AnpTtJo=
+20260422120000_add-selectors-to-principal-grants.sql h1:oFhYQrLtnjyJngEwinw9qfZEIpEVs8L4T/lRqF3kCXA=
+20260422130000_risk-results-add-project-found-idx.sql h1:ChruigmgGANKJ6Sjv3uuXr6zZd7+AkFhE7OJtB7yvkg=
+20260422140000_assistants-v0.sql h1:/5bIHHO6W+rKJu+U4VMZ2n3V8JGj2NUn2/R7kCMeHwA=

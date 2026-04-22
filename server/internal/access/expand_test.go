@@ -50,22 +50,22 @@ func TestGrantsHasAccess_orgReadDoesNotSatisfyOrgAdmin(t *testing.T) {
 func TestGrantsHasAccess_buildWriteSatisfiesBuildRead(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{{Scope: ScopeBuildWrite, Resource: "proj_123"}}
-	require.True(t, grantsSatisfy(g, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"}.expand()))
+	g := []Grant{{Scope: ScopeProjectWrite, Resource: "proj_123"}}
+	require.True(t, grantsSatisfy(g, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand()))
 }
 
 func TestGrantsHasAccess_buildReadDoesNotSatisfyBuildWrite(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{{Scope: ScopeBuildRead, Resource: "proj_123"}}
-	require.False(t, grantsSatisfy(g, Check{Scope: ScopeBuildWrite, ResourceID: "proj_123"}.expand()))
+	g := []Grant{{Scope: ScopeProjectRead, Resource: "proj_123"}}
+	require.False(t, grantsSatisfy(g, Check{Scope: ScopeProjectWrite, ResourceID: "proj_123"}.expand()))
 }
 
 func TestGrantsHasAccess_orgAdminDoesNotSatisfyBuildRead(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{{Scope: ScopeOrgAdmin, Resource: "org_123"}}
-	require.False(t, grantsSatisfy(g, Check{Scope: ScopeBuildRead, ResourceID: "org_123"}.expand()))
+	require.False(t, grantsSatisfy(g, Check{Scope: ScopeProjectRead, ResourceID: "org_123"}.expand()))
 }
 
 func TestGrantsHasAccess_mcpConnectDoesNotSatisfyMCPRead(t *testing.T) {
@@ -100,7 +100,7 @@ func TestGrantsHasAccess_rootWildcardSatisfiesAnyScope(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{{Scope: ScopeRoot, Resource: WildcardResource}}
-	require.True(t, grantsSatisfy(g, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"}.expand()))
+	require.True(t, grantsSatisfy(g, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand()))
 	require.True(t, grantsSatisfy(g, Check{Scope: ScopeOrgAdmin, ResourceID: "org_456"}.expand()))
 	require.True(t, grantsSatisfy(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand()))
 }
@@ -147,11 +147,11 @@ func TestCalculateSubScopes(t *testing.T) {
 		want  []string
 	}{
 		{scope: string(ScopeOrgAdmin), want: []string{string(ScopeOrgRead)}},
-		{scope: string(ScopeBuildWrite), want: []string{string(ScopeBuildRead)}},
+		{scope: string(ScopeProjectWrite), want: []string{string(ScopeProjectRead)}},
 		{scope: string(ScopeMCPWrite), want: []string{string(ScopeMCPConnect), string(ScopeMCPRead)}},
 		{scope: string(ScopeMCPRead), want: []string{string(ScopeMCPConnect)}},
 		{scope: string(ScopeOrgRead), want: []string{}},
-		{scope: string(ScopeBuildRead), want: []string{}},
+		{scope: string(ScopeProjectRead), want: []string{}},
 		{scope: string(ScopeRoot), want: []string{}},
 		{scope: string(ScopeMCPConnect), want: []string{}},
 	}

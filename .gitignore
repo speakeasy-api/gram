@@ -60,3 +60,4 @@ package-lock.json
 .agentlink/
 /plans
 .mcp.json
+flagged-chats.jsonl

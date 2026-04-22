@@ -75,6 +75,7 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     return gram;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- telemetry is stable context value; including it would recreate the SDK client unnecessarily
   }, [projectSlug]);
 
   // Invalidate all queries when projectSlug changes
@@ -83,7 +84,7 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
       queryClient.invalidateQueries();
       previousProjectSlug.current = projectSlug;
     }
-  }, [projectSlug, queryClient]);
+  }, [projectSlug]);
 
   return (
     <IsAdminContext.Provider value={isAdminRef}>

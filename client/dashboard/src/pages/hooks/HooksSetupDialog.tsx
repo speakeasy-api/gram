@@ -3,7 +3,6 @@ import { Dialog } from "@/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -284,46 +283,44 @@ export function HooksSetupDialog({
         </Dialog.Header>
 
         <div className="mb-6 flex flex-wrap gap-3">
-          <TooltipProvider>
-            {providers.map((p) => {
-              const button = (
-                <button
-                  key={p.id}
-                  onClick={() => p.available && setSelected(p.id)}
-                  disabled={!p.available}
-                  className={cn(
-                    "relative flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
-                    selected === p.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50 hover:bg-muted/50",
-                    !p.available &&
-                      "hover:border-border cursor-not-allowed opacity-50 hover:bg-transparent",
-                  )}
-                >
-                  <HookSourceIcon source={p.source} className="size-5" />
-                  {p.label}
-                  {!p.available && (
-                    <span className="text-muted-foreground ml-1 text-[10px] tracking-wide uppercase">
-                      Soon
-                    </span>
-                  )}
-                </button>
+          {providers.map((p) => {
+            const button = (
+              <button
+                key={p.id}
+                onClick={() => p.available && setSelected(p.id)}
+                disabled={!p.available}
+                className={cn(
+                  "relative flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                  selected === p.id
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/50 hover:bg-muted/50",
+                  !p.available &&
+                    "hover:border-border cursor-not-allowed opacity-50 hover:bg-transparent",
+                )}
+              >
+                <HookSourceIcon source={p.source} className="size-5" />
+                {p.label}
+                {!p.available && (
+                  <span className="text-muted-foreground ml-1 text-[10px] tracking-wide uppercase">
+                    Soon
+                  </span>
+                )}
+              </button>
+            );
+
+            if (!p.available) {
+              return (
+                <Tooltip key={p.id}>
+                  <TooltipTrigger asChild>{button}</TooltipTrigger>
+                  <TooltipContent>
+                    <p>Coming soon</p>
+                  </TooltipContent>
+                </Tooltip>
               );
+            }
 
-              if (!p.available) {
-                return (
-                  <Tooltip key={p.id}>
-                    <TooltipTrigger asChild>{button}</TooltipTrigger>
-                    <TooltipContent>
-                      <p>Coming soon</p>
-                    </TooltipContent>
-                  </Tooltip>
-                );
-              }
-
-              return button;
-            })}
-          </TooltipProvider>
+            return button;
+          })}
         </div>
 
         {selected === "claude" && (

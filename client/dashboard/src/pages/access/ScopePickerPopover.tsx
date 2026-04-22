@@ -36,6 +36,8 @@ import type { AnnotationHint, CustomTab, ResourceType } from "./types";
 interface ScopePickerPopoverProps {
   /** The resource type determines which resource list to show */
   resourceType: ResourceType;
+  /** The scope slug this picker is for (e.g. "mcp:connect") */
+  scope?: string;
   /** null = unrestricted; string[] = allowlist */
   resources: string[] | null;
   onChangeResources: (resources: string[] | null) => void;
@@ -119,6 +121,7 @@ function useMCPServers(enabled: boolean) {
 
 export function ScopePickerPopover({
   resourceType,
+  scope,
   resources,
   onChangeResources,
   customMode,
@@ -147,7 +150,7 @@ export function ScopePickerPopover({
   }
 
   const isUnrestricted = resources === null;
-  const isMcp = resourceType === "mcp";
+  const isMcpConnect = scope === "mcp:connect";
   const projectList = organization.projects.map((p) => ({
     id: p.id,
     name: p.name,
@@ -190,7 +193,7 @@ export function ScopePickerPopover({
           }
         }}
       />
-      {isMcp && (
+      {isMcpConnect && (
         <ScopeOption
           label="Specific tools"
           selected={!!customMode}
@@ -437,7 +440,10 @@ function ToolSelectionPanel({
   );
   const [search, setSearch] = useState("");
   const selectedServer = allServers.find((s) => s.id === selectedServerId);
-  const tools = selectedServer?.tools ?? [];
+  const tools = useMemo(
+    () => selectedServer?.tools ?? [],
+    [selectedServer?.tools],
+  );
   const filteredTools = useMemo(
     () =>
       (search
@@ -785,27 +791,25 @@ function CollectionGroupPanel({
   resources: string[];
   onChangeResources: (resources: string[]) => void;
 }) {
-  const organization = useOrganization();
   const client = useSdkClient();
-  const defaultProjectSlug = organization.projects?.[0]?.slug;
 
   // Fetch org-level collections
   const { data: collectionsData, isLoading: collectionsLoading } =
-    useListCollections({ gramProject: defaultProjectSlug }, undefined, {
-      enabled: !!defaultProjectSlug,
-    });
-  const collections = collectionsData?.collections ?? [];
+    useListCollections({}, undefined);
+  const collections = useMemo(
+    () => collectionsData?.collections ?? [],
+    [collectionsData?.collections],
+  );
 
   // Fetch servers for each collection in parallel
   const serverQueries = useQueries({
     queries: collections.map((c) => ({
-      queryKey: ["collections", "listServers", c.slug, defaultProjectSlug],
+      queryKey: ["collections", "listServers", c.slug],
       queryFn: () =>
         client.collections.listServers({
           collectionSlug: c.slug!,
-          gramProject: defaultProjectSlug,
         }),
-      enabled: !!c.slug && !!defaultProjectSlug,
+      enabled: !!c.slug,
     })),
   });
 

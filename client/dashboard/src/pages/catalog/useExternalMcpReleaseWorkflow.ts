@@ -413,6 +413,7 @@ export function useExternalMcpReleaseWorkflow({
     }
 
     createToolsets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- toolset creation should only trigger on phase transition to "complete", not when serverConfigs/toolsetStatuses change mid-creation
   }, [phase]);
 
   const updateServerConfig = useCallback(

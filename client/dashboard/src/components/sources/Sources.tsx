@@ -235,7 +235,7 @@ export default function Sources() {
           <DeploymentsButton deploymentId={deployment?.id} />
         </Page.Section.CTA>
         <Page.Section.CTA>
-          <RequireScope scope="build:write" level="component">
+          <RequireScope scope="project:write" level="component">
             {({ disabled }) => (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild disabled={disabled}>

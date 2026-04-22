@@ -13,7 +13,7 @@ export default function FunctionsOnboarding() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope="build:write" level="page">
+        <RequireScope scope="project:write" level="page">
           <div className="max-w-2xl">
             {/* Header */}
             <Stack gap={3} className="mb-8">

@@ -25,7 +25,7 @@ export default function Environments() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope={["build:read", "build:write"]} level="page">
+        <RequireScope scope={["project:read", "project:write"]} level="page">
           <EnvironmentsInner />
         </RequireScope>
       </Page.Body>
@@ -83,7 +83,7 @@ function EnvironmentsInner() {
         </Page.Section.Description>
         <Page.Section.CTA>
           {environments.length > 0 && (
-            <RequireScope scope="build:write" level="component">
+            <RequireScope scope="project:write" level="component">
               <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
                 <Button.LeftIcon>
                   <Plus className="h-4 w-4" />
@@ -106,7 +106,7 @@ function EnvironmentsInner() {
                 Environments let you store configuration and secrets that can be
                 shared across multiple MCP servers.
               </Type>
-              <RequireScope scope="build:write" level="component">
+              <RequireScope scope="project:write" level="component">
                 <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
                   <Button.LeftIcon>
                     <Plus className="h-4 w-4" />

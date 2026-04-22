@@ -7,11 +7,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	activity := risk_analysis.NewAnalyzeBatch(testLogger, testTracerProvider, testMeterProvider, nil)
+	activity := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil)
 	require.NotNil(t, activity)
 
 	result, err := activity.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{

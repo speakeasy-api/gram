@@ -84,7 +84,7 @@ func UsageCommands() []string {
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|delete-server)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|get-risk-policy-status|trigger-risk-analysis)",
+		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|get-risk-policy-status|trigger-risk-analysis)",
 		"skills (get|list|get-settings|set-settings|capture|capture-claude|list-versions|list-pending|approve-version|supersede-version)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
@@ -497,46 +497,39 @@ func ParseEndpoint(
 
 		collectionsFlags = flag.NewFlagSet("collections", flag.ContinueOnError)
 
-		collectionsCreateFlags                = flag.NewFlagSet("create", flag.ExitOnError)
-		collectionsCreateBodyFlag             = collectionsCreateFlags.String("body", "REQUIRED", "")
-		collectionsCreateSessionTokenFlag     = collectionsCreateFlags.String("session-token", "", "")
-		collectionsCreateApikeyTokenFlag      = collectionsCreateFlags.String("apikey-token", "", "")
-		collectionsCreateProjectSlugInputFlag = collectionsCreateFlags.String("project-slug-input", "", "")
+		collectionsCreateFlags            = flag.NewFlagSet("create", flag.ExitOnError)
+		collectionsCreateBodyFlag         = collectionsCreateFlags.String("body", "REQUIRED", "")
+		collectionsCreateSessionTokenFlag = collectionsCreateFlags.String("session-token", "", "")
+		collectionsCreateApikeyTokenFlag  = collectionsCreateFlags.String("apikey-token", "", "")
 
-		collectionsListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
-		collectionsListSessionTokenFlag     = collectionsListFlags.String("session-token", "", "")
-		collectionsListApikeyTokenFlag      = collectionsListFlags.String("apikey-token", "", "")
-		collectionsListProjectSlugInputFlag = collectionsListFlags.String("project-slug-input", "", "")
+		collectionsListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
+		collectionsListSessionTokenFlag = collectionsListFlags.String("session-token", "", "")
+		collectionsListApikeyTokenFlag  = collectionsListFlags.String("apikey-token", "", "")
 
-		collectionsUpdateFlags                = flag.NewFlagSet("update", flag.ExitOnError)
-		collectionsUpdateBodyFlag             = collectionsUpdateFlags.String("body", "REQUIRED", "")
-		collectionsUpdateSessionTokenFlag     = collectionsUpdateFlags.String("session-token", "", "")
-		collectionsUpdateApikeyTokenFlag      = collectionsUpdateFlags.String("apikey-token", "", "")
-		collectionsUpdateProjectSlugInputFlag = collectionsUpdateFlags.String("project-slug-input", "", "")
+		collectionsUpdateFlags            = flag.NewFlagSet("update", flag.ExitOnError)
+		collectionsUpdateBodyFlag         = collectionsUpdateFlags.String("body", "REQUIRED", "")
+		collectionsUpdateSessionTokenFlag = collectionsUpdateFlags.String("session-token", "", "")
+		collectionsUpdateApikeyTokenFlag  = collectionsUpdateFlags.String("apikey-token", "", "")
 
-		collectionsDeleteFlags                = flag.NewFlagSet("delete", flag.ExitOnError)
-		collectionsDeleteCollectionIDFlag     = collectionsDeleteFlags.String("collection-id", "REQUIRED", "")
-		collectionsDeleteSessionTokenFlag     = collectionsDeleteFlags.String("session-token", "", "")
-		collectionsDeleteApikeyTokenFlag      = collectionsDeleteFlags.String("apikey-token", "", "")
-		collectionsDeleteProjectSlugInputFlag = collectionsDeleteFlags.String("project-slug-input", "", "")
+		collectionsDeleteFlags            = flag.NewFlagSet("delete", flag.ExitOnError)
+		collectionsDeleteCollectionIDFlag = collectionsDeleteFlags.String("collection-id", "REQUIRED", "")
+		collectionsDeleteSessionTokenFlag = collectionsDeleteFlags.String("session-token", "", "")
+		collectionsDeleteApikeyTokenFlag  = collectionsDeleteFlags.String("apikey-token", "", "")
 
-		collectionsAttachServerFlags                = flag.NewFlagSet("attach-server", flag.ExitOnError)
-		collectionsAttachServerBodyFlag             = collectionsAttachServerFlags.String("body", "REQUIRED", "")
-		collectionsAttachServerSessionTokenFlag     = collectionsAttachServerFlags.String("session-token", "", "")
-		collectionsAttachServerApikeyTokenFlag      = collectionsAttachServerFlags.String("apikey-token", "", "")
-		collectionsAttachServerProjectSlugInputFlag = collectionsAttachServerFlags.String("project-slug-input", "", "")
+		collectionsAttachServerFlags            = flag.NewFlagSet("attach-server", flag.ExitOnError)
+		collectionsAttachServerBodyFlag         = collectionsAttachServerFlags.String("body", "REQUIRED", "")
+		collectionsAttachServerSessionTokenFlag = collectionsAttachServerFlags.String("session-token", "", "")
+		collectionsAttachServerApikeyTokenFlag  = collectionsAttachServerFlags.String("apikey-token", "", "")
 
-		collectionsDetachServerFlags                = flag.NewFlagSet("detach-server", flag.ExitOnError)
-		collectionsDetachServerBodyFlag             = collectionsDetachServerFlags.String("body", "REQUIRED", "")
-		collectionsDetachServerSessionTokenFlag     = collectionsDetachServerFlags.String("session-token", "", "")
-		collectionsDetachServerApikeyTokenFlag      = collectionsDetachServerFlags.String("apikey-token", "", "")
-		collectionsDetachServerProjectSlugInputFlag = collectionsDetachServerFlags.String("project-slug-input", "", "")
+		collectionsDetachServerFlags            = flag.NewFlagSet("detach-server", flag.ExitOnError)
+		collectionsDetachServerBodyFlag         = collectionsDetachServerFlags.String("body", "REQUIRED", "")
+		collectionsDetachServerSessionTokenFlag = collectionsDetachServerFlags.String("session-token", "", "")
+		collectionsDetachServerApikeyTokenFlag  = collectionsDetachServerFlags.String("apikey-token", "", "")
 
-		collectionsListServersFlags                = flag.NewFlagSet("list-servers", flag.ExitOnError)
-		collectionsListServersCollectionSlugFlag   = collectionsListServersFlags.String("collection-slug", "REQUIRED", "")
-		collectionsListServersSessionTokenFlag     = collectionsListServersFlags.String("session-token", "", "")
-		collectionsListServersApikeyTokenFlag      = collectionsListServersFlags.String("apikey-token", "", "")
-		collectionsListServersProjectSlugInputFlag = collectionsListServersFlags.String("project-slug-input", "", "")
+		collectionsListServersFlags              = flag.NewFlagSet("list-servers", flag.ExitOnError)
+		collectionsListServersCollectionSlugFlag = collectionsListServersFlags.String("collection-slug", "REQUIRED", "")
+		collectionsListServersSessionTokenFlag   = collectionsListServersFlags.String("session-token", "", "")
+		collectionsListServersApikeyTokenFlag    = collectionsListServersFlags.String("apikey-token", "", "")
 
 		functionsFlags = flag.NewFlagSet("functions", flag.ContinueOnError)
 
@@ -874,10 +867,16 @@ func ParseEndpoint(
 		riskListRiskResultsFlags                = flag.NewFlagSet("list-risk-results", flag.ExitOnError)
 		riskListRiskResultsPolicyIDFlag         = riskListRiskResultsFlags.String("policy-id", "", "")
 		riskListRiskResultsChatIDFlag           = riskListRiskResultsFlags.String("chat-id", "", "")
-		riskListRiskResultsLimitFlag            = riskListRiskResultsFlags.String("limit", "100", "")
+		riskListRiskResultsCursorFlag           = riskListRiskResultsFlags.String("cursor", "", "")
 		riskListRiskResultsApikeyTokenFlag      = riskListRiskResultsFlags.String("apikey-token", "", "")
 		riskListRiskResultsSessionTokenFlag     = riskListRiskResultsFlags.String("session-token", "", "")
 		riskListRiskResultsProjectSlugInputFlag = riskListRiskResultsFlags.String("project-slug-input", "", "")
+
+		riskListRiskResultsByChatFlags                = flag.NewFlagSet("list-risk-results-by-chat", flag.ExitOnError)
+		riskListRiskResultsByChatCursorFlag           = riskListRiskResultsByChatFlags.String("cursor", "", "")
+		riskListRiskResultsByChatApikeyTokenFlag      = riskListRiskResultsByChatFlags.String("apikey-token", "", "")
+		riskListRiskResultsByChatSessionTokenFlag     = riskListRiskResultsByChatFlags.String("session-token", "", "")
+		riskListRiskResultsByChatProjectSlugInputFlag = riskListRiskResultsByChatFlags.String("project-slug-input", "", "")
 
 		riskGetRiskPolicyStatusFlags                = flag.NewFlagSet("get-risk-policy-status", flag.ExitOnError)
 		riskGetRiskPolicyStatusIDFlag               = riskGetRiskPolicyStatusFlags.String("id", "REQUIRED", "")
@@ -1464,6 +1463,7 @@ func ParseEndpoint(
 	riskUpdateRiskPolicyFlags.Usage = riskUpdateRiskPolicyUsage
 	riskDeleteRiskPolicyFlags.Usage = riskDeleteRiskPolicyUsage
 	riskListRiskResultsFlags.Usage = riskListRiskResultsUsage
+	riskListRiskResultsByChatFlags.Usage = riskListRiskResultsByChatUsage
 	riskGetRiskPolicyStatusFlags.Usage = riskGetRiskPolicyStatusUsage
 	riskTriggerRiskAnalysisFlags.Usage = riskTriggerRiskAnalysisUsage
 
@@ -2162,6 +2162,9 @@ func ParseEndpoint(
 			case "list-risk-results":
 				epf = riskListRiskResultsFlags
 
+			case "list-risk-results-by-chat":
+				epf = riskListRiskResultsByChatFlags
+
 			case "get-risk-policy-status":
 				epf = riskGetRiskPolicyStatusFlags
 
@@ -2679,25 +2682,25 @@ func ParseEndpoint(
 			switch epn {
 			case "create":
 				endpoint = c.Create()
-				data, err = collectionsc.BuildCreatePayload(*collectionsCreateBodyFlag, *collectionsCreateSessionTokenFlag, *collectionsCreateApikeyTokenFlag, *collectionsCreateProjectSlugInputFlag)
+				data, err = collectionsc.BuildCreatePayload(*collectionsCreateBodyFlag, *collectionsCreateSessionTokenFlag, *collectionsCreateApikeyTokenFlag)
 			case "list":
 				endpoint = c.List()
-				data, err = collectionsc.BuildListPayload(*collectionsListSessionTokenFlag, *collectionsListApikeyTokenFlag, *collectionsListProjectSlugInputFlag)
+				data, err = collectionsc.BuildListPayload(*collectionsListSessionTokenFlag, *collectionsListApikeyTokenFlag)
 			case "update":
 				endpoint = c.Update()
-				data, err = collectionsc.BuildUpdatePayload(*collectionsUpdateBodyFlag, *collectionsUpdateSessionTokenFlag, *collectionsUpdateApikeyTokenFlag, *collectionsUpdateProjectSlugInputFlag)
+				data, err = collectionsc.BuildUpdatePayload(*collectionsUpdateBodyFlag, *collectionsUpdateSessionTokenFlag, *collectionsUpdateApikeyTokenFlag)
 			case "delete":
 				endpoint = c.Delete()
-				data, err = collectionsc.BuildDeletePayload(*collectionsDeleteCollectionIDFlag, *collectionsDeleteSessionTokenFlag, *collectionsDeleteApikeyTokenFlag, *collectionsDeleteProjectSlugInputFlag)
+				data, err = collectionsc.BuildDeletePayload(*collectionsDeleteCollectionIDFlag, *collectionsDeleteSessionTokenFlag, *collectionsDeleteApikeyTokenFlag)
 			case "attach-server":
 				endpoint = c.AttachServer()
-				data, err = collectionsc.BuildAttachServerPayload(*collectionsAttachServerBodyFlag, *collectionsAttachServerSessionTokenFlag, *collectionsAttachServerApikeyTokenFlag, *collectionsAttachServerProjectSlugInputFlag)
+				data, err = collectionsc.BuildAttachServerPayload(*collectionsAttachServerBodyFlag, *collectionsAttachServerSessionTokenFlag, *collectionsAttachServerApikeyTokenFlag)
 			case "detach-server":
 				endpoint = c.DetachServer()
-				data, err = collectionsc.BuildDetachServerPayload(*collectionsDetachServerBodyFlag, *collectionsDetachServerSessionTokenFlag, *collectionsDetachServerApikeyTokenFlag, *collectionsDetachServerProjectSlugInputFlag)
+				data, err = collectionsc.BuildDetachServerPayload(*collectionsDetachServerBodyFlag, *collectionsDetachServerSessionTokenFlag, *collectionsDetachServerApikeyTokenFlag)
 			case "list-servers":
 				endpoint = c.ListServers()
-				data, err = collectionsc.BuildListServersPayload(*collectionsListServersCollectionSlugFlag, *collectionsListServersSessionTokenFlag, *collectionsListServersApikeyTokenFlag, *collectionsListServersProjectSlugInputFlag)
+				data, err = collectionsc.BuildListServersPayload(*collectionsListServersCollectionSlugFlag, *collectionsListServersSessionTokenFlag, *collectionsListServersApikeyTokenFlag)
 			}
 		case "functions":
 			c := functionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2940,7 +2943,10 @@ func ParseEndpoint(
 				data, err = riskc.BuildDeleteRiskPolicyPayload(*riskDeleteRiskPolicyIDFlag, *riskDeleteRiskPolicyApikeyTokenFlag, *riskDeleteRiskPolicySessionTokenFlag, *riskDeleteRiskPolicyProjectSlugInputFlag)
 			case "list-risk-results":
 				endpoint = c.ListRiskResults()
-				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsLimitFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
+				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsCursorFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
+			case "list-risk-results-by-chat":
+				endpoint = c.ListRiskResultsByChat()
+				data, err = riskc.BuildListRiskResultsByChatPayload(*riskListRiskResultsByChatCursorFlag, *riskListRiskResultsByChatApikeyTokenFlag, *riskListRiskResultsByChatSessionTokenFlag, *riskListRiskResultsByChatProjectSlugInputFlag)
 			case "get-risk-policy-status":
 				endpoint = c.GetRiskPolicyStatus()
 				data, err = riskc.BuildGetRiskPolicyStatusPayload(*riskGetRiskPolicyStatusIDFlag, *riskGetRiskPolicyStatusApikeyTokenFlag, *riskGetRiskPolicyStatusSessionTokenFlag, *riskGetRiskPolicyStatusProjectSlugInputFlag)
@@ -4900,7 +4906,6 @@ func collectionsCreateUsage() {
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -4911,11 +4916,10 @@ func collectionsCreateUsage() {
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections create --body '{\n      \"description\": \"aaa\",\n      \"mcp_registry_namespace\": \"aa\",\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections create --body '{\n      \"description\": \"aaa\",\n      \"mcp_registry_namespace\": \"aa\",\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func collectionsListUsage() {
@@ -4923,7 +4927,6 @@ func collectionsListUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] collections list", os.Args[0])
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -4933,11 +4936,10 @@ func collectionsListUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections list --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections list --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func collectionsUpdateUsage() {
@@ -4946,7 +4948,6 @@ func collectionsUpdateUsage() {
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -4957,11 +4958,10 @@ func collectionsUpdateUsage() {
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections update --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"description\": \"aaa\",\n      \"name\": \"aa\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections update --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"description\": \"aaa\",\n      \"name\": \"aa\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func collectionsDeleteUsage() {
@@ -4970,7 +4970,6 @@ func collectionsDeleteUsage() {
 	fmt.Fprint(os.Stderr, " -collection-id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -4981,11 +4980,10 @@ func collectionsDeleteUsage() {
 	fmt.Fprintln(os.Stderr, `    -collection-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections delete --collection-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections delete --collection-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func collectionsAttachServerUsage() {
@@ -4994,7 +4992,6 @@ func collectionsAttachServerUsage() {
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -5005,11 +5002,10 @@ func collectionsAttachServerUsage() {
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections attach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections attach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func collectionsDetachServerUsage() {
@@ -5018,7 +5014,6 @@ func collectionsDetachServerUsage() {
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -5029,11 +5024,10 @@ func collectionsDetachServerUsage() {
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections detach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections detach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func collectionsListServersUsage() {
@@ -5042,7 +5036,6 @@ func collectionsListServersUsage() {
 	fmt.Fprint(os.Stderr, " -collection-slug STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -5053,11 +5046,10 @@ func collectionsListServersUsage() {
 	fmt.Fprintln(os.Stderr, `    -collection-slug STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections list-servers --collection-slug \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections list-servers --collection-slug \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 // functionsUsage displays the usage of the functions command and its
@@ -6468,6 +6460,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    update-risk-policy: Update a risk analysis policy.`)
 	fmt.Fprintln(os.Stderr, `    delete-risk-policy: Delete a risk analysis policy.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
+	fmt.Fprintln(os.Stderr, `    list-risk-results-by-chat: List risk results grouped by chat session for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy-status: Get the analysis status of a risk policy including progress and workflow state.`)
 	fmt.Fprintln(os.Stderr, `    trigger-risk-analysis: Manually trigger risk analysis for a policy, starting or signaling the drain workflow.`)
 	fmt.Fprintln(os.Stderr)
@@ -6597,7 +6590,7 @@ func riskListRiskResultsUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-results", os.Args[0])
 	fmt.Fprint(os.Stderr, " -policy-id STRING")
 	fmt.Fprint(os.Stderr, " -chat-id STRING")
-	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -6610,14 +6603,38 @@ func riskListRiskResultsUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -chat-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskListRiskResultsByChatUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-results-by-chat", os.Args[0])
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List risk results grouped by chat session for the current project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results-by-chat --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskGetRiskPolicyStatusUsage() {
