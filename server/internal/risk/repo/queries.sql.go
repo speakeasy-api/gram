@@ -467,14 +467,15 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE cm.chat_id = $1
   AND rr.project_id = $2
   AND rr.found IS TRUE
-ORDER BY rr.created_at DESC
-LIMIT $3
+  AND ($3::uuid IS NULL OR rr.id <= $3::uuid)
+ORDER BY rr.id DESC
+LIMIT 51
 `
 
 type ListRiskResultsByChatFoundParams struct {
-	ChatID      uuid.UUID
-	ProjectID   uuid.UUID
-	ResultLimit int32
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+	Cursor    uuid.NullUUID
 }
 
 type ListRiskResultsByChatFoundRow struct {
@@ -500,7 +501,7 @@ type ListRiskResultsByChatFoundRow struct {
 }
 
 func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskResultsByChatFoundParams) ([]ListRiskResultsByChatFoundRow, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsByChatFound, arg.ChatID, arg.ProjectID, arg.ResultLimit)
+	rows, err := q.db.Query(ctx, listRiskResultsByChatFound, arg.ChatID, arg.ProjectID, arg.Cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -648,14 +649,15 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE rr.project_id = $1
   AND rr.risk_policy_id = $2
   AND rr.found IS TRUE
-ORDER BY rr.created_at DESC
-LIMIT $3
+  AND ($3::uuid IS NULL OR rr.id <= $3::uuid)
+ORDER BY rr.id DESC
+LIMIT 51
 `
 
 type ListRiskResultsByProjectAndPolicyParams struct {
 	ProjectID    uuid.UUID
 	RiskPolicyID uuid.UUID
-	ResultLimit  int32
+	Cursor       uuid.NullUUID
 }
 
 type ListRiskResultsByProjectAndPolicyRow struct {
@@ -681,7 +683,7 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 }
 
 func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg ListRiskResultsByProjectAndPolicyParams) ([]ListRiskResultsByProjectAndPolicyRow, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsByProjectAndPolicy, arg.ProjectID, arg.RiskPolicyID, arg.ResultLimit)
+	rows, err := q.db.Query(ctx, listRiskResultsByProjectAndPolicy, arg.ProjectID, arg.RiskPolicyID, arg.Cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -728,13 +730,14 @@ LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE
-ORDER BY rr.created_at DESC
-LIMIT $2
+  AND ($2::uuid IS NULL OR rr.id <= $2::uuid)
+ORDER BY rr.id DESC
+LIMIT 51
 `
 
 type ListRiskResultsByProjectFoundParams struct {
-	ProjectID   uuid.UUID
-	ResultLimit int32
+	ProjectID uuid.UUID
+	Cursor    uuid.NullUUID
 }
 
 type ListRiskResultsByProjectFoundRow struct {
@@ -760,7 +763,7 @@ type ListRiskResultsByProjectFoundRow struct {
 }
 
 func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRiskResultsByProjectFoundParams) ([]ListRiskResultsByProjectFoundRow, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsByProjectFound, arg.ProjectID, arg.ResultLimit)
+	rows, err := q.db.Query(ctx, listRiskResultsByProjectFound, arg.ProjectID, arg.Cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -812,14 +815,15 @@ LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE
+  AND ($2::uuid IS NULL OR cm.chat_id <= $2::uuid)
 GROUP BY cm.chat_id, c.title, c.external_user_id
-ORDER BY latest_detected DESC
-LIMIT $2
+ORDER BY cm.chat_id DESC
+LIMIT 51
 `
 
 type ListRiskResultsGroupedByChatParams struct {
-	ProjectID   uuid.UUID
-	ResultLimit int32
+	ProjectID uuid.UUID
+	Cursor    uuid.NullUUID
 }
 
 type ListRiskResultsGroupedByChatRow struct {
@@ -831,7 +835,7 @@ type ListRiskResultsGroupedByChatRow struct {
 }
 
 func (q *Queries) ListRiskResultsGroupedByChat(ctx context.Context, arg ListRiskResultsGroupedByChatParams) ([]ListRiskResultsGroupedByChatRow, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsGroupedByChat, arg.ProjectID, arg.ResultLimit)
+	rows, err := q.db.Query(ctx, listRiskResultsGroupedByChat, arg.ProjectID, arg.Cursor)
 	if err != nil {
 		return nil, err
 	}

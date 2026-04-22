@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -16,15 +17,27 @@ export type ListRiskResultsByChatResult = {
    * Risk results grouped by chat.
    */
   chats: Array<RiskChatSummary>;
+  /**
+   * Cursor for the next page of results.
+   */
+  nextCursor?: string | undefined;
 };
 
 /** @internal */
 export const ListRiskResultsByChatResult$inboundSchema: z.ZodMiniType<
   ListRiskResultsByChatResult,
   unknown
-> = z.object({
-  chats: z.array(RiskChatSummary$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    chats: z.array(RiskChatSummary$inboundSchema),
+    next_cursor: z.optional(z.string()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "next_cursor": "nextCursor",
+    });
+  }),
+);
 
 export function listRiskResultsByChatResultFromJSON(
   jsonString: string,

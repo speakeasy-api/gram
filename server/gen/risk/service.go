@@ -126,8 +126,8 @@ type ListRiskResultsByChatPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// Maximum number of chats to return.
-	Limit int
+	// Cursor to fetch the next page of results.
+	Cursor *string
 }
 
 // ListRiskResultsByChatResult is the result type of the risk service
@@ -135,6 +135,8 @@ type ListRiskResultsByChatPayload struct {
 type ListRiskResultsByChatResult struct {
 	// Risk results grouped by chat.
 	Chats []*types.RiskChatSummary
+	// Cursor for the next page of results.
+	NextCursor *string
 }
 
 // ListRiskResultsPayload is the payload type of the risk service
@@ -147,8 +149,8 @@ type ListRiskResultsPayload struct {
 	PolicyID *string
 	// Optional chat ID to filter by.
 	ChatID *string
-	// Maximum number of results to return.
-	Limit int
+	// Cursor to fetch the next page of results.
+	Cursor *string
 }
 
 // ListRiskResultsResult is the result type of the risk service listRiskResults
@@ -158,6 +160,8 @@ type ListRiskResultsResult struct {
 	Results []*types.RiskResult
 	// Total number of findings across all enabled policies.
 	TotalCount int64
+	// Cursor for the next page of results.
+	NextCursor *string
 }
 
 // TriggerRiskAnalysisPayload is the payload type of the risk service

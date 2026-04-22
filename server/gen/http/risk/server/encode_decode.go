@@ -12,7 +12,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	risk "github.com/speakeasy-api/gram/server/gen/risk"
@@ -1183,7 +1182,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		var (
 			policyID         *string
 			chatID           *string
-			limit            int
+			cursor           *string
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
@@ -1204,17 +1203,9 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if chatID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", *chatID, goa.FormatUUID))
 		}
-		{
-			limitRaw := qp.Get("limit")
-			if limitRaw == "" {
-				limit = 100
-			} else {
-				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
-				}
-				limit = int(v)
-			}
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -1231,7 +1222,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRiskResultsPayload(policyID, chatID, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsPayload(policyID, chatID, cursor, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1432,23 +1423,14 @@ func DecodeListRiskResultsByChatRequest(mux goahttp.Muxer, decoder func(*http.Re
 	return func(r *http.Request) (*risk.ListRiskResultsByChatPayload, error) {
 		var payload *risk.ListRiskResultsByChatPayload
 		var (
-			limit            int
+			cursor           *string
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
-			err              error
 		)
-		{
-			limitRaw := r.URL.Query().Get("limit")
-			if limitRaw == "" {
-				limit = 10
-			} else {
-				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
-				}
-				limit = int(v)
-			}
+		cursorRaw := r.URL.Query().Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -1462,10 +1444,7 @@ func DecodeListRiskResultsByChatRequest(mux goahttp.Muxer, decoder func(*http.Re
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewListRiskResultsByChatPayload(limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsByChatPayload(cursor, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

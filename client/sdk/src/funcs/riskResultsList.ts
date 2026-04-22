@@ -101,7 +101,7 @@ async function $do(
 
   const query = encodeFormQuery({
     "chat_id": payload?.chat_id,
-    "limit": payload?.limit,
+    "cursor": payload?.cursor,
     "policy_id": payload?.policy_id,
   });
 

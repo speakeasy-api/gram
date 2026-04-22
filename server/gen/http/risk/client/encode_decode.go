@@ -10,7 +10,6 @@ package client
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -1253,7 +1252,9 @@ func EncodeListRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.ChatID != nil {
 			values.Add("chat_id", *p.ChatID)
 		}
-		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -1495,7 +1496,9 @@ func EncodeListRiskResultsByChatRequest(encoder func(*http.Request) goahttp.Enco
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

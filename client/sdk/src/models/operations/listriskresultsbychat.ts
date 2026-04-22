@@ -22,9 +22,9 @@ export type ListRiskResultsByChatSecurity = {
 
 export type ListRiskResultsByChatRequest = {
   /**
-   * Maximum number of chats to return.
+   * Cursor to fetch the next page of results.
    */
-  limit?: number | undefined;
+  cursor?: string | undefined;
   /**
    * API Key header
    */
@@ -144,7 +144,7 @@ export function listRiskResultsByChatSecurityToJSON(
 
 /** @internal */
 export type ListRiskResultsByChatRequest$Outbound = {
-  limit: number;
+  cursor?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -156,7 +156,7 @@ export const ListRiskResultsByChatRequest$outboundSchema: z.ZodMiniType<
   ListRiskResultsByChatRequest
 > = z.pipe(
   z.object({
-    limit: z._default(z.int(), 10),
+    cursor: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),

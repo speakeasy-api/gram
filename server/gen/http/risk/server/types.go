@@ -133,6 +133,8 @@ type ListRiskResultsResponseBody struct {
 	Results []*RiskResultResponseBody `form:"results" json:"results" xml:"results"`
 	// Total number of findings across all enabled policies.
 	TotalCount int64 `form:"total_count" json:"total_count" xml:"total_count"`
+	// Cursor for the next page of results.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // ListRiskResultsByChatResponseBody is the type of the "risk" service
@@ -140,6 +142,8 @@ type ListRiskResultsResponseBody struct {
 type ListRiskResultsByChatResponseBody struct {
 	// Risk results grouped by chat.
 	Chats []*RiskChatSummaryResponseBody `form:"chats" json:"chats" xml:"chats"`
+	// Cursor for the next page of results.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // GetRiskPolicyStatusResponseBody is the type of the "risk" service
@@ -1984,6 +1988,7 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 func NewListRiskResultsResponseBody(res *risk.ListRiskResultsResult) *ListRiskResultsResponseBody {
 	body := &ListRiskResultsResponseBody{
 		TotalCount: res.TotalCount,
+		NextCursor: res.NextCursor,
 	}
 	if res.Results != nil {
 		body.Results = make([]*RiskResultResponseBody, len(res.Results))
@@ -2003,7 +2008,9 @@ func NewListRiskResultsResponseBody(res *risk.ListRiskResultsResult) *ListRiskRe
 // NewListRiskResultsByChatResponseBody builds the HTTP response body from the
 // result of the "listRiskResultsByChat" endpoint of the "risk" service.
 func NewListRiskResultsByChatResponseBody(res *risk.ListRiskResultsByChatResult) *ListRiskResultsByChatResponseBody {
-	body := &ListRiskResultsByChatResponseBody{}
+	body := &ListRiskResultsByChatResponseBody{
+		NextCursor: res.NextCursor,
+	}
 	if res.Chats != nil {
 		body.Chats = make([]*RiskChatSummaryResponseBody, len(res.Chats))
 		for i, val := range res.Chats {
@@ -3393,11 +3400,11 @@ func NewDeleteRiskPolicyPayload(id string, apikeyToken *string, sessionToken *st
 
 // NewListRiskResultsPayload builds a risk service listRiskResults endpoint
 // payload.
-func NewListRiskResultsPayload(policyID *string, chatID *string, limit int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
+func NewListRiskResultsPayload(policyID *string, chatID *string, cursor *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
 	v := &risk.ListRiskResultsPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
-	v.Limit = limit
+	v.Cursor = cursor
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3407,9 +3414,9 @@ func NewListRiskResultsPayload(policyID *string, chatID *string, limit int, apik
 
 // NewListRiskResultsByChatPayload builds a risk service listRiskResultsByChat
 // endpoint payload.
-func NewListRiskResultsByChatPayload(limit int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsByChatPayload {
+func NewListRiskResultsByChatPayload(cursor *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsByChatPayload {
 	v := &risk.ListRiskResultsByChatPayload{}
-	v.Limit = limit
+	v.Cursor = cursor
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

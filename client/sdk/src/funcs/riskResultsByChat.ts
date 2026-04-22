@@ -100,7 +100,7 @@ async function $do(
   const path = pathToFunc("/rpc/risk.results.byChat")();
 
   const query = encodeFormQuery({
-    "limit": payload?.limit,
+    "cursor": payload?.cursor,
   });
 
   const headers = new Headers(compactMap({

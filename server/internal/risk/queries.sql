@@ -187,8 +187,9 @@ LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = @project_id
   AND rr.found IS TRUE
-ORDER BY rr.created_at DESC
-LIMIT @result_limit;
+  AND (sqlc.narg(cursor)::uuid IS NULL OR rr.id <= sqlc.narg(cursor)::uuid)
+ORDER BY rr.id DESC
+LIMIT 51;
 
 -- name: ListRiskResultsByProjectAndPolicy :many
 SELECT rr.*, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
@@ -199,8 +200,9 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
   AND rr.found IS TRUE
-ORDER BY rr.created_at DESC
-LIMIT @result_limit;
+  AND (sqlc.narg(cursor)::uuid IS NULL OR rr.id <= sqlc.narg(cursor)::uuid)
+ORDER BY rr.id DESC
+LIMIT 51;
 
 -- name: ListRiskResultsByChatFound :many
 SELECT rr.*, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
@@ -211,8 +213,9 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE cm.chat_id = @chat_id
   AND rr.project_id = @project_id
   AND rr.found IS TRUE
-ORDER BY rr.created_at DESC
-LIMIT @result_limit;
+  AND (sqlc.narg(cursor)::uuid IS NULL OR rr.id <= sqlc.narg(cursor)::uuid)
+ORDER BY rr.id DESC
+LIMIT 51;
 
 -- name: ListRiskResultsByMessage :many
 SELECT *
@@ -234,6 +237,7 @@ LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = @project_id
   AND rr.found IS TRUE
+  AND (sqlc.narg(cursor)::uuid IS NULL OR cm.chat_id <= sqlc.narg(cursor)::uuid)
 GROUP BY cm.chat_id, c.title, c.external_user_id
-ORDER BY latest_detected DESC
-LIMIT @result_limit;
+ORDER BY cm.chat_id DESC
+LIMIT 51;

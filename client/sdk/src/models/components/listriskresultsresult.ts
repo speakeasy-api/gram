@@ -11,6 +11,10 @@ import { RiskResult, RiskResult$inboundSchema } from "./riskresult.js";
 
 export type ListRiskResultsResult = {
   /**
+   * Cursor for the next page of results.
+   */
+  nextCursor?: string | undefined;
+  /**
    * The list of risk results.
    */
   results: Array<RiskResult>;
@@ -26,11 +30,13 @@ export const ListRiskResultsResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    next_cursor: z.optional(z.string()),
     results: z.array(RiskResult$inboundSchema),
     total_count: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "next_cursor": "nextCursor",
       "total_count": "totalCount",
     });
   }),

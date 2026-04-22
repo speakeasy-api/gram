@@ -13119,14 +13119,12 @@ paths:
             operationId: listRiskResultsByChat
             parameters:
                 - allowEmptyValue: true
-                  description: Maximum number of chats to return.
+                  description: Cursor to fetch the next page of results.
                   in: query
-                  name: limit
+                  name: cursor
                   schema:
-                    default: 10
-                    description: Maximum number of chats to return.
-                    format: int64
-                    type: integer
+                    description: Cursor to fetch the next page of results.
+                    type: string
                 - allowEmptyValue: true
                   description: API Key header
                   in: header
@@ -13243,14 +13241,12 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
-                  description: Maximum number of results to return.
+                  description: Cursor to fetch the next page of results.
                   in: query
-                  name: limit
+                  name: cursor
                   schema:
-                    default: 100
-                    description: Maximum number of results to return.
-                    format: int64
-                    type: integer
+                    description: Cursor to fetch the next page of results.
+                    type: string
                 - allowEmptyValue: true
                   description: API Key header
                   in: header
@@ -22902,11 +22898,17 @@ components:
                     items:
                         $ref: '#/components/schemas/RiskChatSummary'
                     description: Risk results grouped by chat.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of results.
             required:
                 - chats
         ListRiskResultsResult:
             type: object
             properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of results.
                 results:
                     type: array
                     items:

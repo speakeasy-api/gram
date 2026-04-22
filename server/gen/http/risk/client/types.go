@@ -133,6 +133,8 @@ type ListRiskResultsResponseBody struct {
 	Results []*RiskResultResponseBody `form:"results,omitempty" json:"results,omitempty" xml:"results,omitempty"`
 	// Total number of findings across all enabled policies.
 	TotalCount *int64 `form:"total_count,omitempty" json:"total_count,omitempty" xml:"total_count,omitempty"`
+	// Cursor for the next page of results.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // ListRiskResultsByChatResponseBody is the type of the "risk" service
@@ -140,6 +142,8 @@ type ListRiskResultsResponseBody struct {
 type ListRiskResultsByChatResponseBody struct {
 	// Risk results grouped by chat.
 	Chats []*RiskChatSummaryResponseBody `form:"chats,omitempty" json:"chats,omitempty" xml:"chats,omitempty"`
+	// Cursor for the next page of results.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // GetRiskPolicyStatusResponseBody is the type of the "risk" service
@@ -2764,6 +2768,7 @@ func NewDeleteRiskPolicyGatewayError(body *DeleteRiskPolicyGatewayErrorResponseB
 func NewListRiskResultsResultOK(body *ListRiskResultsResponseBody) *risk.ListRiskResultsResult {
 	v := &risk.ListRiskResultsResult{
 		TotalCount: *body.TotalCount,
+		NextCursor: body.NextCursor,
 	}
 	v.Results = make([]*types.RiskResult, len(body.Results))
 	for i, val := range body.Results {
@@ -2930,7 +2935,9 @@ func NewListRiskResultsGatewayError(body *ListRiskResultsGatewayErrorResponseBod
 // NewListRiskResultsByChatResultOK builds a "risk" service
 // "listRiskResultsByChat" endpoint result from a HTTP "OK" response.
 func NewListRiskResultsByChatResultOK(body *ListRiskResultsByChatResponseBody) *risk.ListRiskResultsByChatResult {
-	v := &risk.ListRiskResultsByChatResult{}
+	v := &risk.ListRiskResultsByChatResult{
+		NextCursor: body.NextCursor,
+	}
 	v.Chats = make([]*types.RiskChatSummary, len(body.Chats))
 	for i, val := range body.Chats {
 		if val == nil {

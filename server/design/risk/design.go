@@ -168,9 +168,7 @@ var _ = Service("risk", func() {
 			Attribute("chat_id", String, "Optional chat ID to filter by.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("limit", Int, "Maximum number of results to return.", func() {
-				Default(100)
-			})
+			Attribute("cursor", String, "Cursor to fetch the next page of results.")
 		})
 
 		Result(ListRiskResultsResult)
@@ -182,7 +180,7 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("policy_id")
 			Param("chat_id")
-			Param("limit")
+			Param("cursor")
 			Response(StatusOK)
 		})
 
@@ -199,9 +197,7 @@ var _ = Service("risk", func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
-			Attribute("limit", Int, "Maximum number of chats to return.", func() {
-				Default(10)
-			})
+			Attribute("cursor", String, "Cursor to fetch the next page of results.")
 		})
 
 		Result(ListRiskResultsByChatResult)
@@ -211,7 +207,7 @@ var _ = Service("risk", func() {
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
-			Param("limit")
+			Param("cursor")
 			Response(StatusOK)
 		})
 
@@ -285,10 +281,12 @@ var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {
 var ListRiskResultsResult = Type("ListRiskResultsResult", func() {
 	Attribute("results", ArrayOf(shared.RiskResult), "The list of risk results.")
 	Attribute("total_count", Int64, "Total number of findings across all enabled policies.")
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
 	Required("results", "total_count")
 })
 
 var ListRiskResultsByChatResult = Type("ListRiskResultsByChatResult", func() {
 	Attribute("chats", ArrayOf(shared.RiskChatSummary), "Risk results grouped by chat.")
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
 	Required("chats")
 })

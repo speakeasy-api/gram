@@ -9,18 +9,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
 import { Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
-import { keepPreviousData } from "@tanstack/react-query";
-import {
-  useRiskListResults,
-  useRiskListPolicies,
-  useRiskListResultsByChat,
-} from "@gram/client/react-query/index.js";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useRiskListPolicies } from "@gram/client/react-query/index.js";
+import { useSdkClient } from "@/contexts/Sdk";
 import { RULE_CATEGORY_META } from "./policy-data";
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
@@ -35,6 +31,7 @@ export default function SecurityOverview() {
 
 function SecurityOverviewContent() {
   const routes = useRoutes();
+  const client = useSdkClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
   const setSelectedChatId = useCallback(
@@ -50,33 +47,42 @@ function SecurityOverviewContent() {
     },
     [setSearchParams],
   );
-  const [chatsLimit, setChatsLimit] = useState(10);
-  const [findingsLimit, setFindingsLimit] = useState(10);
 
   const { data: policiesData, isLoading: policiesLoading } =
     useRiskListPolicies();
-  const {
-    data: resultsData,
-    isLoading: resultsLoading,
-    isFetching: resultsFetching,
-  } = useRiskListResults({ limit: findingsLimit }, undefined, {
-    placeholderData: keepPreviousData,
+
+  const resultsQuery = useInfiniteQuery({
+    queryKey: ["risk", "results", "list"],
+    queryFn: async ({ pageParam }) => {
+      return client.risk.results.list({ cursor: pageParam });
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
-  const {
-    data: chatSummaryData,
-    isLoading: chatSummaryLoading,
-    isFetching: chatSummaryFetching,
-  } = useRiskListResultsByChat({ limit: chatsLimit }, undefined, {
-    placeholderData: keepPreviousData,
+
+  const chatSummaryQuery = useInfiniteQuery({
+    queryKey: ["risk", "results", "byChat"],
+    queryFn: async ({ pageParam }) => {
+      return client.risk.results.byChat({ cursor: pageParam });
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
   const policies = policiesData?.policies ?? [];
-  const results = resultsData?.results ?? [];
-  const recentChats = chatSummaryData?.chats ?? [];
+  const results = useMemo(
+    () => resultsQuery.data?.pages.flatMap((p) => p.results) ?? [],
+    [resultsQuery.data],
+  );
+  const totalFindings =
+    resultsQuery.data?.pages[0]?.totalCount ?? results.length;
+  const recentChats = useMemo(
+    () => chatSummaryQuery.data?.pages.flatMap((p) => p.chats) ?? [],
+    [chatSummaryQuery.data],
+  );
 
-  // Only show full-page loading on initial load, not on limit changes
   const isInitialLoading =
-    policiesLoading || resultsLoading || chatSummaryLoading;
+    policiesLoading || resultsQuery.isLoading || chatSummaryQuery.isLoading;
 
   if (isInitialLoading) {
     return (
@@ -100,17 +106,13 @@ function SecurityOverviewContent() {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-            <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-              <Shield className="text-muted-foreground h-6 w-6" />
-            </div>
-            <Type variant="subheading" className="mb-1">
-              Risk Analysis
-            </Type>
-            <Type small muted className="mb-4 max-w-md text-center">
+          <div className="flex flex-col items-center justify-center gap-4 py-20">
+            <Shield className="text-muted-foreground h-12 w-12" />
+            <h2 className="text-lg font-semibold">Risk Analysis</h2>
+            <p className="text-muted-foreground max-w-md text-center text-sm">
               Monitor your chat messages for leaked secrets and sensitive data.
               Set up a risk policy to get started.
-            </Type>
+            </p>
             <Button onClick={() => routes.policyCenter.goTo()}>
               Go to Policy Center
             </Button>
@@ -120,7 +122,6 @@ function SecurityOverviewContent() {
     );
   }
 
-  const totalFindings = resultsData?.totalCount ?? 0;
   const totalScanned = policies.reduce(
     (max, p) => Math.max(max, p.totalMessages - p.pendingMessages),
     0,
@@ -204,15 +205,17 @@ function SecurityOverviewContent() {
                       ))}
                     </TableBody>
                   </Table>
-                  {recentChats.length >= chatsLimit && (
+                  {chatSummaryQuery.hasNextPage && (
                     <div className="mt-2 flex justify-center">
                       <Button
                         variant="ghost"
                         size="sm"
-                        disabled={chatSummaryFetching}
-                        onClick={() => setChatsLimit((l) => l + 100)}
+                        disabled={chatSummaryQuery.isFetchingNextPage}
+                        onClick={() => chatSummaryQuery.fetchNextPage()}
                       >
-                        {chatSummaryFetching ? "Loading..." : "Load More"}
+                        {chatSummaryQuery.isFetchingNextPage
+                          ? "Loading..."
+                          : "Load More"}
                       </Button>
                     </div>
                   )}
@@ -276,15 +279,17 @@ function SecurityOverviewContent() {
                       ))}
                     </TableBody>
                   </Table>
-                  {results.length >= findingsLimit && (
+                  {resultsQuery.hasNextPage && (
                     <div className="mt-2 flex justify-center">
                       <Button
                         variant="ghost"
                         size="sm"
-                        disabled={resultsFetching}
-                        onClick={() => setFindingsLimit((l) => l + 100)}
+                        disabled={resultsQuery.isFetchingNextPage}
+                        onClick={() => resultsQuery.fetchNextPage()}
                       >
-                        {resultsFetching ? "Loading..." : "Load More"}
+                        {resultsQuery.isFetchingNextPage
+                          ? "Loading..."
+                          : "Load More"}
                       </Button>
                     </div>
                   )}
