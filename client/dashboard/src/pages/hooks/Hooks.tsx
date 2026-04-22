@@ -2314,6 +2314,8 @@ function HooksAnalytics({
 }) {
   const breakdown = summaryData?.breakdown ?? [];
   const timeSeries = summaryData?.timeSeries ?? [];
+  const skillTimeSeries = summaryData?.skillTimeSeries ?? [];
+  const skills = summaryData?.skills ?? [];
 
   const kpis = useMemo(() => {
     if (!summaryData) return null;
@@ -2493,6 +2495,24 @@ function HooksAnalytics({
               title="User Event Counts"
               breakdown={breakdown}
               handleFilter={makeFilterHandler({ user: "row" })}
+              expandedChart={expandedChart}
+              onExpand={setExpandedChart}
+            />
+          )}
+
+          {skillTimeSeries.length > 0 && (
+            <SkillUsageTimeSeries
+              skillTimeSeries={skillTimeSeries}
+              from={from}
+              to={to}
+              expandedChart={expandedChart}
+              onExpand={setExpandedChart}
+            />
+          )}
+          {skills.length > 0 && (
+            <UsersPerSkillChart
+              title="Users per Skill"
+              skills={skills}
               expandedChart={expandedChart}
               onExpand={setExpandedChart}
             />
