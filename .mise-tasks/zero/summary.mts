@@ -45,6 +45,26 @@ if (trueish.has(process.env["GRAM_ENABLE_OTEL_METRICS"] ?? "")) {
   );
 }
 
+const assistantRuntimeHostKind =
+  process.env["GRAM_ASSISTANT_RUNTIME_HOST_KIND"] ?? "";
+if (assistantRuntimeHostKind) {
+  console.log(
+    chalk.greenBright(
+      `⚫︎ Assistant runtime host kind is ${assistantRuntimeHostKind} (GRAM_ASSISTANT_RUNTIME_HOST_KIND)`,
+    ),
+  );
+}
+
+const assistantRuntimeServerURL =
+  process.env["GRAM_ASSISTANT_RUNTIME_SERVER_URL"] ?? "";
+if (assistantRuntimeServerURL) {
+  console.log(
+    chalk.greenBright(
+      `⚫︎ Assistant runtimes will reach Gram via ${assistantRuntimeServerURL}`,
+    ),
+  );
+}
+
 async function pokePostgreSQL() {
   let result = await $`docker compose ps gram-db --format json`;
   if (!result.ok) {
