@@ -1837,11 +1837,26 @@ function ServerErrorRateChart({
   );
 }
 
-function buildTimeSeriesFromSummary(
-  timeSeries: HooksTimeSeriesPoint[],
-  keyFn: (p: HooksTimeSeriesPoint) => string,
+type TimeSeriesDataset = {
+  label: string;
+  data: number[];
+  borderColor: string | undefined;
+  backgroundColor: string;
+  pointBackgroundColor: string | undefined;
+  fill: boolean;
+  tension: number;
+  borderWidth: number;
+  pointRadius: number;
+  pointHoverRadius: number;
+};
+
+function buildTimeSeriesFromSummary<
+  T extends { bucketStartNs: string; eventCount: number },
+>(
+  timeSeries: T[],
+  keyFn: (p: T) => string,
   timeRangeMs: number,
-  valueFn: (p: HooksTimeSeriesPoint) => number = (p) => p.eventCount,
+  valueFn: (p: T) => number = (p) => p.eventCount,
 ) {
   if (timeSeries.length === 0)
     return { labels: [], tooltipLabels: [], datasets: [] };
@@ -1878,21 +1893,23 @@ function buildTimeSeriesFromSummary(
     }),
   );
 
-  const datasets = Array.from(seriesMap.entries()).map(([key, series], i) => {
-    const color = USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length];
-    return {
-      label: key,
-      data: sortedTs.map((ts) => series.get(ts) ?? 0),
-      borderColor: color,
-      backgroundColor: color + "1a",
-      pointBackgroundColor: color,
-      fill: false,
-      tension: 0.45,
-      borderWidth: 1.5,
-      pointRadius: 0,
-      pointHoverRadius: 4,
-    };
-  });
+  const datasets: TimeSeriesDataset[] = Array.from(seriesMap.entries()).map(
+    ([key, series], i) => {
+      const color = USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length];
+      return {
+        label: key,
+        data: sortedTs.map((ts) => series.get(ts) ?? 0),
+        borderColor: color,
+        backgroundColor: color + "1a",
+        pointBackgroundColor: color,
+        fill: false,
+        tension: 0.45,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+      };
+    },
+  );
 
   return { labels, tooltipLabels, datasets };
 }
@@ -1906,7 +1923,7 @@ function MultiLineChart({
 }: {
   labels: string[];
   tooltipLabels: string[];
-  datasets: ReturnType<typeof buildTimeSeriesFromSummary>["datasets"];
+  datasets: TimeSeriesDataset[];
   tooltipAfterBody?: (dataIndex: number) => string[];
   height?: number;
 }) {
