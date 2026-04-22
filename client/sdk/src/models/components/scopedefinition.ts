@@ -33,9 +33,6 @@ export const Slug = {
   McpRead: "mcp:read",
   McpWrite: "mcp:write",
   McpConnect: "mcp:connect",
-  RemoteMcpRead: "remote-mcp:read",
-  RemoteMcpWrite: "remote-mcp:write",
-  RemoteMcpConnect: "remote-mcp:connect",
 } as const;
 /**
  * Unique scope identifier.

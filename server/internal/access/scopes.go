@@ -9,33 +9,27 @@ import (
 type Scope string
 
 const (
-	ScopeRoot             Scope = "root"
-	ScopeOrgRead          Scope = "org:read"
-	ScopeOrgAdmin         Scope = "org:admin"
-	ScopeProjectRead      Scope = "project:read"
-	ScopeProjectWrite     Scope = "project:write"
-	ScopeMCPRead          Scope = "mcp:read"
-	ScopeMCPWrite         Scope = "mcp:write"
-	ScopeMCPConnect       Scope = "mcp:connect"
-	ScopeRemoteMCPRead    Scope = "remote-mcp:read"
-	ScopeRemoteMCPWrite   Scope = "remote-mcp:write"
-	ScopeRemoteMCPConnect Scope = "remote-mcp:connect"
+	ScopeRoot         Scope = "root"
+	ScopeOrgRead      Scope = "org:read"
+	ScopeOrgAdmin     Scope = "org:admin"
+	ScopeProjectRead  Scope = "project:read"
+	ScopeProjectWrite Scope = "project:write"
+	ScopeMCPRead      Scope = "mcp:read"
+	ScopeMCPWrite     Scope = "mcp:write"
+	ScopeMCPConnect   Scope = "mcp:connect"
 )
 
 // scopeExpansions maps a required scope to the higher-privilege scopes that also satisfy it.
 // Scopes with no higher-privilege implication (admin tiers) map to nil.
 var scopeExpansions = map[Scope][]Scope{
-	ScopeRoot:             nil,
-	ScopeOrgRead:          {ScopeOrgAdmin},
-	ScopeOrgAdmin:         nil,
-	ScopeProjectRead:      {ScopeProjectWrite},
-	ScopeProjectWrite:     nil,
-	ScopeMCPRead:          {ScopeMCPWrite},
-	ScopeMCPWrite:         nil,
-	ScopeMCPConnect:       {ScopeMCPRead, ScopeMCPWrite},
-	ScopeRemoteMCPRead:    {ScopeRemoteMCPWrite},
-	ScopeRemoteMCPWrite:   nil,
-	ScopeRemoteMCPConnect: {ScopeRemoteMCPRead, ScopeRemoteMCPWrite},
+	ScopeRoot:         nil,
+	ScopeOrgRead:      {ScopeOrgAdmin},
+	ScopeOrgAdmin:     nil,
+	ScopeProjectRead:  {ScopeProjectWrite},
+	ScopeProjectWrite: nil,
+	ScopeMCPRead:      {ScopeMCPWrite},
+	ScopeMCPWrite:     nil,
+	ScopeMCPConnect:   {ScopeMCPRead, ScopeMCPWrite},
 }
 
 // scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege
