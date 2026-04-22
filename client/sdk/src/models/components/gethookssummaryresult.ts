@@ -24,6 +24,10 @@ import {
   HooksUserSummary$inboundSchema,
 } from "./hooksusersummary.js";
 import { SkillSummary, SkillSummary$inboundSchema } from "./skillsummary.js";
+import {
+  SkillTimeSeriesPoint,
+  SkillTimeSeriesPoint$inboundSchema,
+} from "./skilltimeseriespoint.js";
 
 /**
  * Result of hooks summary query
@@ -37,6 +41,10 @@ export type GetHooksSummaryResult = {
    * Aggregated metrics grouped by server
    */
   servers: Array<HooksServerSummary>;
+  /**
+   * Time-bucketed event counts by skill
+   */
+  skillTimeSeries: Array<SkillTimeSeriesPoint>;
   /**
    * Aggregated metrics grouped by skill
    */
@@ -67,6 +75,7 @@ export const GetHooksSummaryResult$inboundSchema: z.ZodMiniType<
   z.object({
     breakdown: z.array(HooksBreakdownRow$inboundSchema),
     servers: z.array(HooksServerSummary$inboundSchema),
+    skill_time_series: z.array(SkillTimeSeriesPoint$inboundSchema),
     skills: z.array(SkillSummary$inboundSchema),
     time_series: z.array(HooksTimeSeriesPoint$inboundSchema),
     total_events: z.int(),
@@ -75,6 +84,7 @@ export const GetHooksSummaryResult$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "skill_time_series": "skillTimeSeries",
       "time_series": "timeSeries",
       "total_events": "totalEvents",
       "total_sessions": "totalSessions",
