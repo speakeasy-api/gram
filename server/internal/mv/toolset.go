@@ -635,7 +635,7 @@ func readToolsetTools(
 			if _, ok := seen[def.HttpToolDefinition.Name]; ok {
 				continue
 			}
-			seen[def.HttpToolDefinition.ID.String()] = true
+			seen[def.HttpToolDefinition.Name] = true
 
 			name := def.HttpToolDefinition.Name
 			description := def.HttpToolDefinition.Description

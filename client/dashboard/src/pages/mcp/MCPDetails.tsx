@@ -200,6 +200,15 @@ function MCPDetailPageInner() {
     return hash && validTabs.includes(hash) ? hash : "overview";
   });
 
+  // Re-validate activeTab when feature flag loads asynchronously
+  useEffect(() => {
+    if (!isRbacEnabled) return;
+    const hash = window.location.hash.slice(1);
+    if (hash === "team-access") {
+      setActiveTab("team-access");
+    }
+  }, [isRbacEnabled]);
+
   const handleTabChange = (value: string) => {
     setActiveTab(value);
     const url = new URL(window.location.href);
