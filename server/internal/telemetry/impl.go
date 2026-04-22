@@ -1524,14 +1524,15 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		bucketSizeNs = fiveMinNs
 	}
 
-	// Run all six independent ClickHouse queries in parallel
+	// Run all seven independent ClickHouse queries in parallel
 	var (
-		serverRows       []repo.HooksServerSummaryRow
-		userRows         []repo.HooksUserSummaryRow
-		skillRows        []repo.SkillSummaryRow
-		breakdownRows    []repo.HooksBreakdownRow
-		timeSeriesPoints []repo.HooksTimeSeriesPoint
-		sessionCount     int64
+		serverRows            []repo.HooksServerSummaryRow
+		userRows              []repo.HooksUserSummaryRow
+		skillRows             []repo.SkillSummaryRow
+		breakdownRows         []repo.HooksBreakdownRow
+		timeSeriesPoints      []repo.HooksTimeSeriesPoint
+		skillTimeSeriesPoints []repo.SkillTimeSeriesPoint
+		sessionCount          int64
 	)
 	eg, egCtx := errgroup.WithContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -1604,6 +1605,20 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks time series: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		skillTimeSeriesPoints, err = s.chRepo.GetSkillTimeSeries(egCtx, repo.GetSkillTimeSeriesParams{
+			GramProjectID: projectID,
+			TimeStart:     timeStart,
+			TimeEnd:       timeEnd,
+			BucketSizeNs:  bucketSizeNs,
+			Filters:       attributeFilters,
+		})
+		if err != nil {
+			return fmt.Errorf("get skill time series: %w", err)
 		}
 		return nil
 	})
@@ -1688,16 +1703,26 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		})
 	}
 
+	skillTimeSeries := make([]*telem_gen.SkillTimeSeriesPoint, 0, len(skillTimeSeriesPoints))
+	for _, pt := range skillTimeSeriesPoints {
+		skillTimeSeries = append(skillTimeSeries, &telem_gen.SkillTimeSeriesPoint{
+			BucketStartNs: strconv.FormatInt(pt.BucketStartNs, 10),
+			SkillName:     pt.SkillName,
+			EventCount:    int64(pt.EventCount), //nolint:gosec // Bounded count
+		})
+	}
+
 	totalSessions = sessionCount
 
 	return &telem_gen.GetHooksSummaryResult{
-		Servers:       servers,
-		Users:         users,
-		Skills:        skills,
-		TotalEvents:   totalEvents,
-		TotalSessions: totalSessions,
-		Breakdown:     breakdown,
-		TimeSeries:    timeSeries,
+		Servers:         servers,
+		Users:           users,
+		Skills:          skills,
+		TotalEvents:     totalEvents,
+		TotalSessions:   totalSessions,
+		Breakdown:       breakdown,
+		TimeSeries:      timeSeries,
+		SkillTimeSeries: skillTimeSeries,
 	}, nil
 }
 
