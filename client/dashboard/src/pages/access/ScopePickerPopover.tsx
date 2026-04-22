@@ -36,6 +36,8 @@ import type { AnnotationHint, CustomTab, ResourceType } from "./types";
 interface ScopePickerPopoverProps {
   /** The resource type determines which resource list to show */
   resourceType: ResourceType;
+  /** The scope slug this picker is for (e.g. "mcp:connect") */
+  scope?: string;
   /** null = unrestricted; string[] = allowlist */
   resources: string[] | null;
   onChangeResources: (resources: string[] | null) => void;
@@ -119,6 +121,7 @@ function useMCPServers(enabled: boolean) {
 
 export function ScopePickerPopover({
   resourceType,
+  scope,
   resources,
   onChangeResources,
   customMode,
@@ -147,7 +150,7 @@ export function ScopePickerPopover({
   }
 
   const isUnrestricted = resources === null;
-  const isMcp = resourceType === "mcp";
+  const isMcpConnect = scope === "mcp:connect";
   const projectList = organization.projects.map((p) => ({
     id: p.id,
     name: p.name,
@@ -190,7 +193,7 @@ export function ScopePickerPopover({
           }
         }}
       />
-      {isMcp && (
+      {isMcpConnect && (
         <ScopeOption
           label="Specific tools"
           selected={!!customMode}
