@@ -12556,7 +12556,8 @@ paths:
             summary: createRiskPolicy risk
             tags:
                 - risk
-            x-speakeasy-name-override: createPolicy
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: RiskCreatePolicy
                 type: mutation
@@ -12660,7 +12661,8 @@ paths:
             summary: deleteRiskPolicy risk
             tags:
                 - risk
-            x-speakeasy-name-override: deletePolicy
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: delete
     /rpc/risk.policies.get:
         get:
             description: Get a risk analysis policy by ID.
@@ -12765,7 +12767,8 @@ paths:
             summary: getRiskPolicy risk
             tags:
                 - risk
-            x-speakeasy-name-override: getPolicy
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: get
     /rpc/risk.policies.list:
         get:
             description: List all risk analysis policies for the current project.
@@ -12861,7 +12864,8 @@ paths:
             summary: listRiskPolicies risk
             tags:
                 - risk
-            x-speakeasy-name-override: listPolicies
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: RiskListPolicies
     /rpc/risk.policies.status:
@@ -12968,7 +12972,8 @@ paths:
             summary: getRiskPolicyStatus risk
             tags:
                 - risk
-            x-speakeasy-name-override: getPolicyStatus
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: status
     /rpc/risk.policies.trigger:
         post:
             description: Manually trigger risk analysis for a policy, starting or signaling the drain workflow.
@@ -13066,7 +13071,8 @@ paths:
             summary: triggerRiskAnalysis risk
             tags:
                 - risk
-            x-speakeasy-name-override: triggerAnalysis
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: trigger
     /rpc/risk.policies.update:
         put:
             description: Update a risk analysis policy.
@@ -13168,7 +13174,8 @@ paths:
             summary: updateRiskPolicy risk
             tags:
                 - risk
-            x-speakeasy-name-override: updatePolicy
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: update
     /rpc/risk.results.byChat:
         get:
             description: List risk results grouped by chat session for the current project.
@@ -13273,7 +13280,8 @@ paths:
             summary: listRiskResultsByChat risk
             tags:
                 - risk
-            x-speakeasy-name-override: listResultsByChat
+            x-speakeasy-group: risk.results
+            x-speakeasy-name-override: byChat
             x-speakeasy-react-hook:
                 name: RiskListResultsByChat
     /rpc/risk.results.byUser:
@@ -13380,7 +13388,8 @@ paths:
             summary: listRiskResultsByUser risk
             tags:
                 - risk
-            x-speakeasy-name-override: listResultsByUser
+            x-speakeasy-group: risk.results
+            x-speakeasy-name-override: byUser
             x-speakeasy-react-hook:
                 name: RiskListResultsByUser
     /rpc/risk.results.list:
@@ -13503,7 +13512,8 @@ paths:
             summary: listRiskResults risk
             tags:
                 - risk
-            x-speakeasy-name-override: listResults
+            x-speakeasy-group: risk.results
+            x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: RiskListResults
     /rpc/slack-apps.configure:

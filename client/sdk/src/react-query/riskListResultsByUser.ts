@@ -141,7 +141,7 @@ export function invalidateRiskListResultsByUser(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "risk", "listResultsByUser", ...queryKeyBase],
+    queryKey: ["@gram/client", "results", "byUser", ...queryKeyBase],
   });
 }
 
@@ -151,6 +151,6 @@ export function invalidateAllRiskListResultsByUser(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "risk", "listResultsByUser"],
+    queryKey: ["@gram/client", "results", "byUser"],
   });
 }

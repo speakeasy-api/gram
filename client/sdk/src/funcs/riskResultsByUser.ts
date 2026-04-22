@@ -28,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listRiskResults risk
+ * listRiskResultsByUser risk
  *
  * @remarks
- * List risk analysis results for the current project.
+ * List risk results grouped by user for the current project.
  */
-export function riskListResults(
+export function riskResultsByUser(
   client: GramCore,
-  request?: operations.ListRiskResultsRequest | undefined,
-  security?: operations.ListRiskResultsSecurity | undefined,
+  request?: operations.ListRiskResultsByUserRequest | undefined,
+  security?: operations.ListRiskResultsByUserSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ListRiskResultsResult,
+    components.ListRiskResultsByUserResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +62,13 @@ export function riskListResults(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListRiskResultsRequest | undefined,
-  security?: operations.ListRiskResultsSecurity | undefined,
+  request?: operations.ListRiskResultsByUserRequest | undefined,
+  security?: operations.ListRiskResultsByUserSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.ListRiskResultsResult,
+      components.ListRiskResultsByUserResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -86,7 +86,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        z.optional(operations.ListRiskResultsRequest$outboundSchema),
+        z.optional(operations.ListRiskResultsByUserRequest$outboundSchema),
         value,
       ),
     "Input validation failed",
@@ -97,12 +97,10 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.results.list")();
+  const path = pathToFunc("/rpc/risk.results.byUser")();
 
   const query = encodeFormQuery({
-    "chat_id": payload?.chat_id,
     "limit": payload?.limit,
-    "policy_id": payload?.policy_id,
   });
 
   const headers = new Headers(compactMap({
@@ -151,7 +149,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listRiskResults",
+    operationID: "listRiskResultsByUser",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -207,7 +205,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ListRiskResultsResult,
+    components.ListRiskResultsByUserResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -218,7 +216,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.ListRiskResultsResult$inboundSchema),
+    M.json(200, components.ListRiskResultsByUserResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

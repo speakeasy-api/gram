@@ -8,23 +8,23 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { riskGetPolicyStatus } from "../funcs/riskGetPolicyStatus.js";
+import { riskPoliciesGet } from "../funcs/riskPoliciesGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskGetPolicyStatusQueryData = components.RiskPolicyStatus;
+export type RiskPoliciesGetQueryData = components.RiskPolicy;
 
-export function prefetchRiskGetPolicyStatus(
+export function prefetchRiskPoliciesGet(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetRiskPolicyStatusRequest,
-  security?: operations.GetRiskPolicyStatusSecurity | undefined,
+  request: operations.GetRiskPolicyRequest,
+  security?: operations.GetRiskPolicySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildRiskGetPolicyStatusQuery(
+    ...buildRiskPoliciesGetQuery(
       client$,
       request,
       security,
@@ -33,27 +33,25 @@ export function prefetchRiskGetPolicyStatus(
   });
 }
 
-export function buildRiskGetPolicyStatusQuery(
+export function buildRiskPoliciesGetQuery(
   client$: GramCore,
-  request: operations.GetRiskPolicyStatusRequest,
-  security?: operations.GetRiskPolicyStatusSecurity | undefined,
+  request: operations.GetRiskPolicyRequest,
+  security?: operations.GetRiskPolicySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<RiskGetPolicyStatusQueryData>;
+  queryFn: (context: QueryFunctionContext) => Promise<RiskPoliciesGetQueryData>;
 } {
   return {
-    queryKey: queryKeyRiskGetPolicyStatus({
+    queryKey: queryKeyRiskPoliciesGet({
       id: request.id,
       gramKey: request.gramKey,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
     }),
-    queryFn: async function riskGetPolicyStatusQueryFn(
+    queryFn: async function riskPoliciesGetQueryFn(
       ctx,
-    ): Promise<RiskGetPolicyStatusQueryData> {
+    ): Promise<RiskPoliciesGetQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -65,7 +63,7 @@ export function buildRiskGetPolicyStatusQuery(
         signal: sig,
       };
 
-      return unwrapAsync(riskGetPolicyStatus(
+      return unwrapAsync(riskPoliciesGet(
         client$,
         request,
         security,
@@ -75,7 +73,7 @@ export function buildRiskGetPolicyStatusQuery(
   };
 }
 
-export function queryKeyRiskGetPolicyStatus(
+export function queryKeyRiskPoliciesGet(
   parameters: {
     id: string;
     gramKey?: string | undefined;
@@ -83,5 +81,5 @@ export function queryKeyRiskGetPolicyStatus(
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "risk", "getPolicyStatus", parameters];
+  return ["@gram/client", "policies", "get", parameters];
 }

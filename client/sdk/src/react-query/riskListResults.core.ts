@@ -8,7 +8,7 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { riskListResults } from "../funcs/riskListResults.js";
+import { riskResultsList } from "../funcs/riskResultsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -65,7 +65,7 @@ export function buildRiskListResultsQuery(
         signal: sig,
       };
 
-      return unwrapAsync(riskListResults(
+      return unwrapAsync(riskResultsList(
         client$,
         request,
         security,
@@ -85,5 +85,5 @@ export function queryKeyRiskListResults(
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "risk", "listResults", parameters];
+  return ["@gram/client", "results", "list", parameters];
 }

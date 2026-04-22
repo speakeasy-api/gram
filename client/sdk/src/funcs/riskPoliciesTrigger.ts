@@ -4,14 +4,13 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listRiskResultsByChat risk
+ * triggerRiskAnalysis risk
  *
  * @remarks
- * List risk results grouped by chat session for the current project.
+ * Manually trigger risk analysis for a policy, starting or signaling the drain workflow.
  */
-export function riskListResultsByChat(
+export function riskPoliciesTrigger(
   client: GramCore,
-  request?: operations.ListRiskResultsByChatRequest | undefined,
-  security?: operations.ListRiskResultsByChatSecurity | undefined,
+  request: operations.TriggerRiskAnalysisRequest,
+  security?: operations.TriggerRiskAnalysisSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ListRiskResultsByChatResult,
+    void,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +61,13 @@ export function riskListResultsByChat(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListRiskResultsByChatRequest | undefined,
-  security?: operations.ListRiskResultsByChatSecurity | undefined,
+  request: operations.TriggerRiskAnalysisRequest,
+  security?: operations.TriggerRiskAnalysisSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.ListRiskResultsByChatResult,
+      void,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -85,35 +84,31 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        z.optional(operations.ListRiskResultsByChatRequest$outboundSchema),
-        value,
-      ),
+      z.parse(operations.TriggerRiskAnalysisRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
-
-  const path = pathToFunc("/rpc/risk.results.byChat")();
-
-  const query = encodeFormQuery({
-    "limit": payload?.limit,
+  const body = encodeJSON("body", payload.TriggerRiskAnalysisRequestBody, {
+    explode: true,
   });
 
+  const path = pathToFunc("/rpc/risk.policies.trigger")();
+
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -149,7 +144,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listRiskResultsByChat",
+    operationID: "triggerRiskAnalysis",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -163,11 +158,10 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -205,7 +199,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ListRiskResultsByChatResult,
+    void,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -216,7 +210,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.ListRiskResultsByChatResult$inboundSchema),
+    M.nil(200, z.void()),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildRiskGetPolicyStatusQuery,
-  prefetchRiskGetPolicyStatus,
-  queryKeyRiskGetPolicyStatus,
-  RiskGetPolicyStatusQueryData,
-} from "./riskGetPolicyStatus.core.js";
+  buildRiskPoliciesStatusQuery,
+  prefetchRiskPoliciesStatus,
+  queryKeyRiskPoliciesStatus,
+  RiskPoliciesStatusQueryData,
+} from "./riskPoliciesStatus.core.js";
 export {
-  buildRiskGetPolicyStatusQuery,
-  prefetchRiskGetPolicyStatus,
-  queryKeyRiskGetPolicyStatus,
-  type RiskGetPolicyStatusQueryData,
+  buildRiskPoliciesStatusQuery,
+  prefetchRiskPoliciesStatus,
+  queryKeyRiskPoliciesStatus,
+  type RiskPoliciesStatusQueryData,
 };
 
-export type RiskGetPolicyStatusQueryError =
+export type RiskPoliciesStatusQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -58,17 +58,17 @@ export type RiskGetPolicyStatusQueryError =
  * @remarks
  * Get the analysis status of a risk policy including progress and workflow state.
  */
-export function useRiskGetPolicyStatus(
+export function useRiskPoliciesStatus(
   request: operations.GetRiskPolicyStatusRequest,
   security?: operations.GetRiskPolicyStatusSecurity | undefined,
   options?: QueryHookOptions<
-    RiskGetPolicyStatusQueryData,
-    RiskGetPolicyStatusQueryError
+    RiskPoliciesStatusQueryData,
+    RiskPoliciesStatusQueryError
   >,
-): UseQueryResult<RiskGetPolicyStatusQueryData, RiskGetPolicyStatusQueryError> {
+): UseQueryResult<RiskPoliciesStatusQueryData, RiskPoliciesStatusQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildRiskGetPolicyStatusQuery(
+    ...buildRiskPoliciesStatusQuery(
       client,
       request,
       security,
@@ -84,20 +84,20 @@ export function useRiskGetPolicyStatus(
  * @remarks
  * Get the analysis status of a risk policy including progress and workflow state.
  */
-export function useRiskGetPolicyStatusSuspense(
+export function useRiskPoliciesStatusSuspense(
   request: operations.GetRiskPolicyStatusRequest,
   security?: operations.GetRiskPolicyStatusSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    RiskGetPolicyStatusQueryData,
-    RiskGetPolicyStatusQueryError
+    RiskPoliciesStatusQueryData,
+    RiskPoliciesStatusQueryError
   >,
 ): UseSuspenseQueryResult<
-  RiskGetPolicyStatusQueryData,
-  RiskGetPolicyStatusQueryError
+  RiskPoliciesStatusQueryData,
+  RiskPoliciesStatusQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildRiskGetPolicyStatusQuery(
+    ...buildRiskPoliciesStatusQuery(
       client,
       request,
       security,
@@ -107,7 +107,7 @@ export function useRiskGetPolicyStatusSuspense(
   });
 }
 
-export function setRiskGetPolicyStatusData(
+export function setRiskPoliciesStatusData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -117,14 +117,14 @@ export function setRiskGetPolicyStatusData(
       gramProject?: string | undefined;
     },
   ],
-  data: RiskGetPolicyStatusQueryData,
-): RiskGetPolicyStatusQueryData | undefined {
-  const key = queryKeyRiskGetPolicyStatus(...queryKeyBase);
+  data: RiskPoliciesStatusQueryData,
+): RiskPoliciesStatusQueryData | undefined {
+  const key = queryKeyRiskPoliciesStatus(...queryKeyBase);
 
-  return client.setQueryData<RiskGetPolicyStatusQueryData>(key, data);
+  return client.setQueryData<RiskPoliciesStatusQueryData>(key, data);
 }
 
-export function invalidateRiskGetPolicyStatus(
+export function invalidateRiskPoliciesStatus(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -138,16 +138,16 @@ export function invalidateRiskGetPolicyStatus(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "risk", "getPolicyStatus", ...queryKeyBase],
+    queryKey: ["@gram/client", "policies", "status", ...queryKeyBase],
   });
 }
 
-export function invalidateAllRiskGetPolicyStatus(
+export function invalidateAllRiskPoliciesStatus(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "risk", "getPolicyStatus"],
+    queryKey: ["@gram/client", "policies", "status"],
   });
 }

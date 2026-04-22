@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { riskDeletePolicy } from "../funcs/riskDeletePolicy.js";
+import { riskPoliciesTrigger } from "../funcs/riskPoliciesTrigger.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GramError } from "../models/errors/gramerror.js";
@@ -27,15 +27,15 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type RiskDeletePolicyMutationVariables = {
-  request: operations.DeleteRiskPolicyRequest;
-  security?: operations.DeleteRiskPolicySecurity | undefined;
+export type RiskPoliciesTriggerMutationVariables = {
+  request: operations.TriggerRiskAnalysisRequest;
+  security?: operations.TriggerRiskAnalysisSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type RiskDeletePolicyMutationData = void;
+export type RiskPoliciesTriggerMutationData = void;
 
-export type RiskDeletePolicyMutationError =
+export type RiskPoliciesTriggerMutationError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -47,49 +47,49 @@ export type RiskDeletePolicyMutationError =
   | SDKValidationError;
 
 /**
- * deleteRiskPolicy risk
+ * triggerRiskAnalysis risk
  *
  * @remarks
- * Delete a risk analysis policy.
+ * Manually trigger risk analysis for a policy, starting or signaling the drain workflow.
  */
-export function useRiskDeletePolicyMutation(
+export function useRiskPoliciesTriggerMutation(
   options?: MutationHookOptions<
-    RiskDeletePolicyMutationData,
-    RiskDeletePolicyMutationError,
-    RiskDeletePolicyMutationVariables
+    RiskPoliciesTriggerMutationData,
+    RiskPoliciesTriggerMutationError,
+    RiskPoliciesTriggerMutationVariables
   >,
 ): UseMutationResult<
-  RiskDeletePolicyMutationData,
-  RiskDeletePolicyMutationError,
-  RiskDeletePolicyMutationVariables
+  RiskPoliciesTriggerMutationData,
+  RiskPoliciesTriggerMutationError,
+  RiskPoliciesTriggerMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildRiskDeletePolicyMutation(client, options),
+    ...buildRiskPoliciesTriggerMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyRiskDeletePolicy(): MutationKey {
-  return ["@gram/client", "risk", "deletePolicy"];
+export function mutationKeyRiskPoliciesTrigger(): MutationKey {
+  return ["@gram/client", "policies", "trigger"];
 }
 
-export function buildRiskDeletePolicyMutation(
+export function buildRiskPoliciesTriggerMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: RiskDeletePolicyMutationVariables,
-  ) => Promise<RiskDeletePolicyMutationData>;
+    variables: RiskPoliciesTriggerMutationVariables,
+  ) => Promise<RiskPoliciesTriggerMutationData>;
 } {
   return {
-    mutationKey: mutationKeyRiskDeletePolicy(),
-    mutationFn: function riskDeletePolicyMutationFn({
+    mutationKey: mutationKeyRiskPoliciesTrigger(),
+    mutationFn: function riskPoliciesTriggerMutationFn({
       request,
       security,
       options,
-    }): Promise<RiskDeletePolicyMutationData> {
+    }): Promise<RiskPoliciesTriggerMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -102,7 +102,7 @@ export function buildRiskDeletePolicyMutation(
           ),
         },
       };
-      return unwrapAsync(riskDeletePolicy(
+      return unwrapAsync(riskPoliciesTrigger(
         client$,
         request,
         security,

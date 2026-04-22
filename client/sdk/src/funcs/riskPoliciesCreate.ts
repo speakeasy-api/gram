@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -28,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listRiskPolicies risk
+ * createRiskPolicy risk
  *
  * @remarks
- * List all risk analysis policies for the current project.
+ * Create a new risk analysis policy for the current project.
  */
-export function riskListPolicies(
+export function riskPoliciesCreate(
   client: GramCore,
-  request?: operations.ListRiskPoliciesRequest | undefined,
-  security?: operations.ListRiskPoliciesSecurity | undefined,
+  request: operations.CreateRiskPolicyRequest,
+  security?: operations.CreateRiskPolicySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ListRiskPoliciesResult,
+    components.RiskPolicy,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +62,13 @@ export function riskListPolicies(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListRiskPoliciesRequest | undefined,
-  security?: operations.ListRiskPoliciesSecurity | undefined,
+  request: operations.CreateRiskPolicyRequest,
+  security?: operations.CreateRiskPolicySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.ListRiskPoliciesResult,
+      components.RiskPolicy,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -85,31 +85,31 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        z.optional(operations.ListRiskPoliciesRequest$outboundSchema),
-        value,
-      ),
+      z.parse(operations.CreateRiskPolicyRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload.CreateRiskPolicyRequestBody, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/risk.policies.list")();
+  const path = pathToFunc("/rpc/risk.policies.create")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -145,7 +145,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listRiskPolicies",
+    operationID: "createRiskPolicy",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -159,7 +159,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -200,7 +200,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ListRiskPoliciesResult,
+    components.RiskPolicy,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -211,7 +211,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.ListRiskPoliciesResult$inboundSchema),
+    M.json(200, components.RiskPolicy$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

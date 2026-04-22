@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildRiskGetPolicyQuery,
-  prefetchRiskGetPolicy,
-  queryKeyRiskGetPolicy,
-  RiskGetPolicyQueryData,
-} from "./riskGetPolicy.core.js";
+  buildRiskPoliciesGetQuery,
+  prefetchRiskPoliciesGet,
+  queryKeyRiskPoliciesGet,
+  RiskPoliciesGetQueryData,
+} from "./riskPoliciesGet.core.js";
 export {
-  buildRiskGetPolicyQuery,
-  prefetchRiskGetPolicy,
-  queryKeyRiskGetPolicy,
-  type RiskGetPolicyQueryData,
+  buildRiskPoliciesGetQuery,
+  prefetchRiskPoliciesGet,
+  queryKeyRiskPoliciesGet,
+  type RiskPoliciesGetQueryData,
 };
 
-export type RiskGetPolicyQueryError =
+export type RiskPoliciesGetQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -58,14 +58,17 @@ export type RiskGetPolicyQueryError =
  * @remarks
  * Get a risk analysis policy by ID.
  */
-export function useRiskGetPolicy(
+export function useRiskPoliciesGet(
   request: operations.GetRiskPolicyRequest,
   security?: operations.GetRiskPolicySecurity | undefined,
-  options?: QueryHookOptions<RiskGetPolicyQueryData, RiskGetPolicyQueryError>,
-): UseQueryResult<RiskGetPolicyQueryData, RiskGetPolicyQueryError> {
+  options?: QueryHookOptions<
+    RiskPoliciesGetQueryData,
+    RiskPoliciesGetQueryError
+  >,
+): UseQueryResult<RiskPoliciesGetQueryData, RiskPoliciesGetQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildRiskGetPolicyQuery(
+    ...buildRiskPoliciesGetQuery(
       client,
       request,
       security,
@@ -81,17 +84,17 @@ export function useRiskGetPolicy(
  * @remarks
  * Get a risk analysis policy by ID.
  */
-export function useRiskGetPolicySuspense(
+export function useRiskPoliciesGetSuspense(
   request: operations.GetRiskPolicyRequest,
   security?: operations.GetRiskPolicySecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    RiskGetPolicyQueryData,
-    RiskGetPolicyQueryError
+    RiskPoliciesGetQueryData,
+    RiskPoliciesGetQueryError
   >,
-): UseSuspenseQueryResult<RiskGetPolicyQueryData, RiskGetPolicyQueryError> {
+): UseSuspenseQueryResult<RiskPoliciesGetQueryData, RiskPoliciesGetQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildRiskGetPolicyQuery(
+    ...buildRiskPoliciesGetQuery(
       client,
       request,
       security,
@@ -101,7 +104,7 @@ export function useRiskGetPolicySuspense(
   });
 }
 
-export function setRiskGetPolicyData(
+export function setRiskPoliciesGetData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -111,14 +114,14 @@ export function setRiskGetPolicyData(
       gramProject?: string | undefined;
     },
   ],
-  data: RiskGetPolicyQueryData,
-): RiskGetPolicyQueryData | undefined {
-  const key = queryKeyRiskGetPolicy(...queryKeyBase);
+  data: RiskPoliciesGetQueryData,
+): RiskPoliciesGetQueryData | undefined {
+  const key = queryKeyRiskPoliciesGet(...queryKeyBase);
 
-  return client.setQueryData<RiskGetPolicyQueryData>(key, data);
+  return client.setQueryData<RiskPoliciesGetQueryData>(key, data);
 }
 
-export function invalidateRiskGetPolicy(
+export function invalidateRiskPoliciesGet(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -132,16 +135,16 @@ export function invalidateRiskGetPolicy(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "risk", "getPolicy", ...queryKeyBase],
+    queryKey: ["@gram/client", "policies", "get", ...queryKeyBase],
   });
 }
 
-export function invalidateAllRiskGetPolicy(
+export function invalidateAllRiskPoliciesGet(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "risk", "getPolicy"],
+    queryKey: ["@gram/client", "policies", "get"],
   });
 }

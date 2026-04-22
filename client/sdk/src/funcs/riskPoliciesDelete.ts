@@ -11,7 +11,6 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getRiskPolicyStatus risk
+ * deleteRiskPolicy risk
  *
  * @remarks
- * Get the analysis status of a risk policy including progress and workflow state.
+ * Delete a risk analysis policy.
  */
-export function riskGetPolicyStatus(
+export function riskPoliciesDelete(
   client: GramCore,
-  request: operations.GetRiskPolicyStatusRequest,
-  security?: operations.GetRiskPolicyStatusSecurity | undefined,
+  request: operations.DeleteRiskPolicyRequest,
+  security?: operations.DeleteRiskPolicySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.RiskPolicyStatus,
+    void,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +61,13 @@ export function riskGetPolicyStatus(
 
 async function $do(
   client: GramCore,
-  request: operations.GetRiskPolicyStatusRequest,
-  security?: operations.GetRiskPolicyStatusSecurity | undefined,
+  request: operations.DeleteRiskPolicyRequest,
+  security?: operations.DeleteRiskPolicySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.RiskPolicyStatus,
+      void,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -85,7 +84,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.GetRiskPolicyStatusRequest$outboundSchema, value),
+      z.parse(operations.DeleteRiskPolicyRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -94,7 +93,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.policies.status")();
+  const path = pathToFunc("/rpc/risk.policies.delete")();
 
   const query = encodeFormQuery({
     "id": payload.id,
@@ -146,7 +145,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getRiskPolicyStatus",
+    operationID: "deleteRiskPolicy",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -160,7 +159,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "DELETE",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -202,7 +201,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.RiskPolicyStatus,
+    void,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -213,7 +212,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.RiskPolicyStatus$inboundSchema),
+    M.nil(200, z.void()),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
