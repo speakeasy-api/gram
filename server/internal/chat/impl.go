@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -64,6 +65,7 @@ type Service struct {
 	logger           *slog.Logger
 	sessions         *sessions.Manager
 	chatSessions     *chatsessions.Manager
+	assistantTokens  *assistanttokens.Manager
 	assetStorage     assets.BlobStore
 	posthog          *posthog.Posthog
 	telemetryService *telemetry.Service
@@ -89,6 +91,7 @@ func NewService(
 		db:               db,
 		sessions:         sessions,
 		chatSessions:     chatSessions,
+		assistantTokens:  nil,
 		logger:           logger,
 		repo:             repo.New(db),
 		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
@@ -119,10 +122,27 @@ func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JW
 	return s.chatSessions.Authorize(ctx, token)
 }
 
+func (s *Service) SetAssistantTokens(manager *assistanttokens.Manager) {
+	s.assistantTokens = manager
+}
+
 // directAuthorize performs authentication and authorization for chat requests.
 // It tries session auth first, then API key auth, then chat session token as fallback.
 // It also validates the project header and ensures ProjectID is present.
 func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, error) {
+	if s.assistantTokens != nil {
+		if token := r.Header.Get("Authorization"); token != "" {
+			authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
+			if err == nil {
+				authCtx, ok := contextvalues.GetAuthContext(authorizedCtx)
+				if !ok || authCtx == nil || authCtx.ProjectID == nil {
+					return authorizedCtx, nil, oops.C(oops.CodeUnauthorized)
+				}
+				return authorizedCtx, authCtx, nil
+			}
+		}
+	}
+
 	// Try session auth first
 	sc := security.APIKeyScheme{
 		Name:           constants.SessionSecurityScheme,
@@ -714,6 +734,18 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		jsonSchema = &schema
 	}
 
+	toolNames := make([]string, 0, len(chatRequest.Tools))
+	for _, t := range chatRequest.Tools {
+		if t.Function != nil {
+			toolNames = append(toolNames, t.Function.Name)
+		}
+	}
+	s.logger.DebugContext(ctx, "chat completions tools forwarded",
+		slog.String(logKeyChatModel, chatRequest.Model),
+		slog.Int(logKeyChatToolCount, len(toolNames)),
+		slog.Any(logKeyChatToolNames, toolNames),
+	)
+
 	completionReq := openrouter.CompletionRequest{
 		OrgID:          orgID,
 		ProjectID:      authCtx.ProjectID.String(),
@@ -1035,6 +1067,10 @@ const (
 	// maxAssetReadSize is the maximum size of message content that will be
 	// read from asset storage to prevent memory issues.
 	maxAssetReadSize = 20 * 1024 * 1024 // 20 MiB
+
+	logKeyChatModel     = "chat.model"
+	logKeyChatToolCount = "chat.tool_count"
+	logKeyChatToolNames = "chat.tool_names"
 )
 
 func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, assetStorage assets.BlobStore, rows []chatMessageRow) error {

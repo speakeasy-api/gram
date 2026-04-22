@@ -14,6 +14,7 @@ const (
 	FeatureToolIOLogs     Feature = "tool_io_logs"
 	FeatureRBAC           Feature = "rbac"
 	FeatureSessionCapture Feature = "session_capture"
+	FeatureAssistants     Feature = "assistants"
 )
 
 type FeatureCache struct {

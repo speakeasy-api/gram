@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -90,6 +91,7 @@ type Service struct {
 	telemLogger         *tm.Logger
 	vectorToolStore     *rag.ToolsetVectorStore
 	temporal            *temporal.Environment
+	assistantTokens     *assistanttokens.Manager
 	sessions            *sessions.Manager
 	chatSessionsManager *chatsessions.Manager
 	externalmcpRepo     *externalmcp_repo.Queries
@@ -191,6 +193,7 @@ func NewService(
 		features:            features,
 		vectorToolStore:     vectorToolStore,
 		temporal:            temporal,
+		assistantTokens:     nil,
 		sessions:            sessions,
 		chatSessionsManager: chatSessionsManager,
 		enc:                 enc,
@@ -209,6 +212,10 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	// OAuth 2.1 Authorization Server Metadata
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-protected-resource/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP)
+}
+
+func (s *Service) SetAssistantTokens(manager *assistanttokens.Manager) {
+	s.assistantTokens = manager
 }
 
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
@@ -911,6 +918,13 @@ func parseMcpSessionID(headers http.Header) string {
 func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID uuid.UUID, isOAuthCapable bool) (context.Context, error) {
 	if token == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
+	if s.assistantTokens != nil {
+		authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
+		if err == nil {
+			return authorizedCtx, nil
+		}
 	}
 
 	var oAuthToken *oauth.Token

@@ -31,8 +31,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -359,6 +361,7 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, redisFlags...)
 	flags = append(flags, clickHouseFlags...)
 	flags = append(flags, functionsFlags...)
+	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, pulseMCPFlags...)
 
 	return &cli.Command{
@@ -631,6 +634,11 @@ func newStartCommand() *cli.Command {
 			}
 
 			authorizer := auth.New(logger, db, sessionManager, accessManager)
+			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db)
+			assistantRuntimeConfig, err := assistantRuntimeConfigFromCLI(c)
+			if err != nil {
+				return err
+			}
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
 			externalOAuthService := oauth.NewExternalOAuthService(logger, guardianPolicy, db, cache.NewRedisCacheAdapter(redisClient), authorizer, encryptionClient, externalMcpOAuthConfig)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, serverURL)
@@ -668,6 +676,7 @@ func newStartCommand() *cli.Command {
 				temporalEnv,
 				accessManager,
 			)
+			mcpService.SetAssistantTokens(assistantTokenManager)
 
 			chatClient := chat.NewAgenticChatClient(
 				logger,
@@ -677,6 +686,13 @@ func newStartCommand() *cli.Command {
 				completionsClient,
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
+			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, posthogClient, telemSvc, assetStorage, accessManager)
+			chatService.SetAssistantTokens(assistantTokenManager)
+			assistantsSvc, err := assistants.NewService(logger, tracerProvider, db, sessionManager, accessManager, assistantTokenManager, serverURL, slackClient, assistantRuntimeConfig, telemLogger)
+			if err != nil {
+				return fmt.Errorf("failed to create assistants service: %w", err)
+			}
+			triggerApp.RegisterDispatcher(assistants.NewDispatcher(assistantsSvc.Core(), temporalEnv))
 
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), accessManager)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), accessManager)
@@ -705,6 +721,7 @@ func newStartCommand() *cli.Command {
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient, accessManager, productFeatures))
+			assistants.Attach(mux, assistantsSvc)
 			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, accessManager, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}))
 			// access depends on audit for log writers, so inject the org-read check
 			// here instead of importing access from the audit package.
@@ -760,7 +777,7 @@ func newStartCommand() *cli.Command {
 			}))
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, accessManager, serverURL))
 			mcp.Attach(mux, mcpService, mcpMetadataService)
-			chat.Attach(mux, chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, posthogClient, telemSvc, assetStorage, accessManager))
+			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, accessManager))
 			customdomains.Attach(mux, customdomains.NewService(logger, tracerProvider, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}, accessManager))
 			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter, accessManager))
