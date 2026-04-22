@@ -1,4 +1,4 @@
-package access
+package authz
 
 import (
 	"testing"
@@ -16,7 +16,7 @@ func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	organizationID := "org_access_require_integration"
+	organizationID := "org_authz_require_integration"
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_require_integration")
 	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "role_require_integration")
 
@@ -28,15 +28,15 @@ func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	manager := NewManager(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
-	err = manager.Require(ctx,
+	err = engine.Require(ctx,
 		Check{Scope: ScopeBuildRead, ResourceID: "proj:123"},
 		Check{Scope: ScopeMCPConnect, ResourceID: "toolA"},
 	)
 	require.NoError(t, err)
 
-	err = manager.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolB"})
+	err = engine.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolB"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -47,7 +47,7 @@ func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	organizationID := "org_access_filter_integration"
+	organizationID := "org_authz_filter_integration"
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_filter_integration")
 	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "role_filter_integration")
 
@@ -60,13 +60,13 @@ func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	manager := NewManager(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
-	projectIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj:123", "proj:456"})
+	projectIDs, err := engine.Filter(ctx, ScopeBuildRead, []string{"proj:123", "proj:456"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj:123"}, projectIDs)
 
-	toolIDs, err := manager.Filter(ctx, ScopeMCPConnect, []string{"toolA", "toolB", "toolC"})
+	toolIDs, err := engine.Filter(ctx, ScopeMCPConnect, []string{"toolA", "toolB", "toolC"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"toolA", "toolB"}, toolIDs)
 }

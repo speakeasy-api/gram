@@ -1,4 +1,4 @@
-package access
+package authz
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -32,56 +33,56 @@ func (s stubFeatureChecker) IsFeatureEnabled(_ context.Context, _ string, _ prod
 	return s.enabled, nil
 }
 
-func TestManagerRequire_requiresAuthContext(t *testing.T) {
+func TestEngineRequire_requiresAuthContext(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
-	err := manager.Require(t.Context(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := engine.Require(t.Context(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
 
-func TestManagerRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
+func TestEngineRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache)
 
-	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	require.NoError(t, err)
 }
 
-func TestManagerRequire_mapsDeniedToForbidden(t *testing.T) {
+func TestEngineRequire_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), nil)
 
-	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := engine.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestManagerRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
+func TestEngineRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 
-	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 	require.ErrorIs(t, err, ErrMissingGrants)
 }
 
-func TestManagerRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
+func TestEngineRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{err: errors.New("boom")}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{err: errors.New("boom")}, workos.NewStubClient(), cache.NoopCache)
 
-	err := manager.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
@@ -90,33 +91,35 @@ func TestManagerRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 func TestResolveRoleSlug_cachesEmptyMembershipResult(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestAccessService(t)
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "test@example.com", "Test User", "user_workos_test", "membership_test")
+	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
+	seedConnectedUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "test@example.com", "Test User", "user_workos_test", "membership_test")
 
 	membership := &countingMembershipFetcher{}
-	manager := NewManager(testLogger(t), ti.conn, stubFeatureChecker{enabled: true}, membership, newMapCache())
+	engine := NewEngine(testLogger(t), conn, stubFeatureChecker{enabled: true}, membership, newMapCache())
 
-	roleSlug, err := manager.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	roleSlug, err := engine.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 	require.Empty(t, roleSlug)
 
-	roleSlug, err = manager.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	roleSlug, err = engine.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 	require.Empty(t, roleSlug)
 	require.Equal(t, 1, membership.calls)
 }
 
-func TestManagerRequireAny_mapsDeniedToForbidden(t *testing.T) {
+func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeMCPConnect, Resource: "tool_a"}})
 
-	err := manager.RequireAny(ctx,
+	err := engine.RequireAny(ctx,
 		Check{Scope: ScopeMCPConnect, ResourceID: "tool_b"},
 		Check{Scope: ScopeMCPConnect, ResourceID: "tool_c"},
 	)
@@ -125,47 +128,47 @@ func TestManagerRequireAny_mapsDeniedToForbidden(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestManagerFilter_returnsAllowedSubset(t *testing.T) {
+func TestEngineFilter_returnsAllowedSubset(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Resource: "proj_123"}})
 
-	resourceIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
+	resourceIDs, err := engine.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj_123"}, resourceIDs)
 }
 
-func TestManagerRequire_rejectsInvalidCheck(t *testing.T) {
+func TestEngineRequire_rejectsInvalidCheck(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Resource: WildcardResource}})
 
-	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: ""})
+	err := engine.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: ""})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 	require.ErrorIs(t, err, ErrInvalidCheck)
 }
 
-func TestManagerRequire_requiresChecks(t *testing.T) {
+func TestEngineRequire_requiresChecks(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Resource: WildcardResource}})
 
-	err := manager.Require(ctx)
+	err := engine.Require(ctx)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 	require.ErrorIs(t, err, ErrNoChecks)
 }
 
-func TestManagerRequire_skipsForAPIKeyAuth(t *testing.T) {
+func TestEngineRequire_skipsForAPIKeyAuth(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	sessionID := "session_123"
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org_123",
@@ -183,14 +186,14 @@ func TestManagerRequire_skipsForAPIKeyAuth(t *testing.T) {
 		APIKeyScopes:          nil,
 	})
 
-	err := manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := engine.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
 	require.NoError(t, err)
 }
 
-func TestManagerFilter_skipsForNonEnterpriseAccount(t *testing.T) {
+func TestEngineFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 	t.Parallel()
 
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
 	sessionID := "session_123"
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org_123",
@@ -208,7 +211,7 @@ func TestManagerFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 		APIKeyScopes:          nil,
 	})
 
-	resourceIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
+	resourceIDs, err := engine.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
 }
@@ -297,8 +300,6 @@ func enterpriseSessionCtx(t *testing.T) context.Context {
 	})
 }
 
-// scopeOverrideCtx returns a context with the scope override header value set
-// and an auth context for the given user/admin state.
 func scopeOverrideCtx(t *testing.T, isAdmin bool, accountType string) context.Context {
 	t.Helper()
 	sessionID := "session_123"
@@ -321,61 +322,47 @@ func scopeOverrideCtx(t *testing.T, isAdmin bool, accountType string) context.Co
 	return contextvalues.SetRBACScopeOverride(ctx, "build:read")
 }
 
-// TestCanUseOverride_devPlusAdmin verifies that an admin in a dev environment
-// can activate the scope override.
 func TestCanUseOverride_devPlusAdmin(t *testing.T) {
 	t.Parallel()
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache, ManagerOpts{DevMode: true})
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache, EngineOpts{DevMode: true})
 	ctx := scopeOverrideCtx(t, true, "pro")
 
-	enforce, err := manager.shouldEnforce(ctx)
+	enforce, err := engine.shouldEnforce(ctx)
 	require.NoError(t, err)
 	require.True(t, enforce)
 }
 
-// TestCanUseOverride_devPlusNonAdmin verifies that any user in a dev environment
-// can activate the scope override — the admin check is bypassed.
 func TestCanUseOverride_devPlusNonAdmin(t *testing.T) {
 	t.Parallel()
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache, ManagerOpts{DevMode: true})
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache, EngineOpts{DevMode: true})
 	ctx := scopeOverrideCtx(t, false, "pro")
 
-	enforce, err := manager.shouldEnforce(ctx)
+	enforce, err := engine.shouldEnforce(ctx)
 	require.NoError(t, err)
 	require.True(t, enforce)
 }
 
-// TestCanUseOverride_prodPlusAdmin verifies that a superadmin in production can
-// activate the scope override.
 func TestCanUseOverride_prodPlusAdmin(t *testing.T) {
 	t.Parallel()
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache)
 	ctx := scopeOverrideCtx(t, true, "pro")
 
-	enforce, err := manager.shouldEnforce(ctx)
+	enforce, err := engine.shouldEnforce(ctx)
 	require.NoError(t, err)
 	require.True(t, enforce)
 }
 
-// TestCanUseOverride_prodPlusNonAdmin verifies that a non-admin in production
-// cannot activate the scope override even when the header is present.
 func TestCanUseOverride_prodPlusNonAdmin(t *testing.T) {
 	t.Parallel()
-	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache)
 	ctx := scopeOverrideCtx(t, false, "pro")
 
-	// Non-enterprise + no feature flag + not admin → RBAC not enforced (all allowed).
-	enforce, err := manager.shouldEnforce(ctx)
+	enforce, err := engine.shouldEnforce(ctx)
 	require.NoError(t, err)
 	require.False(t, enforce)
 }
 
 func testLogger(t *testing.T) *slog.Logger {
 	t.Helper()
-	return slog.New(slog.DiscardHandler)
-}
-
-type noopFeatureCacheWriter struct{}
-
-func (noopFeatureCacheWriter) UpdateFeatureCache(_ context.Context, _ string, _ productfeatures.Feature, _ bool) {
+	return testenv.NewLogger(t)
 }

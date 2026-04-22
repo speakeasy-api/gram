@@ -1,4 +1,4 @@
-package access
+package authz
 
 import (
 	"testing"
@@ -27,9 +27,9 @@ func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	manager := NewManager(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
-	require.NoError(t, manager.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj:123"}))
-	require.NoError(t, manager.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolA"}))
+	engine := NewEngine(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj:123"}))
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolA"}))
 }
 
 func TestLoadGrants_rejectsEmptyOrganizationID(t *testing.T) {
@@ -88,8 +88,8 @@ func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	manager := NewManager(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
-	projectIDs, err := manager.Filter(ctx, ScopeBuildRead, []string{"proj:123"})
+	engine := NewEngine(testLogger(t), conn, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	projectIDs, err := engine.Filter(ctx, ScopeBuildRead, []string{"proj:123"})
 	require.NoError(t, err)
 	require.Empty(t, projectIDs)
 }

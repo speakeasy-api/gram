@@ -1,4 +1,4 @@
-package access
+package authz
 
 import (
 	"context"
