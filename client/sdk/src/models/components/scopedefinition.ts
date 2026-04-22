@@ -28,11 +28,14 @@ export type ResourceType = ClosedEnum<typeof ResourceType>;
 export const Slug = {
   OrgRead: "org:read",
   OrgAdmin: "org:admin",
-  BuildRead: "build:read",
-  BuildWrite: "build:write",
+  ProjectRead: "project:read",
+  ProjectWrite: "project:write",
   McpRead: "mcp:read",
   McpWrite: "mcp:write",
   McpConnect: "mcp:connect",
+  RemoteMcpRead: "remote-mcp:read",
+  RemoteMcpWrite: "remote-mcp:write",
+  RemoteMcpConnect: "remote-mcp:connect",
 } as const;
 /**
  * Unique scope identifier.
