@@ -45,10 +45,10 @@ func TestService_ListGrants(t *testing.T) {
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
 	require.Len(t, result.Grants, 2)
-	require.Equal(t, "project:read", result.Grants[0].Scope)
-	require.Equal(t, []string{"project_123"}, result.Grants[0].Resources)
-	require.Equal(t, "mcp:connect", result.Grants[1].Scope)
-	require.Equal(t, []string{"tool_456"}, result.Grants[1].Resources)
+	require.Equal(t, "mcp:connect", result.Grants[0].Scope)
+	require.Equal(t, []string{"tool_456"}, result.Grants[0].Resources)
+	require.Equal(t, "project:read", result.Grants[1].Scope)
+	require.Equal(t, []string{"project_123"}, result.Grants[1].Resources)
 }
 
 func TestService_ListGrants_MultipleRoles(t *testing.T) {
@@ -73,10 +73,10 @@ func TestService_ListGrants_MultipleRoles(t *testing.T) {
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
 	require.Len(t, result.Grants, 2)
-	require.Equal(t, "project:read", result.Grants[0].Scope)
-	require.Equal(t, []string{"project_123"}, result.Grants[0].Resources)
-	require.Equal(t, "mcp:connect", result.Grants[1].Scope)
-	require.Equal(t, []string{"tool_456"}, result.Grants[1].Resources)
+	require.Equal(t, "mcp:connect", result.Grants[0].Scope)
+	require.Equal(t, []string{"tool_456"}, result.Grants[0].Resources)
+	require.Equal(t, "project:read", result.Grants[1].Scope)
+	require.Equal(t, []string{"project_123"}, result.Grants[1].Resources)
 }
 
 func TestService_ListGrants_NotConnected(t *testing.T) {
