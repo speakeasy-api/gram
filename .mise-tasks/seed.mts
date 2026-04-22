@@ -269,6 +269,7 @@ async function seed() {
     );
   }
 
+  // oxlint-disable-next-line no-unused-vars
   const key = await initAPIKey({
     gram,
     sessionId,
