@@ -161,10 +161,24 @@ export function useExternalMcpReleaseWorkflow({
 }: UseExternalMcpReleaseWorkflowOptions): ExternalMcpReleaseWorkflow {
   const client = useSdkClient();
   const { data: toolsetsResult } = useListToolsets(
-    projectSlug ? { gramProject: projectSlug } : undefined,
+    projectSlug
+      ? {
+          option1: {
+            projectSlugHeaderGramProject: projectSlug,
+            sessionHeaderGramSession: "",
+          },
+        }
+      : undefined,
   );
   const { data: latestDeploymentResult } = useLatestDeployment(
-    projectSlug ? { gramProject: projectSlug } : undefined,
+    projectSlug
+      ? {
+          option2: {
+            projectSlugHeaderGramProject: projectSlug,
+            sessionHeaderGramSession: "",
+          },
+        }
+      : undefined,
   );
   const latestDeployment = latestDeploymentResult?.deployment;
 
@@ -282,8 +296,13 @@ export function useExternalMcpReleaseWorkflow({
 
   // Poll deployment status — pass gramProject for cross-project batch flow
   const { data: deploymentData } = useDeployment(
-    { id: deploymentId!, gramProject: projectSlug },
-    undefined,
+    { id: deploymentId! },
+    {
+      option2: {
+        projectSlugHeaderGramProject: projectSlug || "",
+        sessionHeaderGramSession: "",
+      },
+    },
     {
       enabled: !!deploymentId && phase === "deploying",
       refetchInterval: (query) => {
@@ -296,8 +315,13 @@ export function useExternalMcpReleaseWorkflow({
 
   // Poll deployment logs — keep polling in deploying phase OR briefly in error phase to capture final logs
   const { data: logsData } = useDeploymentLogs(
-    { deploymentId: deploymentId!, gramProject: projectSlug },
-    undefined,
+    { deploymentId: deploymentId! },
+    {
+      option2: {
+        sessionHeaderGramSession: "",
+        projectSlugHeaderGramProject: projectSlug || "",
+      },
+    },
     {
       enabled: !!deploymentId && (phase === "deploying" || phase === "error"),
       refetchInterval: phase === "deploying" ? 2000 : false,

@@ -922,10 +922,7 @@ function InstallationGuide({
     });
   }, [projectSlug, selectedFramework, selectedProduct, telemetry]);
 
-  const { data: existingKeys } = useListAPIKeys(
-    {},
-    { sessionHeaderGramSession: "" },
-  );
+  const { data: existingKeys } = useListAPIKeys();
 
   const createApiKeyMutation = useCreateAPIKeyMutation();
 

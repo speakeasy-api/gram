@@ -262,9 +262,17 @@ export function useIsProjectEmpty() {
   const { projectSlug } = useParams();
 
   const { data: deployment, isLoading: isDeploymentLoading } =
-    useLatestDeployment({ gramProject: projectSlug });
+    useLatestDeployment({
+      option2: {
+        projectSlugHeaderGramProject: projectSlug || "",
+        sessionHeaderGramSession: "",
+      },
+    });
   const { data: toolsets, isLoading: isToolsetsLoading } = useListToolsets({
-    gramProject: projectSlug,
+    option1: {
+      projectSlugHeaderGramProject: projectSlug || "",
+      sessionHeaderGramSession: "",
+    },
   });
 
   return {

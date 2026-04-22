@@ -55,7 +55,13 @@ export default function CreateCollection() {
   const toolsetQueries = useQueries({
     queries: projects.map((project) => ({
       queryKey: ["toolsets", "list", project.slug],
-      queryFn: () => client.toolsets.list({ gramProject: project.slug }),
+      queryFn: () =>
+        client.toolsets.list({
+          option1: {
+            sessionHeaderGramSession: "",
+            projectSlugHeaderGramProject: project.slug,
+          },
+        }),
       enabled: !!project.slug,
     })),
   });
