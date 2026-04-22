@@ -22,7 +22,7 @@ export default function SkillsSettings() {
   return (
     <div className="p-8">
       <div className="mx-auto max-w-4xl">
-        <RequireScope scope="build:read" level="page">
+        <RequireScope scope="project:read" level="page">
           <SkillsSettingsInner />
         </RequireScope>
       </div>
@@ -170,9 +170,9 @@ function CaptureToggleRow({
         </Type>
       </div>
       <RequireScope
-        scope="build:write"
+        scope="project:write"
         level="component"
-        reason="You need build:write to update capture settings."
+        reason="You need project:write to update capture settings."
       >
         <Switch
           checked={checked}

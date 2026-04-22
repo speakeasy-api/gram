@@ -90,7 +90,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupContent>
             <SidebarMenu>
               {featuresData?.skillsCaptureEnabled && (
-                <ScopeGatedNavItem item={routes.skills} scope="build:read" />
+                <ScopeGatedNavItem item={routes.skills} scope="project:read" />
               )}
               <ScopeGatedNavItem item={routes.elements} scope="project:read" />
               <ScopeGatedNavItem

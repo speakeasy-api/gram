@@ -1,13 +1,14 @@
-import type { ElementsConfig } from "@gram-ai/elements";
 import { Chat, GramElementsProvider } from "@gram-ai/elements";
-import { useAssistantRuntime } from "@assistant-ui/react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
-import { Wand2, ChevronRight, Sparkles, Terminal } from "lucide-react";
+import { ChevronRight, Sparkles, Terminal, Wand2 } from "lucide-react";
+import { InsightsContext, useInsightsState } from "./insights-context";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import type { ElementsConfig } from "@gram-ai/elements";
+import type { InsightsConfigOptions } from "./insights-context";
 import { cn } from "@/lib/utils";
 import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
-import { InsightsContext, useInsightsState } from "./insights-context";
-import type { InsightsConfigOptions } from "./insights-context";
+import { useAssistantRuntime } from "@assistant-ui/react";
+import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
 export type { InsightsConfigOptions } from "./insights-context";
@@ -378,7 +379,6 @@ function PendingPromptBridge({
         assistantRuntime.thread.append(text);
       })
       .catch((err: unknown) => {
-        // eslint-disable-next-line no-console
         console.error("Failed to send Explore prompt:", err);
       });
 
