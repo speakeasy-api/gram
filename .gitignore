@@ -56,5 +56,6 @@ package-lock.json
 /examples/*/pnpm-lock.yaml
 .worktrees
 .granary/
+/agents/runner/target
 .claude/hooks/*
 flagged-chats.jsonl
