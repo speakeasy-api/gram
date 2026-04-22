@@ -2031,6 +2031,31 @@ CREATE TABLE IF NOT EXISTS plugin_assignments (
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_assignments_plugin_id_principal_urn_key
   ON plugin_assignments (plugin_id, principal_urn);
 
+-- Tracks the GitHub repository where plugin packages are published for a project.
+CREATE TABLE IF NOT EXISTS plugin_github_connections (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  installation_id BIGINT NOT NULL,
+  repo_owner TEXT NOT NULL CHECK (repo_owner <> ''),
+  repo_name TEXT NOT NULL CHECK (repo_name <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT plugin_github_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT plugin_github_connections_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_project_id_key
+  ON plugin_github_connections (project_id);
+
+-- Prevent two projects from writing to the same GitHub repo under the same
+-- App installation. Two distinct installations could in theory point at the
+-- same external repo path; that's permitted and harmless.
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_installation_repo_key
+  ON plugin_github_connections (installation_id, repo_owner, repo_name);
+
+
 -- Risk analysis policies for scanning chat messages against configurable rules.
 -- One workflow per policy drains unanalyzed messages and produces risk_results.
 CREATE TABLE IF NOT EXISTS risk_policies (
