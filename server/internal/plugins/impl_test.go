@@ -720,6 +720,90 @@ func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
 	require.NotContains(t, string(cursorMCP), "gram_local_")
 }
 
+// User-provided env configs without a HeaderDisplayName must be skipped —
+// substituting the variable name as the HTTP header would produce a broken
+// MCP config. Only configs with an explicit header name should be emitted.
+func TestPluginsService_PublishPlugins_SkipsUserEnvConfigsWithoutHeaderName(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Headerless"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "headerless-toolset")
+	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	mcpRepo := mcpmetarepo.New(ti.conn)
+	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
+		ToolsetID:                 toolset.ID,
+		ProjectID:                 *authCtx.ProjectID,
+		ExternalDocumentationUrl:  pgtype.Text{Valid: false},
+		ExternalDocumentationText: pgtype.Text{Valid: false},
+		LogoID:                    uuid.NullUUID{Valid: false},
+		Instructions:              pgtype.Text{Valid: false},
+		DefaultEnvironmentID:      uuid.NullUUID{Valid: false},
+		InstallationOverrideUrl:   pgtype.Text{Valid: false},
+	})
+	require.NoError(t, err)
+
+	// Two user-provided env configs: one with header name, one without.
+	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
+		ProjectID:         *authCtx.ProjectID,
+		McpMetadataID:     metadata.ID,
+		VariableName:      "HAS_HEADER",
+		HeaderDisplayName: pgtype.Text{String: "X-Has-Header", Valid: true},
+		ProvidedBy:        "user",
+	})
+	require.NoError(t, err)
+	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
+		ProjectID:         *authCtx.ProjectID,
+		McpMetadataID:     metadata.ID,
+		VariableName:      "NO_HEADER",
+		HeaderDisplayName: pgtype.Text{Valid: false},
+		ProvidedBy:        "user",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Headerless Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	cursorMCP := mock.lastPushedFiles["headerless-cursor/mcp.json"]
+	require.NotNil(t, cursorMCP)
+
+	var cursorConfig struct {
+		MCPServers map[string]struct {
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(cursorMCP, &cursorConfig))
+
+	server, ok := cursorConfig.MCPServers["Headerless Server"]
+	require.True(t, ok)
+
+	// HAS_HEADER survived with its proper header name.
+	require.Equal(t, "${env:HAS_HEADER}", server.Headers["X-Has-Header"])
+
+	// NO_HEADER must not leak through as either a header key or a value.
+	require.NotContains(t, server.Headers, "NO_HEADER")
+	for k, v := range server.Headers {
+		require.NotContains(t, v, "NO_HEADER", "NO_HEADER variable leaked into header %q", k)
+	}
+}
+
 // AddPluginServer rejects toolsets without mcp_enabled, but mcp can be
 // disabled later without removing the persisted mcp_slug. The publish path
 // must filter those out so generated configs don't reference dead URLs.

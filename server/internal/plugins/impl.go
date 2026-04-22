@@ -908,16 +908,26 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 						return nil, oops.E(oops.CodeUnexpected, envErr, "load environment configs for toolset").Log(ctx, s.logger)
 					}
 					for _, ec := range envConfigs {
-						if ec.ProvidedBy == "user" {
-							displayName := ec.VariableName
-							if dn := conv.FromPGText[string](ec.HeaderDisplayName); dn != nil {
-								displayName = *dn
-							}
-							serverInfo.EnvConfigs = append(serverInfo.EnvConfigs, ServerEnvConfig{
-								VariableName: ec.VariableName,
-								DisplayName:  displayName,
-							})
+						if ec.ProvidedBy != "user" {
+							continue
 						}
+						// DisplayName ends up as both the HTTP header name and
+						// the userConfig description in generated configs. The
+						// env variable name is not a valid header substitute,
+						// so skip configs with no HeaderDisplayName rather than
+						// emit a broken header.
+						headerName := conv.FromPGText[string](ec.HeaderDisplayName)
+						if headerName == nil {
+							s.logger.WarnContext(ctx, "skipping user env config with no header name",
+								attr.SlogToolsetID(r.ToolsetID.String()),
+								slog.String("variable_name", ec.VariableName),
+							)
+							continue
+						}
+						serverInfo.EnvConfigs = append(serverInfo.EnvConfigs, ServerEnvConfig{
+							VariableName: ec.VariableName,
+							DisplayName:  *headerName,
+						})
 					}
 				}
 			}
