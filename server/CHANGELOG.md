@@ -1,5 +1,27 @@
 # server
 
+## 0.41.0
+
+### Minor Changes
+
+- d8c6ce1: add support for publishing external servers into collections.
+- 78e3323: Add remote MCP server management API endpoints with CRUD operations, RBAC scopes, header encryption, and audit logging
+- 1ee9f95: Improved Hooks dashboard with new charts, refined visuals, and smarter default filters.
+- 04c6c30: Add team invite flow with accept page, configurable expiry, and security hardening
+
+### Patch Changes
+
+- afe4b80: Normalize the `Source` column on `chat_messages` for Claude Code hook
+  intake so tool-call messages use the OTEL `service.name` like user and
+  assistant messages, instead of hardcoding `ClaudeCode`.
+- bbe494e: Fix chats breaking when switching providers mid-conversation. Assistant turns that contained both a text reply and a tool call could cause the next turn to fail with a validation error on some provider routes, leaving the conversation unrecoverable. Affected chats now continue to work seamlessly across providers.
+- 8c5d6e9: Add a defense-in-depth 413 guard on the `/completion` chat proxy — reject any
+  single tool-result message over 200KB with a clean HTTP 413 / `request_too_large`
+  error instead of forwarding to OpenRouter where it would surface as an opaque
+  "prompt is too long" 400. Clients are expected to truncate tool outputs
+  before sending (see `@gram-ai/elements` `tools.maxOutputBytes`), but this
+  guard keeps the error surface clean if they don't.
+
 ## 0.40.1
 
 ### Patch Changes
