@@ -42,7 +42,7 @@ import type {
 } from "@gram/client/models/components";
 import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Badge, Icon } from "@speakeasy-api/moonshine";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { formatChartLabel } from "@/components/chart/chartUtils";
@@ -1621,14 +1621,18 @@ function UsersPerServerChart({
       onExpand={onExpand}
       hasData={labels.length > 0}
     >
-      <StackedBarChart
-        labels={labels}
-        datasets={datasets}
-        handleFilter={handleFilter}
-        expanded={expanded}
-        maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
-        onShowAll={() => onExpand(chartId)}
-      />
+      {labels.length === 0 ? (
+        <ChartNoData />
+      ) : (
+        <StackedBarChart
+          labels={labels}
+          datasets={datasets}
+          handleFilter={handleFilter}
+          expanded={expanded}
+          maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
+          onShowAll={() => onExpand(chartId)}
+        />
+      )}
     </ChartCard>
   );
 }
@@ -1682,14 +1686,18 @@ function UserEventCountsChart({
       onExpand={onExpand}
       hasData={labels.length > 0}
     >
-      <StackedBarChart
-        labels={labels}
-        datasets={datasets}
-        handleFilter={handleFilter}
-        expanded={expanded}
-        maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
-        onShowAll={() => onExpand(chartId)}
-      />
+      {labels.length === 0 ? (
+        <ChartNoData />
+      ) : (
+        <StackedBarChart
+          labels={labels}
+          datasets={datasets}
+          handleFilter={handleFilter}
+          expanded={expanded}
+          maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
+          onShowAll={() => onExpand(chartId)}
+        />
+      )}
     </ChartCard>
   );
 }
@@ -1810,9 +1818,7 @@ function ServerErrorRateChart({
       hasData={labels.length > 0}
     >
       {labels.length === 0 ? (
-        <div className="text-muted-foreground flex h-16 items-center justify-center text-sm">
-          No errors in this period
-        </div>
+        <ChartNoData />
       ) : (
         <>
           <div
@@ -1916,6 +1922,19 @@ function buildTimeSeriesFromSummary<
   return { labels, tooltipLabels, datasets };
 }
 
+function ChartNoData() {
+  return (
+    <div className="flex h-24 items-center justify-center">
+      <Badge variant="neutral">
+        <Badge.LeftIcon>
+          <Icon name="chart-no-axes-column" size="small" />
+        </Badge.LeftIcon>
+        <Badge.Text>No data</Badge.Text>
+      </Badge>
+    </div>
+  );
+}
+
 function MultiLineChart({
   labels,
   tooltipLabels,
@@ -1930,11 +1949,7 @@ function MultiLineChart({
   height?: number;
 }) {
   if (labels.length === 0) {
-    return (
-      <div className="text-muted-foreground flex h-24 items-center justify-center text-sm">
-        No data
-      </div>
-    );
+    return <ChartNoData />;
   }
 
   const options: ChartOptions<"line"> = {
@@ -2159,13 +2174,17 @@ function UsersPerSkillChart({
       onExpand={onExpand}
       hasData={labels.length > 0}
     >
-      <StackedBarChart
-        labels={labels}
-        datasets={datasets}
-        expanded={expanded}
-        maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
-        onShowAll={() => onExpand(chartId)}
-      />
+      {labels.length === 0 ? (
+        <ChartNoData />
+      ) : (
+        <StackedBarChart
+          labels={labels}
+          datasets={datasets}
+          expanded={expanded}
+          maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
+          onShowAll={() => onExpand(chartId)}
+        />
+      )}
     </ChartCard>
   );
 }
@@ -2265,9 +2284,7 @@ function ErrorsOverTimeChart({
       hasData={hasErrors}
     >
       {!hasErrors ? (
-        <div className="text-muted-foreground flex h-[200px] items-center justify-center text-sm">
-          No errors in this period
-        </div>
+        <ChartNoData />
       ) : (
         <MultiLineChart
           labels={labels}
@@ -2341,8 +2358,6 @@ function HooksAnalytics({
       uniqueTools,
     };
   }, [summaryData]);
-
-  const hasServers = (summaryData?.servers.length ?? 0) > 0;
 
   type FilterAxisConfig = Partial<Record<"user" | "server", "dataset" | "row">>;
 
@@ -2446,99 +2461,85 @@ function HooksAnalytics({
         )}
       </div>
 
-      {(timeSeries.length > 0 || hasServers) && (
-        <div
-          className={cn(
-            "grid gap-4",
-            expandedChart
+      <div
+        className={cn(
+          "grid gap-4",
+          expandedChart
+            ? "grid-cols-1"
+            : compact
               ? "grid-cols-1"
-              : compact
-                ? "grid-cols-1"
-                : "grid-cols-1 lg:grid-cols-2",
-          )}
-        >
-          {timeSeries.length > 0 && (
-            <ServerUsageTimeSeries
-              timeSeries={timeSeries}
-              from={from}
-              to={to}
-              serverNameMappings={serverNameMappings}
-              expandedChart={expandedChart}
-              onExpand={setExpandedChart}
-            />
-          )}
-          {hasServers && (
-            <UsersPerServerChart
-              title="Users per Server"
-              breakdown={breakdown}
-              serverNameMappings={serverNameMappings}
-              handleFilter={makeFilterHandler({
-                server: "row",
-                user: "dataset",
-              })}
-              expandedChart={expandedChart}
-              onExpand={setExpandedChart}
-            />
-          )}
+              : "grid-cols-1 lg:grid-cols-2",
+        )}
+      >
+        <ServerUsageTimeSeries
+          timeSeries={timeSeries}
+          from={from}
+          to={to}
+          serverNameMappings={serverNameMappings}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
 
-          {timeSeries.length > 0 && (
-            <UserUsageTimeSeries
-              timeSeries={timeSeries}
-              from={from}
-              to={to}
-              expandedChart={expandedChart}
-              onExpand={setExpandedChart}
-            />
-          )}
-          {hasServers && (
-            <UserEventCountsChart
-              title="User Event Counts"
-              breakdown={breakdown}
-              handleFilter={makeFilterHandler({ user: "row" })}
-              expandedChart={expandedChart}
-              onExpand={setExpandedChart}
-            />
-          )}
+        <UsersPerServerChart
+          title="Users per Server"
+          breakdown={breakdown}
+          serverNameMappings={serverNameMappings}
+          handleFilter={makeFilterHandler({
+            server: "row",
+            user: "dataset",
+          })}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
 
-          {skillTimeSeries.length > 0 && (
-            <SkillUsageTimeSeries
-              skillTimeSeries={skillTimeSeries}
-              from={from}
-              to={to}
-              expandedChart={expandedChart}
-              onExpand={setExpandedChart}
-            />
-          )}
-          {skills.length > 0 && (
-            <UsersPerSkillChart
-              title="Users per Skill"
-              skills={skills}
-              expandedChart={expandedChart}
-              onExpand={setExpandedChart}
-            />
-          )}
+        <UserUsageTimeSeries
+          timeSeries={timeSeries}
+          from={from}
+          to={to}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
 
-          {timeSeries.length > 0 && (
-            <ErrorsOverTimeChart
-              timeSeries={timeSeries}
-              from={from}
-              to={to}
-              serverNameMappings={serverNameMappings}
-              expandedChart={expandedChart}
-              onExpand={setExpandedChart}
-            />
-          )}
-          {hasServers && (
-            <ServerErrorRateChart
-              title="Errors per Server and Tool"
-              breakdown={breakdown}
-              serverNameMappings={serverNameMappings}
-              expandedChart={expandedChart}
-              onExpand={setExpandedChart}
-            />
-          )}
-        </div>
-      )}
+        <UserEventCountsChart
+          title="User Event Counts"
+          breakdown={breakdown}
+          handleFilter={makeFilterHandler({ user: "row" })}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
+
+        <SkillUsageTimeSeries
+          skillTimeSeries={skillTimeSeries}
+          from={from}
+          to={to}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
+
+        <UsersPerSkillChart
+          title="Users per Skill"
+          skills={skills}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
+
+        <ErrorsOverTimeChart
+          timeSeries={timeSeries}
+          from={from}
+          to={to}
+          serverNameMappings={serverNameMappings}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
+
+        <ServerErrorRateChart
+          title="Errors per Server and Tool"
+          breakdown={breakdown}
+          serverNameMappings={serverNameMappings}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
+      </div>
     </div>
   );
 }
