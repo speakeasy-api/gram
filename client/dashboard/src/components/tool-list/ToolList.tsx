@@ -781,6 +781,33 @@ export function ToolList({
     return map;
   }, [visibleTools]);
 
+  const handleCheckboxChange = useCallback(
+    (toolId: string, checked: boolean) => {
+      if (selectionMode === "add" && onSelectionChange) {
+        // For selection mode, update parent state
+        const next = new Set(selectedUrns);
+        if (checked) {
+          next.add(toolId);
+        } else {
+          next.delete(toolId);
+        }
+        onSelectionChange(Array.from(next));
+      } else {
+        // For normal mode, update local state
+        setSelectedForRemoval((prev) => {
+          const next = new Set(prev);
+          if (checked) {
+            next.add(toolId);
+          } else {
+            next.delete(toolId);
+          }
+          return next;
+        });
+      }
+    },
+    [selectionMode, onSelectionChange, selectedUrns],
+  );
+
   // Handle keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -939,33 +966,6 @@ export function ToolList({
       return next;
     });
   };
-
-  const handleCheckboxChange = useCallback(
-    (toolId: string, checked: boolean) => {
-      if (selectionMode === "add" && onSelectionChange) {
-        // For selection mode, update parent state
-        const next = new Set(selectedUrns);
-        if (checked) {
-          next.add(toolId);
-        } else {
-          next.delete(toolId);
-        }
-        onSelectionChange(Array.from(next));
-      } else {
-        // For normal mode, update local state
-        setSelectedForRemoval((prev) => {
-          const next = new Set(prev);
-          if (checked) {
-            next.add(toolId);
-          } else {
-            next.delete(toolId);
-          }
-          return next;
-        });
-      }
-    },
-    [selectionMode, onSelectionChange, selectedUrns],
-  );
 
   const handleCancel = () => {
     setSelectedForRemoval(new Set());
