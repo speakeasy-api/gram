@@ -150,6 +150,7 @@ export function ScopePickerPopover({
   }
 
   const isUnrestricted = resources === null;
+  const isMcpConnect = scope === "mcp:connect";
   const projectList = organization.projects.map((p) => ({
     id: p.id,
     name: p.name,
@@ -192,7 +193,7 @@ export function ScopePickerPopover({
           }
         }}
       />
-      {(scope === "mcp:connect" || scope === "remote-mcp:connect") && (
+      {isMcpConnect && (
         <ScopeOption
           label="Specific tools"
           selected={!!customMode}
