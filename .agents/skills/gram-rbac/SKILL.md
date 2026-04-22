@@ -47,6 +47,8 @@ The server-side RBAC implementation lives in `server/internal/access/` and the `
 
 **`access.Check`.** `{Scope, ResourceID}` — the thing a handler asks `Require` to enforce. `ResourceID` is typically `authCtx.ProjectID.String()` for project-scoped scopes.
 
+**`access.Filter` for list endpoints.** When a handler lists resources the caller might only partially own, `s.access.Filter(ctx, scope, candidateIDs) ([]string, error)` returns the subset of IDs the caller holds the scope for. The standard pattern is: gather candidate IDs from the repo, call `Filter`, then rebuild the response from the allowed IDs. Prefer this over a post-hoc per-item `Require` loop. Canonical call sites: `server/internal/projects/impl.go` (projects list) and `server/internal/toolsets/impl.go` (toolsets list).
+
 **Auth context accessor.** `contextvalues.GetAuthContext(ctx)` returns the current `*AuthContext`. RBAC-relevant fields: `ActiveOrganizationID`, `ProjectID`, `UserID`, `Email`, `AccountType`, `IsAdmin`.
 
 ### Non-generated files
@@ -94,17 +96,31 @@ Scope and resource-type changes on the server must be accompanied by a matching 
 
 ## Client
 
-The dashboard pages under `client/dashboard/src/pages/access/` render membership and role management on top of the generated SDK and the `listScopes` response.
+The dashboard pages under `client/dashboard/src/pages/access/` render membership and role management on top of the generated SDK and the `listScopes` response. RBAC-aware UI across the rest of the dashboard gates itself through a shared hook and component.
+
+### Conventions
+
+**`useRBAC` hook.** `client/dashboard/src/hooks/useRBAC.ts` wraps the generated `useGrants` React Query hook and exposes `hasScope(scope, resourceId?)`, `hasAllScopes(scopes, resourceId?)`, `hasAnyScope(scopes, resourceId?)`, plus `isRbacEnabled`, `isLoading`, `grants`, and `error`. Returns `false` from the `has*` checks while loading and `true` when RBAC is disabled.
+
+**`RequireScope` component.** `client/dashboard/src/components/require-scope.tsx` is the primary rendering gate. Props: `scope: Scope | Scope[]`, `all?: boolean` (AND vs OR when multiple scopes), `resourceId?: string`, `level: "page" | "section" | "component"`, `children`, and level-specific extras (`fallback` for page/section, `reason`/`className` for component).
+
+- `level="page"` — renders a full Unauthorized fallback page when the scope is missing.
+- `level="section"` — hides the children entirely.
+- `level="component"` — renders disabled with a tooltip explaining why (good for buttons and inputs).
+
+**Scope vocabulary import.** `useRBAC` and `RequireScope` both consume the `Scope` union from `client/dashboard/src/pages/access/types.ts` (covered under "Server-client contract"). Keeping that file in lockstep with the server is what makes the client gates work.
 
 ### Non-generated files
 
-| File                                                                   | Purpose                                                                                         |
-| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `Access.tsx`                                                           | Top-level page shell.                                                                           |
-| `ChangeRoleDialog.tsx`, `CreateRoleDialog.tsx`, `DeleteRoleDialog.tsx` | Role and member-role mutation dialogs.                                                          |
-| `MembersTab.tsx`, `RolesTab.tsx`                                       | The two tabs of the access page.                                                                |
-| `ScopePickerPopover.tsx`                                               | Scope selection UI.                                                                             |
-| `types.ts`                                                             | Hand-maintained client mirror of the server's scope vocabulary. (See "Server-client contract".) |
+| File                                                                                                     | Purpose                                                                                         |
+| -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `client/dashboard/src/components/require-scope.tsx`                                                      | `RequireScope` gating component — page, section, and component-level rendering gates.           |
+| `client/dashboard/src/hooks/useRBAC.ts`                                                                  | `useRBAC` hook — scope checks and raw grants for the dashboard.                                 |
+| `client/dashboard/src/pages/access/Access.tsx`                                                           | Top-level access page shell.                                                                    |
+| `client/dashboard/src/pages/access/ChangeRoleDialog.tsx`, `CreateRoleDialog.tsx`, `DeleteRoleDialog.tsx` | Role and member-role mutation dialogs.                                                          |
+| `client/dashboard/src/pages/access/MembersTab.tsx`, `RolesTab.tsx`                                       | The two tabs of the access page.                                                                |
+| `client/dashboard/src/pages/access/ScopePickerPopover.tsx`                                               | Scope selection UI.                                                                             |
+| `client/dashboard/src/pages/access/types.ts`                                                             | Hand-maintained client mirror of the server's scope vocabulary. (See "Server-client contract".) |
 
 ## Jobs to be done
 
@@ -148,11 +164,49 @@ Use this when adjusting what `admin` or `member` gets out of the box. Prefer add
 3. Consider whether existing orgs' grant tables need a migration to reflect the new defaults; new orgs pick up defaults automatically via seeding.
 4. Run `mise run lint:server` and `mise run test:server`.
 
-### How to inspect the caller's grants or filter resources
+### How to filter a list handler to the caller's accessible resources
 
-- To get the caller's full grant set (e.g. to gate UI): call `/rpc/access.listUserGrants` from the frontend, or inspect `access.GrantsFromContext(ctx)` in Go.
-- To enforce a single scope inline: `s.access.Require(ctx, access.Check{...})`.
-- To filter a list of candidate resource ids down to the ones the caller has access to: `s.access.Filter(ctx, scope, resourceIDs)` returns only the ids that satisfy the scope. Use this for `list*` handlers that would otherwise return resources the caller isn't allowed to see.
+Use this whenever a `list*` handler would otherwise return resources the caller has no grant for. `projects.List` and `toolsets.List` are the canonical examples.
+
+1. Query the repo for the full candidate set the org/project contains.
+2. Collect the candidate IDs into `[]string`.
+3. Call `allowedIDs, err := s.access.Filter(ctx, access.Scope<Name>, candidateIDs)`. Return the error as-is.
+4. Build a set from `allowedIDs` and rebuild the response by walking the original rows, keeping only the ones whose ID is in the set. Preserves repo ordering without a second query.
+5. Do not fall back to a per-item `Require` loop — `Filter` exists specifically to avoid N authorization round-trips.
+
+### How to gate dashboard UI with RBAC
+
+Dashboard code should never hand-roll scope checks — use the shared primitives so a change to `useRBAC` or `<RequireScope>` flows through the whole app.
+
+1. **Rendering gates — use `<RequireScope>`.** Pick the level that matches what you want the un-entitled user to see:
+   - `level="page"` around a full route component renders an Unauthorized fallback page.
+   - `level="section"` around a block hides it entirely.
+   - `level="component"` around a button or input renders disabled with a tooltip reason.
+
+   ```tsx
+   <RequireScope scope="org:admin" level="component" reason="Admin only">
+     <Button onClick={() => setDialogOpen(true)}>New API key</Button>
+   </RequireScope>
+   ```
+
+2. **Multi-scope gates.** Pass an array and set `all` to switch between OR (default) and AND logic: `<RequireScope scope={["org:read", "org:admin"]} level="page">`.
+
+3. **Resource-specific gates.** Pass `resourceId` when the scope only applies to a specific resource: `<RequireScope scope="mcp:write" resourceId={toolsetId} level="component">`.
+
+4. **Imperative checks — use `useRBAC`.** When you need the scope result as a value (to compute a class name, skip an effect, pick a label), pull from the hook instead of wrapping markup:
+
+   ```tsx
+   const { hasScope, isLoading } = useRBAC();
+   const canEdit = hasScope("mcp:write", toolsetId);
+   ```
+
+5. **The `Scope` string you pass must match the server.** Import from `client/dashboard/src/pages/access/types.ts` (re-exported via `useRBAC` for convenience). If TypeScript complains about an unknown scope, you're missing the union update from the server scope add (see "How to add a new scope to an existing resource type").
+
+### How to inspect the caller's grants
+
+- **In the dashboard**: `const { grants } = useRBAC();` returns the raw `RoleGrant[]`. Prefer `hasScope` for gating; reach for `grants` only when you need to render them (the access page itself, diagnostics, dev overlays).
+- **In Go handlers**: `access.GrantsFromContext(ctx)` returns the grants on the request context after the access middleware has run.
+- **Over the API**: `GET /rpc/access.listUserGrants` returns the caller's effective grants.
 
 ## Role hierarchy at a glance
 
@@ -182,6 +236,7 @@ This file documents conventions that evolve over time. Adding a new scope, resou
 - Changing how `fullAccessGrantPayloads` or `ListScopes` is populated (e.g. moving the scope catalogue out of `impl.go`).
 - Moving the hand-maintained client scope vocabulary out of `client/dashboard/src/pages/access/types.ts`, or changing the three-place-enum-lockstep count in the design file.
 - Changing the auth context invariant — e.g. if `ActiveOrganizationID` becomes optional, or a new invariant field is added.
+- Changing or replacing the dashboard's RBAC primitives — `useRBAC` return shape, `<RequireScope>` levels/props, or the SDK hook the dashboard reads grants from.
 - Adding a new RBAC-relevant mise task that belongs on the cheat sheet.
 
 ## Cross-references
