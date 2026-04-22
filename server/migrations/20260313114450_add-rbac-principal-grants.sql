@@ -21,6 +21,6 @@ COMMENT ON COLUMN "principal_grants"."principal_urn" IS 'URN identifying the pri
 -- Set comment to column: "principal_type" on table: "principal_grants"
 COMMENT ON COLUMN "principal_grants"."principal_type" IS 'Derived from principal_urn. The type prefix, e.g. "user", "role".';
 -- Set comment to column: "scope" on table: "principal_grants"
-COMMENT ON COLUMN "principal_grants"."scope" IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.';
+COMMENT ON COLUMN "principal_grants"."scope" IS 'The scope being granted, e.g. "project:read". Validated in application code, not via FK.';
 -- Set comment to column: "resource" on table: "principal_grants"
 COMMENT ON COLUMN "principal_grants"."resource" IS '''*'' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.';

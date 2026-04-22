@@ -7,10 +7,10 @@ export function SourcesRoot() {
   return <Outlet />;
 }
 
-/** Gates the shared Catalog behind build:write when accessed via sources/add-from-catalog. */
+/** Gates the shared Catalog behind project:write when accessed via sources/add-from-catalog. */
 export function AddFromCatalogGate() {
   return (
-    <RequireScope scope="build:write" level="page">
+    <RequireScope scope="project:write" level="page">
       <Outlet />
     </RequireScope>
   );
@@ -23,7 +23,7 @@ export function SourcesPage() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope={["build:read", "build:write"]} level="page">
+        <RequireScope scope={["project:read", "project:write"]} level="page">
           <SourcesComponent />
         </RequireScope>
       </Page.Body>

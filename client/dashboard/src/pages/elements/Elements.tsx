@@ -190,7 +190,7 @@ export default function ChatElements() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope="build:read" level="page">
+        <RequireScope scope="project:read" level="page">
           <ChatElementsInner />
         </RequireScope>
       </Page.Body>

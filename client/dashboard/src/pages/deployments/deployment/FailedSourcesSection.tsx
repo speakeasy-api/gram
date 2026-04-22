@@ -279,7 +279,7 @@ export function FailedSourcesSection({
 
         {failedSources.length > 0 && (
           <div className="flex justify-end">
-            <RequireScope scope="build:write" level="component">
+            <RequireScope scope="project:write" level="component">
               <Button
                 variant="destructive-primary"
                 onClick={handleRemoveClick}

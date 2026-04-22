@@ -45,7 +45,7 @@ export function SourcesEmptyState() {
             Add an OpenAPI spec, custom function, or third-party server to
             generate tools for your MCP server.
           </Type>
-          <RequireScope scope="build:write" level="component">
+          <RequireScope scope="project:write" level="component">
             {({ disabled }) => (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild disabled={disabled}>

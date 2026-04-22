@@ -24,7 +24,7 @@ func TestService_ListScopes(t *testing.T) {
 	}
 
 	require.Equal(t, "org", bySlug[string(ScopeOrgRead)].ResourceType)
-	require.Equal(t, "project", bySlug[string(ScopeBuildWrite)].ResourceType)
+	require.Equal(t, "project", bySlug[string(ScopeProjectWrite)].ResourceType)
 	require.Equal(t, "mcp", bySlug[string(ScopeMCPConnect)].ResourceType)
 	require.Equal(t, "Read organization metadata and members.", bySlug[string(ScopeOrgRead)].Description)
 }

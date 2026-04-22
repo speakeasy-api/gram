@@ -724,7 +724,7 @@ func newStartCommand() *cli.Command {
 				},
 				accessManager,
 				func(ctx context.Context, projectIDs []string) ([]string, error) {
-					return accessManager.Filter(ctx, access.ScopeBuildRead, projectIDs)
+					return accessManager.Filter(ctx, access.ScopeProjectRead, projectIDs)
 				},
 			))
 			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, accessManager))
@@ -756,7 +756,7 @@ func newStartCommand() *cli.Command {
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, accessManager))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, accessManager, func(ctx context.Context, resourceID string) error {
-				return accessManager.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: resourceID})
+				return accessManager.Require(ctx, access.Check{Scope: access.ScopeProjectRead, ResourceID: resourceID})
 			}))
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, accessManager, serverURL))
 			mcp.Attach(mux, mcpService, mcpMetadataService)

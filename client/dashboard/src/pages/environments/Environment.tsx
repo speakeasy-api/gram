@@ -162,7 +162,7 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
 
 export default function EnvironmentPage() {
   return (
-    <RequireScope scope="build:read" level="page">
+    <RequireScope scope="project:read" level="page">
       <EnvironmentPageInner />
     </RequireScope>
   );
@@ -173,7 +173,7 @@ function EnvironmentPageInner() {
   const navigate = useNavigate();
   const telemetry = useTelemetry();
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("build:write");
+  const canWrite = hasScope("project:write");
 
   const [toolsetDialogOpen, setToolsetDialogOpen] = useState(false);
   const [selectedToolsetSlug, setSelectedToolsetSlug] = useState<string>("");
@@ -470,7 +470,7 @@ function EnvironmentPageInner() {
         <Page.Section>
           <Page.Section.Title>{environment.name}</Page.Section.Title>
           <Page.Section.CTA>
-            <RequireScope scope="build:write" level="component">
+            <RequireScope scope="project:write" level="component">
               <Button
                 onClick={handleAddNewEntry}
                 disabled={isSaving || isAddingNew}

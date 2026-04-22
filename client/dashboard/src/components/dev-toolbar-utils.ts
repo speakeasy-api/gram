@@ -35,7 +35,7 @@ export function getRBACScopeOverrideHeader(
       })
       .map(([scope, s]) => {
         if (typeof s === "boolean") return scope;
-        // Include resource IDs if restricted: build:read=proj_1|proj_2
+        // Include resource IDs if restricted: project:read=proj_1|proj_2
         if (s.resources && s.resources.length > 0) {
           return `${scope}=${s.resources.join("|")}`;
         }

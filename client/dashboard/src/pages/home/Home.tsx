@@ -9,11 +9,11 @@ export default function Home() {
   const { hasAnyScope, isRbacEnabled, isLoading } = useRBAC();
   const routes = useRoutes();
 
-  // Redirect MCP-only users (no build:read) to the MCP page
+  // Redirect MCP-only users (no project:read) to the MCP page
   if (
     isRbacEnabled &&
     !isLoading &&
-    !hasAnyScope(["build:read"]) &&
+    !hasAnyScope(["project:read"]) &&
     hasAnyScope(["mcp:read", "mcp:write"])
   ) {
     return <Navigate to={routes.mcp.href()} replace />;
@@ -25,7 +25,7 @@ export default function Home() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope="build:read" level="page">
+        <RequireScope scope="project:read" level="page">
           <ProjectDashboard />
         </RequireScope>
       </Page.Body>

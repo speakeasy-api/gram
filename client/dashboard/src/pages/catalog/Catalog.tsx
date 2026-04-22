@@ -32,7 +32,7 @@ export function CatalogRoot() {
 
 export default function Catalog() {
   return (
-    <RequireScope scope={["build:read", "mcp:write"]} level="page">
+    <RequireScope scope={["project:read", "mcp:write"]} level="page">
       <CatalogInner />
     </RequireScope>
   );
