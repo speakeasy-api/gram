@@ -3439,6 +3439,10 @@ type ToolEntryResponseBody struct {
 	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
 	// The name of the tool
 	Name string `form:"name" json:"name" xml:"name"`
+	// Tool annotations providing behavioral hints
+	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+	// HTTP method for HTTP tools (GET, POST, PUT, PATCH, DELETE)
+	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
 }
 
 // ResourceEntryResponseBody is used to define fields on response body types.

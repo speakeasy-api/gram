@@ -12455,6 +12455,843 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListResources
+    /rpc/risk.policies.create:
+        post:
+            description: Create a new risk analysis policy for the current project.
+            operationId: createRiskPolicy
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRiskPolicyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskPolicy'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createRiskPolicy risk
+            tags:
+                - risk
+            x-speakeasy-name-override: createPolicy
+            x-speakeasy-react-hook:
+                name: RiskCreatePolicy
+                type: mutation
+    /rpc/risk.policies.delete:
+        delete:
+            description: Delete a risk analysis policy.
+            operationId: deleteRiskPolicy
+            parameters:
+                - allowEmptyValue: true
+                  description: The policy ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The policy ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: deleteRiskPolicy risk
+            tags:
+                - risk
+            x-speakeasy-name-override: deletePolicy
+    /rpc/risk.policies.get:
+        get:
+            description: Get a risk analysis policy by ID.
+            operationId: getRiskPolicy
+            parameters:
+                - allowEmptyValue: true
+                  description: The policy ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The policy ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskPolicy'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getRiskPolicy risk
+            tags:
+                - risk
+            x-speakeasy-name-override: getPolicy
+    /rpc/risk.policies.list:
+        get:
+            description: List all risk analysis policies for the current project.
+            operationId: listRiskPolicies
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRiskPoliciesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listRiskPolicies risk
+            tags:
+                - risk
+            x-speakeasy-name-override: listPolicies
+            x-speakeasy-react-hook:
+                name: RiskListPolicies
+    /rpc/risk.policies.status:
+        get:
+            description: Get the analysis status of a risk policy including progress and workflow state.
+            operationId: getRiskPolicyStatus
+            parameters:
+                - allowEmptyValue: true
+                  description: The policy ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The policy ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskPolicyStatus'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getRiskPolicyStatus risk
+            tags:
+                - risk
+            x-speakeasy-name-override: getPolicyStatus
+    /rpc/risk.policies.trigger:
+        post:
+            description: Manually trigger risk analysis for a policy, starting or signaling the drain workflow.
+            operationId: triggerRiskAnalysis
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TriggerRiskAnalysisRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: triggerRiskAnalysis risk
+            tags:
+                - risk
+            x-speakeasy-name-override: triggerAnalysis
+    /rpc/risk.policies.update:
+        put:
+            description: Update a risk analysis policy.
+            operationId: updateRiskPolicy
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateRiskPolicyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskPolicy'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updateRiskPolicy risk
+            tags:
+                - risk
+            x-speakeasy-name-override: updatePolicy
+    /rpc/risk.results.list:
+        get:
+            description: List risk analysis results for the current project.
+            operationId: listRiskResults
+            parameters:
+                - allowEmptyValue: true
+                  description: Optional policy ID to filter by.
+                  in: query
+                  name: policy_id
+                  schema:
+                    description: Optional policy ID to filter by.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional chat ID to filter by.
+                  in: query
+                  name: chat_id
+                  schema:
+                    description: Optional chat ID to filter by.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of results to return.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 100
+                    description: Maximum number of results to return.
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRiskResultsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listRiskResults risk
+            tags:
+                - risk
+            x-speakeasy-name-override: listResults
+            x-speakeasy-react-hook:
+                name: RiskListResults
     /rpc/skills.approveVersion:
         post:
             description: Approve a captured skill version and mark it active for the lineage.
@@ -20554,6 +21391,22 @@ components:
                 - client_token
                 - expires_after
                 - status
+        CreateRiskPolicyRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether the policy is active.
+                name:
+                    type: string
+                    description: The policy name.
+                sources:
+                    type: array
+                    items:
+                        type: string
+                    description: Detection sources to enable.
+            required:
+                - name
         CreateRoleForm:
             type: object
             properties:
@@ -20694,6 +21547,8 @@ components:
                 name:
                     type: string
                     description: The name of the toolset
+                origin:
+                    $ref: '#/components/schemas/ToolsetOrigin'
                 project_slug_input:
                     type: string
                 resource_urns:
@@ -20722,6 +21577,8 @@ components:
                 name:
                     type: string
                     description: The name of the toolset
+                origin:
+                    $ref: '#/components/schemas/ToolsetOrigin'
                 resource_urns:
                     type: array
                     items:
@@ -21455,6 +22312,10 @@ components:
                     items:
                         $ref: '#/components/schemas/ExternalMCPTool'
                     description: Tools available on the server
+                toolset_id:
+                    type: string
+                    description: ID of the attached toolset when this server is listed from a Collection
+                    format: uuid
                 version:
                     type: string
                     description: Semantic version of the server
@@ -23298,6 +24159,26 @@ components:
                     description: List of collections
             required:
                 - collections
+        ListRiskPoliciesResult:
+            type: object
+            properties:
+                policies:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskPolicy'
+                    description: The list of risk policies.
+            required:
+                - policies
+        ListRiskResultsResult:
+            type: object
+            properties:
+                results:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskResult'
+                    description: The list of risk results.
+            required:
+                - results
         ListRoleGrant:
             type: object
             properties:
@@ -25306,6 +26187,167 @@ components:
                 - type
                 - status_codes
                 - content_types
+        RiskPolicy:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the policy was created.
+                    format: date-time
+                enabled:
+                    type: boolean
+                    description: Whether the policy is active.
+                id:
+                    type: string
+                    description: The risk policy ID.
+                    format: uuid
+                name:
+                    type: string
+                    description: The policy name.
+                pending_messages:
+                    type: integer
+                    description: Number of messages not yet analyzed at the current policy version.
+                    format: int64
+                project_id:
+                    type: string
+                    description: The project ID.
+                    format: uuid
+                sources:
+                    type: array
+                    items:
+                        type: string
+                    description: Detection sources enabled for this policy.
+                total_messages:
+                    type: integer
+                    description: Total number of messages in the project.
+                    format: int64
+                updated_at:
+                    type: string
+                    description: When the policy was last updated.
+                    format: date-time
+                version:
+                    type: integer
+                    description: Policy version, incremented on each update.
+                    format: int64
+            required:
+                - id
+                - project_id
+                - name
+                - sources
+                - enabled
+                - version
+                - created_at
+                - updated_at
+                - pending_messages
+                - total_messages
+        RiskPolicyStatus:
+            type: object
+            properties:
+                analyzed_messages:
+                    type: integer
+                    description: Messages analyzed at the current policy version.
+                    format: int64
+                findings_count:
+                    type: integer
+                    description: Number of findings at the current policy version.
+                    format: int64
+                pending_messages:
+                    type: integer
+                    description: Messages not yet analyzed.
+                    format: int64
+                policy_id:
+                    type: string
+                    description: The risk policy ID.
+                    format: uuid
+                policy_version:
+                    type: integer
+                    description: Current policy version.
+                    format: int64
+                total_messages:
+                    type: integer
+                    description: Total messages in the project.
+                    format: int64
+                workflow_status:
+                    type: string
+                    description: 'Workflow state: running, sleeping, or not_started.'
+                    enum:
+                        - running
+                        - sleeping
+                        - not_started
+            required:
+                - policy_id
+                - policy_version
+                - total_messages
+                - analyzed_messages
+                - pending_messages
+                - findings_count
+                - workflow_status
+        RiskResult:
+            type: object
+            properties:
+                chat_id:
+                    type: string
+                    description: The chat session containing the message.
+                    format: uuid
+                chat_message_id:
+                    type: string
+                    description: The chat message that was scanned.
+                    format: uuid
+                chat_title:
+                    type: string
+                    description: Title of the chat session.
+                confidence:
+                    type: number
+                    description: Confidence score for this finding.
+                    format: double
+                created_at:
+                    type: string
+                    description: When this result was created.
+                    format: date-time
+                description:
+                    type: string
+                    description: Human-readable description of the finding.
+                end_pos:
+                    type: integer
+                    description: End byte position within the message content.
+                    format: int64
+                id:
+                    type: string
+                    description: The result ID.
+                    format: uuid
+                match:
+                    type: string
+                    description: The matched secret or sensitive data.
+                policy_id:
+                    type: string
+                    description: The risk policy ID.
+                    format: uuid
+                policy_version:
+                    type: integer
+                    description: Policy version when this result was produced.
+                    format: int64
+                rule_id:
+                    type: string
+                    description: The matched rule identifier.
+                source:
+                    type: string
+                    description: Detection source (e.g. gitleaks).
+                start_pos:
+                    type: integer
+                    description: Start byte position within the message content.
+                    format: int64
+                tags:
+                    type: array
+                    items:
+                        type: string
+                    description: Tags from the detection rule.
+            required:
+                - id
+                - policy_id
+                - policy_version
+                - chat_message_id
+                - source
+                - created_at
         Role:
             type: object
             properties:
@@ -26677,6 +27719,11 @@ components:
         ToolEntry:
             type: object
             properties:
+                annotations:
+                    $ref: '#/components/schemas/ToolAnnotations'
+                http_method:
+                    type: string
+                    description: HTTP method for HTTP tools (GET, POST, PUT, PATCH, DELETE)
                 id:
                     type: string
                     description: The ID of the tool
@@ -26872,6 +27919,8 @@ components:
                 organization_id:
                     type: string
                     description: The organization ID this toolset belongs to
+                origin:
+                    $ref: '#/components/schemas/ToolsetOrigin'
                 project_id:
                     type: string
                     description: The project ID this toolset belongs to
@@ -26991,6 +28040,8 @@ components:
                 organization_id:
                     type: string
                     description: The organization ID this toolset belongs to
+                origin:
+                    $ref: '#/components/schemas/ToolsetOrigin'
                 project_id:
                     type: string
                     description: The project ID this toolset belongs to
@@ -27075,6 +28126,14 @@ components:
                 - id
                 - toolset_id
                 - environment_id
+        ToolsetOrigin:
+            type: object
+            properties:
+                registry_specifier:
+                    type: string
+                    description: The globally unique registry specifier this toolset originated from
+            required:
+                - registry_specifier
         TopServer:
             type: object
             properties:
@@ -27222,6 +28281,15 @@ components:
                 - status
                 - created_at
                 - updated_at
+        TriggerRiskAnalysisRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The policy ID.
+                    format: uuid
+            required:
+                - id
         UpdateEnvironmentForm:
             type: object
             properties:
@@ -27468,6 +28536,27 @@ components:
                         - private
             required:
                 - collection_id
+        UpdateRiskPolicyRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether the policy is active.
+                id:
+                    type: string
+                    description: The policy ID.
+                    format: uuid
+                name:
+                    type: string
+                    description: The policy name.
+                sources:
+                    type: array
+                    items:
+                        type: string
+                    description: Detection sources to enable.
+            required:
+                - id
+                - name
         UpdateRoleForm:
             type: object
             properties:
@@ -28121,6 +29210,8 @@ tags:
       description: Managing remote MCP servers.
     - name: resources
       description: Dashboard API for interacting with resources.
+    - name: risk
+      description: Manage risk analysis policies and view scan results.
     - name: skills
       description: Capture skill artifacts and metadata from local hook producers.
     - name: slack

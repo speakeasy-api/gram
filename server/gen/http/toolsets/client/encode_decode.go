@@ -3633,10 +3633,14 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 // *types.ToolEntry from a value of type *ToolEntryResponseBody.
 func unmarshalToolEntryResponseBodyToTypesToolEntry(v *ToolEntryResponseBody) *types.ToolEntry {
 	res := &types.ToolEntry{
-		Type:    *v.Type,
-		ID:      *v.ID,
-		ToolUrn: *v.ToolUrn,
-		Name:    *v.Name,
+		Type:       *v.Type,
+		ID:         *v.ID,
+		ToolUrn:    *v.ToolUrn,
+		Name:       *v.Name,
+		HTTPMethod: v.HTTPMethod,
+	}
+	if v.Annotations != nil {
+		res.Annotations = unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v.Annotations)
 	}
 
 	return res

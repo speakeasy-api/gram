@@ -145,15 +145,17 @@ func DescribeToolsetEntry(
 			if _, ok := seen[def.Name]; ok {
 				continue
 			}
-			seen[def.ID.String()] = true
+			seen[def.Name] = true
 
 			name := conv.Default(urnToVariedName[def.ToolUrn.String()], def.Name)
 
 			tool := &types.ToolEntry{
-				Type:    string(urn.ToolKindHTTP),
-				ID:      def.ID.String(),
-				Name:    name,
-				ToolUrn: def.ToolUrn.String(),
+				Type:        string(urn.ToolKindHTTP),
+				ID:          def.ID.String(),
+				Name:        name,
+				ToolUrn:     def.ToolUrn.String(),
+				Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
+				HTTPMethod:  &def.HttpMethod,
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
@@ -174,10 +176,12 @@ func DescribeToolsetEntry(
 		}
 		for _, tool := range funcTools {
 			tools = append(tools, &types.ToolEntry{
-				Type:    string(urn.ToolKindFunction),
-				ID:      tool.ID.String(),
-				Name:    tool.Name,
-				ToolUrn: tool.ToolUrn.String(),
+				Type:        string(urn.ToolKindFunction),
+				ID:          tool.ID.String(),
+				Name:        tool.Name,
+				ToolUrn:     tool.ToolUrn.String(),
+				Annotations: conv.AnnotationsFromColumns(tool.ReadOnlyHint, tool.DestructiveHint, tool.IdempotentHint, tool.OpenWorldHint),
+				HTTPMethod:  nil,
 			})
 
 			envVars, err := extractFunctionEnvVars(ctx, logger, tool.Variables, tool.AuthInput)
@@ -197,10 +201,12 @@ func DescribeToolsetEntry(
 
 		for _, pt := range promptTools {
 			tools = append(tools, &types.ToolEntry{
-				Type:    string(urn.ToolKindPrompt),
-				ID:      pt.ID.String(),
-				Name:    pt.Name,
-				ToolUrn: pt.ToolUrn.String(),
+				Type:        string(urn.ToolKindPrompt),
+				ID:          pt.ID.String(),
+				Name:        pt.Name,
+				ToolUrn:     pt.ToolUrn.String(),
+				Annotations: nil,
+				HTTPMethod:  nil,
 			})
 		}
 
@@ -227,10 +233,12 @@ func DescribeToolsetEntry(
 				continue // Skip if not found
 			}
 			tools = append(tools, &types.ToolEntry{
-				Type:    string(urn.ToolKindExternalMCP),
-				ID:      externalMCPTool.ID.String(),
-				Name:    externalMCPTool.Slug + ":proxy",
-				ToolUrn: externalMCPTool.ToolUrn,
+				Type:        string(urn.ToolKindExternalMCP),
+				ID:          externalMCPTool.ID.String(),
+				Name:        externalMCPTool.Slug + ":proxy",
+				ToolUrn:     externalMCPTool.ToolUrn,
+				Annotations: conv.AnnotationsFromColumns(externalMCPTool.ReadOnlyHint, externalMCPTool.DestructiveHint, externalMCPTool.IdempotentHint, externalMCPTool.OpenWorldHint),
+				HTTPMethod:  nil,
 			})
 
 			headerDefs, err := extractExternalMCPHeaderDefinitions(ctx, logger, externalMCPTool.HeaderDefinitions, externalMCPTool.Slug)
@@ -627,7 +635,7 @@ func readToolsetTools(
 			if _, ok := seen[def.HttpToolDefinition.Name]; ok {
 				continue
 			}
-			seen[def.HttpToolDefinition.ID.String()] = true
+			seen[def.HttpToolDefinition.Name] = true
 
 			name := def.HttpToolDefinition.Name
 			description := def.HttpToolDefinition.Description

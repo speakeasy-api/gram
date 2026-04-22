@@ -99,6 +99,7 @@ import { getSystemProvidedVariables } from "./environmentVariableUtils";
 import { useMcpConfigs, useMcpSlugValidation } from "./mcp-details-utils";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 import { MCPPerformanceTab } from "./MCPPerformanceTab";
+import { MCPTeamAccessTab } from "./MCPTeamAccessTab";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
 
 export function MCPDetailsRoot() {
@@ -165,6 +166,8 @@ export function MCPDetailPage() {
 function MCPDetailPageInner() {
   const { toolsetSlug } = useParams();
   const routes = useRoutes();
+  const telemetry = useTelemetry();
+  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const { data: toolset, isLoading } = useToolset(toolsetSlug);
 
@@ -191,10 +194,20 @@ function MCPDetailPageInner() {
       "prompts",
       "authentication",
       "performance",
+      ...(isRbacEnabled ? ["team-access"] : []),
       "settings",
     ];
     return hash && validTabs.includes(hash) ? hash : "overview";
   });
+
+  // Re-validate activeTab when feature flag loads asynchronously
+  useEffect(() => {
+    if (!isRbacEnabled) return;
+    const hash = window.location.hash.slice(1);
+    if (hash === "team-access") {
+      setActiveTab("team-access");
+    }
+  }, [isRbacEnabled]);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
@@ -341,6 +354,11 @@ function MCPDetailPageInner() {
                 <PageTabsTrigger value="performance">
                   Performance
                 </PageTabsTrigger>
+                {isRbacEnabled && (
+                  <PageTabsTrigger value="team-access">
+                    Team Access
+                  </PageTabsTrigger>
+                )}
                 <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
               </TabsList>
             </div>
@@ -375,6 +393,14 @@ function MCPDetailPageInner() {
                 <MCPPerformanceTab toolset={toolset} />
               </RequireScope>
             </TabsContent>
+
+            {isRbacEnabled && (
+              <TabsContent value="team-access" className="mt-0 w-full">
+                <RequireScope scope="mcp:read" level="page">
+                  <MCPTeamAccessTab toolset={toolset} />
+                </RequireScope>
+              </TabsContent>
+            )}
 
             <TabsContent value="settings" className="mt-0 w-full">
               <RequireScope scope="mcp:write" level="page">
