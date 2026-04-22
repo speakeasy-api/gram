@@ -4126,13 +4126,6 @@ paths:
                   schema:
                     description: API Key header
                     type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
             requestBody:
                 content:
                     application/json:
@@ -4201,10 +4194,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: attachServer collections
             tags:
                 - collections
@@ -4227,13 +4218,6 @@ paths:
                   name: Gram-Key
                   schema:
                     description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             requestBody:
                 content:
@@ -4303,10 +4287,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: create collections
             tags:
                 - collections
@@ -4338,13 +4320,6 @@ paths:
                   name: Gram-Key
                   schema:
                     description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             responses:
                 "204":
@@ -4404,10 +4379,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: delete collections
             tags:
                 - collections
@@ -4430,13 +4403,6 @@ paths:
                   name: Gram-Key
                   schema:
                     description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             requestBody:
                 content:
@@ -4502,10 +4468,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: detachServer collections
             tags:
                 - collections
@@ -4528,13 +4492,6 @@ paths:
                   name: Gram-Key
                   schema:
                     description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             responses:
                 "200":
@@ -4598,10 +4555,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: list collections
             tags:
                 - collections
@@ -4634,13 +4589,6 @@ paths:
                   name: Gram-Key
                   schema:
                     description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             responses:
                 "200":
@@ -4704,10 +4652,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: listServers collections
             tags:
                 - collections
@@ -4730,13 +4676,6 @@ paths:
                   name: Gram-Key
                   schema:
                     description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             requestBody:
                 content:
@@ -4806,10 +4745,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: update collections
             tags:
                 - collections
@@ -20366,6 +20303,8 @@ components:
                 name:
                     type: string
                     description: The name of the toolset
+                origin:
+                    $ref: '#/components/schemas/ToolsetOrigin'
                 project_slug_input:
                     type: string
                 resource_urns:
@@ -20394,6 +20333,8 @@ components:
                 name:
                     type: string
                     description: The name of the toolset
+                origin:
+                    $ref: '#/components/schemas/ToolsetOrigin'
                 resource_urns:
                     type: array
                     items:
@@ -21127,6 +21068,10 @@ components:
                     items:
                         $ref: '#/components/schemas/ExternalMCPTool'
                     description: Tools available on the server
+                toolset_id:
+                    type: string
+                    description: ID of the attached toolset when this server is listed from a Collection
+                    format: uuid
                 version:
                     type: string
                     description: Semantic version of the server
@@ -26319,6 +26264,11 @@ components:
         ToolEntry:
             type: object
             properties:
+                annotations:
+                    $ref: '#/components/schemas/ToolAnnotations'
+                http_method:
+                    type: string
+                    description: HTTP method for HTTP tools (GET, POST, PUT, PATCH, DELETE)
                 id:
                     type: string
                     description: The ID of the tool
@@ -26514,6 +26464,8 @@ components:
                 organization_id:
                     type: string
                     description: The organization ID this toolset belongs to
+                origin:
+                    $ref: '#/components/schemas/ToolsetOrigin'
                 project_id:
                     type: string
                     description: The project ID this toolset belongs to
@@ -26633,6 +26585,8 @@ components:
                 organization_id:
                     type: string
                     description: The organization ID this toolset belongs to
+                origin:
+                    $ref: '#/components/schemas/ToolsetOrigin'
                 project_id:
                     type: string
                     description: The project ID this toolset belongs to
@@ -26717,6 +26671,14 @@ components:
                 - id
                 - toolset_id
                 - environment_id
+        ToolsetOrigin:
+            type: object
+            properties:
+                registry_specifier:
+                    type: string
+                    description: The globally unique registry specifier this toolset originated from
+            required:
+                - registry_specifier
         TopServer:
             type: object
             properties:

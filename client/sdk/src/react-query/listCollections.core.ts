@@ -46,7 +46,6 @@ export function buildListCollectionsQuery(
     queryKey: queryKeyListCollections({
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
-      gramProject: request?.gramProject,
     }),
     queryFn: async function listCollectionsQueryFn(
       ctx,
@@ -76,7 +75,6 @@ export function queryKeyListCollections(
   parameters: {
     gramSession?: string | undefined;
     gramKey?: string | undefined;
-    gramProject?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "collections", "list", parameters];

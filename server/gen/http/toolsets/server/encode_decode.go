@@ -2823,6 +2823,19 @@ func EncodeUpdateOAuthProxyServerError(encoder func(context.Context, http.Respon
 	}
 }
 
+// unmarshalToolsetOriginRequestBodyToTypesToolsetOrigin builds a value of type
+// *types.ToolsetOrigin from a value of type *ToolsetOriginRequestBody.
+func unmarshalToolsetOriginRequestBodyToTypesToolsetOrigin(v *ToolsetOriginRequestBody) *types.ToolsetOrigin {
+	if v == nil {
+		return nil
+	}
+	res := &types.ToolsetOrigin{
+		RegistrySpecifier: *v.RegistrySpecifier,
+	}
+
+	return res
+}
+
 // marshalTypesSecurityVariableToSecurityVariableResponseBody builds a value of
 // type *SecurityVariableResponseBody from a value of type
 // *types.SecurityVariable.
@@ -3338,6 +3351,19 @@ func marshalTypesFunctionResourceDefinitionToFunctionResourceDefinitionResponseB
 	return res
 }
 
+// marshalTypesToolsetOriginToToolsetOriginResponseBody builds a value of type
+// *ToolsetOriginResponseBody from a value of type *types.ToolsetOrigin.
+func marshalTypesToolsetOriginToToolsetOriginResponseBody(v *types.ToolsetOrigin) *ToolsetOriginResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ToolsetOriginResponseBody{
+		RegistrySpecifier: v.RegistrySpecifier,
+	}
+
+	return res
+}
+
 // marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody builds a
 // value of type *ExternalOAuthServerResponseBody from a value of type
 // *types.ExternalOAuthServer.
@@ -3545,6 +3571,9 @@ func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *
 	} else {
 		res.PromptTemplates = []*PromptTemplateEntryResponseBody{}
 	}
+	if v.Origin != nil {
+		res.Origin = marshalTypesToolsetOriginToToolsetOriginResponseBody(v.Origin)
+	}
 
 	return res
 }
@@ -3553,10 +3582,14 @@ func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *
 // *ToolEntryResponseBody from a value of type *types.ToolEntry.
 func marshalTypesToolEntryToToolEntryResponseBody(v *types.ToolEntry) *ToolEntryResponseBody {
 	res := &ToolEntryResponseBody{
-		Type:    v.Type,
-		ID:      v.ID,
-		ToolUrn: v.ToolUrn,
-		Name:    v.Name,
+		Type:       v.Type,
+		ID:         v.ID,
+		ToolUrn:    v.ToolUrn,
+		Name:       v.Name,
+		HTTPMethod: v.HTTPMethod,
+	}
+	if v.Annotations != nil {
+		res.Annotations = marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v.Annotations)
 	}
 
 	return res

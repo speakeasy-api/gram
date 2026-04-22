@@ -190,6 +190,8 @@ var ToolEntry = Type("ToolEntry", func() {
 	Attribute("id", String, "The ID of the tool")
 	Attribute("tool_urn", String, "The URN of the tool")
 	Attribute("name", String, "The name of the tool")
+	Attribute("annotations", ToolAnnotations, "Tool annotations providing behavioral hints")
+	Attribute("http_method", String, "HTTP method for HTTP tools (GET, POST, PUT, PATCH, DELETE)")
 
 	Required("type", "id", "name", "tool_urn")
 

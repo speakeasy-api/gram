@@ -130,6 +130,7 @@ export function ToolMentionAutocomplete({
 
     textarea.addEventListener("keydown", handleKeyDown);
     return () => textarea.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleKeyDown is intentionally omitted; its captured values (showSuggestions, filteredTools, selectedIndex) are listed explicitly
   }, [showSuggestions, filteredTools, selectedIndex, textareaRef]);
 
   // Get position for suggestions dropdown

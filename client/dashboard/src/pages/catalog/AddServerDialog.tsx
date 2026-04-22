@@ -307,6 +307,7 @@ export function AddServerDialog({
     if (!open) {
       releaseState.reset();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset when dialog open/close state changes, not on every releaseState update
   }, [open]);
 
   // Clean up Radix body scroll-lock on unmount (e.g. when navigating away mid-dialog)
@@ -332,7 +333,7 @@ export function AddServerDialog({
     if (!allToolsetsDone) {
       prevAllDoneRef.current = false;
     }
-  }, [allToolsetsDone]);
+  }, [allToolsetsDone, onServersAdded]);
 
   if (servers.length === 0) return null;
 
@@ -391,15 +392,16 @@ export function AddServerDialog({
   const hasConfiguredMultiRemote =
     releaseState.phase === "configure" &&
     releaseState.serverConfigs.some((c) => c.selectedRemotes);
-  // Check if all servers are already added (for title/description)
-  // Multi-remote servers with selectedRemotes are always new deployments
-  const allAlreadyAdded =
+  const allAlreadyInstalled =
     releaseState.phase === "configure" &&
-    releaseState.existingSpecifiers.size > 0 &&
-    releaseState.serverConfigs.every(
-      (c) =>
-        !c.selectedRemotes &&
-        releaseState.existingSpecifiers.has(c.server.registrySpecifier),
+    releaseState.serverConfigs.length > 0 &&
+    releaseState.serverConfigs.every((c) =>
+      releaseState.isServerAlreadyInstalled(c.server),
+    );
+  const hasInstalledServers =
+    releaseState.phase === "configure" &&
+    releaseState.serverConfigs.some((c) =>
+      releaseState.isServerAlreadyInstalled(c.server),
     );
   const title = (() => {
     if (releaseState.phase === "complete") return "Added to Project";
@@ -409,7 +411,9 @@ export function AddServerDialog({
         releaseState.multiRemoteConfigs[releaseState.currentServerIndex];
       return `Configure ${config?.server.title ?? config?.server.registrySpecifier ?? "Server"}`;
     }
-    if (allAlreadyAdded) return "Already in Project";
+    if (allAlreadyInstalled) {
+      return isSingle ? "Install as Fork" : "Install as Forks";
+    }
     if (hasConfiguredMultiRemote) return "One more step";
     return isSingle
       ? "Add to Project"
@@ -426,7 +430,9 @@ export function AddServerDialog({
               phase={releaseState.phase}
               isSingle={isSingle}
               hasConfiguredMultiRemote={hasConfiguredMultiRemote}
-              allAlreadyAdded={allAlreadyAdded}
+              allAlreadyInstalled={allAlreadyInstalled}
+              hasInstalledServers={hasInstalledServers}
+              projectSlug={releaseState.projectSlug}
             />
           </Dialog.Description>
         </Dialog.Header>
@@ -444,19 +450,46 @@ function PhaseDescription({
   phase,
   isSingle,
   hasConfiguredMultiRemote,
-  allAlreadyAdded,
+  allAlreadyInstalled,
+  hasInstalledServers,
+  projectSlug,
 }: {
   phase: ExternalMcpReleaseWorkflow["phase"];
   isSingle: boolean;
   hasConfiguredMultiRemote: boolean;
-  allAlreadyAdded: boolean;
+  allAlreadyInstalled: boolean;
+  hasInstalledServers: boolean;
+  projectSlug?: string;
 }) {
+  const routes = useRoutes(projectSlug ? { projectSlug } : undefined);
+  const viewSourcesLink = (
+    <routes.sources.Link className="text-primary">
+      View sources
+    </routes.sources.Link>
+  );
+
   switch (phase) {
     case "selectRemotes":
       return "This server has multiple endpoints. Select which ones to include.";
     case "configure":
-      if (allAlreadyAdded) {
-        return "";
+      if (allAlreadyInstalled) {
+        return (
+          <>
+            {isSingle
+              ? "This source is already installed in your project. Installing it again will create a fork with its own name and MCP URL."
+              : "These sources are already installed in your project. Installing them again will create forks with their own names and MCP URLs."}{" "}
+            {viewSourcesLink}
+          </>
+        );
+      }
+      if (hasInstalledServers) {
+        return (
+          <>
+            Some selected sources are already in your project. Those entries
+            will be installed as forks while the rest are deployed normally.{" "}
+            {viewSourcesLink}
+          </>
+        );
       }
       if (hasConfiguredMultiRemote) {
         return "Name the remaining servers before adding to your project.";
@@ -696,9 +729,6 @@ function ConfigurePhaseContent({
   releaseState: ConfigurePhase;
   onClose: () => void;
 }) {
-  const routes = useTargetRoutes(releaseState);
-  const { existingSpecifiers } = releaseState;
-
   // Filter out multi-remote servers that were already configured in selectRemotes phase
   const singleRemoteConfigs = releaseState.serverConfigs.filter(
     (c) => !c.selectedRemotes,
@@ -706,24 +736,20 @@ function ConfigurePhaseContent({
   const hasOnlySingleRemote = singleRemoteConfigs.length > 0;
   const effectiveIsSingle = singleRemoteConfigs.length === 1;
 
-  // Multi-remote servers (with selectedRemotes) are always considered "new"
-  // because different remote selections make them distinct configurations
-  const allAlreadyAdded =
-    existingSpecifiers.size > 0 &&
-    releaseState.serverConfigs.every(
-      (c) =>
-        // Multi-remote servers are never "already added" - they're new configs
-        !c.selectedRemotes &&
-        existingSpecifiers.has(c.server.registrySpecifier),
+  const allAlreadyInstalled =
+    releaseState.serverConfigs.length > 0 &&
+    releaseState.serverConfigs.every((c) =>
+      releaseState.isServerAlreadyInstalled(c.server),
     );
-  const hasNewServers = releaseState.serverConfigs.some(
-    (c) =>
-      // Multi-remote servers are always "new"
-      c.selectedRemotes || !existingSpecifiers.has(c.server.registrySpecifier),
+  const hasInstalledServers = releaseState.serverConfigs.some((c) =>
+    releaseState.isServerAlreadyInstalled(c.server),
+  );
+  const needsDeployment = releaseState.serverConfigs.some(
+    (c) => !releaseState.isServerAlreadyInstalled(c.server),
   );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && releaseState.canDeploy && hasNewServers) {
+    if (e.key === "Enter" && releaseState.canDeploy) {
       e.preventDefault();
       releaseState.startDeployment();
     }
@@ -731,13 +757,14 @@ function ConfigurePhaseContent({
 
   // Auto-deploy when all servers were multi-remote (already configured in selectRemotes)
   useEffect(() => {
-    if (!hasOnlySingleRemote && releaseState.canDeploy && hasNewServers) {
+    if (!hasOnlySingleRemote && releaseState.canDeploy && needsDeployment) {
       releaseState.startDeployment();
     }
-  }, [hasOnlySingleRemote, releaseState.canDeploy, hasNewServers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only trigger on deploy readiness changes, not on every releaseState update
+  }, [hasOnlySingleRemote, needsDeployment, releaseState.canDeploy]);
 
   // If all servers were multi-remote, show loading state while auto-deploying
-  if (!hasOnlySingleRemote && !allAlreadyAdded) {
+  if (!hasOnlySingleRemote && needsDeployment) {
     return (
       <div className="flex items-center justify-center gap-2 py-4">
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -751,20 +778,7 @@ function ConfigurePhaseContent({
   return (
     <div onKeyDown={handleKeyDown}>
       <Stack gap={4} className="py-2">
-        {allAlreadyAdded ? (
-          <div className="bg-muted/30 flex items-start gap-3 rounded-lg border p-3">
-            <AlertCircle className="text-muted-foreground mt-0.5 size-4 shrink-0" />
-            <Type small muted>
-              {releaseState.serverConfigs.length === 1
-                ? "This source is"
-                : "All selected sources are"}{" "}
-              already in your project.{" "}
-              <routes.sources.Link className="text-primary">
-                View sources
-              </routes.sources.Link>
-            </Type>
-          </div>
-        ) : effectiveIsSingle ? (
+        {effectiveIsSingle ? (
           <SingleServerConfig
             releaseState={releaseState}
             singleRemoteConfigs={singleRemoteConfigs}
@@ -783,20 +797,26 @@ function ConfigurePhaseContent({
               Back
             </Button>
           )}
-          {(!releaseState.goBack || allAlreadyAdded) && (
+          {(!releaseState.goBack || allAlreadyInstalled) && (
             <Button variant="tertiary" onClick={onClose}>
-              {allAlreadyAdded ? "Close" : "Cancel"}
+              Cancel
             </Button>
           )}
         </div>
-        {!allAlreadyAdded && (
-          <Button
-            disabled={!releaseState.canDeploy || !hasNewServers}
-            onClick={() => releaseState.startDeployment()}
-          >
-            <Button.Text>Deploy</Button.Text>
-          </Button>
-        )}
+        <Button
+          disabled={!releaseState.canDeploy}
+          onClick={() => releaseState.startDeployment()}
+        >
+          <Button.Text>
+            {needsDeployment
+              ? hasInstalledServers
+                ? "Deploy and install"
+                : "Deploy"
+              : releaseState.serverConfigs.length === 1
+                ? "Install as fork"
+                : "Install selected"}
+          </Button.Text>
+        </Button>
       </Dialog.Footer>
     </div>
   );
@@ -811,6 +831,9 @@ function SingleServerConfig({
 }) {
   const config = singleRemoteConfigs[0];
   if (!config) return null;
+  const isAlreadyInstalled = releaseState.isServerAlreadyInstalled(
+    config.server,
+  );
 
   // Find the original index in serverConfigs
   const originalIndex = releaseState.serverConfigs.findIndex(
@@ -829,6 +852,11 @@ function SingleServerConfig({
           })
         }
       />
+      {isAlreadyInstalled && (
+        <Type small muted>
+          Installing again will create a fork of the existing source.
+        </Type>
+      )}
     </div>
   );
 }
@@ -840,13 +868,9 @@ function BatchServerConfig({
   releaseState: ConfigurePhase;
   singleRemoteConfigs: ConfigurePhase["serverConfigs"];
 }) {
-  const { existingSpecifiers } = releaseState;
   return (
     <div className="max-h-80 space-y-3 overflow-y-auto">
       {singleRemoteConfigs.map((config) => {
-        const isAlreadyAdded = existingSpecifiers.has(
-          config.server.registrySpecifier,
-        );
         // Find the original index in serverConfigs
         const originalIndex = releaseState.serverConfigs.findIndex(
           (c) => c.server.registrySpecifier === config.server.registrySpecifier,
@@ -854,10 +878,7 @@ function BatchServerConfig({
         return (
           <div
             key={config.server.registrySpecifier}
-            className={cn(
-              "flex items-center gap-3 rounded-lg border p-3",
-              isAlreadyAdded && "opacity-50",
-            )}
+            className="flex items-center gap-3 rounded-lg border p-3"
           >
             <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center rounded">
               {config.server.iconUrl ? (
@@ -884,11 +905,6 @@ function BatchServerConfig({
                 className="text-sm"
               />
             </div>
-            {isAlreadyAdded && (
-              <span className="text-muted-foreground shrink-0 text-xs">
-                Already added
-              </span>
-            )}
           </div>
         );
       })}

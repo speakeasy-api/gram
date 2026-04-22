@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
 import { Icon } from "@speakeasy-api/moonshine";
 
@@ -29,8 +30,12 @@ export default function CLIs() {
                   No skills yet
                 </Type>
                 <Type small muted className="max-w-md text-center">
-                  Coming soon
+                  Build and distribute skills to your team. Track usage, enable
+                  discovery and improve performance.
                 </Type>
+                <Badge variant="secondary" className="mt-3">
+                  Coming Soon
+                </Badge>
               </div>
             </Page.Section.Body>
           </Page.Section>

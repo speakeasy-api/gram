@@ -5,19 +5,9 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type ListCollectionServersSecurityOption1 = {
-  projectSlugHeaderGramProject: string;
-  sessionHeaderGramSession: string;
-};
-
-export type ListCollectionServersSecurityOption2 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
 export type ListCollectionServersSecurity = {
-  option1?: ListCollectionServersSecurityOption1 | undefined;
-  option2?: ListCollectionServersSecurityOption2 | undefined;
+  sessionHeaderGramSession?: string | undefined;
+  apikeyHeaderGramKey?: string | undefined;
 };
 
 export type ListCollectionServersRequest = {
@@ -33,82 +23,12 @@ export type ListCollectionServersRequest = {
    * API Key header
    */
   gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
-
-/** @internal */
-export type ListCollectionServersSecurityOption1$Outbound = {
-  "project_slug_header_Gram-Project": string;
-  "session_header_Gram-Session": string;
-};
-
-/** @internal */
-export const ListCollectionServersSecurityOption1$outboundSchema: z.ZodMiniType<
-  ListCollectionServersSecurityOption1$Outbound,
-  ListCollectionServersSecurityOption1
-> = z.pipe(
-  z.object({
-    projectSlugHeaderGramProject: z.string(),
-    sessionHeaderGramSession: z.string(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-      sessionHeaderGramSession: "session_header_Gram-Session",
-    });
-  }),
-);
-
-export function listCollectionServersSecurityOption1ToJSON(
-  listCollectionServersSecurityOption1: ListCollectionServersSecurityOption1,
-): string {
-  return JSON.stringify(
-    ListCollectionServersSecurityOption1$outboundSchema.parse(
-      listCollectionServersSecurityOption1,
-    ),
-  );
-}
-
-/** @internal */
-export type ListCollectionServersSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
-};
-
-/** @internal */
-export const ListCollectionServersSecurityOption2$outboundSchema: z.ZodMiniType<
-  ListCollectionServersSecurityOption2$Outbound,
-  ListCollectionServersSecurityOption2
-> = z.pipe(
-  z.object({
-    apikeyHeaderGramKey: z.string(),
-    projectSlugHeaderGramProject: z.string(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    });
-  }),
-);
-
-export function listCollectionServersSecurityOption2ToJSON(
-  listCollectionServersSecurityOption2: ListCollectionServersSecurityOption2,
-): string {
-  return JSON.stringify(
-    ListCollectionServersSecurityOption2$outboundSchema.parse(
-      listCollectionServersSecurityOption2,
-    ),
-  );
-}
 
 /** @internal */
 export type ListCollectionServersSecurity$Outbound = {
-  Option1?: ListCollectionServersSecurityOption1$Outbound | undefined;
-  Option2?: ListCollectionServersSecurityOption2$Outbound | undefined;
+  "session_header_Gram-Session"?: string | undefined;
+  "apikey_header_Gram-Key"?: string | undefined;
 };
 
 /** @internal */
@@ -117,17 +37,13 @@ export const ListCollectionServersSecurity$outboundSchema: z.ZodMiniType<
   ListCollectionServersSecurity
 > = z.pipe(
   z.object({
-    option1: z.optional(
-      z.lazy(() => ListCollectionServersSecurityOption1$outboundSchema),
-    ),
-    option2: z.optional(
-      z.lazy(() => ListCollectionServersSecurityOption2$outboundSchema),
-    ),
+    sessionHeaderGramSession: z.optional(z.string()),
+    apikeyHeaderGramKey: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      option1: "Option1",
-      option2: "Option2",
+      sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
     });
   }),
 );
@@ -147,7 +63,6 @@ export type ListCollectionServersRequest$Outbound = {
   collection_slug: string;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -159,14 +74,12 @@ export const ListCollectionServersRequest$outboundSchema: z.ZodMiniType<
     collectionSlug: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       collectionSlug: "collection_slug",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
     });
   }),
 );

@@ -61,10 +61,9 @@ type AttachServerPayload struct {
 	// ID of the collection
 	CollectionID string
 	// ID of the toolset to attach
-	ToolsetID        string
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	ToolsetID    string
+	SessionToken *string
+	ApikeyToken  *string
 }
 
 // CreatePayload is the payload type of the collections service create method.
@@ -80,19 +79,17 @@ type CreatePayload struct {
 	// Visibility of the collection
 	Visibility string
 	// Toolset IDs to attach to the collection
-	ToolsetIds       []string
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	ToolsetIds   []string
+	SessionToken *string
+	ApikeyToken  *string
 }
 
 // DeletePayload is the payload type of the collections service delete method.
 type DeletePayload struct {
 	// ID of the collection to delete
-	CollectionID     string
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	CollectionID string
+	SessionToken *string
+	ApikeyToken  *string
 }
 
 // DetachServerPayload is the payload type of the collections service
@@ -101,17 +98,15 @@ type DetachServerPayload struct {
 	// ID of the collection
 	CollectionID string
 	// ID of the toolset to detach
-	ToolsetID        string
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	ToolsetID    string
+	SessionToken *string
+	ApikeyToken  *string
 }
 
 // ListPayload is the payload type of the collections service list method.
 type ListPayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	SessionToken *string
+	ApikeyToken  *string
 }
 
 // ListResult is the result type of the collections service list method.
@@ -124,10 +119,9 @@ type ListResult struct {
 // listServers method.
 type ListServersPayload struct {
 	// Slug of the collection to serve
-	CollectionSlug   string
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	CollectionSlug string
+	SessionToken   *string
+	ApikeyToken    *string
 }
 
 // ListServersResult is the result type of the collections service listServers
@@ -146,10 +140,9 @@ type UpdatePayload struct {
 	// Description of the collection
 	Description *string
 	// Visibility of the collection
-	Visibility       *string
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	Visibility   *string
+	SessionToken *string
+	ApikeyToken  *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

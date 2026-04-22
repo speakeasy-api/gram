@@ -661,7 +661,7 @@ export function ChatDetailPanel({
     });
   }, [chatId, searchLogs]);
 
-  const logs = logsData?.logs || [];
+  const logs = useMemo(() => logsData?.logs || [], [logsData?.logs]);
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
 
   // Fetch risk findings for this chat

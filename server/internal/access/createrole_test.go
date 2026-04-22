@@ -1,8 +1,8 @@
 package access
 
 import (
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"errors"
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"

@@ -1,12 +1,13 @@
 import { CopyButton } from "@/components/ui/copy-button";
 import { DotRow } from "@/components/ui/dot-row";
+import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
-import { Link2, Network } from "lucide-react";
+import { Link2, Network, Package } from "lucide-react";
 import { useMemo } from "react";
 import { useCatalogIconMap } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
@@ -49,6 +50,9 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
   };
 
   const status = getStatusConfig();
+  const installSourceTooltip = toolset.origin?.registrySpecifier
+    ? `Installed from ${toolset.origin.registrySpecifier}`
+    : undefined;
 
   return (
     <DotRow
@@ -115,6 +119,18 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
               icon={Link2}
               tooltip="Copy MCP URL"
             />
+            {installSourceTooltip && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                tooltip={installSourceTooltip}
+                aria-label={installSourceTooltip}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Package className="text-muted-foreground group-hover:text-foreground h-4 w-4" />
+              </Button>
+            )}
           </div>
         ) : (
           <Type small muted>

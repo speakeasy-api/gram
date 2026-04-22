@@ -20,9 +20,8 @@ func TestCollectionsService_List_CreatesDefaultRegistryCollection(t *testing.T) 
 	ctx, ti := newTestCollectionsService(t)
 
 	result, err := ti.service.List(ctx, &gen.ListPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -50,23 +49,20 @@ func TestCollectionsService_List_DefaultRegistryIsIdempotent(t *testing.T) {
 	require.True(t, ok)
 
 	first, err := ti.service.List(ctx, &gen.ListPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
 	})
 	require.NoError(t, err)
 
 	second, err := ti.service.List(ctx, &gen.ListPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
 	})
 	require.NoError(t, err)
 
 	third, err := ti.service.List(ctx, &gen.ListPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
 	})
 	require.NoError(t, err)
 
@@ -94,9 +90,8 @@ func TestCollectionsService_List_DefaultRegistryCoexistsWithUserCollections(t *t
 	createCollection(t, ctx, ti, "Custom", "custom-collection", "com.example.custom")
 
 	result, err := ti.service.List(ctx, &gen.ListPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
 	})
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(result.Collections), 2)
@@ -117,9 +112,8 @@ func TestCollectionsService_List_DefaultRegistryNotDuplicatedWhenAlreadyExists(t
 	createCollection(t, ctx, ti, "Registry", "registry", "com.example.preexisting")
 
 	result, err := ti.service.List(ctx, &gen.ListPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
 	})
 	require.NoError(t, err)
 
@@ -147,9 +141,8 @@ func TestCollectionsService_List_DefaultRegistryConcurrent(t *testing.T) {
 			defer wg.Done()
 			<-start
 			_, err := ti.service.List(ctx, &gen.ListPayload{
-				SessionToken:     nil,
-				ApikeyToken:      nil,
-				ProjectSlugInput: nil,
+				SessionToken: nil,
+				ApikeyToken:  nil,
 			})
 			errs <- err
 		}()
@@ -193,9 +186,8 @@ func TestCollectionsService_List_EnsureDefaultRegistryFailureIsNonFatal(t *testi
 	})
 
 	result, err := ti.service.List(ctx, &gen.ListPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -221,9 +213,8 @@ func TestCollectionsService_List_DefaultRegistryBackfillsMissingNamespace(t *tes
 	require.NoError(t, err)
 
 	result, err := ti.service.List(ctx, &gen.ListPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
 	})
 	require.NoError(t, err)
 

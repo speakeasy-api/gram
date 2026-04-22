@@ -147,12 +147,15 @@ export function LogFilterBar({
     focusMainInput();
   };
 
-  const handleOpSelect = (op: Op) => {
-    setSelectedOp(op);
-    setStep("value");
-    setFilterValue("");
-    onSearchInputChange("");
-  };
+  const handleOpSelect = useCallback(
+    (op: Op) => {
+      setSelectedOp(op);
+      setStep("value");
+      setFilterValue("");
+      onSearchInputChange("");
+    },
+    [onSearchInputChange],
+  );
 
   // Wraps the parent onSearchInputChange. During the operator step, if the
   // user types a recognised operator followed by a space (e.g. "!= ") we

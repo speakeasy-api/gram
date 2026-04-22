@@ -30,7 +30,10 @@ export default function CreateCollection() {
   const orgRoutes = useOrgRoutes();
   const client = useSdkClient();
   const organization = useOrganization();
-  const projects = organization.projects ?? [];
+  const projects = useMemo(
+    () => organization.projects ?? [],
+    [organization.projects],
+  );
 
   const orgSlug = organization.slug ?? "";
   const baseNamespace = `com.speakeasy.${orgSlug}`;
@@ -127,7 +130,6 @@ export default function CreateCollection() {
 
     await createCollection.mutateAsync({
       request: {
-        gramProject: projects[0]?.slug,
         createRequestBody2: {
           name,
           slug,

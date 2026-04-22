@@ -7,6 +7,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/logs"
+	platformslack "github.com/speakeasy-api/gram/server/internal/platformtools/slack"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -22,6 +23,30 @@ var registry = []toolFactory{
 	},
 	func(deps Dependencies) PlatformToolExecutor {
 		return platformtriggers.NewConfigureTriggerTool(deps.DB, deps.TriggerApp)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewReadChannelMessagesTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewReadThreadMessagesTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewReadUserProfileTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewSearchChannelsTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewSearchMessagesAndFilesTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewSearchUsersTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewScheduleMessageTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewSendMessageTool(deps.SlackHTTPClient)
 	},
 }
 
@@ -41,6 +66,7 @@ func ListPlatformTools() []ToolDescriptor {
 		DB:               nil,
 		TelemetryService: nil,
 		TriggerApp:       nil,
+		SlackHTTPClient:  nil,
 	}
 	for _, factory := range registry {
 		tools = append(tools, factory(deps).Descriptor())

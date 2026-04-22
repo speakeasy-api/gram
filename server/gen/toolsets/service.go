@@ -124,7 +124,9 @@ type CreateToolsetPayload struct {
 	ResourceUrns []string
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *types.Slug
-	ProjectSlugInput       *string
+	// Optional registry lineage for toolsets installed from an external MCP catalog
+	Origin           *types.ToolsetOrigin
+	ProjectSlugInput *string
 }
 
 // DeleteToolsetPayload is the payload type of the toolsets service

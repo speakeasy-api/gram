@@ -273,6 +273,7 @@ export * from "./toolmetric.js";
 export * from "./toolset.js";
 export * from "./toolsetentry.js";
 export * from "./toolsetenvironmentlink.js";
+export * from "./toolsetorigin.js";
 export * from "./toolusage.js";
 export * from "./toolvariation.js";
 export * from "./topserver.js";

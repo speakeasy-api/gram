@@ -31,7 +31,7 @@ export function useRBAC() {
     (featureFlagEnabled && productTier === "enterprise") || devOverrideActive;
 
   // Re-render when the toolbar changes scopes in localStorage.
-  const [overrideVersion, setOverrideVersion] = useState(0);
+  const [, setOverrideVersion] = useState(0);
   useEffect(() => {
     if (!import.meta.env.DEV && !isAdmin) return;
     const handler = () => setOverrideVersion((v) => v + 1);
@@ -48,11 +48,11 @@ export function useRBAC() {
     throwOnError: false,
   });
 
-  // overrideVersion triggers a re-render (and therefore a re-read of devOverrideActive)
+  // setOverrideVersion triggers a re-render (and therefore a re-read of devOverrideActive)
   // when the dev toolbar changes; the query invalidation handles the actual refetch.
   const grants = useMemo(() => {
     return data?.grants;
-  }, [data?.grants, overrideVersion]);
+  }, [data?.grants]);
 
   /**
    * Check if the user has a given scope, optionally scoped to a resource ID.

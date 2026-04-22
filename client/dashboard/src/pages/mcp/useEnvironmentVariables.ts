@@ -252,5 +252,12 @@ export function useEnvironmentVariables(
     });
 
     return existingVars;
-  }, [toolset.slug, environments, mcpMetadata]);
+  }, [
+    toolset.securityVariables,
+    toolset.serverVariables,
+    toolset.functionEnvironmentVariables,
+    toolset.externalMcpHeaderDefinitions,
+    environments,
+    mcpMetadata,
+  ]);
 }

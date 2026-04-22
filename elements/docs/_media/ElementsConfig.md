@@ -335,6 +335,16 @@ const config: ElementsConfig = {
 
 ***
 
+### contextCompaction?
+
+> `optional` **contextCompaction**: `ContextCompactionConfig`
+
+Configuration for automatic conversation compaction when the estimated
+input size approaches the model's context window. Defaults are safe for
+all models; override per-page to tighten or disable.
+
+***
+
 ### history?
 
 > `optional` **history**: [`HistoryConfig`](HistoryConfig.md)

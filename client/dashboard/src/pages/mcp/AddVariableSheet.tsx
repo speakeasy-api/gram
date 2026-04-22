@@ -49,7 +49,7 @@ export function AddVariableSheet({
   const [entries, setEntries] = useState([{ ...emptyEntry }]);
 
   const resetForm = useCallback(() => {
-    setEntries([{ ...emptyEntry }]);
+    setEntries([{ key: "", value: "" }]);
   }, []);
 
   const handleSave = () => {

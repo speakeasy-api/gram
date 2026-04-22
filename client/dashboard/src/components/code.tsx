@@ -58,7 +58,7 @@ export function CodeBlock({
         },
       ],
     }).then(setHighlightedCode);
-  }, [code, language, preClassName]);
+  }, [code, language, preClassName, theme]);
 
   const baseClasses =
     "rounded-md font-mono text-sm text-wrap overflow-x-auto border break-all whitespace-pre-wrap truncate";

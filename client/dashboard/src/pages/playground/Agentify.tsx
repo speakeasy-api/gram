@@ -54,7 +54,7 @@ export const AgentifyProvider = ({
     if (!Object.keys(FRAMEWORKS[lang]).includes(framework)) {
       setFramework(FRAMEWORKS[lang][0]);
     }
-  }, [lang]);
+  }, [lang, framework]);
 
   const agentify = async (toolsetSlug: string, environmentSlug: string) => {
     telemetry.capture("agentify_event", {
@@ -223,7 +223,8 @@ export const AgentifyButton = ({
       );
       setSuggestionNumMessages(messages.length);
     });
-  }, [agentifyModalOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only trigger when modal opens or message count changes
+  }, [agentifyModalOpen, messages.length, suggestionNumMessages]);
 
   const agentifyFn = async () => {
     agentify(toolsetSlug, environmentSlug);

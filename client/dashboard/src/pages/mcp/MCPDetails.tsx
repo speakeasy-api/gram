@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { RequireScope } from "@/components/require-scope";
-import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -99,6 +98,7 @@ import { getSystemProvidedVariables } from "./environmentVariableUtils";
 import { useMcpConfigs, useMcpSlugValidation } from "./mcp-details-utils";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 import { MCPPerformanceTab } from "./MCPPerformanceTab";
+import { MCPTeamAccessTab } from "./MCPTeamAccessTab";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
 
 export function MCPDetailsRoot() {
@@ -165,6 +165,8 @@ export function MCPDetailPage() {
 function MCPDetailPageInner() {
   const { toolsetSlug } = useParams();
   const routes = useRoutes();
+  const telemetry = useTelemetry();
+  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const { data: toolset, isLoading } = useToolset(toolsetSlug);
 
@@ -191,10 +193,20 @@ function MCPDetailPageInner() {
       "prompts",
       "authentication",
       "performance",
+      ...(isRbacEnabled ? ["team-access"] : []),
       "settings",
     ];
     return hash && validTabs.includes(hash) ? hash : "overview";
   });
+
+  // Re-validate activeTab when feature flag loads asynchronously
+  useEffect(() => {
+    if (!isRbacEnabled) return;
+    const hash = window.location.hash.slice(1);
+    if (hash === "team-access") {
+      setActiveTab("team-access");
+    }
+  }, [isRbacEnabled]);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
@@ -273,9 +285,11 @@ function MCPDetailPageInner() {
         >
           <div className="flex items-end justify-between">
             <Stack gap={2}>
-              <div className="ml-1 flex gap-3">
+              <div className="ml-1 flex items-end gap-3">
                 <Heading variant="h1">{toolset.name}</Heading>
-                <div className="mt-auto mb-1">{statusBadge}</div>
+                <div className="mb-1 flex items-center gap-2">
+                  {statusBadge}
+                </div>
               </div>
               <div className="ml-1 flex items-center gap-2">
                 <Type className="text-muted-foreground max-w-2xl truncate">
@@ -339,6 +353,11 @@ function MCPDetailPageInner() {
                 <PageTabsTrigger value="performance">
                   Performance
                 </PageTabsTrigger>
+                {isRbacEnabled && (
+                  <PageTabsTrigger value="team-access">
+                    Team Access
+                  </PageTabsTrigger>
+                )}
                 <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
               </TabsList>
             </div>
@@ -373,6 +392,14 @@ function MCPDetailPageInner() {
                 <MCPPerformanceTab toolset={toolset} />
               </RequireScope>
             </TabsContent>
+
+            {isRbacEnabled && (
+              <TabsContent value="team-access" className="mt-0 w-full">
+                <RequireScope scope="mcp:read" level="page">
+                  <MCPTeamAccessTab toolset={toolset} />
+                </RequireScope>
+              </TabsContent>
+            )}
 
             <TabsContent value="settings" className="mt-0 w-full">
               <RequireScope scope="mcp:write" level="page">
@@ -926,11 +953,12 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
     grouped.map((group) => group.key),
   );
 
-  const groupKeys = grouped.map((group) => group.key);
+  const groupKeysJoined = grouped.map((group) => group.key).join(",");
   // Set initial selected groups when the tool list resolves
   useEffect(() => {
-    setSelectedGroups(groupKeys);
-  }, [groupKeys.join(",")]);
+    setSelectedGroups(grouped.map((group) => group.key));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recalculate only when the set of group keys changes
+  }, [groupKeysJoined]);
 
   const handleToolUpdate = async (
     tool: Tool,
@@ -1454,9 +1482,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         </Block>
       </PageSection>
 
-      {!toolset.toolUrns?.some((u) => u.startsWith("tools:externalmcp:")) && (
-        <MCPPublishingSection toolset={toolset} />
-      )}
+      <MCPPublishingSection toolset={toolset} />
 
       <PageSection
         heading="Actions"
@@ -1564,8 +1590,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
 
 function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
   const client = useSdkClient();
-  const organization = useOrganization();
-  const defaultProjectSlug = organization.projects?.[0]?.slug;
   const { data: collections, isLoading: collectionsLoading } = useCollections();
   const attachServer = useAttachServer();
   const detachServer = useDetachServer();
@@ -1576,9 +1600,8 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
     queries: collections.map((collection) => ({
       ...buildCollectionsListServersQuery(client, {
         collectionSlug: collection.slug!,
-        gramProject: defaultProjectSlug,
       }),
-      enabled: !!collection.slug && !!defaultProjectSlug,
+      enabled: !!collection.slug,
     })),
   });
 
@@ -1588,6 +1611,11 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
     for (let i = 0; i < collections.length; i++) {
       const servers = serveQueries[i]?.data?.servers ?? [];
       for (const server of servers) {
+        if (server.toolsetId === toolset.id) {
+          ids.add(collections[i].id);
+          break;
+        }
+
         const parts = server.registrySpecifier?.split("/") ?? [];
         const slug = parts[parts.length - 1];
         if (slug === toolset.mcpSlug) {
@@ -1598,7 +1626,7 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
     }
 
     return ids;
-  }, [collections, serveQueries, toolset.mcpSlug]);
+  }, [collections, serveQueries, toolset.id, toolset.mcpSlug]);
 
   const effectiveSelected = selectedIds ?? publishedCollectionIds;
 
@@ -1625,7 +1653,7 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
   };
 
   const handleSave = async () => {
-    if (!selectedIds || !defaultProjectSlug) return;
+    if (!selectedIds) return;
 
     setIsSaving(true);
     try {
@@ -1640,7 +1668,6 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
         ...toAttach.map((collectionId) =>
           attachServer.mutateAsync({
             request: {
-              gramProject: defaultProjectSlug,
               attachServerRequestBody: {
                 collectionId,
                 toolsetId: toolset.id,
@@ -1651,7 +1678,6 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
         ...toDetach.map((collectionId) =>
           detachServer.mutateAsync({
             request: {
-              gramProject: defaultProjectSlug,
               attachServerRequestBody: {
                 collectionId,
                 toolsetId: toolset.id,
@@ -1672,8 +1698,7 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
   };
 
   const isLoading =
-    collectionsLoading ||
-    (!!defaultProjectSlug && serveQueries.some((query) => query.isLoading));
+    collectionsLoading || serveQueries.some((query) => query.isLoading);
 
   return (
     <PageSection
@@ -1682,11 +1707,7 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
     >
       <Block label="Collections" className="p-0">
         <BlockInner>
-          {!defaultProjectSlug ? (
-            <Type muted small>
-              No project available for publishing.
-            </Type>
-          ) : !toolset.mcpEnabled || !toolset.mcpSlug ? (
+          {!toolset.mcpEnabled || !toolset.mcpSlug ? (
             <Type muted small>
               Enable this MCP server before publishing it to a collection.
             </Type>
