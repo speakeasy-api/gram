@@ -205,7 +205,21 @@ When the user asks about "current period", "selected period", "this timeframe", 
       variant: "standalone",
       systemPrompt,
       model: {
-        defaultModel: "anthropic/claude-sonnet-4.5",
+        defaultModel: "anthropic/claude-sonnet-4.6",
+      },
+      tools: {
+        ...mcpConfig.tools,
+        // Cap individual MCP tool outputs to ~12.5K tokens. Observability
+        // queries (gram_search_logs, gram_get_deployment_logs) can return
+        // hundreds of KB; without this cap, one wide search fills the
+        // context window.
+        maxOutputBytes: 50_000,
+      },
+      contextCompaction: {
+        // Start compacting at 60% of the model ceiling — Insights runs long
+        // tool-heavy conversations and benefits from a tighter margin than
+        // the library default of 70%.
+        compactAtFraction: 0.6,
       },
       welcome: {
         title,

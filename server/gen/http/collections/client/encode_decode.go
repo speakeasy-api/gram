@@ -50,10 +50,6 @@ func EncodeCreateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		body := NewCreateRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("collections", "create", err)
@@ -292,10 +288,6 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		return nil
 	}
 }
@@ -529,10 +521,6 @@ func EncodeUpdateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
 		}
 		body := NewUpdateRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -772,10 +760,6 @@ func EncodeDeleteRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		values := req.URL.Query()
 		values.Add("collection_id", p.CollectionID)
 		req.URL.RawQuery = values.Encode()
@@ -999,10 +983,6 @@ func EncodeAttachServerRequest(encoder func(*http.Request) goahttp.Encoder) func
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
 		}
 		body := NewAttachServerRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -1242,10 +1222,6 @@ func EncodeDetachServerRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		body := NewDetachServerRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("collections", "detachServer", err)
@@ -1470,10 +1446,6 @@ func EncodeListServersRequest(encoder func(*http.Request) goahttp.Encoder) func(
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
 		values.Add("collection_slug", p.CollectionSlug)

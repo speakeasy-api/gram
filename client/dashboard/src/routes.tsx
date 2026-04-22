@@ -571,7 +571,8 @@ export const useRoutes = (overrides?: {
 
   const routes: RoutesWithGoTo = useMemo(
     () => addGoToToRoutes(ROUTE_STRUCTURE),
-    [location.pathname],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addGoToToRoutes is stable in behavior; recompute only when pathname or slugs change
+    [location.pathname, orgSlug, projectSlug, navigate],
   );
 
   return routes;
@@ -807,7 +808,8 @@ export const useOrgRoutes = (): OrgRoutesWithGoTo => {
 
   const routes: OrgRoutesWithGoTo = useMemo(
     () => addGoToToRoutes(ORG_ROUTE_STRUCTURE),
-    [location.pathname],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addGoToToRoutes is stable in behavior; recompute only when pathname or slug change
+    [location.pathname, orgSlug, navigate],
   );
 
   return routes;

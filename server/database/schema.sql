@@ -811,6 +811,148 @@ CREATE TABLE IF NOT EXISTS chats (
   CONSTRAINT chats_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS assistants (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 120),
+  model TEXT NOT NULL CHECK (model <> '' AND CHAR_LENGTH(model) <= 200),
+  instructions TEXT NOT NULL,
+  warm_ttl_seconds BIGINT NOT NULL DEFAULT 300 CHECK (warm_ttl_seconds >= 0 AND warm_ttl_seconds <= 3600),
+  max_concurrency BIGINT NOT NULL DEFAULT 1 CHECK (max_concurrency >= 1 AND max_concurrency <= 100),
+  status TEXT NOT NULL DEFAULT 'active',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT assistants_pkey PRIMARY KEY (id),
+  CONSTRAINT assistants_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_name_key
+ON assistants (project_id, name)
+WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS assistant_toolsets (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  assistant_id uuid NOT NULL,
+  toolset_id uuid NOT NULL,
+  environment_id uuid,
+  project_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT assistant_toolsets_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_toolsets_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_toolsets_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_toolsets_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_toolsets_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_toolsets_assistant_id_toolset_id_key UNIQUE (assistant_id, toolset_id)
+);
+
+CREATE INDEX IF NOT EXISTS assistant_toolsets_assistant_id_idx ON assistant_toolsets (assistant_id);
+CREATE INDEX IF NOT EXISTS assistant_toolsets_toolset_id_idx ON assistant_toolsets (toolset_id);
+
+CREATE TABLE IF NOT EXISTS assistant_threads (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  assistant_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  correlation_id TEXT NOT NULL CHECK (correlation_id <> '' AND CHAR_LENGTH(correlation_id) <= 300),
+  chat_id uuid NOT NULL,
+  source_kind TEXT NOT NULL CHECK (source_kind <> '' AND CHAR_LENGTH(source_kind) <= 50),
+  source_ref_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  last_event_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT assistant_threads_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_threads_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants(id) ON DELETE CASCADE,
+  CONSTRAINT assistant_threads_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT assistant_threads_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_threads_project_id_assistant_id_correlation_id_key
+ON assistant_threads (project_id, assistant_id, correlation_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS assistant_threads_project_id_assistant_id_last_event_at_idx
+ON assistant_threads (project_id, assistant_id, last_event_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS assistant_runtimes (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  assistant_thread_id uuid NOT NULL,
+  assistant_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  backend TEXT NOT NULL CHECK (backend <> '' AND CHAR_LENGTH(backend) <= 50),
+  state TEXT NOT NULL,
+  warm_until timestamptz,
+  lease_owner TEXT,
+  last_heartbeat_at timestamptz,
+  backend_metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  ended_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  ended boolean NOT NULL GENERATED ALWAYS AS (ended_at IS NOT NULL) stored,
+
+  CONSTRAINT assistant_runtimes_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_runtimes_assistant_thread_id_fkey FOREIGN KEY (assistant_thread_id) REFERENCES assistant_threads(id) ON DELETE CASCADE,
+  CONSTRAINT assistant_runtimes_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants(id) ON DELETE CASCADE,
+  CONSTRAINT assistant_runtimes_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_runtimes_assistant_thread_id_active_key
+ON assistant_runtimes (assistant_thread_id)
+WHERE deleted IS FALSE AND ended IS FALSE;
+
+CREATE INDEX IF NOT EXISTS assistant_runtimes_project_id_assistant_id_state_idx
+ON assistant_runtimes (project_id, assistant_id, state)
+WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS assistant_thread_events (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  assistant_thread_id uuid NOT NULL,
+  assistant_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  trigger_instance_id uuid,
+  event_id TEXT NOT NULL CHECK (event_id <> '' AND CHAR_LENGTH(event_id) <= 300),
+  correlation_id TEXT NOT NULL CHECK (correlation_id <> '' AND CHAR_LENGTH(correlation_id) <= 300),
+  status TEXT NOT NULL DEFAULT 'pending',
+  normalized_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  source_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  attempts BIGINT NOT NULL DEFAULT 0,
+  last_error TEXT,
+  processed_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT assistant_thread_events_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_thread_events_assistant_thread_id_fkey FOREIGN KEY (assistant_thread_id) REFERENCES assistant_threads(id) ON DELETE CASCADE,
+  CONSTRAINT assistant_thread_events_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants(id) ON DELETE CASCADE,
+  CONSTRAINT assistant_thread_events_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT assistant_thread_events_trigger_instance_id_fkey FOREIGN KEY (trigger_instance_id) REFERENCES trigger_instances(id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_thread_events_project_id_assistant_id_event_id_key
+ON assistant_thread_events (project_id, assistant_id, event_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS assistant_thread_events_project_id_thread_status_created_at_idx
+ON assistant_thread_events (project_id, assistant_thread_id, status, created_at)
+WHERE deleted IS FALSE;
+
 -- Create the chat_messages table to store individual messages in each chat
 CREATE TABLE IF NOT EXISTS chat_messages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1614,21 +1756,29 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   principal_type TEXT NOT NULL GENERATED ALWAYS AS (split_part(principal_urn, ':', 1)) STORED,
   scope TEXT NOT NULL,
   resource TEXT NOT NULL DEFAULT '*',
+  selectors JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT principal_grants_pkey PRIMARY KEY (id),
   CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT principal_grants_selectors_check CHECK (selectors IS NULL OR jsonb_typeof(selectors) = 'object'),
   CONSTRAINT principal_grants_org_principal_scope_resource_key UNIQUE (organization_id, principal_urn, scope, resource)
 );
 
-COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource=''*'' means unrestricted.';
+COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource=''*'' means unrestricted. Selectors can further constrain applicability.';
 COMMENT ON COLUMN principal_grants.organization_id IS 'The organization this grant belongs to. Grants are always org-scoped.';
 COMMENT ON COLUMN principal_grants.principal_urn IS 'URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.';
 COMMENT ON COLUMN principal_grants.principal_type IS 'Derived from principal_urn. The type prefix, e.g. "user", "role".';
 COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.';
 COMMENT ON COLUMN principal_grants.resource IS '''*'' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.';
+COMMENT ON COLUMN principal_grants.selectors IS 'Optional JSON selector constraints refining when the grant applies. NULL means the grant has no selector constraints.';
+
+CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
+ON principal_grants
+USING GIN (selectors)
+WHERE selectors IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1960,3 +2110,7 @@ ON risk_results (project_id, risk_policy_id, risk_policy_version, chat_message_i
 
 CREATE INDEX IF NOT EXISTS risk_results_project_chat_message_idx
 ON risk_results (project_id, chat_message_id);
+
+CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
+ON risk_results (project_id, created_at DESC)
+WHERE found IS TRUE;

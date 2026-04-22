@@ -5,19 +5,9 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type DeleteCollectionSecurityOption1 = {
-  projectSlugHeaderGramProject: string;
-  sessionHeaderGramSession: string;
-};
-
-export type DeleteCollectionSecurityOption2 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
 export type DeleteCollectionSecurity = {
-  option1?: DeleteCollectionSecurityOption1 | undefined;
-  option2?: DeleteCollectionSecurityOption2 | undefined;
+  sessionHeaderGramSession?: string | undefined;
+  apikeyHeaderGramKey?: string | undefined;
 };
 
 export type DeleteCollectionRequest = {
@@ -33,82 +23,12 @@ export type DeleteCollectionRequest = {
    * API Key header
    */
   gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
-
-/** @internal */
-export type DeleteCollectionSecurityOption1$Outbound = {
-  "project_slug_header_Gram-Project": string;
-  "session_header_Gram-Session": string;
-};
-
-/** @internal */
-export const DeleteCollectionSecurityOption1$outboundSchema: z.ZodMiniType<
-  DeleteCollectionSecurityOption1$Outbound,
-  DeleteCollectionSecurityOption1
-> = z.pipe(
-  z.object({
-    projectSlugHeaderGramProject: z.string(),
-    sessionHeaderGramSession: z.string(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-      sessionHeaderGramSession: "session_header_Gram-Session",
-    });
-  }),
-);
-
-export function deleteCollectionSecurityOption1ToJSON(
-  deleteCollectionSecurityOption1: DeleteCollectionSecurityOption1,
-): string {
-  return JSON.stringify(
-    DeleteCollectionSecurityOption1$outboundSchema.parse(
-      deleteCollectionSecurityOption1,
-    ),
-  );
-}
-
-/** @internal */
-export type DeleteCollectionSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
-};
-
-/** @internal */
-export const DeleteCollectionSecurityOption2$outboundSchema: z.ZodMiniType<
-  DeleteCollectionSecurityOption2$Outbound,
-  DeleteCollectionSecurityOption2
-> = z.pipe(
-  z.object({
-    apikeyHeaderGramKey: z.string(),
-    projectSlugHeaderGramProject: z.string(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    });
-  }),
-);
-
-export function deleteCollectionSecurityOption2ToJSON(
-  deleteCollectionSecurityOption2: DeleteCollectionSecurityOption2,
-): string {
-  return JSON.stringify(
-    DeleteCollectionSecurityOption2$outboundSchema.parse(
-      deleteCollectionSecurityOption2,
-    ),
-  );
-}
 
 /** @internal */
 export type DeleteCollectionSecurity$Outbound = {
-  Option1?: DeleteCollectionSecurityOption1$Outbound | undefined;
-  Option2?: DeleteCollectionSecurityOption2$Outbound | undefined;
+  "session_header_Gram-Session"?: string | undefined;
+  "apikey_header_Gram-Key"?: string | undefined;
 };
 
 /** @internal */
@@ -117,17 +37,13 @@ export const DeleteCollectionSecurity$outboundSchema: z.ZodMiniType<
   DeleteCollectionSecurity
 > = z.pipe(
   z.object({
-    option1: z.optional(
-      z.lazy(() => DeleteCollectionSecurityOption1$outboundSchema),
-    ),
-    option2: z.optional(
-      z.lazy(() => DeleteCollectionSecurityOption2$outboundSchema),
-    ),
+    sessionHeaderGramSession: z.optional(z.string()),
+    apikeyHeaderGramKey: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      option1: "Option1",
-      option2: "Option2",
+      sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
     });
   }),
 );
@@ -145,7 +61,6 @@ export type DeleteCollectionRequest$Outbound = {
   collection_id: string;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -157,14 +72,12 @@ export const DeleteCollectionRequest$outboundSchema: z.ZodMiniType<
     collectionId: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       collectionId: "collection_id",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
     });
   }),
 );

@@ -28,11 +28,10 @@ func TestCollectionsService_AttachServer_AllowsOriginBackedToolsets(t *testing.T
 	)
 
 	result, err := ti.service.AttachServer(ctx, &gen.AttachServerPayload{
-		CollectionID:     collection.ID,
-		ToolsetID:        toolset.ID,
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+		CollectionID: collection.ID,
+		ToolsetID:    toolset.ID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -60,19 +59,17 @@ func TestCollectionsService_ListServers_PreservesOriginLineage(t *testing.T) {
 	)
 
 	_, err := ti.service.AttachServer(ctx, &gen.AttachServerPayload{
-		CollectionID:     collection.ID,
-		ToolsetID:        toolset.ID,
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+		CollectionID: collection.ID,
+		ToolsetID:    toolset.ID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
 	})
 	require.NoError(t, err)
 
 	result, err := ti.service.ListServers(ctx, &gen.ListServersPayload{
-		CollectionSlug:   collection.Slug,
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+		CollectionSlug: collection.Slug,
+		SessionToken:   nil,
+		ApikeyToken:    nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Servers, 1)

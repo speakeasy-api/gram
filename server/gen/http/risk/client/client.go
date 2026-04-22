@@ -41,6 +41,10 @@ type Client struct {
 	// listRiskResults endpoint.
 	ListRiskResultsDoer goahttp.Doer
 
+	// ListRiskResultsByChat Doer is the HTTP client used to make requests to the
+	// listRiskResultsByChat endpoint.
+	ListRiskResultsByChatDoer goahttp.Doer
+
 	// GetRiskPolicyStatus Doer is the HTTP client used to make requests to the
 	// getRiskPolicyStatus endpoint.
 	GetRiskPolicyStatusDoer goahttp.Doer
@@ -69,19 +73,20 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateRiskPolicyDoer:    doer,
-		ListRiskPoliciesDoer:    doer,
-		GetRiskPolicyDoer:       doer,
-		UpdateRiskPolicyDoer:    doer,
-		DeleteRiskPolicyDoer:    doer,
-		ListRiskResultsDoer:     doer,
-		GetRiskPolicyStatusDoer: doer,
-		TriggerRiskAnalysisDoer: doer,
-		RestoreResponseBody:     restoreBody,
-		scheme:                  scheme,
-		host:                    host,
-		decoder:                 dec,
-		encoder:                 enc,
+		CreateRiskPolicyDoer:      doer,
+		ListRiskPoliciesDoer:      doer,
+		GetRiskPolicyDoer:         doer,
+		UpdateRiskPolicyDoer:      doer,
+		DeleteRiskPolicyDoer:      doer,
+		ListRiskResultsDoer:       doer,
+		ListRiskResultsByChatDoer: doer,
+		GetRiskPolicyStatusDoer:   doer,
+		TriggerRiskAnalysisDoer:   doer,
+		RestoreResponseBody:       restoreBody,
+		scheme:                    scheme,
+		host:                      host,
+		decoder:                   dec,
+		encoder:                   enc,
 	}
 }
 
@@ -224,6 +229,30 @@ func (c *Client) ListRiskResults() goa.Endpoint {
 		resp, err := c.ListRiskResultsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "listRiskResults", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRiskResultsByChat returns an endpoint that makes HTTP requests to the
+// risk service listRiskResultsByChat server.
+func (c *Client) ListRiskResultsByChat() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRiskResultsByChatRequest(c.encoder)
+		decodeResponse = DecodeListRiskResultsByChatResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRiskResultsByChatRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRiskResultsByChatDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listRiskResultsByChat", err)
 		}
 		return decodeResponse(resp)
 	}

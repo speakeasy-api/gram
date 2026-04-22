@@ -48,9 +48,10 @@ export const StepperContextProvider: React.FC<StepperContextProviderProps> = ({
 
   React.useEffect(() => {
     isMounted.current = true;
+    const subs = subscribers.current;
     return () => {
       isMounted.current = false;
-      subscribers.current.clear();
+      subs.clear();
     };
   }, []);
 

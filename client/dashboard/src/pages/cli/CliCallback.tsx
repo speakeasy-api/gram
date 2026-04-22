@@ -63,7 +63,7 @@ export default function CliCallback(props: CliCallbackProps) {
           err instanceof Error ? err.message : "Failed to create API key",
         );
       });
-  }, [createKey, session, localCallbackUrl]);
+  }, [createKey, session, localCallbackUrl, validCallback]);
 
   if (error) {
     return <FailedScreen error={error} />;

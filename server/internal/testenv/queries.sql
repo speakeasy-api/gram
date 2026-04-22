@@ -1,3 +1,8 @@
+-- name: InsertChatMessage :one
+INSERT INTO chat_messages (chat_id, project_id, role, content)
+VALUES (@chat_id, @project_id, @role, @content)
+RETURNING id;
+
 -- name: ListDeploymentHTTPTools :many
 SELECT *
 FROM http_tool_definitions

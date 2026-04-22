@@ -1,5 +1,12 @@
 # @gram/client
 
+## 0.34.0
+
+### Minor Changes
+
+- d8c6ce1: add support for publishing external servers into collections.
+- 1ee9f95: Improved Hooks dashboard with new charts, refined visuals, and smarter default filters.
+
 ## 0.32.65
 
 ### Patch Changes

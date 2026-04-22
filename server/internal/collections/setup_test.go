@@ -114,7 +114,6 @@ func createMCPEnabledToolset(
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		Origin:                 origin,
-		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
 
@@ -133,7 +132,6 @@ func createMCPEnabledToolset(
 		McpIsPublic:            nil,
 		McpEnabled:             &mcpEnabled,
 		CustomDomainID:         nil,
-		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
 	require.True(t, *updated.McpEnabled)
@@ -153,7 +151,6 @@ func createCollection(t *testing.T, ctx context.Context, ti *testInstance, name,
 		ToolsetIds:           []string{},
 		SessionToken:         nil,
 		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
 	})
 	require.NoError(t, err)
 

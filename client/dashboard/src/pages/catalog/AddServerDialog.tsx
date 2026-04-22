@@ -307,6 +307,7 @@ export function AddServerDialog({
     if (!open) {
       releaseState.reset();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset when dialog open/close state changes, not on every releaseState update
   }, [open]);
 
   // Clean up Radix body scroll-lock on unmount (e.g. when navigating away mid-dialog)
@@ -332,7 +333,7 @@ export function AddServerDialog({
     if (!allToolsetsDone) {
       prevAllDoneRef.current = false;
     }
-  }, [allToolsetsDone]);
+  }, [allToolsetsDone, onServersAdded]);
 
   if (servers.length === 0) return null;
 
@@ -759,6 +760,7 @@ function ConfigurePhaseContent({
     if (!hasOnlySingleRemote && releaseState.canDeploy && needsDeployment) {
       releaseState.startDeployment();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only trigger on deploy readiness changes, not on every releaseState update
   }, [hasOnlySingleRemote, needsDeployment, releaseState.canDeploy]);
 
   // If all servers were multi-remote, show loading state while auto-deploying

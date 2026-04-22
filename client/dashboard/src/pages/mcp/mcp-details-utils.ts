@@ -133,7 +133,7 @@ export function useMcpSlugValidation(
           }
         });
     }
-  }, [mcpSlug]);
+  }, [mcpSlug, currentSlug, client.toolsets]);
 
   return slugError;
 }

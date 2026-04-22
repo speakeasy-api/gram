@@ -120,6 +120,7 @@ export * from "./listremotemcpservers.js";
 export * from "./listresources.js";
 export * from "./listriskpolicies.js";
 export * from "./listriskresults.js";
+export * from "./listriskresultsbychat.js";
 export * from "./listroles.js";
 export * from "./listscopes.js";
 export * from "./listservernameoverrides.js";

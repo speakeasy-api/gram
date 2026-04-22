@@ -222,6 +222,7 @@ export function ToolsetView({
     if (newTab !== activeTab) {
       setActiveTab(newTab);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getTabFromHash reads location.hash; activeTab excluded to avoid loop
   }, [location.hash]);
 
   // Redirect to appropriate default tab based on toolset kind
@@ -242,6 +243,7 @@ export function ToolsetView({
       setActiveTab("tools");
       navigate("#tools", { replace: true });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only redirect on toolset kind change; activeTab/navigate/isExternalMcpProxy excluded to avoid loops
   }, [toolset?.kind]);
 
   // Update URL hash when tab changes
@@ -300,9 +302,8 @@ export function ToolsetView({
     return () => {
       removeActions(pageActions.map((a) => a.id));
     };
-    // addActions and removeActions are memoized in CommandPaletteContext with empty deps
-    // so they're stable and don't need to be in the dependency array
-  }, [toolsetSlug, toolset?.kind]); // Re-run when toolset slug or kind changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- routes changes every render; addActions/removeActions/cloneToolset are stable
+  }, [toolsetSlug, toolset?.kind]);
 
   // Refetch any loaded instances of this toolset on update (primarily for the playground)
   const refetchInstance = () => {
@@ -410,12 +411,13 @@ export function ToolsetView({
         },
       );
     },
-    [toolset?.toolUrns, toolsetSlug],
+    [toolset?.toolUrns, toolsetSlug, telemetry, updateToolsetMutation],
   );
 
   const handleTestInPlayground = useCallback(() => {
     routes.playground.goTo(toolsetSlug);
-  }, [toolsetSlug]); // routes changes every render but is used in closure
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- routes changes every render but goTo is stable
+  }, [toolsetSlug]);
 
   const handleCreateToolset = useCallback((toolUrns: string[]) => {
     setSelectedToolUrns(toolUrns);
