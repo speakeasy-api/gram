@@ -28,6 +28,8 @@ type CreateToolsetRequestBody struct {
 	ResourceUrns []string `form:"resource_urns,omitempty" json:"resource_urns,omitempty" xml:"resource_urns,omitempty"`
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// Optional registry lineage for toolsets installed from an external MCP catalog
+	Origin *ToolsetOriginRequestBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 }
 
 // UpdateToolsetRequestBody is the type of the "toolsets" service
@@ -131,6 +133,8 @@ type CreateToolsetResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The registry lineage for toolsets installed from an external MCP catalog
+	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -207,6 +211,8 @@ type UpdateToolsetResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The registry lineage for toolsets installed from an external MCP catalog
+	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -269,6 +275,8 @@ type GetToolsetResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The registry lineage for toolsets installed from an external MCP catalog
+	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -331,6 +339,8 @@ type CloneToolsetResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The registry lineage for toolsets installed from an external MCP catalog
+	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -393,6 +403,8 @@ type AddExternalOAuthServerResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The registry lineage for toolsets installed from an external MCP catalog
+	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -455,6 +467,8 @@ type RemoveOAuthServerResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The registry lineage for toolsets installed from an external MCP catalog
+	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -517,6 +531,8 @@ type AddOAuthProxyServerResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The registry lineage for toolsets installed from an external MCP catalog
+	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -579,6 +595,8 @@ type UpdateOAuthProxyServerResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The registry lineage for toolsets installed from an external MCP catalog
+	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -2812,6 +2830,12 @@ type UpdateOAuthProxyServerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ToolsetOriginRequestBody is used to define fields on request body types.
+type ToolsetOriginRequestBody struct {
+	// The globally unique registry specifier this toolset originated from
+	RegistrySpecifier string `form:"registry_specifier" json:"registry_specifier" xml:"registry_specifier"`
+}
+
 // SecurityVariableResponseBody is used to define fields on response body types.
 type SecurityVariableResponseBody struct {
 	// The unique identifier of the security variable
@@ -3291,6 +3315,12 @@ type FunctionResourceDefinitionResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// ToolsetOriginResponseBody is used to define fields on response body types.
+type ToolsetOriginResponseBody struct {
+	// The globally unique registry specifier this toolset originated from
+	RegistrySpecifier *string `form:"registry_specifier,omitempty" json:"registry_specifier,omitempty" xml:"registry_specifier,omitempty"`
+}
+
 // ExternalOAuthServerResponseBody is used to define fields on response body
 // types.
 type ExternalOAuthServerResponseBody struct {
@@ -3398,6 +3428,8 @@ type ToolsetEntryResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The registry lineage for toolsets installed from an external MCP catalog
+	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// When the toolset was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the toolset was last updated.
@@ -3413,6 +3445,10 @@ type ToolEntryResponseBody struct {
 	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
 	// The name of the tool
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Tool annotations providing behavioral hints
+	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+	// HTTP method for HTTP tools (GET, POST, PUT, PATCH, DELETE)
+	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
 }
 
 // ResourceEntryResponseBody is used to define fields on response body types.
@@ -3508,6 +3544,9 @@ func NewCreateToolsetRequestBody(p *toolsets.CreateToolsetPayload) *CreateToolse
 		for i, val := range p.ResourceUrns {
 			body.ResourceUrns[i] = val
 		}
+	}
+	if p.Origin != nil {
+		body.Origin = marshalTypesToolsetOriginToToolsetOriginRequestBody(p.Origin)
 	}
 	return body
 }
@@ -3681,6 +3720,9 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
 			continue
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	}
+	if body.Origin != nil {
+		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
 	}
 	if body.ExternalOauthServer != nil {
 		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
@@ -4274,6 +4316,9 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
+	if body.Origin != nil {
+		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
+	}
 	if body.ExternalOauthServer != nil {
 		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
 	}
@@ -4683,6 +4728,9 @@ func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
 			continue
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	}
+	if body.Origin != nil {
+		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
 	}
 	if body.ExternalOauthServer != nil {
 		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
@@ -5094,6 +5142,9 @@ func NewCloneToolsetToolsetOK(body *CloneToolsetResponseBody) *types.Toolset {
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
+	if body.Origin != nil {
+		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
+	}
 	if body.ExternalOauthServer != nil {
 		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
 	}
@@ -5353,6 +5404,9 @@ func NewAddExternalOAuthServerToolsetOK(body *AddExternalOAuthServerResponseBody
 			continue
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	}
+	if body.Origin != nil {
+		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
 	}
 	if body.ExternalOauthServer != nil {
 		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
@@ -5614,6 +5668,9 @@ func NewRemoveOAuthServerToolsetOK(body *RemoveOAuthServerResponseBody) *types.T
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
+	if body.Origin != nil {
+		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
+	}
 	if body.ExternalOauthServer != nil {
 		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
 	}
@@ -5874,6 +5931,9 @@ func NewAddOAuthProxyServerToolsetOK(body *AddOAuthProxyServerResponseBody) *typ
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
+	if body.Origin != nil {
+		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
+	}
 	if body.ExternalOauthServer != nil {
 		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
 	}
@@ -6133,6 +6193,9 @@ func NewUpdateOAuthProxyServerToolsetOK(body *UpdateOAuthProxyServerResponseBody
 			continue
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	}
+	if body.Origin != nil {
+		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
 	}
 	if body.ExternalOauthServer != nil {
 		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
@@ -6423,6 +6486,11 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
 		}
 	}
+	if body.Origin != nil {
+		if err2 := ValidateToolsetOriginResponseBody(body.Origin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.ExternalOauthServer != nil {
 		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -6603,6 +6671,11 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
 		}
 	}
+	if body.Origin != nil {
+		if err2 := ValidateToolsetOriginResponseBody(body.Origin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.ExternalOauthServer != nil {
 		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -6749,6 +6822,11 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
+		}
+	}
+	if body.Origin != nil {
+		if err2 := ValidateToolsetOriginResponseBody(body.Origin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.ExternalOauthServer != nil {
@@ -6899,6 +6977,11 @@ func ValidateCloneToolsetResponseBody(body *CloneToolsetResponseBody) (err error
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
 		}
 	}
+	if body.Origin != nil {
+		if err2 := ValidateToolsetOriginResponseBody(body.Origin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.ExternalOauthServer != nil {
 		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -7045,6 +7128,11 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
+		}
+	}
+	if body.Origin != nil {
+		if err2 := ValidateToolsetOriginResponseBody(body.Origin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.ExternalOauthServer != nil {
@@ -7195,6 +7283,11 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
 		}
 	}
+	if body.Origin != nil {
+		if err2 := ValidateToolsetOriginResponseBody(body.Origin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.ExternalOauthServer != nil {
 		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -7343,6 +7436,11 @@ func ValidateAddOAuthProxyServerResponseBody(body *AddOAuthProxyServerResponseBo
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
 		}
 	}
+	if body.Origin != nil {
+		if err2 := ValidateToolsetOriginResponseBody(body.Origin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.ExternalOauthServer != nil {
 		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -7489,6 +7587,11 @@ func ValidateUpdateOAuthProxyServerResponseBody(body *UpdateOAuthProxyServerResp
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
+		}
+	}
+	if body.Origin != nil {
+		if err2 := ValidateToolsetOriginResponseBody(body.Origin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.ExternalOauthServer != nil {
@@ -10952,6 +11055,15 @@ func ValidateFunctionResourceDefinitionResponseBody(body *FunctionResourceDefini
 	return
 }
 
+// ValidateToolsetOriginResponseBody runs the validations defined on
+// ToolsetOriginResponseBody
+func ValidateToolsetOriginResponseBody(body *ToolsetOriginResponseBody) (err error) {
+	if body.RegistrySpecifier == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registry_specifier", "body"))
+	}
+	return
+}
+
 // ValidateExternalOAuthServerResponseBody runs the validations defined on
 // ExternalOAuthServerResponseBody
 func ValidateExternalOAuthServerResponseBody(body *ExternalOAuthServerResponseBody) (err error) {
@@ -11199,6 +11311,11 @@ func ValidateToolsetEntryResponseBody(body *ToolsetEntryResponseBody) (err error
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
+		}
+	}
+	if body.Origin != nil {
+		if err2 := ValidateToolsetOriginResponseBody(body.Origin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.CreatedAt != nil {

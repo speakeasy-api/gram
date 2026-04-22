@@ -152,6 +152,7 @@ func NewService(
 		db,
 		telemSvc,
 		platformtoolsruntime.WithTriggerTools(triggerApp),
+		platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
 	)
 
 	return &Service{

@@ -84,7 +84,7 @@ function ConfigureButton() {
   );
 }
 
-function IdentityCard({
+function IdentitySection({
   heading,
   description,
   providerIcon,
@@ -95,8 +95,8 @@ function IdentityCard({
   children,
 }: IdentityCardProps) {
   return (
-    <section className="border-border bg-card overflow-hidden rounded-lg border">
-      <div className="p-6">
+    <section>
+      <div className="flex flex-col">
         <Heading variant="h5" className="mb-1">
           {heading}
         </Heading>
@@ -120,13 +120,11 @@ function IdentityCard({
           </div>
           {children}
         </div>
-      </div>
-      <div className="border-border bg-muted/30 border-t px-6 py-3">
         <a
           href={learnMoreHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4 transition-colors"
+          className="text-muted-foreground hover:text-foreground mt-4 ml-auto block text-sm underline underline-offset-4 transition-colors"
         >
           {learnMoreText}
         </a>
@@ -156,7 +154,7 @@ export default function OrgIdentity() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Title>Identity</Page.Header.Title>
+        <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
@@ -171,26 +169,31 @@ function OrgIdentityInner() {
   return (
     <div className="flex flex-col gap-6">
       <Heading variant="h4">Security</Heading>
-      <IdentityCard
-        heading="SAML Single Sign-On"
-        description="Set up SAML Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
-        providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
-        providerTitle="SAML"
-        providerSubtitle="Choose an identity provider to get started."
-        learnMoreText="Learn more about SAML SSO"
-        learnMoreHref="https://www.speakeasy.com/docs"
-      >
-        <RequireSsoRow />
-      </IdentityCard>
-      <IdentityCard
-        heading="Directory Sync"
-        description="Automatically provision and deprovision users from your identity provider."
-        providerIcon={<FolderSync className="text-muted-foreground h-5 w-5" />}
-        providerTitle="SCIM"
-        providerSubtitle="Choose an identity provider to get started."
-        learnMoreText="Learn more about SCIM Directory Sync"
-        learnMoreHref="https://www.speakeasy.com/docs"
-      />
+      <div className="flex flex-col gap-6">
+        <IdentitySection
+          heading="SAML Single Sign-On"
+          description="Set up SAML Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
+          providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
+          providerTitle="SAML"
+          providerSubtitle="Choose an identity provider to get started."
+          learnMoreText="Learn more about SAML SSO"
+          learnMoreHref="https://www.speakeasy.com/docs"
+        >
+          <RequireSsoRow />
+        </IdentitySection>
+
+        <IdentitySection
+          heading="Directory Sync"
+          description="Automatically provision and deprovision users from your identity provider."
+          providerIcon={
+            <FolderSync className="text-muted-foreground h-5 w-5" />
+          }
+          providerTitle="SCIM"
+          providerSubtitle="Choose an identity provider to get started."
+          learnMoreText="Learn more about SCIM Directory Sync"
+          learnMoreHref="https://www.speakeasy.com/docs"
+        />
+      </div>
     </div>
   );
 }

@@ -11,8 +11,14 @@ import { useAuditLogs, useGetProjectOverview } from "@gram/client/react-query";
 import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
 import { cn } from "@/lib/utils";
 import { subDays } from "date-fns";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Badge, Button, Card, Icon } from "@speakeasy-api/moonshine";
+import { Wand2 } from "lucide-react";
+import {
+  INSIGHTS_AI_RAINBOW_CLASS,
+  type InsightsConfigOptions,
+} from "@/components/insights-sidebar";
+import { useInsightsState } from "@/components/insights-context";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { ProjectOnboardingBanner } from "./ProjectOnboarding";
 
@@ -25,7 +31,11 @@ export function ProjectDashboard() {
   const to = useMemo(() => new Date(), []);
   const from = useMemo(() => subDays(to, 7), [to]);
 
-  const { data: featuresData, isPending: isFeaturesPending } = useFeaturesGet();
+  const {
+    data: featuresData,
+    isPending: isFeaturesPending,
+    isError: isFeaturesError,
+  } = useFeaturesGet();
   const logsEnabled = featuresData?.logsEnabled === true;
 
   const { data: overview, isPending: isOverviewPending } =
@@ -35,8 +45,9 @@ export function ProjectDashboard() {
       { enabled: logsEnabled },
     );
 
+  const featuresSettled = !isFeaturesPending || isFeaturesError;
   const isOverviewLoading =
-    isFeaturesPending || (logsEnabled && isOverviewPending);
+    !featuresSettled || (logsEnabled && isOverviewPending);
 
   const { data: auditLogsData, isPending: isAuditLogsPending } = useAuditLogs({
     projectSlug,
@@ -55,7 +66,47 @@ export function ProjectDashboard() {
     overview?.summary?.activeServersCount === 0 &&
     overview?.summary?.totalToolCalls === 0;
 
-  const showDisabledBanner = !isFeaturesPending && !logsEnabled;
+  const showDisabledBanner =
+    !isFeaturesPending && !isFeaturesError && !logsEnabled;
+
+  const {
+    isExpanded: isInsightsExpanded,
+    setIsExpanded: setInsightsExpanded,
+    setOverride: setInsightsOverride,
+    sendPrompt: sendInsightsPrompt,
+  } = useInsightsState();
+
+  const exploreWithAI = useCallback(
+    (opts: InsightsConfigOptions) => {
+      // Apply the override synchronously so it lands in the same commit as
+      // setIsExpanded + sendPrompt. Routing through <InsightsConfig> adds a
+      // useEffect-deferred setOverride, which (a) loses the chart contextInfo
+      // on the first runtime.append call and (b) triggered a click-outside
+      // crash via the unmount→cleanup chain.
+      setInsightsOverride(opts);
+      setInsightsExpanded(true);
+      const firstPrompt = opts.suggestions?.[0]?.prompt;
+      if (firstPrompt) sendInsightsPrompt(firstPrompt);
+    },
+    [setInsightsOverride, setInsightsExpanded, sendInsightsPrompt],
+  );
+
+  // Clear the per-chart override when the panel is closed so the next opening
+  // (e.g. via the header trigger) falls back to the page defaults.
+  useEffect(() => {
+    if (!isInsightsExpanded) setInsightsOverride(null);
+  }, [isInsightsExpanded, setInsightsOverride]);
+
+  // Also clear on unmount: otherwise navigating away with the sidebar still
+  // open leaves a stale chart-specific override in InsightsProvider state,
+  // which would leak into pages that don't mount their own <InsightsConfig>.
+  // Kept as a separate effect so the cleanup fires only on unmount, not on
+  // every isInsightsExpanded transition.
+  useEffect(() => {
+    return () => setInsightsOverride(null);
+  }, [setInsightsOverride]);
+
+  const timeWindowContext = `The user is on the Project Overview dashboard. The selected period is the last 7 days (from ${from.toISOString()} to ${to.toISOString()}).`;
 
   return (
     <Page.Section>
@@ -79,9 +130,11 @@ export function ProjectDashboard() {
             <ProjectOnboardingBanner />
           )}
 
-          {showDisabledBanner ? (
+          {showDisabledBanner && (
             <LoggingDisabledBanner settingsHref={orgRoutes.logs.href()} />
-          ) : (
+          )}
+
+          {logsEnabled && (
             <>
               {/* Row 0: KPI Cards */}
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -92,6 +145,7 @@ export function ProjectDashboard() {
                     title="Active Servers"
                     value={overview?.summary.activeServersCount ?? 0}
                     icon="server"
+                    tooltip="Unique MCP servers that received at least one tool call via hook telemetry in the selected period. Servers with no activity in the window are not counted."
                   />
                 )}
                 {isOverviewPending ? (
@@ -101,6 +155,7 @@ export function ProjectDashboard() {
                     title="Tool Calls"
                     value={overview?.summary.totalToolCalls ?? 0}
                     icon="wrench"
+                    tooltip="Total tool invocations recorded across all servers and sources (Elements, MCP, hooks, and the Gram SDK) in the selected period."
                   />
                 )}
                 {isOverviewPending ? (
@@ -110,6 +165,7 @@ export function ProjectDashboard() {
                     title="End Users"
                     value={overview?.summary.activeUsersCount ?? 0}
                     icon="users"
+                    tooltip="Unique end users identified during the selected period. When chat sessions exist they are counted from chat messages; otherwise they are counted from tool-call hook events."
                   />
                 )}
                 {isOverviewPending ? (
@@ -119,6 +175,7 @@ export function ProjectDashboard() {
                     title="Sessions"
                     value={overview?.summary.totalChats ?? 0}
                     icon="message-circle"
+                    tooltip="Chat sessions started in the selected period across Elements, MCP clients, hooks, and any other source that opens a Gram chat."
                   />
                 )}
               </div>
@@ -127,7 +184,30 @@ export function ProjectDashboard() {
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <DashboardCard
                   title="Top Users"
-                  action={<ViewAllLink to={routes.hooks.href()} />}
+                  tooltip="End users ranked by activity in the selected period. Activity is measured in tool calls, skill invocations or in chat messages when agent sessions exist."
+                  action={
+                    <CardActions>
+                      <ExploreWithAIButton
+                        onClick={() =>
+                          exploreWithAI({
+                            title: "Analyze your top users",
+                            subtitle:
+                              "Dig into who is driving the most activity.",
+                            contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Top Users chart.`,
+                            suggestions: [
+                              {
+                                title: "Top users & usage patterns",
+                                label: "Last 7 days",
+                                prompt:
+                                  "Who are my top 5 end users in the last 7 days, and what is each user's main usage pattern — tool calls, skill invocations, agent sessions, or a mix?",
+                              },
+                            ],
+                          })
+                        }
+                      />
+                      <ViewAllLink to={routes.hooks.href()} />
+                    </CardActions>
+                  }
                 >
                   {isOverviewPending ? (
                     <SkeletonList />
@@ -148,7 +228,30 @@ export function ProjectDashboard() {
 
                 <DashboardCard
                   title="Top Servers"
-                  action={<ViewAllLink to={routes.hooks.href()} />}
+                  tooltip="MCP servers ranked by the number of tool calls they served in the selected period, based on hook telemetry."
+                  action={
+                    <CardActions>
+                      <ExploreWithAIButton
+                        onClick={() =>
+                          exploreWithAI({
+                            title: "Analyze your top servers",
+                            subtitle:
+                              "See which MCP servers are driving the most traffic.",
+                            contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Top Servers chart.`,
+                            suggestions: [
+                              {
+                                title: "Top servers & hot tools",
+                                label: "Last 7 days",
+                                prompt:
+                                  "Which MCP servers received the most tool calls in the last 7 days, and which specific tools on each server are driving that volume?",
+                              },
+                            ],
+                          })
+                        }
+                      />
+                      <ViewAllLink to={routes.hooks.href()} />
+                    </CardActions>
+                  }
                 >
                   {isOverviewPending ? (
                     <SkeletonList />
@@ -172,19 +275,40 @@ export function ProjectDashboard() {
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <DashboardCard
                   title="Most Agent Sessions by User"
+                  tooltip="End users ranked by agent activity in the selected period. When chat sessions exist, activity counts chat messages; otherwise it counts tool calls from hook events."
                   action={
-                    <ViewAllLink
-                      to={
-                        // no hooks data and no chat sessions
-                        isProjectEmpty && overview?.summary.totalChats === 0
-                          ? routes.hooks.href()
-                          : // has hooks data but no chat sessions
-                            !isProjectEmpty &&
-                              overview?.summary.totalChats === 0
-                            ? routes.observability.href()
-                            : routes.chatSessions.href()
-                      }
-                    />
+                    <CardActions>
+                      <ExploreWithAIButton
+                        onClick={() =>
+                          exploreWithAI({
+                            title: "Analyze agent sessions",
+                            subtitle:
+                              "Understand how your power users interact with agents.",
+                            contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Most Agent Sessions by User chart.`,
+                            suggestions: [
+                              {
+                                title: "Power users & agent behavior",
+                                label: "Last 7 days",
+                                prompt:
+                                  "For the users with the most agent sessions in the last 7 days, what are the common prompts they send and which tools get invoked most often?",
+                              },
+                            ],
+                          })
+                        }
+                      />
+                      <ViewAllLink
+                        to={
+                          // no hooks data and no chat sessions
+                          isProjectEmpty && overview?.summary.totalChats === 0
+                            ? routes.hooks.href()
+                            : // has hooks data but no chat sessions
+                              !isProjectEmpty &&
+                                overview?.summary.totalChats === 0
+                              ? routes.observability.href()
+                              : routes.chatSessions.href()
+                        }
+                      />
+                    </CardActions>
                   }
                 >
                   {isOverviewPending ? (
@@ -226,7 +350,30 @@ export function ProjectDashboard() {
 
                 <DashboardCard
                   title="Most Used LLM Clients"
-                  action={<ViewAllLink to={routes.hooks.href()} />}
+                  tooltip="LLM clients (e.g. Claude, Cursor, Windsurf) ranked by activity volume in the selected period, identified from client metadata sent with each call."
+                  action={
+                    <CardActions>
+                      <ExploreWithAIButton
+                        onClick={() =>
+                          exploreWithAI({
+                            title: "Analyze LLM client usage",
+                            subtitle:
+                              "Compare how different LLM clients exercise your tools.",
+                            contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Most Used LLM Clients chart.`,
+                            suggestions: [
+                              {
+                                title: "LLM clients & reliability",
+                                label: "Last 7 days",
+                                prompt:
+                                  "Break down tool-call activity by LLM client in the last 7 days and highlight any clients with unusually high error rates or latency.",
+                              },
+                            ],
+                          })
+                        }
+                      />
+                      <ViewAllLink to={routes.hooks.href()} />
+                    </CardActions>
+                  }
                 >
                   {isOverviewPending ? (
                     <SkeletonList />
@@ -246,13 +393,14 @@ export function ProjectDashboard() {
                   )}
                 </DashboardCard>
               </div>
-              <ActivityTimelineCard
-                logs={recentLogs}
-                isPending={isAuditLogsPending}
-                viewAllHref={orgRoutes.auditLogs.href()}
-              />
             </>
           )}
+
+          <ActivityTimelineCard
+            logs={recentLogs}
+            isPending={isAuditLogsPending}
+            viewAllHref={orgRoutes.auditLogs.href()}
+          />
         </div>
       </Page.Section.Body>
     </Page.Section>
@@ -268,6 +416,27 @@ function ViewAllLink({ to }: { to: string }) {
       View all
       <Icon name="arrow-right" />
     </Link>
+  );
+}
+
+function CardActions({ children }: { children: ReactNode }) {
+  return <div className="flex items-center gap-3">{children}</div>;
+}
+
+function ExploreWithAIButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Explore with AI"
+      title="Explore with AI"
+      className={cn(
+        "text-muted-foreground inline-flex items-center justify-center rounded-md p-1 transition-colors",
+        INSIGHTS_AI_RAINBOW_CLASS,
+      )}
+    >
+      <Wand2 className="size-3.5" />
+    </button>
   );
 }
 

@@ -1128,18 +1128,19 @@ const DefaultLogo = () => (
   </motion.div>
 );
 
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
 const TerminalSpinner = () => {
-  const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setFrame((prev) => (prev + 1) % spinnerFrames.length);
+      setFrame((prev) => (prev + 1) % SPINNER_FRAMES.length);
     }, 80);
     return () => clearInterval(interval);
   }, []);
 
-  return <span className="text-primary">{spinnerFrames[frame]}</span>;
+  return <span className="text-primary">{SPINNER_FRAMES[frame]}</span>;
 };
 
 const TerminalAnimationWithLogs = () => {
@@ -1209,6 +1210,7 @@ export default gram;`;
   // Initialize editor with MCP code
   useEffect(() => {
     setEditorCode(mcpCode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
   // Animate logs appearing one by one
@@ -1273,6 +1275,7 @@ export default gram;`;
     });
 
     return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mcpCode and greetCode are stable string constants defined in the component
   }, [animationKey, hasMoved]);
 
   // Check for actual tools deployment

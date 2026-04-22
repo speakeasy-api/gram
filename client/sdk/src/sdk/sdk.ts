@@ -27,6 +27,7 @@ import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
 import { RemoteMcp } from "./remotemcp.js";
 import { Resources } from "./resources.js";
+import { Risk } from "./risk.js";
 import { Slack } from "./slack.js";
 import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
@@ -155,6 +156,11 @@ export class Gram extends ClientSDK {
   private _resources?: Resources;
   get resources(): Resources {
     return (this._resources ??= new Resources(this._options));
+  }
+
+  private _risk?: Risk;
+  get risk(): Risk {
+    return (this._risk ??= new Risk(this._options));
   }
 
   private _slack?: Slack;

@@ -391,11 +391,14 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list collection servers").Log(ctx, s.logger)
 	}
 
+	collectionRegistryIDStr := registry.ID.String()
+
 	servers := make([]*types.ExternalMCPServer, 0, len(toolsets))
 	for _, t := range toolsets {
 		if !t.McpSlug.Valid {
 			continue
 		}
+
 		remoteURL := s.serverURL.JoinPath("mcp", t.McpSlug.String).String()
 		desc := ""
 		if t.Description.Valid {
@@ -405,11 +408,12 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		if registry.Namespace != "" {
 			specifier = path.Join(registry.Namespace, t.McpSlug.String)
 		}
-		collectionRegistryIDStr := registry.ID.String()
+		toolsetID := t.ID.String()
 		servers = append(servers, &types.ExternalMCPServer{
 			RegistrySpecifier:                   specifier,
 			Version:                             "1.0.0",
 			Description:                         desc,
+			ToolsetID:                           &toolsetID,
 			RegistryID:                          nil,
 			OrganizationMcpCollectionRegistryID: &collectionRegistryIDStr,
 			Title:                               &t.Name,
@@ -439,15 +443,6 @@ func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Qu
 	}
 	if !toolset.McpEnabled || !toolset.McpSlug.Valid {
 		return oops.E(oops.CodeInvalid, nil, "cannot attach a toolset that is not enabled as an MCP server").Log(ctx, s.logger)
-	}
-
-	installed, checkErr := queries.IsToolsetInstalledFromCatalog(ctx, toolsetID)
-	if checkErr != nil {
-		return oops.E(oops.CodeUnexpected, checkErr, "error checking if toolset is installed from catalog").Log(ctx, s.logger)
-	}
-
-	if installed {
-		return oops.E(oops.CodeInvalid, nil, "cannot attach a toolset installed from the catalog").Log(ctx, s.logger)
 	}
 
 	_, err = queries.AttachServerToOrganizationMcpCollection(ctx, repo.AttachServerToOrganizationMcpCollectionParams{

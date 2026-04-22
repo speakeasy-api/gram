@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -86,6 +87,11 @@ type initializeRequestResult struct {
 
 // initializeRequest creates the OpenAI-compatible request body with defaults applied.
 func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionRequest) (*initializeRequestResult, error) {
+	// Normalize before anything else so hashing, persistence, and the forwarded
+	// request all see the same canonical shape. Combined assistant messages
+	// (content + tool_calls on the same object) become two sequential messages.
+	req.Messages = slices.Collect(NormalizeAssistantMessages(req.Messages))
+
 	var captureSession CaptureSession
 	if c.messageCaptureStrategy != nil {
 		sess, err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req)
@@ -114,6 +120,19 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 	model := req.Model
 	if model == "" {
 		model = DefaultChatModel
+	}
+
+	// Resolve unsupported models to a supported model from the same provider
+	if resolved := ResolveModel(model); resolved != "" {
+		if resolved != model {
+			c.logger.WarnContext(ctx, "requested model not in allowlist, falling back to supported model",
+				attr.SlogGenAIRequestModel(model),
+				attr.SlogGenAIResponseModel(resolved),
+			)
+			model = resolved
+		}
+	} else {
+		return nil, fmt.Errorf("model %s is not allowed and no fallback is available for its provider", model)
 	}
 
 	// Build request body

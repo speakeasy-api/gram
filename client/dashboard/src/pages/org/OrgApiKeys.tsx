@@ -28,7 +28,7 @@ export default function OrgApiKeys() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Title>API Keys</Page.Header.Title>
+        <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
         <RequireScope scope="org:admin" level="page">

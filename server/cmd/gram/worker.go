@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
@@ -36,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -453,11 +455,21 @@ func newWorkerCommand() *cli.Command {
 			 * BEGIN -- MCP service setup for agent client
 			 */
 
+			captureStrategy, shutdown := chat.NewChatMessageCaptureStrategy(logger, db, assetStorage)
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			riskSignaler := background.NewThrottledSignaler(
+				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv},
+				30*time.Second,
+				logger,
+			)
+			captureStrategy.AddObserver(risk.NewObserver(logger, db, riskSignaler))
+
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
 				openRouter,
-				chat.NewChatMessageCaptureStrategy(logger, db, assetStorage),
+				captureStrategy,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},

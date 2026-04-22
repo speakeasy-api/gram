@@ -89,6 +89,21 @@ linters:
         linters:
           - forbidigo
         text: GG002
+      # This is the only sanctioned place to use slog attribute builders to establish conventions.
+      - path: internal/attr/conventions\.go
+        linters:
+          - glint
+        text: enforceo11yconventions
+      # This is forwarding log events from within pgx library that we have no control over.
+      - path: internal/o11y/slog\.go
+        linters:
+          - glint
+        text: enforceo11yconventions
+      # Not interesting to enforce this in tests
+      - path: _test\.go|internal/testenv/
+        linters:
+          - glint
+        text: enforceo11yconventions
   settings:
     custom:
       glint:
@@ -97,6 +112,9 @@ linters:
         original-url: github.com/speakeasy-api/gram/glint
         settings:
           rules:
+            enforce-o11y-conventions:
+              disabled: false
+              message: Use the attribute builders in `github.com/speakeasy-api/gram/server/internal/attr` instead.
             no-anonymous-defer:
               disabled: true
             no-repo-fields-in-service:

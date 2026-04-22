@@ -41,6 +41,7 @@ import {
   ServerVariable$inboundSchema,
 } from "./servervariable.js";
 import { Tool, Tool$inboundSchema } from "./tool.js";
+import { ToolsetOrigin, ToolsetOrigin$inboundSchema } from "./toolsetorigin.js";
 
 export type Toolset = {
   /**
@@ -98,6 +99,7 @@ export type Toolset = {
    * The organization ID this toolset belongs to
    */
   organizationId: string;
+  origin?: ToolsetOrigin | undefined;
   /**
    * The project ID this toolset belongs to
    */
@@ -174,6 +176,7 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
     oauth_enablement_metadata: OAuthEnablementMetadata$inboundSchema,
     oauth_proxy_server: z.optional(OAuthProxyServer$inboundSchema),
     organization_id: z.string(),
+    origin: z.optional(ToolsetOrigin$inboundSchema),
     project_id: z.string(),
     prompt_templates: z.array(PromptTemplate$inboundSchema),
     resource_urns: z.array(z.string()),

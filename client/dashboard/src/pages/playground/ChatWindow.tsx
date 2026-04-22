@@ -306,7 +306,8 @@ function ChatInner({
     });
 
     return tools;
-  }, [instance.data, client]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- configRef is a stable ref; createToolExecutor is defined inline and depends on stable refs
+  }, [instance.data, client, configRef]);
 
   // Create a list of tools for the mention system
   const mentionTools: MentionTool[] = useMemo(() => {
@@ -424,7 +425,7 @@ function ChatInner({
   }, [
     openrouterChat,
     _temperature,
-    allTools,
+    maxTokens,
     isToolTaggingEnabled,
     mentionTools,
     appendDisplayOnlyMessage,
@@ -499,7 +500,13 @@ function ChatInner({
         setUseChatMessages(initialMessagesInner);
       }
     }
-  }, [currentChatId, isChatHistoryLoading]);
+  }, [
+    currentChatId,
+    isChatHistoryLoading,
+    chatHistory,
+    _initialMessages,
+    setUseChatMessages,
+  ]);
 
   const handleSend = useCallback(
     async (msg: string) => {
@@ -525,18 +532,25 @@ function ChatInner({
       sendMessage({ text: msg });
       setInputText("");
     },
-    [chatMessages, telemetry, model, mentionTools, sendMessage],
+    [
+      chatMessages,
+      telemetry,
+      model,
+      mentionTools,
+      sendMessage,
+      isToolTaggingEnabled,
+    ],
   );
 
   useEffect(() => {
     chat.setAppendMessage((message) => {
       sendMessage({ text: message.content as string });
     });
-  }, [sendMessage]);
+  }, [sendMessage, chat]);
 
   useEffect(() => {
     setMessages(chatMessages);
-  }, [chatMessages]);
+  }, [chatMessages, setMessages]);
 
   useEffect(() => {
     setDisplayOnlyMessages([]);

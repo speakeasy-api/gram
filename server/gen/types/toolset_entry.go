@@ -51,6 +51,8 @@ type ToolsetEntry struct {
 	ToolSelectionMode string
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string
+	// The registry lineage for toolsets installed from an external MCP catalog
+	Origin *ToolsetOrigin
 	// When the toolset was created.
 	CreatedAt string
 	// When the toolset was last updated.

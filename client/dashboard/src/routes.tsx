@@ -53,10 +53,16 @@ import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
+import SecurityOverview from "./pages/security/SecurityOverview";
+import PolicyCenter from "./pages/security/PolicyCenter";
 import Team from "./pages/team/Team";
 import AcceptInvite from "./pages/invite/AcceptInvite";
 import SourceDetails from "./pages/sources/SourceDetails";
-import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
+import {
+  AddFromCatalogGate,
+  SourcesPage,
+  SourcesRoot,
+} from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
@@ -234,7 +240,7 @@ const ROUTE_STRUCTURE = {
       addFromCatalog: {
         title: "Add from Catalog",
         url: "add-from-catalog",
-        component: CatalogRoot,
+        component: AddFromCatalogGate,
         indexComponent: Catalog,
       },
     },
@@ -297,6 +303,7 @@ const ROUTE_STRUCTURE = {
   environments: {
     title: "Environments",
     url: "environments",
+    icon: "blocks",
     component: EnvironmentsRoot,
     indexComponent: Environments,
     subPages: {
@@ -337,6 +344,18 @@ const ROUTE_STRUCTURE = {
     url: "observability",
     icon: "layout-dashboard",
     component: ObservabilityOverview,
+  },
+  riskOverview: {
+    title: "Risk Overview",
+    url: "risk-overview",
+    icon: "shield",
+    component: SecurityOverview,
+  },
+  policyCenter: {
+    title: "Policy Center",
+    url: "risk-policies",
+    icon: "shield-check",
+    component: PolicyCenter,
   },
   sdks: {
     title: "SDKs",
@@ -552,7 +571,8 @@ export const useRoutes = (overrides?: {
 
   const routes: RoutesWithGoTo = useMemo(
     () => addGoToToRoutes(ROUTE_STRUCTURE),
-    [location.pathname],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addGoToToRoutes is stable in behavior; recompute only when pathname or slugs change
+    [location.pathname, orgSlug, projectSlug, navigate],
   );
 
   return routes;
@@ -788,7 +808,8 @@ export const useOrgRoutes = (): OrgRoutesWithGoTo => {
 
   const routes: OrgRoutesWithGoTo = useMemo(
     () => addGoToToRoutes(ORG_ROUTE_STRUCTURE),
-    [location.pathname],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addGoToToRoutes is stable in behavior; recompute only when pathname or slug change
+    [location.pathname, orgSlug, navigate],
   );
 
   return routes;

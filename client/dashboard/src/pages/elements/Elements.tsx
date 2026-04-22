@@ -3,6 +3,7 @@ import {
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -183,6 +184,21 @@ function SwitchField({
 }
 
 export default function ChatElements() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <RequireScope scope="build:read" level="page">
+          <ChatElementsInner />
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
+}
+
+function ChatElementsInner() {
   const { projectSlug } = useSlugs();
   const session = useSession();
   const project = useProject();
@@ -243,6 +259,7 @@ export default function ChatElements() {
         updateConfig("mcp", getMcpUrl(firstEnabledToolset));
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when toolsets or URL param change, not when config.mcp updates (would cause loop)
   }, [toolsets, toolsetSlugFromUrl]);
 
   const updateConfig = <K extends keyof ElementsFormConfig>(
@@ -288,7 +305,8 @@ export default function ChatElements() {
     };
 
     createSession();
-  }, [previewKey, project.slug, session.session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- createSessionMutation is unstable; trigger on previewKey, auth, and user identity changes only
+  }, [previewKey, project.slug, session.session, session.user.id]);
 
   // Build config object (memoized) - excludes api since sessionToken changes independently
   const baseElementsConfig = useMemo(
@@ -337,449 +355,433 @@ export default function ChatElements() {
   };
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Chat Elements</Page.Section.Title>
-          <Page.Section.Description>
-            Embeddable AI chat experience for your applications
-          </Page.Section.Description>
-          <Page.Section.Body>
-            {/* Top-level tabs: Manual vs Hosted */}
-            <div className="border-border mt-3 overflow-hidden rounded-lg border p-0">
-              <Tabs
-                value={installMethod}
-                onValueChange={(v) =>
-                  setInstallMethod(v as "manual" | "hosted")
-                }
-                className="gap-0"
-              >
-                <div className="w-full rounded-t-lg bg-stone-200 px-4 py-2 dark:bg-stone-800">
-                  <TabsList className="h-auto rounded-b-none bg-transparent p-0">
-                    <TabsTrigger value="manual">
-                      Manual installation
-                    </TabsTrigger>
-                    <TabsTrigger value="hosted">Hosted</TabsTrigger>
-                  </TabsList>
-                </div>
+    <>
+      <Page.Section>
+        <Page.Section.Title>Chat Elements</Page.Section.Title>
+        <Page.Section.Description>
+          Embeddable AI chat experience for your applications
+        </Page.Section.Description>
+        <Page.Section.Body>
+          {/* Top-level tabs: Manual vs Hosted */}
+          <div className="border-border mt-3 overflow-hidden rounded-lg border p-0">
+            <Tabs
+              value={installMethod}
+              onValueChange={(v) => setInstallMethod(v as "manual" | "hosted")}
+              className="gap-0"
+            >
+              <div className="w-full rounded-t-lg bg-stone-200 px-4 py-2 dark:bg-stone-800">
+                <TabsList className="h-auto rounded-b-none bg-transparent p-0">
+                  <TabsTrigger value="manual">Manual installation</TabsTrigger>
+                  <TabsTrigger value="hosted">Hosted</TabsTrigger>
+                </TabsList>
+              </div>
 
-                {/* Manual Installation Tab Content */}
-                <div
-                  className={installMethod === "manual" ? "block" : "hidden"}
-                >
-                  <div className="flex min-h-fit gap-12 p-6">
-                    {/* Config Panel */}
+              {/* Manual Installation Tab Content */}
+              <div className={installMethod === "manual" ? "block" : "hidden"}>
+                <div className="flex min-h-fit gap-12 p-6">
+                  {/* Config Panel */}
 
-                    <div className="flex h-full w-1/3 flex-col space-y-6 overflow-y-auto pr-4">
-                      {/* Connection */}
-                      <ConfigSection
-                        title="MCP"
-                        isOpen={openSection === "connection"}
-                        onToggle={() =>
-                          setOpenSection((prev) =>
-                            prev === "connection" ? null : "connection",
-                          )
-                        }
+                  <div className="flex h-full w-1/3 flex-col space-y-6 overflow-y-auto pr-4">
+                    {/* Connection */}
+                    <ConfigSection
+                      title="MCP"
+                      isOpen={openSection === "connection"}
+                      onToggle={() =>
+                        setOpenSection((prev) =>
+                          prev === "connection" ? null : "connection",
+                        )
+                      }
+                    >
+                      <ConfigField
+                        label="Connected Server"
+                        description="The chosen server's tools will be loaded into the chat context"
                       >
-                        <ConfigField
-                          label="Connected Server"
-                          description="The chosen server's tools will be loaded into the chat context"
-                        >
-                          <div className="space-y-3">
-                            {toolsetsLoading ? (
-                              <div className="text-muted-foreground text-sm">
-                                Loading MCP servers...
-                              </div>
-                            ) : toolsets.length === 0 ? (
-                              <div className="text-muted-foreground text-sm">
-                                No MCP servers available. Add a source to create
-                                one.
-                              </div>
-                            ) : (
-                              <Select
-                                value={config.mcp}
-                                onValueChange={(v) => updateConfig("mcp", v)}
-                              >
-                                <SelectTrigger className="w-full">
-                                  <SelectValue placeholder="Select an MCP server" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {toolsets.map((toolset) => {
-                                    const mcpUrl = getMcpUrl(toolset);
-                                    return (
-                                      <SelectItem
-                                        key={toolset.id}
-                                        value={mcpUrl}
-                                        disabled={!toolset.mcpEnabled}
-                                      >
-                                        <div className="flex items-center gap-2">
-                                          <Server className="text-muted-foreground h-4 w-4" />
-                                          <span>{toolset.name}</span>
-                                          {!toolset.mcpEnabled && (
-                                            <span className="text-muted-foreground text-xs">
-                                              (disabled)
-                                            </span>
-                                          )}
-                                        </div>
-                                      </SelectItem>
-                                    );
-                                  })}
-                                </SelectContent>
-                              </Select>
-                            )}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full"
-                              onClick={() => routes.mcp.goTo()}
-                            >
-                              <Plus className="mr-2 h-4 w-4" />
-                              Add New MCP Server
-                            </Button>
-                          </div>
-                        </ConfigField>
-                      </ConfigSection>
-
-                      {/* Appearance */}
-                      <ConfigSection
-                        title="Appearance"
-                        isOpen={openSection === "appearance"}
-                        onToggle={() =>
-                          setOpenSection((prev) =>
-                            prev === "appearance" ? null : "appearance",
-                          )
-                        }
-                      >
-                        <ConfigField label="Variant" description="Layout style">
-                          <Select
-                            value={config.variant}
-                            onValueChange={(v) =>
-                              updateConfig("variant", v as Variant)
-                            }
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="standalone">
-                                Standalone
-                              </SelectItem>
-                              <SelectItem value="widget">Widget</SelectItem>
-                              <SelectItem value="sidecar">Sidecar</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </ConfigField>
-
-                        <ConfigField
-                          label="Color Scheme"
-                          description="The color scheme of the chat"
-                        >
-                          <Select
-                            value={config.colorScheme}
-                            onValueChange={(v) =>
-                              updateConfig("colorScheme", v as ColorScheme)
-                            }
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="system">System</SelectItem>
-                              <SelectItem value="light">Light</SelectItem>
-                              <SelectItem value="dark">Dark</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </ConfigField>
-
-                        <ConfigField
-                          label="Density"
-                          description="Spacing density"
-                        >
-                          <Select
-                            value={config.density}
-                            onValueChange={(v) =>
-                              updateConfig("density", v as Density)
-                            }
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="compact">Compact</SelectItem>
-                              <SelectItem value="normal">Normal</SelectItem>
-                              <SelectItem value="spacious">Spacious</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </ConfigField>
-
-                        <ConfigField
-                          label="Border Radius"
-                          description="The border radius size for UI elements within the chat"
-                        >
-                          <Select
-                            value={config.radius}
-                            onValueChange={(v) =>
-                              updateConfig("radius", v as Radius)
-                            }
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="round">Round</SelectItem>
-                              <SelectItem value="soft">Soft</SelectItem>
-                              <SelectItem value="sharp">Sharp</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </ConfigField>
-                      </ConfigSection>
-
-                      {/* Welcome */}
-                      <ConfigSection
-                        title="Welcome Screen"
-                        isOpen={openSection === "welcome"}
-                        onToggle={() =>
-                          setOpenSection((prev) =>
-                            prev === "welcome" ? null : "welcome",
-                          )
-                        }
-                      >
-                        <ConfigField
-                          label="Title"
-                          description="The title to show on the welcome screen"
-                        >
-                          <Input
-                            value={config.welcomeTitle}
-                            onChange={(value) =>
-                              updateConfig("welcomeTitle", value)
-                            }
-                            placeholder="Welcome"
-                          />
-                        </ConfigField>
-                        <ConfigField
-                          label="Subtitle"
-                          description="The subtitle to show on the welcome screen"
-                        >
-                          <Input
-                            value={config.welcomeSubtitle}
-                            onChange={(value) =>
-                              updateConfig("welcomeSubtitle", value)
-                            }
-                            placeholder="How can I help you today?"
-                          />
-                        </ConfigField>
-                      </ConfigSection>
-
-                      {/* Composer */}
-                      <ConfigSection
-                        title="Composer"
-                        isOpen={openSection === "composer"}
-                        onToggle={() =>
-                          setOpenSection((prev) =>
-                            prev === "composer" ? null : "composer",
-                          )
-                        }
-                      >
-                        <ConfigField
-                          label="Placeholder"
-                          description="The placeholder text for the composer input"
-                        >
-                          <Input
-                            value={config.composerPlaceholder}
-                            onChange={(value) =>
-                              updateConfig("composerPlaceholder", value)
-                            }
-                            placeholder="Send a message..."
-                          />
-                        </ConfigField>
-                      </ConfigSection>
-
-                      {/* Model */}
-                      <ConfigSection
-                        title="Model"
-                        isOpen={openSection === "model"}
-                        onToggle={() =>
-                          setOpenSection((prev) =>
-                            prev === "model" ? null : "model",
-                          )
-                        }
-                      >
-                        <SwitchField
-                          label="Show Model Picker"
-                          description="Allow users to select different models"
-                          checked={config.showModelPicker}
-                          onCheckedChange={(checked) =>
-                            updateConfig("showModelPicker", checked)
-                          }
-                        />
-                      </ConfigSection>
-
-                      {/* System Prompt */}
-                      <ConfigSection
-                        title="System Prompt"
-                        isOpen={openSection === "systemPrompt"}
-                        onToggle={() =>
-                          setOpenSection((prev) =>
-                            prev === "systemPrompt" ? null : "systemPrompt",
-                          )
-                        }
-                      >
-                        <ConfigField
-                          label="Instructions"
-                          description="Custom instructions for the AI assistant"
-                        >
-                          <TextArea
-                            value={config.systemPrompt}
-                            onChange={(value) =>
-                              updateConfig("systemPrompt", value)
-                            }
-                            placeholder="You are a helpful assistant..."
-                            rows={4}
-                          />
-                        </ConfigField>
-                      </ConfigSection>
-
-                      {/* Modal Config (only for widget variant) */}
-                      {config.variant === "widget" && (
-                        <ConfigSection
-                          title="Widget Modal"
-                          isOpen={openSection === "widgetModal"}
-                          onToggle={() =>
-                            setOpenSection((prev) =>
-                              prev === "widgetModal" ? null : "widgetModal",
-                            )
-                          }
-                        >
-                          <ConfigField label="Modal Title">
-                            <Input
-                              value={config.modalTitle}
-                              onChange={(value) =>
-                                updateConfig("modalTitle", value)
-                              }
-                              placeholder="Chat"
-                            />
-                          </ConfigField>
-                          <ConfigField label="Position">
+                        <div className="space-y-3">
+                          {toolsetsLoading ? (
+                            <div className="text-muted-foreground text-sm">
+                              Loading MCP servers...
+                            </div>
+                          ) : toolsets.length === 0 ? (
+                            <div className="text-muted-foreground text-sm">
+                              No MCP servers available. Add a source to create
+                              one.
+                            </div>
+                          ) : (
                             <Select
-                              value={config.modalPosition}
-                              onValueChange={(v) =>
-                                updateConfig(
-                                  "modalPosition",
-                                  v as ModalPosition,
-                                )
-                              }
+                              value={config.mcp}
+                              onValueChange={(v) => updateConfig("mcp", v)}
                             >
                               <SelectTrigger className="w-full">
-                                <SelectValue />
+                                <SelectValue placeholder="Select an MCP server" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="bottom-right">
-                                  Bottom Right
-                                </SelectItem>
-                                <SelectItem value="bottom-left">
-                                  Bottom Left
-                                </SelectItem>
-                                <SelectItem value="top-right">
-                                  Top Right
-                                </SelectItem>
-                                <SelectItem value="top-left">
-                                  Top Left
-                                </SelectItem>
+                                {toolsets.map((toolset) => {
+                                  const mcpUrl = getMcpUrl(toolset);
+                                  return (
+                                    <SelectItem
+                                      key={toolset.id}
+                                      value={mcpUrl}
+                                      disabled={!toolset.mcpEnabled}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <Server className="text-muted-foreground h-4 w-4" />
+                                        <span>{toolset.name}</span>
+                                        {!toolset.mcpEnabled && (
+                                          <span className="text-muted-foreground text-xs">
+                                            (disabled)
+                                          </span>
+                                        )}
+                                      </div>
+                                    </SelectItem>
+                                  );
+                                })}
                               </SelectContent>
                             </Select>
-                          </ConfigField>
-                          <SwitchField
-                            label="Open by Default"
-                            checked={config.modalDefaultOpen}
-                            onCheckedChange={(checked) =>
-                              updateConfig("modalDefaultOpen", checked)
-                            }
-                          />
-                        </ConfigSection>
-                      )}
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => routes.mcp.goTo()}
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add New MCP Server
+                          </Button>
+                        </div>
+                      </ConfigField>
+                    </ConfigSection>
 
-                      {/* Tools */}
+                    {/* Appearance */}
+                    <ConfigSection
+                      title="Appearance"
+                      isOpen={openSection === "appearance"}
+                      onToggle={() =>
+                        setOpenSection((prev) =>
+                          prev === "appearance" ? null : "appearance",
+                        )
+                      }
+                    >
+                      <ConfigField label="Variant" description="Layout style">
+                        <Select
+                          value={config.variant}
+                          onValueChange={(v) =>
+                            updateConfig("variant", v as Variant)
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="standalone">
+                              Standalone
+                            </SelectItem>
+                            <SelectItem value="widget">Widget</SelectItem>
+                            <SelectItem value="sidecar">Sidecar</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </ConfigField>
+
+                      <ConfigField
+                        label="Color Scheme"
+                        description="The color scheme of the chat"
+                      >
+                        <Select
+                          value={config.colorScheme}
+                          onValueChange={(v) =>
+                            updateConfig("colorScheme", v as ColorScheme)
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="system">System</SelectItem>
+                            <SelectItem value="light">Light</SelectItem>
+                            <SelectItem value="dark">Dark</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </ConfigField>
+
+                      <ConfigField
+                        label="Density"
+                        description="Spacing density"
+                      >
+                        <Select
+                          value={config.density}
+                          onValueChange={(v) =>
+                            updateConfig("density", v as Density)
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="compact">Compact</SelectItem>
+                            <SelectItem value="normal">Normal</SelectItem>
+                            <SelectItem value="spacious">Spacious</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </ConfigField>
+
+                      <ConfigField
+                        label="Border Radius"
+                        description="The border radius size for UI elements within the chat"
+                      >
+                        <Select
+                          value={config.radius}
+                          onValueChange={(v) =>
+                            updateConfig("radius", v as Radius)
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="round">Round</SelectItem>
+                            <SelectItem value="soft">Soft</SelectItem>
+                            <SelectItem value="sharp">Sharp</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </ConfigField>
+                    </ConfigSection>
+
+                    {/* Welcome */}
+                    <ConfigSection
+                      title="Welcome Screen"
+                      isOpen={openSection === "welcome"}
+                      onToggle={() =>
+                        setOpenSection((prev) =>
+                          prev === "welcome" ? null : "welcome",
+                        )
+                      }
+                    >
+                      <ConfigField
+                        label="Title"
+                        description="The title to show on the welcome screen"
+                      >
+                        <Input
+                          value={config.welcomeTitle}
+                          onChange={(value) =>
+                            updateConfig("welcomeTitle", value)
+                          }
+                          placeholder="Welcome"
+                        />
+                      </ConfigField>
+                      <ConfigField
+                        label="Subtitle"
+                        description="The subtitle to show on the welcome screen"
+                      >
+                        <Input
+                          value={config.welcomeSubtitle}
+                          onChange={(value) =>
+                            updateConfig("welcomeSubtitle", value)
+                          }
+                          placeholder="How can I help you today?"
+                        />
+                      </ConfigField>
+                    </ConfigSection>
+
+                    {/* Composer */}
+                    <ConfigSection
+                      title="Composer"
+                      isOpen={openSection === "composer"}
+                      onToggle={() =>
+                        setOpenSection((prev) =>
+                          prev === "composer" ? null : "composer",
+                        )
+                      }
+                    >
+                      <ConfigField
+                        label="Placeholder"
+                        description="The placeholder text for the composer input"
+                      >
+                        <Input
+                          value={config.composerPlaceholder}
+                          onChange={(value) =>
+                            updateConfig("composerPlaceholder", value)
+                          }
+                          placeholder="Send a message..."
+                        />
+                      </ConfigField>
+                    </ConfigSection>
+
+                    {/* Model */}
+                    <ConfigSection
+                      title="Model"
+                      isOpen={openSection === "model"}
+                      onToggle={() =>
+                        setOpenSection((prev) =>
+                          prev === "model" ? null : "model",
+                        )
+                      }
+                    >
+                      <SwitchField
+                        label="Show Model Picker"
+                        description="Allow users to select different models"
+                        checked={config.showModelPicker}
+                        onCheckedChange={(checked) =>
+                          updateConfig("showModelPicker", checked)
+                        }
+                      />
+                    </ConfigSection>
+
+                    {/* System Prompt */}
+                    <ConfigSection
+                      title="System Prompt"
+                      isOpen={openSection === "systemPrompt"}
+                      onToggle={() =>
+                        setOpenSection((prev) =>
+                          prev === "systemPrompt" ? null : "systemPrompt",
+                        )
+                      }
+                    >
+                      <ConfigField
+                        label="Instructions"
+                        description="Custom instructions for the AI assistant"
+                      >
+                        <TextArea
+                          value={config.systemPrompt}
+                          onChange={(value) =>
+                            updateConfig("systemPrompt", value)
+                          }
+                          placeholder="You are a helpful assistant..."
+                          rows={4}
+                        />
+                      </ConfigField>
+                    </ConfigSection>
+
+                    {/* Modal Config (only for widget variant) */}
+                    {config.variant === "widget" && (
                       <ConfigSection
-                        title="Tools"
-                        isOpen={openSection === "tools"}
+                        title="Widget Modal"
+                        isOpen={openSection === "widgetModal"}
                         onToggle={() =>
                           setOpenSection((prev) =>
-                            prev === "tools" ? null : "tools",
+                            prev === "widgetModal" ? null : "widgetModal",
                           )
                         }
                       >
+                        <ConfigField label="Modal Title">
+                          <Input
+                            value={config.modalTitle}
+                            onChange={(value) =>
+                              updateConfig("modalTitle", value)
+                            }
+                            placeholder="Chat"
+                          />
+                        </ConfigField>
+                        <ConfigField label="Position">
+                          <Select
+                            value={config.modalPosition}
+                            onValueChange={(v) =>
+                              updateConfig("modalPosition", v as ModalPosition)
+                            }
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="bottom-right">
+                                Bottom Right
+                              </SelectItem>
+                              <SelectItem value="bottom-left">
+                                Bottom Left
+                              </SelectItem>
+                              <SelectItem value="top-right">
+                                Top Right
+                              </SelectItem>
+                              <SelectItem value="top-left">Top Left</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </ConfigField>
                         <SwitchField
-                          label="Expand Tool Groups by Default"
-                          description="Show tool call details expanded"
-                          checked={config.expandToolGroupsByDefault}
+                          label="Open by Default"
+                          checked={config.modalDefaultOpen}
                           onCheckedChange={(checked) =>
-                            updateConfig("expandToolGroupsByDefault", checked)
+                            updateConfig("modalDefaultOpen", checked)
                           }
                         />
                       </ConfigSection>
+                    )}
 
-                      {/* Setup Button */}
-                      <div className="flex-1" />
+                    {/* Tools */}
+                    <ConfigSection
+                      title="Tools"
+                      isOpen={openSection === "tools"}
+                      onToggle={() =>
+                        setOpenSection((prev) =>
+                          prev === "tools" ? null : "tools",
+                        )
+                      }
+                    >
+                      <SwitchField
+                        label="Expand Tool Groups by Default"
+                        description="Show tool call details expanded"
+                        checked={config.expandToolGroupsByDefault}
+                        onCheckedChange={(checked) =>
+                          updateConfig("expandToolGroupsByDefault", checked)
+                        }
+                      />
+                    </ConfigSection>
+
+                    {/* Setup Button */}
+                    <div className="flex-1" />
+                    <Button
+                      className="w-full"
+                      onClick={() => setShowInstallGuide(true)}
+                    >
+                      <ArrowRight className="mr-2 h-4 w-4" />
+                      Setup
+                    </Button>
+                  </div>
+
+                  {/* Preview Panel */}
+                  <div className="flex h-[700px] w-2/3 flex-col">
+                    <div className="bg-muted/30 relative flex-1 overflow-hidden rounded-lg border">
                       <Button
-                        className="w-full"
-                        onClick={() => setShowInstallGuide(true)}
+                        variant="ghost"
+                        size="sm"
+                        onClick={refreshPreview}
+                        className={cn(
+                          "bg-foreground/[0.7] text-background hover:bg-foreground/80 hover:text-background absolute top-6 right-6 z-10 h-8 px-2 backdrop-blur-sm",
+                          config.variant === "sidecar" && "right-auto left-6",
+                        )}
                       >
-                        <ArrowRight className="mr-2 h-4 w-4" />
-                        Setup
+                        <RefreshCw className="mr-1 h-4 w-4" />
+                        Reset Preview
                       </Button>
-                    </div>
-
-                    {/* Preview Panel */}
-                    <div className="flex h-[700px] w-2/3 flex-col">
-                      <div className="bg-muted/30 relative flex-1 overflow-hidden rounded-lg border">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={refreshPreview}
-                          className={cn(
-                            "bg-foreground/[0.7] text-background hover:bg-foreground/80 hover:text-background absolute top-6 right-6 z-10 h-8 px-2 backdrop-blur-sm",
-                            config.variant === "sidecar" && "right-auto left-6",
-                          )}
-                        >
-                          <RefreshCw className="mr-1 h-4 w-4" />
-                          Reset Preview
-                        </Button>
-                        <ElementsPreview
-                          key={previewKey}
-                          config={baseElementsConfig}
-                          apiUrl={apiUrl}
-                          sessionToken={sessionToken}
-                        />
-                      </div>
+                      <ElementsPreview
+                        key={previewKey}
+                        config={baseElementsConfig}
+                        apiUrl={apiUrl}
+                        sessionToken={sessionToken}
+                      />
                     </div>
                   </div>
                 </div>
+              </div>
 
-                {/* Hosted Tab Content */}
-                <div
-                  className={
-                    installMethod === "hosted" ? "block px-4 py-4" : "hidden"
-                  }
-                >
-                  <div className="flex h-[700px] flex-col items-center justify-center text-center">
-                    <div className="bg-muted mb-4 flex h-16 w-16 items-center justify-center rounded-full">
-                      <Server className="text-muted-foreground h-8 w-8" />
-                    </div>
-                    <h3 className="mb-2 text-lg font-semibold">Coming Soon</h3>
-                    <p className="text-muted-foreground max-w-md">
-                      Hosted Elements will allow you to deploy chat experiences
-                      without any code changes. Stay tuned!
-                    </p>
+              {/* Hosted Tab Content */}
+              <div
+                className={
+                  installMethod === "hosted" ? "block px-4 py-4" : "hidden"
+                }
+              >
+                <div className="flex h-[700px] flex-col items-center justify-center text-center">
+                  <div className="bg-muted mb-4 flex h-16 w-16 items-center justify-center rounded-full">
+                    <Server className="text-muted-foreground h-8 w-8" />
                   </div>
+                  <h3 className="mb-2 text-lg font-semibold">Coming Soon</h3>
+                  <p className="text-muted-foreground max-w-md">
+                    Hosted Elements will allow you to deploy chat experiences
+                    without any code changes. Stay tuned!
+                  </p>
                 </div>
-              </Tabs>
-            </div>
-          </Page.Section.Body>
-        </Page.Section>
-      </Page.Body>
+              </div>
+            </Tabs>
+          </div>
+        </Page.Section.Body>
+      </Page.Section>
 
       {/* Installation Guide Dialog */}
       <Dialog open={showInstallGuide} onOpenChange={setShowInstallGuide}>
@@ -793,7 +795,7 @@ export default function ChatElements() {
           />
         </Dialog.Content>
       </Dialog>
-    </Page>
+    </>
   );
 }
 
@@ -920,7 +922,7 @@ function InstallationGuide({
       framework: selectedFramework,
       product: selectedProduct,
     });
-  }, [projectSlug, selectedFramework, selectedProduct]);
+  }, [projectSlug, selectedFramework, selectedProduct, telemetry]);
 
   const { data: existingKeys } = useListAPIKeys(
     {},
@@ -972,7 +974,14 @@ function InstallationGuide({
         },
       );
     }
-  }, [currentStep, existingKeys]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- createApiKeyMutation is unstable; only trigger on step changes and when existing keys load
+  }, [
+    currentStep,
+    existingKeys,
+    generatedApiKey,
+    keyCreationAttempted,
+    projectSlug,
+  ]);
 
   const mcpUrl = config.mcp || `https://app.getgram.ai/mcp/${projectSlug}`;
 
