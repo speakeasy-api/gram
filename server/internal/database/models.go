@@ -834,7 +834,7 @@ type PrincipalGrant struct {
 	PrincipalUrn urn.Principal
 	// Derived from principal_urn. The type prefix, e.g. "user", "role".
 	PrincipalType string
-	// The scope being granted, e.g. "project:read". Validated in application code, not via FK.
+	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
 	Scope string
 	// '*' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.
 	Resource string
