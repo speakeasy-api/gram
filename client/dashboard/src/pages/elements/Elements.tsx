@@ -259,6 +259,7 @@ function ChatElementsInner() {
         updateConfig("mcp", getMcpUrl(firstEnabledToolset));
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when toolsets or URL param change, not when config.mcp updates (would cause loop)
   }, [toolsets, toolsetSlugFromUrl]);
 
   const updateConfig = <K extends keyof ElementsFormConfig>(
@@ -304,7 +305,8 @@ function ChatElementsInner() {
     };
 
     createSession();
-  }, [previewKey, project.slug, session.session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- createSessionMutation is unstable; trigger on previewKey, auth, and user identity changes only
+  }, [previewKey, project.slug, session.session, session.user.id]);
 
   // Build config object (memoized) - excludes api since sessionToken changes independently
   const baseElementsConfig = useMemo(
@@ -920,7 +922,7 @@ function InstallationGuide({
       framework: selectedFramework,
       product: selectedProduct,
     });
-  }, [projectSlug, selectedFramework, selectedProduct]);
+  }, [projectSlug, selectedFramework, selectedProduct, telemetry]);
 
   const { data: existingKeys } = useListAPIKeys(
     {},
@@ -972,7 +974,14 @@ function InstallationGuide({
         },
       );
     }
-  }, [currentStep, existingKeys]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- createApiKeyMutation is unstable; only trigger on step changes and when existing keys load
+  }, [
+    currentStep,
+    existingKeys,
+    generatedApiKey,
+    keyCreationAttempted,
+    projectSlug,
+  ]);
 
   const mcpUrl = config.mcp || `https://app.getgram.ai/mcp/${projectSlug}`;
 

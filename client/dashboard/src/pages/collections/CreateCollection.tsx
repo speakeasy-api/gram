@@ -30,7 +30,10 @@ export default function CreateCollection() {
   const orgRoutes = useOrgRoutes();
   const client = useSdkClient();
   const organization = useOrganization();
-  const projects = organization.projects ?? [];
+  const projects = useMemo(
+    () => organization.projects ?? [],
+    [organization.projects],
+  );
 
   const orgSlug = organization.slug ?? "";
   const baseNamespace = `com.speakeasy.${orgSlug}`;

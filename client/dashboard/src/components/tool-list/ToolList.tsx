@@ -19,7 +19,7 @@ import {
   PencilRuler,
   SquareFunction,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnnotationBadges } from "./AnnotationBadges";
 import { ToolVariationBadge } from "../tool-variation-badge";
 import { McpIcon } from "../ui/mcp-icon";
@@ -737,7 +737,7 @@ export function ToolList({
 
   useEffect(() => {
     setExpandedGroups(new Set(groups.map((_, i) => i)));
-  }, [groups.length]);
+  }, [groups]);
 
   // For normal mode (remove tools from toolset)
   const [selectedForRemoval, setSelectedForRemoval] = useState<Set<string>>(
@@ -830,7 +830,15 @@ export function ToolList({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [hasChanges, focusedToolIndex, visibleTools.length]);
+  }, [
+    hasChanges,
+    focusedToolIndex,
+    visibleTools,
+    selectionMode,
+    selectedSet,
+    selectedForRemoval,
+    handleCheckboxChange,
+  ]);
 
   // Register command palette actions and context badge when tools are selected
   // Skip this in selection mode - the dialog handles its own UI
@@ -908,8 +916,6 @@ export function ToolList({
       removeActions(toolActionIds);
       setContextBadge(null);
     };
-    // addActions, removeActions, and setContextBadge are memoized in CommandPaletteContext
-    // with empty deps so they're stable and don't need to be in the dependency array
   }, [
     selectionMode,
     hasChanges,
@@ -917,6 +923,9 @@ export function ToolList({
     onAddToToolset,
     onCreateToolset,
     onToolsRemove,
+    addActions,
+    removeActions,
+    setContextBadge,
   ]);
 
   const toggleGroup = (index: number) => {
@@ -931,29 +940,32 @@ export function ToolList({
     });
   };
 
-  const handleCheckboxChange = (toolId: string, checked: boolean) => {
-    if (selectionMode === "add" && onSelectionChange) {
-      // For selection mode, update parent state
-      const next = new Set(selectedUrns);
-      if (checked) {
-        next.add(toolId);
-      } else {
-        next.delete(toolId);
-      }
-      onSelectionChange(Array.from(next));
-    } else {
-      // For normal mode, update local state
-      setSelectedForRemoval((prev) => {
-        const next = new Set(prev);
+  const handleCheckboxChange = useCallback(
+    (toolId: string, checked: boolean) => {
+      if (selectionMode === "add" && onSelectionChange) {
+        // For selection mode, update parent state
+        const next = new Set(selectedUrns);
         if (checked) {
           next.add(toolId);
         } else {
           next.delete(toolId);
         }
-        return next;
-      });
-    }
-  };
+        onSelectionChange(Array.from(next));
+      } else {
+        // For normal mode, update local state
+        setSelectedForRemoval((prev) => {
+          const next = new Set(prev);
+          if (checked) {
+            next.add(toolId);
+          } else {
+            next.delete(toolId);
+          }
+          return next;
+        });
+      }
+    },
+    [selectionMode, onSelectionChange, selectedUrns],
+  );
 
   const handleCancel = () => {
     setSelectedForRemoval(new Set());

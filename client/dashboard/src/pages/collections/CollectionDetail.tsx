@@ -83,7 +83,10 @@ export default function CollectionDetail() {
   );
 
   // Fetch toolsets from all projects for the inline server picker
-  const projects = organization.projects ?? [];
+  const projects = useMemo(
+    () => organization.projects ?? [],
+    [organization.projects],
+  );
   const toolsetQueries = useQueries({
     queries: projects.map((project) => ({
       queryKey: ["toolsets", "list", project.slug],

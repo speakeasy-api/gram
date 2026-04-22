@@ -107,7 +107,7 @@ export function ToolsList(props: { deploymentId?: string }) {
       }),
     }));
     return filteredGroups.filter((g) => g.tools.length > 0);
-  }, [tools, search, tagFilters]);
+  }, [groupedTools, search, tagFilters]);
 
   const toolGroups = useMemo(() => {
     const toolGroups = filteredGroups.map((group) => ({

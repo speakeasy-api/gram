@@ -412,6 +412,7 @@ function EnvironmentPageInner() {
     newEntryValue,
     deletedFields,
     updateEnvironment,
+    validateEntryName,
   ]);
 
   const handleAddNewEntry = useCallback(() => {
@@ -425,14 +426,17 @@ function EnvironmentPageInner() {
     setNewEntryVisible(false);
   }, []);
 
-  const validateEntryName = (name: string) => {
-    return (
-      name.length > 0 &&
-      !environment?.entries.some((entry) => entry.name === name) &&
-      !Object.keys(envValues).includes(name) &&
-      /^[-_.a-zA-Z][-_.a-zA-Z0-9]*$/.test(name)
-    );
-  };
+  const validateEntryName = useCallback(
+    (name: string) => {
+      return (
+        name.length > 0 &&
+        !environment?.entries.some((entry) => entry.name === name) &&
+        !Object.keys(envValues).includes(name) &&
+        /^[-_.a-zA-Z][-_.a-zA-Z0-9]*$/.test(name)
+      );
+    },
+    [environment?.entries, envValues],
+  );
 
   const handleToolsetSubmit = (toolsetSlug: string) => {
     setSelectedToolsetSlug(toolsetSlug);

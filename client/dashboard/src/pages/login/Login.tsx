@@ -20,7 +20,7 @@ export default function Login() {
         routes.home.goTo();
       }
     }
-  }, [session.session, searchParams, navigate, routes.home]);
+  }, [session.session, redirectTo, navigate, routes.home]);
 
   return (
     <main className="flex min-h-screen flex-col md:flex-row">

@@ -120,7 +120,7 @@ export function useMcpMetadataMetadataForm(
         instructions: currentMetadata?.instructions,
       });
     }
-  }, [currentMetadata]);
+  }, [currentMetadata, metadataParams]);
 
   useEffect(() => {
     if (!metadataParams.externalDocumentationUrl) {

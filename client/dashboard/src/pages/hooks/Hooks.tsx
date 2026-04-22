@@ -1259,7 +1259,7 @@ function HookTraceRow({
         {displayServerName || "local"}
       </span>
     );
-  }, [displayServerName, toolName, skillName]);
+  }, [displayServerName, serverName, toolName, skillName]);
 
   const statusConfig = useMemo(() => {
     if (trace.hookStatus === "failure") {

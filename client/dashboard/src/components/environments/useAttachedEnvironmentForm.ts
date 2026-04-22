@@ -119,7 +119,7 @@ export function useAttachedEnvironmentForm({
 
   useEffect(() => {
     serverDataReceived(attachedEnvironmentQuery.data ?? null);
-  }, [attachedEnvironmentQuery.data]);
+  }, [attachedEnvironmentQuery.data, serverDataReceived]);
 
   const mutation = useMutation<ToolsetEnvironmentLink | null, Error, void>({
     mutationFn: async (): Promise<ToolsetEnvironmentLink | null> => {
