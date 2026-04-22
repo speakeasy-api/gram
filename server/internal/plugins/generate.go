@@ -105,7 +105,9 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	b.WriteString("# " + cfg.OrgName + " Plugins\n\n")
 	b.WriteString("This repository contains plugin packages managed by [Gram](https://getgram.ai). ")
 	b.WriteString("Each plugin bundles MCP servers for distribution via Claude Code and Cursor marketplaces.\n\n")
-	b.WriteString("> **Do not edit this repository manually.** It is automatically generated and updated by Gram.\n\n")
+	b.WriteString("## How this repo works\n\n")
+	b.WriteString("- **Read-only access.** Collaborators are granted pull permission only. You can clone and inspect the repository, but you cannot push to it.\n")
+	b.WriteString("- **Auto-managed by Gram.** Each publish from the Gram dashboard overwrites this repository's contents. Any manual edits, new branches, or local commits will be discarded on the next publish — make changes in Gram instead.\n\n")
 
 	if len(plugins) > 0 {
 		b.WriteString("## Plugins\n\n")
