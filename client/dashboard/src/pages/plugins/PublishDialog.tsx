@@ -22,9 +22,10 @@ export const PublishDialog = memo(function PublishDialog({
       const fd = new FormData(e.currentTarget);
       const username = (fd.get("githubUsername") as string) || undefined;
       onPublish(username);
-      onOpenChange(false);
+      // Dialog close is driven by the parent's mutation onSuccess so the
+      // pending state stays visible during the publish.
     },
-    [onPublish, onOpenChange],
+    [onPublish],
   );
 
   return (

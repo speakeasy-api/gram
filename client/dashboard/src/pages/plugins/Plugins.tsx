@@ -43,6 +43,7 @@ export default function Plugins() {
 
   const publishMutation = usePublishPluginsMutation({
     onSuccess: () => {
+      setIsPublishDialogOpen(false);
       invalidateAllPublishStatus(queryClient);
       toast.success("Plugins published to GitHub");
     },
@@ -320,7 +321,6 @@ export default function Plugins() {
           onPublish={handlePublish}
           isPending={publishMutation.isPending}
         />
-
       </Page.Body>
     </Page>
   );
