@@ -33,6 +33,7 @@ import type {
   GetHooksSummaryResult,
   HooksBreakdownRow,
   HooksTimeSeriesPoint,
+  SkillTimeSeriesPoint,
   HookTraceSummary as HookTrace,
   LogFilter,
   TelemetryLogRecord,
@@ -2058,6 +2059,51 @@ function UserUsageTimeSeries({
   return (
     <ChartCard
       title="User Usage"
+      chartId={chartId}
+      expandedChart={expandedChart}
+      onExpand={onExpand}
+      hasData={labels.length > 0}
+    >
+      <MultiLineChart
+        labels={labels}
+        tooltipLabels={tooltipLabels}
+        datasets={datasets}
+        height={
+          expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
+        }
+      />
+    </ChartCard>
+  );
+}
+
+function SkillUsageTimeSeries({
+  skillTimeSeries,
+  from,
+  to,
+  expandedChart,
+  onExpand,
+}: {
+  skillTimeSeries: SkillTimeSeriesPoint[];
+  from: Date;
+  to: Date;
+  expandedChart: string | null;
+  onExpand: (id: string | null) => void;
+}) {
+  const chartId = "skill-usage";
+  const expanded = expandedChart === chartId;
+  const timeRangeMs = to.getTime() - from.getTime();
+  const { labels, tooltipLabels, datasets } = useMemo(
+    () =>
+      buildTimeSeriesFromSummary(
+        skillTimeSeries,
+        (pt) => pt.skillName,
+        timeRangeMs,
+      ),
+    [skillTimeSeries, timeRangeMs],
+  );
+  return (
+    <ChartCard
+      title="Skill Usage"
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
