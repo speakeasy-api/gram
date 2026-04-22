@@ -162,192 +162,181 @@ export function ScopePickerPopover({
     onChangeResources(next);
   };
 
-  const pickerContent = (
-    <>
-      {/* Scope mode options */}
-      <div className="pb-1.5">
-        <ScopeOption
-          label={resourceType === "project" ? "All projects" : "All servers"}
-          selected={isUnrestricted && !customMode}
-          onClick={() => {
-            if (customMode) {
-              onCustomModeChange?.(false);
-              onChangeAnnotations?.([]);
-            }
-            onChangeResources(null);
-          }}
-        />
-        <ScopeOption
-          label={
-            resourceType === "project"
-              ? "Specific projects"
-              : "Specific servers"
+  const scopeOptions = (
+    <div className="shrink-0 pb-1.5">
+      <ScopeOption
+        label={resourceType === "project" ? "All projects" : "All servers"}
+        selected={isUnrestricted && !customMode}
+        onClick={() => {
+          if (customMode) {
+            onCustomModeChange?.(false);
+            onChangeAnnotations?.([]);
           }
-          selected={!isUnrestricted && !customMode}
+          onChangeResources(null);
+        }}
+      />
+      <ScopeOption
+        label={
+          resourceType === "project" ? "Specific projects" : "Specific servers"
+        }
+        selected={!isUnrestricted && !customMode}
+        onClick={() => {
+          if (customMode) {
+            onCustomModeChange?.(false);
+            onChangeResources([]);
+            onChangeAnnotations?.([]);
+          } else if (isUnrestricted) {
+            onChangeResources([]);
+          }
+        }}
+      />
+      {isMcp && (
+        <ScopeOption
+          label="Specific tools"
+          selected={!!customMode}
           onClick={() => {
-            if (customMode) {
-              onCustomModeChange?.(false);
-              onChangeResources([]);
-              onChangeAnnotations?.([]);
-            } else if (isUnrestricted) {
-              onChangeResources([]);
-            }
+            onCustomModeChange?.(true);
+            if (isUnrestricted) onChangeResources([]);
           }}
         />
+      )}
+    </div>
+  );
 
-        {/* Custom option for MCP scopes */}
-        {isMcp && (
-          <ScopeOption
-            label="Specific tools"
-            selected={!!customMode}
-            onClick={() => {
-              onCustomModeChange?.(true);
-              if (isUnrestricted) onChangeResources([]);
-            }}
-          />
-        )}
-      </div>
-
-      {/* Resource list when scoped to specific resources */}
-      {!isUnrestricted && !customMode && (
-        <>
-          <div className="bg-border my-1 h-px" />
-          {resourceType === "project"
-            ? projectList.map((resource) => (
+  const resourceList = !isUnrestricted && !customMode && (
+    <>
+      <div className="bg-border my-1 h-px" />
+      {resourceType === "project"
+        ? projectList.map((resource) => (
+            <ResourceCheckbox
+              key={resource.id}
+              id={resource.id}
+              name={resource.name}
+              checked={resources.includes(resource.id)}
+              onToggle={toggleResource}
+            />
+          ))
+        : mcpServers.map((group) => (
+            <div key={group.projectId}>
+              <div className="text-muted-foreground px-3 py-1.5 text-xs font-medium">
+                {group.projectName}
+              </div>
+              {group.servers.map((server) => (
                 <ResourceCheckbox
-                  key={resource.id}
-                  id={resource.id}
-                  name={resource.name}
-                  checked={resources.includes(resource.id)}
+                  key={server.id}
+                  id={server.id}
+                  name={server.name}
+                  checked={resources.includes(server.id)}
                   onToggle={toggleResource}
                 />
-              ))
-            : mcpServers.map((group) => (
-                <div key={group.projectId}>
-                  <div className="text-muted-foreground px-3 py-1.5 text-xs font-medium">
-                    {group.projectName}
-                  </div>
-                  {group.servers.map((server) => (
-                    <ResourceCheckbox
-                      key={server.id}
-                      id={server.id}
-                      name={server.name}
-                      checked={resources.includes(server.id)}
-                      onToggle={toggleResource}
-                    />
-                  ))}
-                </div>
               ))}
-        </>
-      )}
-
-      {/* Custom mode — tabbed fine-grained picker */}
-      {customMode && (
-        <>
-          <Tabs
-            value={customTab ?? "select"}
-            className="-mx-1.5 -mb-1.5 flex min-h-0 flex-1 flex-col gap-0"
-            onValueChange={(value) => {
-              onChangeResources([]);
-              onChangeAnnotations?.([]);
-              onCustomTabChange?.(value as CustomTab);
-            }}
-          >
-            <TabsList className="border-border h-auto w-full gap-2 rounded-none border-y bg-transparent px-1.5 py-1.5">
-              <TabsTrigger
-                value="select"
-                className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
-              >
-                <Wrench className="h-3.5 w-3.5" />
-                All tools
-              </TabsTrigger>
-              <div className="bg-border/40 my-1 w-px self-stretch" />
-              <TabsTrigger
-                value="auto-groups"
-                className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
-              >
-                <Tag className="h-3.5 w-3.5" />
-                By annotation
-              </TabsTrigger>
-              <div className="bg-border/40 my-1 w-px self-stretch" />
-              <TabsTrigger
-                value="http-method"
-                className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
-              >
-                <SquareAsterisk className="h-3.5 w-3.5" />
-                By HTTP method
-              </TabsTrigger>
-              <div className="bg-border/40 my-1 w-px self-stretch" />
-              <TabsTrigger
-                value="collection"
-                className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
-              >
-                <SquareLibrary className="h-3.5 w-3.5" />
-                By collection
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="select" className="min-h-0 flex-1 p-0">
-              <ToolSelectionPanel
-                mcpServers={mcpServers}
-                resources={resources ?? []}
-                onToggle={toggleResource}
-              />
-            </TabsContent>
-            <TabsContent
-              value="auto-groups"
-              className="min-h-0 flex-1 overflow-y-auto px-2 py-1"
-            >
-              <AnnotationGroupPanel
-                annotations={annotations ?? []}
-                onChangeAnnotations={(newAnnotations) => {
-                  onChangeAnnotations?.(newAnnotations);
-                  // Resolve matched annotations to compound tool IDs so the
-                  // backend receives real resource identifiers it can enforce.
-                  const matchedIds: string[] = [];
-                  for (const group of mcpServers) {
-                    for (const server of group.servers) {
-                      for (const tool of server.tools) {
-                        if (
-                          newAnnotations.some(
-                            (hint) => tool.annotations?.[hint] === true,
-                          )
-                        ) {
-                          matchedIds.push(`${server.id}:${tool.name}`);
-                        }
-                      }
-                    }
-                  }
-                  onChangeResources(matchedIds);
-                }}
-                mcpServers={mcpServers}
-              />
-            </TabsContent>
-            <TabsContent
-              value="http-method"
-              className="min-h-0 flex-1 overflow-y-auto px-2 py-1"
-            >
-              <HttpMethodGroupPanel
-                mcpServers={mcpServers}
-                resources={resources ?? []}
-                onToggle={toggleResource}
-                onChangeResources={onChangeResources}
-              />
-            </TabsContent>
-            <TabsContent
-              value="collection"
-              className="min-h-0 flex-1 overflow-y-auto px-2 py-1"
-            >
-              <CollectionGroupPanel
-                mcpServers={mcpServers}
-                resources={resources ?? []}
-                onToggle={toggleResource}
-                onChangeResources={onChangeResources}
-              />
-            </TabsContent>
-          </Tabs>
-        </>
-      )}
+            </div>
+          ))}
     </>
+  );
+
+  const customTabs = (toolScrollClass?: string) => (
+    <Tabs
+      value={customTab ?? "select"}
+      className="flex min-h-0 flex-1 flex-col gap-0"
+      onValueChange={(value) => {
+        onChangeResources([]);
+        onChangeAnnotations?.([]);
+        onCustomTabChange?.(value as CustomTab);
+      }}
+    >
+      <TabsList className="border-border h-auto w-full shrink-0 gap-2 rounded-none border-y bg-transparent px-1.5 py-1.5">
+        <TabsTrigger
+          value="select"
+          className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
+        >
+          <Wrench className="h-3.5 w-3.5" />
+          All tools
+        </TabsTrigger>
+        <div className="bg-border/40 my-1 w-px self-stretch" />
+        <TabsTrigger
+          value="auto-groups"
+          className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
+        >
+          <Tag className="h-3.5 w-3.5" />
+          By annotation
+        </TabsTrigger>
+        <div className="bg-border/40 my-1 w-px self-stretch" />
+        <TabsTrigger
+          value="http-method"
+          className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
+        >
+          <SquareAsterisk className="h-3.5 w-3.5" />
+          By HTTP method
+        </TabsTrigger>
+        <div className="bg-border/40 my-1 w-px self-stretch" />
+        <TabsTrigger
+          value="collection"
+          className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
+        >
+          <SquareLibrary className="h-3.5 w-3.5" />
+          By collection
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent
+        value="select"
+        className="flex min-h-[200px] flex-1 flex-col p-0"
+      >
+        <ToolSelectionPanel
+          mcpServers={mcpServers}
+          resources={resources ?? []}
+          onToggle={toggleResource}
+          className={toolScrollClass}
+        />
+      </TabsContent>
+      <TabsContent
+        value="auto-groups"
+        className="min-h-[200px] flex-1 overflow-y-auto px-2 py-1"
+      >
+        <AnnotationGroupPanel
+          annotations={annotations ?? []}
+          onChangeAnnotations={(newAnnotations) => {
+            onChangeAnnotations?.(newAnnotations);
+            const matchedIds: string[] = [];
+            for (const group of mcpServers) {
+              for (const server of group.servers) {
+                for (const tool of server.tools) {
+                  if (
+                    newAnnotations.some(
+                      (hint) => tool.annotations?.[hint] === true,
+                    )
+                  ) {
+                    matchedIds.push(`${server.id}:${tool.name}`);
+                  }
+                }
+              }
+            }
+            onChangeResources(matchedIds);
+          }}
+          mcpServers={mcpServers}
+        />
+      </TabsContent>
+      <TabsContent
+        value="http-method"
+        className="min-h-[200px] flex-1 overflow-y-auto px-2 py-1"
+      >
+        <HttpMethodGroupPanel
+          mcpServers={mcpServers}
+          resources={resources ?? []}
+          onChangeResources={onChangeResources}
+        />
+      </TabsContent>
+      <TabsContent
+        value="collection"
+        className="min-h-[200px] flex-1 overflow-y-auto px-2 py-1"
+      >
+        <CollectionGroupPanel
+          mcpServers={mcpServers}
+          resources={resources ?? []}
+          onChangeResources={onChangeResources}
+        />
+      </TabsContent>
+    </Tabs>
   );
 
   return (
@@ -366,27 +355,31 @@ export function ScopePickerPopover({
           align="end"
           sideOffset={8}
           className={cn(
-            "overflow-hidden p-1.5 transition-[width] duration-500",
-            customMode ? "w-[620px]" : "max-h-[300px] w-56 overflow-y-auto",
+            "p-1.5 transition-[width] duration-500",
+            customMode ? "w-[620px]" : "max-h-[300px] w-44 overflow-y-auto",
           )}
           style={{
             transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
           }}
         >
-          {pickerContent}
-          {isMcp && (
-            <div className="border-border -mx-1.5 mt-1 -mb-1.5 rounded-b-lg border-t">
-              <button
-                type="button"
-                onClick={() => {
-                  setPopoverOpen(false);
-                  setExpanded(true);
-                }}
-                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-b-lg px-3 py-2.5 text-xs transition-colors"
-              >
-                <Maximize2 className="h-3 w-3" />
-                Open in full screen
-              </button>
+          {scopeOptions}
+          {resourceList}
+          {customMode && (
+            <div className="-mx-1.5 -mb-1.5 flex max-h-[min(420px,60vh)] flex-col">
+              {customTabs("max-h-[min(340px,50vh)]")}
+              <div className="bg-background border-border shrink-0 rounded-b-lg border-t">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPopoverOpen(false);
+                    setExpanded(true);
+                  }}
+                  className="text-muted-foreground hover:text-foreground hover:bg-muted/50 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-b-lg px-3 py-2.5 text-xs transition-colors"
+                >
+                  <Maximize2 className="h-3 w-3" />
+                  Open in full screen
+                </button>
+              </div>
             </div>
           )}
         </PopoverContent>
@@ -414,8 +407,9 @@ export function ScopePickerPopover({
               <Minimize2 className="h-4 w-4" />
             </button>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-1.5 [&_.tool-scroll]:max-h-none [&_.tool-scroll]:min-h-0 [&_.tool-scroll]:flex-1">
-            {pickerContent}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-1.5">
+            {scopeOptions}
+            {customTabs()}
           </div>
         </Dialog.Content>
       </Dialog>
@@ -427,10 +421,12 @@ function ToolSelectionPanel({
   mcpServers,
   resources,
   onToggle,
+  className,
 }: {
   mcpServers: ServerGroup[];
   resources: string[];
   onToggle: (id: string) => void;
+  className?: string;
 }) {
   const allServers = useMemo(
     () => mcpServers.flatMap((g) => g.servers),
@@ -461,7 +457,7 @@ function ToolSelectionPanel({
   }, []);
 
   return (
-    <div className="flex h-full">
+    <div className={cn("flex min-h-0 flex-1", className)}>
       {/* Left column — server list */}
       <div className="border-border w-[160px] shrink-0 overflow-y-auto border-r">
         <div className="bg-muted/50 text-muted-foreground border-border flex h-10 items-center gap-1.5 border-b px-3 text-[10px] font-medium tracking-wider uppercase">
@@ -515,7 +511,7 @@ function ToolSelectionPanel({
         <div
           ref={scrollRef}
           onWheel={handleWheel}
-          className="tool-scroll max-h-[300px] min-h-[300px] overflow-y-auto pb-2"
+          className="tool-scroll min-h-0 flex-1 overflow-y-auto pb-2"
         >
           {filteredTools.length === 0 ? (
             <div className="text-muted-foreground px-3 py-3 text-sm">
@@ -583,7 +579,6 @@ function AnnotationGroupPanel({
   onChangeAnnotations?: (annotations: AnnotationHint[]) => void;
   mcpServers: ServerGroup[];
 }) {
-  const [expanded, setExpanded] = useState<Set<AnnotationHint>>(new Set());
   const allTools = useMemo(
     () =>
       mcpServers.flatMap((g) =>
@@ -604,9 +599,7 @@ function AnnotationGroupPanel({
     ] as AnnotationHint[]) {
       map.set(
         hint,
-        allTools
-          .filter((t) => t.annotations?.[hint] === true)
-          .sort((a, b) => a.name.localeCompare(b.name)),
+        allTools.filter((t) => t.annotations?.[hint] === true),
       );
     }
     return map;
@@ -620,15 +613,6 @@ function AnnotationGroupPanel({
     onChangeAnnotations?.(next);
   };
 
-  const toggleExpanded = (key: AnnotationHint) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
   return (
     <div className="py-1">
       <div className="text-muted-foreground px-2 py-2 text-sm">
@@ -636,74 +620,34 @@ function AnnotationGroupPanel({
       </div>
       {ANNOTATION_OPTIONS.map((opt) => {
         const isSelected = annotations.includes(opt.key);
-        const isExpanded = expanded.has(opt.key);
-        const matchedTools = toolsByAnnotation.get(opt.key) ?? [];
+        const matchCount = (toolsByAnnotation.get(opt.key) ?? []).length;
         const Icon = opt.icon;
         return (
-          <div key={opt.key} className="hover:bg-accent rounded-sm">
-            <button
-              type="button"
-              onClick={() => toggle(opt.key)}
-              className={cn(
-                "flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-sm outline-none",
-                isSelected && "font-medium",
-              )}
-            >
-              <Checkbox
-                checked={isSelected}
-                className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
-                tabIndex={-1}
-              />
-              <Icon className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
-              <div className="min-w-0 flex-1 text-left">
-                <div>{opt.label}</div>
-                <div className="text-muted-foreground text-[11px] font-normal">
-                  {opt.description}
-                </div>
-              </div>
-            </button>
-            {isSelected && (
-              <div className="pr-3 pb-3 pl-[66px]">
-                {matchedTools.length === 0 ? (
-                  <span className="text-muted-foreground text-[11px]">
-                    No tools matched
-                  </span>
-                ) : (
-                  <div className="border-border bg-background overflow-hidden rounded-md border">
-                    <button
-                      type="button"
-                      onClick={() => toggleExpanded(opt.key)}
-                      className="text-muted-foreground hover:text-foreground flex w-full cursor-pointer items-center gap-1 px-2.5 py-1.5 text-xs"
-                    >
-                      <ChevronRight
-                        className={cn(
-                          "h-3 w-3 transition-transform",
-                          isExpanded && "rotate-90",
-                        )}
-                      />
-                      {matchedTools.length} tool
-                      {matchedTools.length !== 1 ? "s" : ""} matched
-                    </button>
-                    {isExpanded && (
-                      <div className="border-border bg-popover max-h-[120px] overflow-y-auto border-t">
-                        {matchedTools.map((tool) => (
-                          <div
-                            key={`${tool.serverName}:${tool.id}`}
-                            className="text-muted-foreground border-border flex items-center justify-between gap-2 border-b px-2.5 py-1.5 text-xs last:border-b-0"
-                          >
-                            <span className="truncate">{tool.name}</span>
-                            <span className="shrink-0 text-[10px] opacity-50">
-                              {tool.serverName}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+          <button
+            key={opt.key}
+            type="button"
+            onClick={() => toggle(opt.key)}
+            className={cn(
+              "hover:bg-accent flex w-full cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 text-sm outline-none",
+              isSelected && "font-medium",
             )}
-          </div>
+          >
+            <Checkbox
+              checked={isSelected}
+              className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
+              tabIndex={-1}
+            />
+            <Icon className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+            <div className="min-w-0 flex-1 text-left">
+              <div>{opt.label}</div>
+              <div className="text-muted-foreground text-[11px] font-normal">
+                {opt.description}
+              </div>
+            </div>
+            <span className="text-muted-foreground shrink-0 text-xs">
+              {matchCount} tool{matchCount !== 1 ? "s" : ""}
+            </span>
+          </button>
         );
       })}
     </div>
@@ -723,12 +667,10 @@ const METHOD_COLORS: Record<string, string> = {
 function HttpMethodGroupPanel({
   mcpServers,
   resources,
-  onToggle,
   onChangeResources,
 }: {
   mcpServers: ServerGroup[];
   resources: string[];
-  onToggle: (id: string) => void;
   onChangeResources: (resources: string[]) => void;
 }) {
   const allTools = useMemo(
@@ -772,16 +714,6 @@ function HttpMethodGroupPanel({
     return sorted;
   }, [httpTools]);
 
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const toggleExpanded = (method: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(method)) next.delete(method);
-      else next.add(method);
-      return next;
-    });
-  };
-
   if (httpTools.length === 0) {
     return (
       <div className="text-muted-foreground py-6 text-center text-sm">
@@ -793,25 +725,21 @@ function HttpMethodGroupPanel({
   return (
     <div className="py-1">
       <div className="text-muted-foreground px-2 py-2 text-sm">
-        Select tools by HTTP method:
+        Select all tools by HTTP method:
       </div>
       {[...toolsByMethod.entries()].map(([method, tools]) => {
-        const isExpanded = expanded.has(method);
         const compoundIds = tools.map((t) => `${t.serverSlug}:${t.name}`);
-        const selectedCount = compoundIds.filter((id) =>
-          resources.includes(id),
-        ).length;
-        const allSelected = selectedCount === tools.length && tools.length > 0;
+        const allSelected =
+          compoundIds.length > 0 &&
+          compoundIds.every((id) => resources.includes(id));
         const colors =
           METHOD_COLORS[method] ?? "text-muted-foreground bg-muted";
 
         const toggleAll = () => {
           if (allSelected) {
-            // Deselect all in this group
             const removeSet = new Set(compoundIds);
             onChangeResources(resources.filter((r) => !removeSet.has(r)));
           } else {
-            // Select all in this group
             const existing = new Set(resources);
             const toAdd = compoundIds.filter((id) => !existing.has(id));
             onChangeResources([...resources, ...toAdd]);
@@ -819,78 +747,29 @@ function HttpMethodGroupPanel({
         };
 
         return (
-          <div key={method} className="hover:bg-accent rounded-sm">
-            <div className="flex w-full items-center gap-3 px-3 py-2.5 text-sm">
-              <Checkbox
-                checked={
-                  allSelected
-                    ? true
-                    : selectedCount > 0
-                      ? "indeterminate"
-                      : false
-                }
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleAll();
-                }}
-                className="cursor-pointer"
-              />
-              <span
-                className={cn(
-                  "inline-flex min-w-[52px] items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide",
-                  colors,
-                )}
-              >
-                {method}
-              </span>
-              <button
-                type="button"
-                onClick={() => toggleExpanded(method)}
-                className="flex flex-1 cursor-pointer items-center gap-2"
-              >
-                <span className="text-muted-foreground flex-1 text-left font-normal">
-                  {selectedCount} of {tools.length} selected
-                </span>
-                <ChevronRight
-                  className={cn(
-                    "text-muted-foreground h-3.5 w-3.5 transition-transform",
-                    isExpanded && "rotate-90",
-                  )}
-                />
-              </button>
-            </div>
-            {isExpanded && (
-              <div className="border-border bg-background max-h-[180px] overflow-y-auto border-t">
-                {tools.map((tool) => {
-                  const compoundId = `${tool.serverSlug}:${tool.name}`;
-                  const isChecked = resources.includes(compoundId);
-                  return (
-                    <button
-                      key={compoundId}
-                      type="button"
-                      onClick={() => onToggle(compoundId)}
-                      className={cn(
-                        "hover:bg-accent flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm",
-                        isChecked && "font-medium",
-                      )}
-                    >
-                      <Checkbox
-                        checked={isChecked}
-                        className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
-                        tabIndex={-1}
-                      />
-                      <span className="flex-1 truncate text-left">
-                        {tool.name}
-                      </span>
-                      <span className="text-muted-foreground shrink-0 text-[10px] opacity-50">
-                        {tool.serverName}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <button
+            key={method}
+            type="button"
+            onClick={toggleAll}
+            className="hover:bg-accent flex w-full cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 text-sm"
+          >
+            <Checkbox
+              checked={allSelected}
+              className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
+              tabIndex={-1}
+            />
+            <span
+              className={cn(
+                "inline-flex min-w-[52px] items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide",
+                colors,
+              )}
+            >
+              {method}
+            </span>
+            <span className="flex-1 text-left">
+              {tools.length} tool{tools.length !== 1 ? "s" : ""}
+            </span>
+          </button>
         );
       })}
     </div>
@@ -900,12 +779,10 @@ function HttpMethodGroupPanel({
 function CollectionGroupPanel({
   mcpServers,
   resources,
-  onToggle,
   onChangeResources,
 }: {
   mcpServers: ServerGroup[];
   resources: string[];
-  onToggle: (id: string) => void;
   onChangeResources: (resources: string[]) => void;
 }) {
   const organization = useOrganization();
@@ -951,7 +828,6 @@ function CollectionGroupPanel({
       const serversResponse = serverQueries[i]?.data;
       const externalServers = serversResponse?.servers ?? [];
 
-      // Map collection servers → internal toolset servers via mcpSlug
       const matchedServers: Server[] = [];
       for (const es of externalServers) {
         const parts = es.registrySpecifier.split("/");
@@ -968,16 +844,6 @@ function CollectionGroupPanel({
       };
     });
   }, [collections, serverQueries, mcpSlugToServer]);
-
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const toggleExpanded = (id: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   if (collectionsLoading) {
     return (
@@ -998,18 +864,15 @@ function CollectionGroupPanel({
   return (
     <div className="py-1">
       <div className="text-muted-foreground px-2 py-2 text-sm">
-        Select tools by collection:
+        Select all tools by collection:
       </div>
       {collectionGroups.map((group) => {
-        const isExpanded = expanded.has(group.id);
         const allToolIds = group.servers.flatMap((s) =>
           s.tools.map((t) => `${s.id}:${t.name}`),
         );
-        const selectedCount = allToolIds.filter((id) =>
-          resources.includes(id),
-        ).length;
         const allSelected =
-          selectedCount === allToolIds.length && allToolIds.length > 0;
+          allToolIds.length > 0 &&
+          allToolIds.every((id) => resources.includes(id));
 
         const toggleAll = () => {
           if (allSelected) {
@@ -1023,80 +886,24 @@ function CollectionGroupPanel({
         };
 
         return (
-          <div key={group.id} className="hover:bg-accent rounded-sm">
-            <div className="flex w-full items-center gap-3 px-3 py-2.5 text-sm">
-              <Checkbox
-                checked={
-                  allSelected
-                    ? true
-                    : selectedCount > 0
-                      ? "indeterminate"
-                      : false
-                }
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleAll();
-                }}
-                className="cursor-pointer"
-              />
-              <button
-                type="button"
-                onClick={() => toggleExpanded(group.id)}
-                className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
-              >
-                <span className="truncate font-medium">{group.name}</span>
-                <span className="text-muted-foreground font-normal">
-                  {selectedCount} of {allToolIds.length} selected
-                </span>
-                <ChevronRight
-                  className={cn(
-                    "text-muted-foreground ml-auto h-3.5 w-3.5 shrink-0 transition-transform",
-                    isExpanded && "rotate-90",
-                  )}
-                />
-              </button>
-            </div>
-            {isExpanded && (
-              <div className="border-border bg-background max-h-[180px] overflow-y-auto border-t">
-                {group.servers.map((server) => (
-                  <div key={server.id}>
-                    <div className="text-muted-foreground bg-muted/30 px-3 py-1.5 text-[10px] font-medium tracking-wider uppercase">
-                      {server.name}
-                    </div>
-                    {server.tools.map((tool) => {
-                      const compoundId = `${server.id}:${tool.name}`;
-                      const isChecked = resources.includes(compoundId);
-                      return (
-                        <button
-                          key={compoundId}
-                          type="button"
-                          onClick={() => onToggle(compoundId)}
-                          className={cn(
-                            "hover:bg-accent flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm",
-                            isChecked && "font-medium",
-                          )}
-                        >
-                          <Checkbox
-                            checked={isChecked}
-                            className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
-                            tabIndex={-1}
-                          />
-                          <span className="flex-1 truncate text-left">
-                            {tool.name}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))}
-                {group.servers.length === 0 && (
-                  <div className="text-muted-foreground px-3 py-3 text-xs">
-                    No matching servers in this collection
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <button
+            key={group.id}
+            type="button"
+            onClick={toggleAll}
+            className="hover:bg-accent flex w-full cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 text-sm"
+          >
+            <Checkbox
+              checked={allSelected}
+              className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
+              tabIndex={-1}
+            />
+            <span className="min-w-0 flex-1 truncate text-left font-medium">
+              {group.name}
+            </span>
+            <span className="text-muted-foreground shrink-0 text-xs">
+              {allToolIds.length} tool{allToolIds.length !== 1 ? "s" : ""}
+            </span>
+          </button>
         );
       })}
     </div>
