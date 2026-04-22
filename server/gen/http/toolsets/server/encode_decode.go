@@ -3582,10 +3582,14 @@ func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *
 // *ToolEntryResponseBody from a value of type *types.ToolEntry.
 func marshalTypesToolEntryToToolEntryResponseBody(v *types.ToolEntry) *ToolEntryResponseBody {
 	res := &ToolEntryResponseBody{
-		Type:    v.Type,
-		ID:      v.ID,
-		ToolUrn: v.ToolUrn,
-		Name:    v.Name,
+		Type:       v.Type,
+		ID:         v.ID,
+		ToolUrn:    v.ToolUrn,
+		Name:       v.Name,
+		HTTPMethod: v.HTTPMethod,
+	}
+	if v.Annotations != nil {
+		res.Annotations = marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v.Annotations)
 	}
 
 	return res

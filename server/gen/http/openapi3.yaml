@@ -26168,6 +26168,11 @@ components:
         ToolEntry:
             type: object
             properties:
+                annotations:
+                    $ref: '#/components/schemas/ToolAnnotations'
+                http_method:
+                    type: string
+                    description: HTTP method for HTTP tools (GET, POST, PUT, PATCH, DELETE)
                 id:
                     type: string
                     description: The ID of the tool
