@@ -23,7 +23,6 @@ func TestCollectionsService_Create_Success(t *testing.T) {
 		ToolsetIds:           []string{},
 		SessionToken:         nil,
 		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -50,16 +49,14 @@ func TestCollectionsService_Create_WithToolsetIds(t *testing.T) {
 		ToolsetIds:           []string{ts.ID},
 		SessionToken:         nil,
 		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
 	servers, err := ti.service.ListServers(ctx, &gen.ListServersPayload{
-		CollectionSlug:   "collection-with-toolsets",
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+		CollectionSlug: "collection-with-toolsets",
+		SessionToken:   nil,
+		ApikeyToken:    nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, servers.Servers, 1)
@@ -80,7 +77,6 @@ func TestCollectionsService_Create_InvalidToolsetIdsRejected(t *testing.T) {
 		ToolsetIds:           []string{"not-a-uuid", "also-invalid"},
 		SessionToken:         nil,
 		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
 	})
 	require.Error(t, err)
 	require.Nil(t, result)
@@ -102,7 +98,6 @@ func TestCollectionsService_Create_DuplicateSlug(t *testing.T) {
 		ToolsetIds:           []string{},
 		SessionToken:         nil,
 		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "collection slug already exists")
@@ -123,7 +118,6 @@ func TestCollectionsService_Create_DuplicateNamespace(t *testing.T) {
 		ToolsetIds:           []string{},
 		SessionToken:         nil,
 		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "registry namespace already exists")
