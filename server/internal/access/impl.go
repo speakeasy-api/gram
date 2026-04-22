@@ -522,9 +522,6 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{Slug: string(ScopeMCPRead), Description: "View MCP servers and configuration.", ResourceType: "mcp"},
 		{Slug: string(ScopeMCPWrite), Description: "Create and modify MCP servers and configuration.", ResourceType: "mcp"},
 		{Slug: string(ScopeMCPConnect), Description: "Connect to and use MCP servers.", ResourceType: "mcp"},
-		{Slug: string(ScopeRemoteMCPRead), Description: "View remote MCP servers and configuration.", ResourceType: "remote-mcp"},
-		{Slug: string(ScopeRemoteMCPWrite), Description: "Create and modify remote MCP servers and configuration.", ResourceType: "remote-mcp"},
-		{Slug: string(ScopeRemoteMCPConnect), Description: "Connect to and use remote MCP servers.", ResourceType: "remote-mcp"},
 	}}, nil
 }
 
@@ -973,9 +970,6 @@ func fullAccessGrantPayloads() []*gen.ListRoleGrant {
 		{Scope: string(ScopeMCPRead), Resources: nil},
 		{Scope: string(ScopeMCPWrite), Resources: nil},
 		{Scope: string(ScopeMCPConnect), Resources: nil},
-		{Scope: string(ScopeRemoteMCPRead), Resources: nil},
-		{Scope: string(ScopeRemoteMCPWrite), Resources: nil},
-		{Scope: string(ScopeRemoteMCPConnect), Resources: nil},
 	}
 }
 

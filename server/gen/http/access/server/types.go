@@ -4466,8 +4466,8 @@ func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "build:read" || *body.Scope == "build:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "remote-mcp:read" || *body.Scope == "remote-mcp:write" || *body.Scope == "remote-mcp:connect") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect", "remote-mcp:read", "remote-mcp:write", "remote-mcp:connect"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "build:read" || *body.Scope == "build:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect"}))
 		}
 	}
 	return

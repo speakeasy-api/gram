@@ -74,7 +74,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeRemoteMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
 
@@ -152,7 +152,7 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeRemoteMCPRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
 
@@ -194,7 +194,7 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeRemoteMCPRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
 
@@ -238,7 +238,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeRemoteMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
 
@@ -409,7 +409,7 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeRemoteMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return err
 	}
 

@@ -23145,9 +23145,6 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
-            - remote-mcp:read
-            - remote-mcp:write
-            - remote-mcp:connect
         sub_scopes:
           type: array
           items:
@@ -23160,9 +23157,6 @@ components:
               - mcp:read
               - mcp:write
               - mcp:connect
-              - remote-mcp:read
-              - remote-mcp:write
-              - remote-mcp:connect
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -25351,9 +25345,6 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
-            - remote-mcp:read
-            - remote-mcp:write
-            - remote-mcp:connect
       required:
         - scope
     ScopeDefinition:
@@ -25369,7 +25360,6 @@ components:
             - org
             - project
             - mcp
-            - remote-mcp
         slug:
           type: string
           description: Unique scope identifier.
@@ -25381,9 +25371,6 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
-            - remote-mcp:read
-            - remote-mcp:write
-            - remote-mcp:connect
       required:
         - slug
         - description

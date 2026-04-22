@@ -68,8 +68,7 @@ linters:
         linters:
           - exhaustruct
           - gosec
-      # False positives that scope constants, such as remote-mcp:write, are
-      # somehow hardcoded credentials.
+      # False positives that scope constants are somehow hardcoded credentials.
       - path: internal/access/scopes\.go
         linters:
           - gosec

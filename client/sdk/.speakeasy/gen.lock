@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: c32f6b24fc642a859c23217ff801d376
+  docChecksum: 202431065712d5b55d4f8fd3aeaf4bce
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
-  releaseVersion: 0.33.4
-  configChecksum: 5ac16124fad4de97f9435d5cbd6e8354
+  releaseVersion: 0.33.5
+  configChecksum: 6a59128f56d836b845e7d286961c3758
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -167,7 +167,7 @@ trackedFiles:
   docs/models/components/createriskpolicyrequestbody.md:
     last_write_checksum: sha1:8f9c26f6ccc6d3931235da3456cf0cb96bab4772
   docs/models/components/createroleform.md:
-    last_write_checksum: sha1:7f66643a7003dd803ed47f17138bafe5db53d044
+    last_write_checksum: sha1:6b116b64b9fb3618d9d78d1476b5d47d99580176
   docs/models/components/createserverform.md:
     last_write_checksum: sha1:46cfc0f459eaced73debfe7ce5188622d26f842e
   docs/models/components/createsignedchatattachmenturlform2.md:
@@ -389,11 +389,11 @@ trackedFiles:
   docs/models/components/listriskresultsresult.md:
     last_write_checksum: sha1:b9598d5d1bcbb33c95b7f7b15e7e2c4310bdb3b3
   docs/models/components/listrolegrant.md:
-    last_write_checksum: sha1:bfad22ce5eaa361749f3314f6f832c8bd96037e5
+    last_write_checksum: sha1:4716689cd10b221545ae681c956676e459e70b2f
   docs/models/components/listrolegrantscope.md:
-    last_write_checksum: sha1:b024cb074288fc92b0c53470e21f886872ff0c7e
+    last_write_checksum: sha1:fa03216664b6104d3041c98a2a69f247faaef7a8
   docs/models/components/listrolesresult.md:
-    last_write_checksum: sha1:14ff1382940a172ae438e8ac14cfd9be967e3078
+    last_write_checksum: sha1:af72cd390ad97948cffed51871adf7483e7ebc7b
   docs/models/components/listscopesresult.md:
     last_write_checksum: sha1:5d5ea3bc90e7cf9c25cb5ee59e57409cfdd220d6
   docs/models/components/listserversresponsebody.md:
@@ -573,7 +573,7 @@ trackedFiles:
   docs/models/components/resourceentry.md:
     last_write_checksum: sha1:1fd4caa06e03fef506b201ec27e04238a238450d
   docs/models/components/resourcetype.md:
-    last_write_checksum: sha1:c0c0525f9aa7abffa5b9931e104e86a02a7872a8
+    last_write_checksum: sha1:e51f6391a253740b0891d0c289ea1578ee55c77d
   docs/models/components/responsefilter.md:
     last_write_checksum: sha1:0c3d3b8bffe28ce8638776c1291b8b322baea905
   docs/models/components/riskchatsummary.md:
@@ -587,11 +587,11 @@ trackedFiles:
   docs/models/components/role.md:
     last_write_checksum: sha1:809bed93dac0663775bca80b214937f21a60184a
   docs/models/components/rolegrant.md:
-    last_write_checksum: sha1:f98e6973efb874854be8f1dcde3864f6fa769145
+    last_write_checksum: sha1:10f4c56e21163bd1657a49539426683165aedfae
   docs/models/components/scope.md:
-    last_write_checksum: sha1:26e091b351af661752001fa3860d54b42b1cfc96
+    last_write_checksum: sha1:2a945f6da1a531aab24d8eb04cd1ce4a74aae7b3
   docs/models/components/scopedefinition.md:
-    last_write_checksum: sha1:9e997acb2d9b9fc2fba4c498a77fcbce8fce34f2
+    last_write_checksum: sha1:909023c86027ef6bec6fc6583ca04653064f4b76
   docs/models/components/searchchatsfilter.md:
     last_write_checksum: sha1:6030d1eef228e96402dce043397ceb548383a655
   docs/models/components/searchchatspayload.md:
@@ -661,7 +661,7 @@ trackedFiles:
   docs/models/components/slackappresult.md:
     last_write_checksum: sha1:62f9ec605a9bb2193261e13b1790eb9cf957c7c1
   docs/models/components/slug.md:
-    last_write_checksum: sha1:278d62f5fe216db4cc4b256a341ffddcd742cbad
+    last_write_checksum: sha1:a317f912255357fc197cbc7203830db8d44f1bfb
   docs/models/components/sort.md:
     last_write_checksum: sha1:2f0a7e8e1494777fc9390e1ed8affca76b06ebca
   docs/models/components/sourceenvironmentlink.md:
@@ -677,7 +677,7 @@ trackedFiles:
   docs/models/components/submitfeedbackrequestbody.md:
     last_write_checksum: sha1:4fc79535eaf97ea3ba6530166786c6a0033623e5
   docs/models/components/subscopes.md:
-    last_write_checksum: sha1:521e266da7fd892f65ce971ae8b5a6f5faa46ddc
+    last_write_checksum: sha1:db459e2c0931944135d4cebfe6abe238bc6b44d8
   docs/models/components/targetkind.md:
     last_write_checksum: sha1:5d600cc8329b5cabff595ac87ddc5c95b49e96b3
   docs/models/components/telemetrylogrecord.md:
@@ -2052,11 +2052,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:d27ad8ed304789f1a0cf9735cb209ed9cbdbfcf6
+    last_write_checksum: sha1:7df9576a756c2daad2f1bd42d9ce5c8c71f1a9ba
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:1ce3d09d03276824823d34c76803492b7e298ad2
+    last_write_checksum: sha1:8bcf4bd7f109d53dd02b36b7ba8f53dfc3c9eb23
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2658,7 +2658,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:8c5ee0b28bf50207c96dca9bc57cd01c077f5c6d
+    last_write_checksum: sha1:f53ae850c40bbdc9c6cfadb5c7434264491af976
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -3171,7 +3171,7 @@ trackedFiles:
   src/models/components/listriskresultsresult.ts:
     last_write_checksum: sha1:d16223e7b7bc4d6f6ee25b9876b4746553baff8c
   src/models/components/listrolegrant.ts:
-    last_write_checksum: sha1:5dd084f35b18043b91b586b122a398cfdd3d9414
+    last_write_checksum: sha1:1723be5620403a82fca4e8fec5dcaf016341caac
   src/models/components/listrolesresult.ts:
     last_write_checksum: sha1:c6334302437232f7d088e953ea4b0360f1e6c8c2
   src/models/components/listscopesresult.ts:
@@ -3403,9 +3403,9 @@ trackedFiles:
   src/models/components/role.ts:
     last_write_checksum: sha1:0471a9177cc9f7a8494dfa8d834808500d1b05a7
   src/models/components/rolegrant.ts:
-    last_write_checksum: sha1:0d0fc14c1efcaa97eafed637aa5a6020c225ebec
+    last_write_checksum: sha1:12b5623b35805927bcbccc7c50cb0ed13095ae5a
   src/models/components/scopedefinition.ts:
-    last_write_checksum: sha1:0eef5ef488f655e0a5b15de6f37ddf0f3d4c890c
+    last_write_checksum: sha1:d0ff8f2458bcfc69bb157264cf334b79827d9b6f
   src/models/components/searchchatsfilter.ts:
     last_write_checksum: sha1:d32819c682e8b5987f9f1f1513c4d31392e03dc9
   src/models/components/searchchatspayload.ts:
