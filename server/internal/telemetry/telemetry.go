@@ -17,6 +17,7 @@ const (
 	EventSourceResourceRead   EventSource = "resource_read"
 	EventSourceHook           EventSource = "hook"
 	EventSourceTrigger        EventSource = "trigger"
+	EventSourceAssistant      EventSource = "assistant"
 )
 
 // PosthogClient defines the interface for capturing events in PostHog.
