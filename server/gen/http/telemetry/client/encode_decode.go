@@ -3800,6 +3800,19 @@ func unmarshalHooksTimeSeriesPointResponseBodyToTelemetryHooksTimeSeriesPoint(v 
 	return res
 }
 
+// unmarshalSkillTimeSeriesPointResponseBodyToTelemetrySkillTimeSeriesPoint
+// builds a value of type *telemetry.SkillTimeSeriesPoint from a value of type
+// *SkillTimeSeriesPointResponseBody.
+func unmarshalSkillTimeSeriesPointResponseBodyToTelemetrySkillTimeSeriesPoint(v *SkillTimeSeriesPointResponseBody) *telemetry.SkillTimeSeriesPoint {
+	res := &telemetry.SkillTimeSeriesPoint{
+		BucketStartNs: *v.BucketStartNs,
+		SkillName:     *v.SkillName,
+		EventCount:    *v.EventCount,
+	}
+
+	return res
+}
+
 // unmarshalHookTraceSummaryResponseBodyToTelemetryHookTraceSummary builds a
 // value of type *telemetry.HookTraceSummary from a value of type
 // *HookTraceSummaryResponseBody.

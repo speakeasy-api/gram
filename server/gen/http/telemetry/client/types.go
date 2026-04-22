@@ -303,6 +303,8 @@ type GetHooksSummaryResponseBody struct {
 	Breakdown []*HooksBreakdownRowResponseBody `form:"breakdown,omitempty" json:"breakdown,omitempty" xml:"breakdown,omitempty"`
 	// Time-bucketed event counts by server and user
 	TimeSeries []*HooksTimeSeriesPointResponseBody `form:"time_series,omitempty" json:"time_series,omitempty" xml:"time_series,omitempty"`
+	// Time-bucketed event counts by skill
+	SkillTimeSeries []*SkillTimeSeriesPointResponseBody `form:"skill_time_series,omitempty" json:"skill_time_series,omitempty" xml:"skill_time_series,omitempty"`
 }
 
 // ListHooksTracesResponseBody is the type of the "telemetry" service
@@ -3239,6 +3241,17 @@ type HooksTimeSeriesPointResponseBody struct {
 	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
 }
 
+// SkillTimeSeriesPointResponseBody is used to define fields on response body
+// types.
+type SkillTimeSeriesPointResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS int64 precision)
+	BucketStartNs *string `form:"bucket_start_ns,omitempty" json:"bucket_start_ns,omitempty" xml:"bucket_start_ns,omitempty"`
+	// Skill name
+	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
+	// Number of skill use events in this bucket
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+}
+
 // HookTraceSummaryResponseBody is used to define fields on response body types.
 type HookTraceSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
@@ -5415,6 +5428,14 @@ func NewGetHooksSummaryResultOK(body *GetHooksSummaryResponseBody) *telemetry.Ge
 		}
 		v.TimeSeries[i] = unmarshalHooksTimeSeriesPointResponseBodyToTelemetryHooksTimeSeriesPoint(val)
 	}
+	v.SkillTimeSeries = make([]*telemetry.SkillTimeSeriesPoint, len(body.SkillTimeSeries))
+	for i, val := range body.SkillTimeSeries {
+		if val == nil {
+			v.SkillTimeSeries[i] = nil
+			continue
+		}
+		v.SkillTimeSeries[i] = unmarshalSkillTimeSeriesPointResponseBodyToTelemetrySkillTimeSeriesPoint(val)
+	}
 
 	return v
 }
@@ -5972,6 +5993,9 @@ func ValidateGetHooksSummaryResponseBody(body *GetHooksSummaryResponseBody) (err
 	if body.TimeSeries == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("time_series", "body"))
 	}
+	if body.SkillTimeSeries == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_time_series", "body"))
+	}
 	for _, e := range body.Servers {
 		if e != nil {
 			if err2 := ValidateHooksServerSummaryResponseBody(e); err2 != nil {
@@ -6003,6 +6027,13 @@ func ValidateGetHooksSummaryResponseBody(body *GetHooksSummaryResponseBody) (err
 	for _, e := range body.TimeSeries {
 		if e != nil {
 			if err2 := ValidateHooksTimeSeriesPointResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.SkillTimeSeries {
+		if e != nil {
+			if err2 := ValidateSkillTimeSeriesPointResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -9892,6 +9923,21 @@ func ValidateHooksTimeSeriesPointResponseBody(body *HooksTimeSeriesPointResponse
 	}
 	if body.FailureCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("failure_count", "body"))
+	}
+	return
+}
+
+// ValidateSkillTimeSeriesPointResponseBody runs the validations defined on
+// SkillTimeSeriesPointResponseBody
+func ValidateSkillTimeSeriesPointResponseBody(body *SkillTimeSeriesPointResponseBody) (err error) {
+	if body.BucketStartNs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_start_ns", "body"))
+	}
+	if body.SkillName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_name", "body"))
+	}
+	if body.EventCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))
 	}
 	return
 }
