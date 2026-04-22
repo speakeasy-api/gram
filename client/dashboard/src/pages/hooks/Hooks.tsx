@@ -116,6 +116,10 @@ const BRAND_RED_COLORS = [
 ];
 
 const COLLAPSED_BAR_CHART_MAX_ROWS = 6;
+const BAR_THICKNESS = { collapsed: 18, expanded: 24 };
+const BAR_ROW_HEIGHT = { collapsed: 18, expanded: 24 };
+const BAR_ROW_SPACER = { collapsed: 8, expanded: 12 };
+const LINE_CHART_HEIGHT = { collapsed: 250, expanded: 600 };
 
 // ---------------------------------------------------------------------------
 // Shared Chart.js config building blocks
@@ -1442,21 +1446,23 @@ function StackedBarChart({
   maxRows?: number;
   onShowAll?: () => void;
 }) {
+  const thickness = expanded ? BAR_THICKNESS.expanded : BAR_THICKNESS.collapsed;
   const hiddenCount =
     !expanded && maxRows && labels.length > maxRows
       ? labels.length - maxRows
       : 0;
   const visibleLabels = hiddenCount > 0 ? labels.slice(0, maxRows) : labels;
-  const visibleDatasets =
+  const visibleDatasets = (
     hiddenCount > 0
       ? datasets.map((ds) => ({ ...ds, data: ds.data.slice(0, maxRows) }))
-      : datasets;
+      : datasets
+  ).map((ds) => ({ ...ds, barThickness: thickness }));
 
-  const barHeight = expanded ? 36 : 24;
-  const spacerHeight = expanded ? 12 : 8;
+  const rowH = expanded ? BAR_ROW_HEIGHT.expanded : BAR_ROW_HEIGHT.collapsed;
+  const rowS = expanded ? BAR_ROW_SPACER.expanded : BAR_ROW_SPACER.collapsed;
   const containerHeight = Math.max(
     120,
-    visibleLabels.length * (barHeight + spacerHeight) + 60,
+    visibleLabels.length * (rowH + rowS) + 60,
   );
 
   const options = useMemo<ChartOptions<"bar">>(
@@ -1727,7 +1733,7 @@ function ServerErrorRateChart({
     const chartLabels = sortedServers.map((s) => s.displayName);
     const chartDatasets = sortedTools.map((tool, i) => ({
       label: tool,
-      barThickness: 16,
+      barThickness: BAR_THICKNESS.collapsed,
       data: sortedServers.map((s) => s.toolCounts.get(tool) ?? 0),
       backgroundColor: BRAND_RED_COLORS[i % BRAND_RED_COLORS.length],
       hoverBackgroundColor:
@@ -1743,20 +1749,19 @@ function ServerErrorRateChart({
       : 0;
   const visibleLabels =
     hiddenCount > 0 ? labels.slice(0, COLLAPSED_BAR_CHART_MAX_ROWS) : labels;
-  const visibleDatasets =
+  const thickness = expanded ? BAR_THICKNESS.expanded : BAR_THICKNESS.collapsed;
+  const visibleDatasets = (
     hiddenCount > 0
       ? datasets.map((ds) => ({
           ...ds,
           data: ds.data.slice(0, COLLAPSED_BAR_CHART_MAX_ROWS),
         }))
-      : datasets;
+      : datasets
+  ).map((ds) => ({ ...ds, barThickness: thickness }));
 
-  const barHeight = expanded ? 36 : 24;
-  const spacerHeight = expanded ? 12 : 8;
-  const height = Math.max(
-    120,
-    visibleLabels.length * (barHeight + spacerHeight) + 60,
-  );
+  const rowH = expanded ? BAR_ROW_HEIGHT.expanded : BAR_ROW_HEIGHT.collapsed;
+  const rowS = expanded ? BAR_ROW_SPACER.expanded : BAR_ROW_SPACER.collapsed;
+  const height = Math.max(120, visibleLabels.length * (rowH + rowS) + 60);
 
   const options: ChartOptions<"bar"> = {
     indexAxis: "y",
@@ -1987,7 +1992,9 @@ function ServerUsageTimeSeries({
         labels={labels}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
-        height={expanded ? 600 : 260}
+        height={
+          expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
+        }
       />
     </ChartCard>
   );
@@ -2026,7 +2033,9 @@ function UserUsageTimeSeries({
         labels={labels}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
-        height={expanded ? 600 : 260}
+        height={
+          expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
+        }
       />
     </ChartCard>
   );
@@ -2135,7 +2144,9 @@ function ErrorsOverTimeChart({
           labels={labels}
           tooltipLabels={tooltipLabels}
           datasets={datasets}
-          height={expanded ? 600 : 260}
+          height={
+            expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
+          }
           tooltipAfterBody={(idx) => {
             const servers = perServerByIndex[idx];
             if (!servers || servers.length === 0) return [];
