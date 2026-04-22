@@ -590,56 +590,6 @@ func (q *Queries) ListRiskResultsByMessage(ctx context.Context, arg ListRiskResu
 	return items, nil
 }
 
-const listRiskResultsByProject = `-- name: ListRiskResultsByProject :many
-SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, created_at
-FROM risk_results
-WHERE project_id = $1
-ORDER BY created_at DESC
-LIMIT $2
-`
-
-type ListRiskResultsByProjectParams struct {
-	ProjectID   uuid.UUID
-	ResultLimit int32
-}
-
-func (q *Queries) ListRiskResultsByProject(ctx context.Context, arg ListRiskResultsByProjectParams) ([]RiskResult, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsByProject, arg.ProjectID, arg.ResultLimit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RiskResult
-	for rows.Next() {
-		var i RiskResult
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.OrganizationID,
-			&i.RiskPolicyID,
-			&i.RiskPolicyVersion,
-			&i.ChatMessageID,
-			&i.Source,
-			&i.Found,
-			&i.RuleID,
-			&i.Description,
-			&i.Match,
-			&i.StartPos,
-			&i.EndPos,
-			&i.Confidence,
-			&i.Tags,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
 SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr

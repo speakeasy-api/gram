@@ -172,13 +172,6 @@ WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND chat_message_id = ANY(@message_ids::uuid[]);
 
--- name: ListRiskResultsByProject :many
-SELECT *
-FROM risk_results
-WHERE project_id = @project_id
-ORDER BY created_at DESC
-LIMIT @result_limit;
-
 -- name: ListRiskResultsByProjectFound :many
 SELECT rr.*, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
