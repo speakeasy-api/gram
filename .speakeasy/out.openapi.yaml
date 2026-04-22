@@ -23326,14 +23326,11 @@ components:
           enum:
             - org:read
             - org:admin
-            - build:read
-            - build:write
+            - project:read
+            - project:write
             - mcp:read
             - mcp:write
             - mcp:connect
-            - remote-mcp:read
-            - remote-mcp:write
-            - remote-mcp:connect
         sub_scopes:
           type: array
           items:
@@ -23341,14 +23338,11 @@ components:
             enum:
               - org:read
               - org:admin
-              - build:read
-              - build:write
+              - project:read
+              - project:write
               - mcp:read
               - mcp:write
               - mcp:connect
-              - remote-mcp:read
-              - remote-mcp:write
-              - remote-mcp:connect
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -25567,14 +25561,11 @@ components:
           enum:
             - org:read
             - org:admin
-            - build:read
-            - build:write
+            - project:read
+            - project:write
             - mcp:read
             - mcp:write
             - mcp:connect
-            - remote-mcp:read
-            - remote-mcp:write
-            - remote-mcp:connect
       required:
         - scope
     ScopeDefinition:
@@ -25590,21 +25581,17 @@ components:
             - org
             - project
             - mcp
-            - remote-mcp
         slug:
           type: string
           description: Unique scope identifier.
           enum:
             - org:read
             - org:admin
-            - build:read
-            - build:write
+            - project:read
+            - project:write
             - mcp:read
             - mcp:write
             - mcp:connect
-            - remote-mcp:read
-            - remote-mcp:write
-            - remote-mcp:connect
       required:
         - slug
         - description

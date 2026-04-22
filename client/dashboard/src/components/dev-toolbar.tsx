@@ -35,14 +35,14 @@ const SCOPE_DEFS: {
     description: "Manage org settings & access",
   },
   {
-    scope: "build:read",
-    label: "build:read",
+    scope: "project:read",
+    label: "project:read",
     resourceType: "project",
     description: "View projects & build resources",
   },
   {
-    scope: "build:write",
-    label: "build:write",
+    scope: "project:write",
+    label: "project:write",
     resourceType: "project",
     description: "Modify projects & build resources",
   },

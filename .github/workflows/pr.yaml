@@ -1261,7 +1261,7 @@ jobs:
     steps:
       - name: Generate GitHub App Token
         id: generate-token
-        uses: actions/create-github-app-token@b96fde71c0080358ed6e2d162f11c612c92a97d1 # v2.1.4
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         with:
           app-id: ${{ vars.GRAM_BOT_APP_ID }}
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}

@@ -1356,7 +1356,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     domain && canAccessCustomDomain && !toolset.customDomainId ? (
       linkDomainButton
     ) : (
-      <RequireScope scope="build:write" level="component">
+      <RequireScope scope="project:write" level="component">
         <Button
           variant="secondary"
           size="sm"

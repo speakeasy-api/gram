@@ -103,6 +103,28 @@ useEffect(() => {
 }, [logs]); // or parsedLogs, depending on the component
 ```
 
+### Tooltip Usage
+
+`App.tsx` wraps the entire app in a global `TooltipProvider`. **Never add another `TooltipProvider` inside a component** — doing so creates a redundant Radix context per instance and contributes to `ResizeObserver loop completed with undelivered notifications` errors in the browser.
+
+Use `<Tooltip>`, `<TooltipTrigger>`, and `<TooltipContent>` directly — they inherit the global provider automatically. For simple cases use the existing `<SimpleTooltip tooltip="...">` wrapper from `@/components/ui/tooltip`.
+
+```tsx
+// ✅ correct
+<Tooltip>
+  <TooltipTrigger asChild>{button}</TooltipTrigger>
+  <TooltipContent>Hello</TooltipContent>
+</Tooltip>
+
+// ❌ wrong — TooltipProvider already exists at the app root
+<TooltipProvider>
+  <Tooltip>
+    <TooltipTrigger asChild>{button}</TooltipTrigger>
+    <TooltipContent>Hello</TooltipContent>
+  </Tooltip>
+</TooltipProvider>
+```
+
 ### Styling and Design System
 
 - **ALWAYS use Moonshine design system utilities** from `@speakeasy-api/moonshine` instead of hardcoded Tailwind color values

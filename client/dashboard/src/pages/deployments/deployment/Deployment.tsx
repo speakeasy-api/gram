@@ -179,7 +179,7 @@ const HeadingSection = () => {
   return (
     <div className="flex items-center justify-between">
       <Heading variant="h1">Deployment Overview</Heading>
-      <RequireScope scope="build:write" level="section">
+      <RequireScope scope="project:write" level="section">
         <RedeployButton />
       </RequireScope>
     </div>

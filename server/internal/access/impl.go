@@ -517,14 +517,11 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 	return &gen.ListScopesResult{Scopes: []*gen.ScopeDefinition{
 		{Slug: string(ScopeOrgRead), Description: "Read organization metadata and members.", ResourceType: "org"},
 		{Slug: string(ScopeOrgAdmin), Description: "Manage organization access and settings.", ResourceType: "org"},
-		{Slug: string(ScopeBuildRead), Description: "View projects and build-related resources.", ResourceType: "project"},
-		{Slug: string(ScopeBuildWrite), Description: "Create and modify projects and build-related resources.", ResourceType: "project"},
+		{Slug: string(ScopeProjectRead), Description: "View projects and build-related resources.", ResourceType: "project"},
+		{Slug: string(ScopeProjectWrite), Description: "Create and modify projects and build-related resources.", ResourceType: "project"},
 		{Slug: string(ScopeMCPRead), Description: "View MCP servers and configuration.", ResourceType: "mcp"},
 		{Slug: string(ScopeMCPWrite), Description: "Create and modify MCP servers and configuration.", ResourceType: "mcp"},
 		{Slug: string(ScopeMCPConnect), Description: "Connect to and use MCP servers.", ResourceType: "mcp"},
-		{Slug: string(ScopeRemoteMCPRead), Description: "View remote MCP servers and configuration.", ResourceType: "remote-mcp"},
-		{Slug: string(ScopeRemoteMCPWrite), Description: "Create and modify remote MCP servers and configuration.", ResourceType: "remote-mcp"},
-		{Slug: string(ScopeRemoteMCPConnect), Description: "Connect to and use remote MCP servers.", ResourceType: "remote-mcp"},
 	}}, nil
 }
 
@@ -968,14 +965,11 @@ func fullAccessGrantPayloads() []*gen.ListRoleGrant {
 	return []*gen.ListRoleGrant{
 		{Scope: string(ScopeOrgRead), Resources: nil},
 		{Scope: string(ScopeOrgAdmin), Resources: nil},
-		{Scope: string(ScopeBuildRead), Resources: nil},
-		{Scope: string(ScopeBuildWrite), Resources: nil},
+		{Scope: string(ScopeProjectRead), Resources: nil},
+		{Scope: string(ScopeProjectWrite), Resources: nil},
 		{Scope: string(ScopeMCPRead), Resources: nil},
 		{Scope: string(ScopeMCPWrite), Resources: nil},
 		{Scope: string(ScopeMCPConnect), Resources: nil},
-		{Scope: string(ScopeRemoteMCPRead), Resources: nil},
-		{Scope: string(ScopeRemoteMCPWrite), Resources: nil},
-		{Scope: string(ScopeRemoteMCPConnect), Resources: nil},
 	}
 }
 

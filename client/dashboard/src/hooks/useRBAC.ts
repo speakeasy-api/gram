@@ -6,7 +6,7 @@ import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-export type { Scope };
+export { Scope };
 
 /**
  * Core RBAC hook. Fetches the current user's effective grants and provides

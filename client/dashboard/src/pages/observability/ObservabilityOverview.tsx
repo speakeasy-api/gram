@@ -539,7 +539,7 @@ function parseLocalDate(dateStr: string): Date {
 
 export default function ObservabilityOverview() {
   return (
-    <RequireScope scope="build:read" level="page">
+    <RequireScope scope="project:read" level="page">
       <ObservabilityOverviewInner />
     </RequireScope>
   );

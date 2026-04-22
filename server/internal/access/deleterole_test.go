@@ -28,7 +28,7 @@ func TestService_DeleteRole(t *testing.T) {
 		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
 	}, nil).Once()
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeBuildRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeProjectRead, "project-1")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeMCPConnect, WildcardResource)
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
@@ -73,7 +73,7 @@ func TestService_DeleteRole_WorkOSDeleteFailure(t *testing.T) {
 		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
 	}, nil).Once()
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(errors.New("workos unavailable")).Once()
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeBuildRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeProjectRead, "project-1")
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
 	require.Error(t, err)
@@ -98,7 +98,7 @@ func TestService_DeleteRole_AuditLog(t *testing.T) {
 		mockRole("role_custom", "Audit Builder", "custom-builder", "Old description"),
 	}, nil).Once()
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeBuildRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeProjectRead, "project-1")
 
 	err = ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
 	require.NoError(t, err)

@@ -27,7 +27,7 @@ export default function DeploymentsPage() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope={["build:read", "build:write"]} level="page">
+        <RequireScope scope={["project:read", "project:write"]} level="page">
           <Suspense fallback={<div>Loading...</div>}>
             <DeploymentsTable />
           </Suspense>
@@ -97,7 +97,7 @@ function DeploymentActionsDropdown({
     : actionText;
 
   return (
-    <RequireScope scope="build:write" level="section">
+    <RequireScope scope="project:write" level="section">
       <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
         <DropdownMenuTrigger asChild>
           <Button variant="tertiary" size="sm" className="h-8 w-8 p-0">

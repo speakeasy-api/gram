@@ -7574,8 +7574,8 @@ func ValidateRoleGrantResponseBody(body *RoleGrantResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "build:read" || *body.Scope == "build:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "remote-mcp:read" || *body.Scope == "remote-mcp:write" || *body.Scope == "remote-mcp:connect") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect", "remote-mcp:read", "remote-mcp:write", "remote-mcp:connect"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect"}))
 		}
 	}
 	return
@@ -7584,8 +7584,8 @@ func ValidateRoleGrantResponseBody(body *RoleGrantResponseBody) (err error) {
 // ValidateRoleGrantRequestBody runs the validations defined on
 // RoleGrantRequestBody
 func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
-	if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "build:read" || body.Scope == "build:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "remote-mcp:read" || body.Scope == "remote-mcp:write" || body.Scope == "remote-mcp:connect") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect", "remote-mcp:read", "remote-mcp:write", "remote-mcp:connect"}))
+	if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect"}))
 	}
 	return
 }
@@ -7603,13 +7603,13 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_type", "body"))
 	}
 	if body.Slug != nil {
-		if !(*body.Slug == "org:read" || *body.Slug == "org:admin" || *body.Slug == "build:read" || *body.Slug == "build:write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:connect" || *body.Slug == "remote-mcp:read" || *body.Slug == "remote-mcp:write" || *body.Slug == "remote-mcp:connect") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect", "remote-mcp:read", "remote-mcp:write", "remote-mcp:connect"}))
+		if !(*body.Slug == "org:read" || *body.Slug == "org:admin" || *body.Slug == "project:read" || *body.Slug == "project:write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:connect") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect"}))
 		}
 	}
 	if body.ResourceType != nil {
-		if !(*body.ResourceType == "org" || *body.ResourceType == "project" || *body.ResourceType == "mcp" || *body.ResourceType == "remote-mcp") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_type", *body.ResourceType, []any{"org", "project", "mcp", "remote-mcp"}))
+		if !(*body.ResourceType == "org" || *body.ResourceType == "project" || *body.ResourceType == "mcp") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_type", *body.ResourceType, []any{"org", "project", "mcp"}))
 		}
 	}
 	return
@@ -7646,13 +7646,13 @@ func ValidateListRoleGrantResponseBody(body *ListRoleGrantResponseBody) (err err
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "build:read" || *body.Scope == "build:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "remote-mcp:read" || *body.Scope == "remote-mcp:write" || *body.Scope == "remote-mcp:connect") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect", "remote-mcp:read", "remote-mcp:write", "remote-mcp:connect"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect"}))
 		}
 	}
 	for _, e := range body.SubScopes {
-		if !(e == "org:read" || e == "org:admin" || e == "build:read" || e == "build:write" || e == "mcp:read" || e == "mcp:write" || e == "mcp:connect" || e == "remote-mcp:read" || e == "remote-mcp:write" || e == "remote-mcp:connect") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect", "remote-mcp:read", "remote-mcp:write", "remote-mcp:connect"}))
+		if !(e == "org:read" || e == "org:admin" || e == "project:read" || e == "project:write" || e == "mcp:read" || e == "mcp:write" || e == "mcp:connect") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect"}))
 		}
 	}
 	return
