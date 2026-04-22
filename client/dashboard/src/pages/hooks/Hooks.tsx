@@ -808,6 +808,9 @@ function HooksInnerContent({
   );
   const [isLogsVisible, setIsLogsVisible] = useState(false);
   const { expandedChart, setExpandedChart } = useExpandedChart();
+  useEffect(() => {
+    if (summaryPending) setExpandedChart(null);
+  }, [summaryPending, setExpandedChart]);
 
   return (
     <>
