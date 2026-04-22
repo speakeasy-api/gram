@@ -13,8 +13,8 @@ func (c Check) selector() Selector {
 
 // expand returns all scope variants that would satisfy this check: the check's
 // own scope, any higher-privilege scopes that imply it, and ScopeRoot. Selector
-// matching handles wildcard grants natively (empty selector matches any check),
-// so we only need one entry per scope level.
+// matching handles wildcard grants natively ({"resource_id":"*"} matches any
+// check), so we only need one entry per scope level.
 func (c Check) expand() []Check {
 	checks := []Check{
 		{Scope: ScopeRoot, ResourceID: c.ResourceID},
