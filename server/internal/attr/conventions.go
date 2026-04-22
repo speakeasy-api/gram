@@ -167,7 +167,7 @@ const (
 	OAuthConnectedKey              = attribute.Key("gram.oauth.connected")
 	OAuthExpiredKey                = attribute.Key("gram.oauth.expired")
 	OAuthProxyServerIDKey          = attribute.Key("gram.oauth.proxy_server_id")
-	ObserverCountKey               = attribute.Key("gram.observer.count")
+	MessageObserverCountKey        = attribute.Key("gram.message_observer.count")
 	OAuthProviderCountKey          = attribute.Key("gram.oauth.provider_count")
 	OpenAPIMethodKey               = attribute.Key("gram.openapi.method")
 	OpenAPIOperationIDKey          = attribute.Key("gram.openapi.operation_id")
@@ -778,8 +778,10 @@ func SlogOAuthProxyServerID(v string) slog.Attr {
 	return slog.String(string(OAuthProxyServerIDKey), v)
 }
 
-func ObserverCount(v int) attribute.KeyValue { return ObserverCountKey.Int(v) }
-func SlogObserverCount(v int) slog.Attr      { return slog.Int(string(ObserverCountKey), v) }
+func MessageObserverCount(v int) attribute.KeyValue { return MessageObserverCountKey.Int(v) }
+func SlogMessageObserverCount(v int) slog.Attr {
+	return slog.Int(string(MessageObserverCountKey), v)
+}
 
 func OAuthProviderCount(v int) attribute.KeyValue { return OAuthProviderCountKey.Int(v) }
 func SlogOAuthProviderCount(v int) slog.Attr      { return slog.Int(string(OAuthProviderCountKey), v) }
