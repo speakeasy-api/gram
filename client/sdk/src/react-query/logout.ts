@@ -28,7 +28,6 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type LogoutMutationVariables = {
-  request?: operations.LogoutRequest | undefined;
   security?: operations.LogoutSecurity | undefined;
   options?: RequestOptions;
 };
@@ -86,7 +85,6 @@ export function buildLogoutMutation(
   return {
     mutationKey: mutationKeyLogout(),
     mutationFn: function logoutMutationFn({
-      request,
       security,
       options,
     }): Promise<LogoutMutationData> {
@@ -104,7 +102,6 @@ export function buildLogoutMutation(
       };
       return unwrapAsync(authLogout(
         client$,
-        request,
         security,
         mergedOptions,
       ));

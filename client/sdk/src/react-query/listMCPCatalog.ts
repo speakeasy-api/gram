@@ -108,9 +108,6 @@ export function setListMCPCatalogData(
       registryId?: string | undefined;
       search?: string | undefined;
       cursor?: string | undefined;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
     },
   ],
   data: ListMCPCatalogQueryData,
@@ -127,9 +124,6 @@ export function invalidateListMCPCatalog(
       registryId?: string | undefined;
       search?: string | undefined;
       cursor?: string | undefined;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type GetHooksSummarySecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type GetHooksSummarySecurityOption2 = {
 export type GetHooksSummarySecurity = {
   option1?: GetHooksSummarySecurityOption1 | undefined;
   option2?: GetHooksSummarySecurityOption2 | undefined;
-};
-
-export type GetHooksSummaryRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  getHooksSummaryPayload: components.GetHooksSummaryPayload;
 };
 
 /** @internal */
@@ -135,42 +118,5 @@ export function getHooksSummarySecurityToJSON(
 ): string {
   return JSON.stringify(
     GetHooksSummarySecurity$outboundSchema.parse(getHooksSummarySecurity),
-  );
-}
-
-/** @internal */
-export type GetHooksSummaryRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  GetHooksSummaryPayload: components.GetHooksSummaryPayload$Outbound;
-};
-
-/** @internal */
-export const GetHooksSummaryRequest$outboundSchema: z.ZodMiniType<
-  GetHooksSummaryRequest$Outbound,
-  GetHooksSummaryRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    getHooksSummaryPayload: components.GetHooksSummaryPayload$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      getHooksSummaryPayload: "GetHooksSummaryPayload",
-    });
-  }),
-);
-
-export function getHooksSummaryRequestToJSON(
-  getHooksSummaryRequest: GetHooksSummaryRequest,
-): string {
-  return JSON.stringify(
-    GetHooksSummaryRequest$outboundSchema.parse(getHooksSummaryRequest),
   );
 }

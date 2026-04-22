@@ -10,17 +10,6 @@ export type ListToolsetsForOrgSecurity = {
   apikeyHeaderGramKey?: string | undefined;
 };
 
-export type ListToolsetsForOrgRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-};
-
 /** @internal */
 export type ListToolsetsForOrgSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
@@ -49,36 +38,5 @@ export function listToolsetsForOrgSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListToolsetsForOrgSecurity$outboundSchema.parse(listToolsetsForOrgSecurity),
-  );
-}
-
-/** @internal */
-export type ListToolsetsForOrgRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-};
-
-/** @internal */
-export const ListToolsetsForOrgRequest$outboundSchema: z.ZodMiniType<
-  ListToolsetsForOrgRequest$Outbound,
-  ListToolsetsForOrgRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-    });
-  }),
-);
-
-export function listToolsetsForOrgRequestToJSON(
-  listToolsetsForOrgRequest: ListToolsetsForOrgRequest,
-): string {
-  return JSON.stringify(
-    ListToolsetsForOrgRequest$outboundSchema.parse(listToolsetsForOrgRequest),
   );
 }

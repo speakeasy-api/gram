@@ -4,23 +4,10 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type CreateProjectSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
-};
-
-export type CreateProjectRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  createProjectRequestBody: components.CreateProjectRequestBody;
 };
 
 /** @internal */
@@ -51,40 +38,5 @@ export function createProjectSecurityToJSON(
 ): string {
   return JSON.stringify(
     CreateProjectSecurity$outboundSchema.parse(createProjectSecurity),
-  );
-}
-
-/** @internal */
-export type CreateProjectRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  CreateProjectRequestBody: components.CreateProjectRequestBody$Outbound;
-};
-
-/** @internal */
-export const CreateProjectRequest$outboundSchema: z.ZodMiniType<
-  CreateProjectRequest$Outbound,
-  CreateProjectRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    createProjectRequestBody:
-      components.CreateProjectRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      createProjectRequestBody: "CreateProjectRequestBody",
-    });
-  }),
-);
-
-export function createProjectRequestToJSON(
-  createProjectRequest: CreateProjectRequest,
-): string {
-  return JSON.stringify(
-    CreateProjectRequest$outboundSchema.parse(createProjectRequest),
   );
 }

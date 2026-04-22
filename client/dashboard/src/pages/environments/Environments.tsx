@@ -63,12 +63,10 @@ function EnvironmentsInner() {
   const createEnvironment = () => {
     createEnvironmentMutation.mutate({
       request: {
-        createEnvironmentForm: {
-          name: environmentName,
-          description: "New Environment Description",
-          entries: [],
-          organizationId: session.activeOrganizationId,
-        },
+        name: environmentName,
+        description: "New Environment Description",
+        entries: [],
+        organizationId: session.activeOrganizationId,
       },
     });
   };

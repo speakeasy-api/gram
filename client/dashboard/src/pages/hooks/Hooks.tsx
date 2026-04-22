@@ -433,16 +433,14 @@ function HooksContent() {
       queryFn: ({ pageParam }) =>
         unwrapAsync(
           telemetryListHooksTraces(client, {
-            listHooksTracesPayload: {
-              from,
-              to,
-              filters: logFilters,
-              typesToInclude:
-                selectedHookTypes.length > 0 ? selectedHookTypes : undefined,
-              cursor: pageParam,
-              limit: perPage,
-              sort: "desc",
-            },
+            from,
+            to,
+            filters: logFilters,
+            typesToInclude:
+              selectedHookTypes.length > 0 ? selectedHookTypes : undefined,
+            cursor: pageParam,
+            limit: perPage,
+            sort: "desc",
           }),
         ),
       initialPageParam: undefined as string | undefined,
@@ -472,13 +470,11 @@ function HooksContent() {
     queryFn: () =>
       unwrapAsync(
         telemetryGetHooksSummary(client, {
-          getHooksSummaryPayload: {
-            from,
-            to,
-            filters: logFilters,
-            typesToInclude:
-              selectedHookTypes.length > 0 ? selectedHookTypes : undefined,
-          },
+          from,
+          to,
+          filters: logFilters,
+          typesToInclude:
+            selectedHookTypes.length > 0 ? selectedHookTypes : undefined,
         }),
       ),
     throwOnError: false,

@@ -20,21 +20,6 @@ export type ListRiskPoliciesSecurity = {
   option2?: ListRiskPoliciesSecurityOption2 | undefined;
 };
 
-export type ListRiskPoliciesRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-};
-
 /** @internal */
 export type ListRiskPoliciesSecurityOption1$Outbound = {
   "apikey_header_Gram-Key": string;
@@ -133,39 +118,5 @@ export function listRiskPoliciesSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListRiskPoliciesSecurity$outboundSchema.parse(listRiskPoliciesSecurity),
-  );
-}
-
-/** @internal */
-export type ListRiskPoliciesRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const ListRiskPoliciesRequest$outboundSchema: z.ZodMiniType<
-  ListRiskPoliciesRequest$Outbound,
-  ListRiskPoliciesRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
-
-export function listRiskPoliciesRequestToJSON(
-  listRiskPoliciesRequest: ListRiskPoliciesRequest,
-): string {
-  return JSON.stringify(
-    ListRiskPoliciesRequest$outboundSchema.parse(listRiskPoliciesRequest),
   );
 }

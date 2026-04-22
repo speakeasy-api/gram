@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -35,7 +35,7 @@ import { Result } from "../types/fp.js";
  */
 export function triggersCreate(
   client: GramCore,
-  request: operations.CreateTriggerInstanceRequest,
+  request: components.CreateTriggerInstanceForm,
   security?: operations.CreateTriggerInstanceSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -62,7 +62,7 @@ export function triggersCreate(
 
 async function $do(
   client: GramCore,
-  request: operations.CreateTriggerInstanceRequest,
+  request: components.CreateTriggerInstanceForm,
   security?: operations.CreateTriggerInstanceSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -85,30 +85,20 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.CreateTriggerInstanceRequest$outboundSchema, value),
+      z.parse(components.CreateTriggerInstanceForm$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.CreateTriggerInstanceForm, {
-    explode: true,
-  });
+  const body = encodeJSON("body", payload, { explode: true });
 
   const path = pathToFunc("/rpc/triggers.create")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
-      explode: false,
-      charEncoding: "none",
-    }),
   }));
 
   const requestSecurity = resolveSecurity(

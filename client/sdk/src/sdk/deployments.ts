@@ -23,13 +23,11 @@ export class Deployments extends ClientSDK {
    * Get the active deployment for a project.
    */
   async active(
-    request?: operations.GetActiveDeploymentRequest | undefined,
     security?: operations.GetActiveDeploymentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GetActiveDeploymentResult> {
     return unwrapAsync(deploymentsActive(
       this,
-      request,
       security,
       options,
     ));
@@ -61,7 +59,7 @@ export class Deployments extends ClientSDK {
    * Create a new deployment with additional or updated tool sources.
    */
   async evolveDeployment(
-    request: operations.EvolveDeploymentRequest,
+    request: components.EvolveForm,
     security?: operations.EvolveDeploymentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.EvolveResult> {
@@ -99,13 +97,11 @@ export class Deployments extends ClientSDK {
    * Get the latest deployment for a project.
    */
   async latest(
-    request?: operations.GetLatestDeploymentRequest | undefined,
     security?: operations.GetLatestDeploymentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GetLatestDeploymentResult> {
     return unwrapAsync(deploymentsLatest(
       this,
-      request,
       security,
       options,
     ));
@@ -156,7 +152,7 @@ export class Deployments extends ClientSDK {
    * Redeploys an existing deployment.
    */
   async redeployDeployment(
-    request: operations.RedeployDeploymentRequest,
+    request: components.RedeployRequestBody,
     security?: operations.RedeployDeploymentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.RedeployResult> {

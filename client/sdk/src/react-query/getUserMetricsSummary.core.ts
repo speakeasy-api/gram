@@ -20,7 +20,7 @@ export type GetUserMetricsSummaryQueryData =
 export function prefetchGetUserMetricsSummary(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetUserMetricsSummaryRequest,
+  request: components.GetUserMetricsSummaryPayload,
   security?: operations.GetUserMetricsSummarySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -36,7 +36,7 @@ export function prefetchGetUserMetricsSummary(
 
 export function buildGetUserMetricsSummaryQuery(
   client$: GramCore,
-  request: operations.GetUserMetricsSummaryRequest,
+  request: components.GetUserMetricsSummaryPayload,
   security?: operations.GetUserMetricsSummarySecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -46,11 +46,7 @@ export function buildGetUserMetricsSummaryQuery(
   ) => Promise<GetUserMetricsSummaryQueryData>;
 } {
   return {
-    queryKey: queryKeyGetUserMetricsSummary({
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyGetUserMetricsSummary(),
     queryFn: async function getUserMetricsSummaryQueryFn(
       ctx,
     ): Promise<GetUserMetricsSummaryQueryData> {
@@ -75,12 +71,6 @@ export function buildGetUserMetricsSummaryQuery(
   };
 }
 
-export function queryKeyGetUserMetricsSummary(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "telemetry", "getUserMetricsSummary", parameters];
+export function queryKeyGetUserMetricsSummary(): QueryKey {
+  return ["@gram/client", "telemetry", "getUserMetricsSummary"];
 }

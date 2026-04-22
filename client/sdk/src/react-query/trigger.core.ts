@@ -43,11 +43,7 @@ export function buildTriggerQuery(
   queryFn: (context: QueryFunctionContext) => Promise<TriggerQueryData>;
 } {
   return {
-    queryKey: queryKeyTrigger({
-      id: request.id,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyTrigger({ id: request.id }),
     queryFn: async function triggerQueryFn(ctx): Promise<TriggerQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -70,12 +66,6 @@ export function buildTriggerQuery(
   };
 }
 
-export function queryKeyTrigger(
-  parameters: {
-    id: string;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
+export function queryKeyTrigger(parameters: { id: string }): QueryKey {
   return ["@gram/client", "triggers", "get", parameters];
 }

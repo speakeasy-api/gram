@@ -55,7 +55,13 @@ export default function CreateCollection() {
   const toolsetQueries = useQueries({
     queries: projects.map((project) => ({
       queryKey: ["toolsets", "list", project.slug],
-      queryFn: () => client.toolsets.list({ gramProject: project.slug }),
+      queryFn: () =>
+        client.toolsets.list({
+          option1: {
+            sessionHeaderGramSession: "",
+            projectSlugHeaderGramProject: project.slug,
+          },
+        }),
       enabled: !!project.slug,
     })),
   });
@@ -130,14 +136,12 @@ export default function CreateCollection() {
 
     await createCollection.mutateAsync({
       request: {
-        createRequestBody2: {
-          name,
-          slug,
-          mcpRegistryNamespace: namespace,
-          description: description || undefined,
-          visibility,
-          toolsetIds: toolsetIds.length > 0 ? toolsetIds : undefined,
-        },
+        name,
+        slug,
+        mcpRegistryNamespace: namespace,
+        description: description || undefined,
+        visibility,
+        toolsetIds: toolsetIds.length > 0 ? toolsetIds : undefined,
       },
     });
     orgRoutes.collections.goTo();

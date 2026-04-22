@@ -45,8 +45,6 @@ export function buildServeOpenAPIv3Query(
     queryKey: queryKeyServeOpenAPIv3({
       id: request.id,
       projectId: request.projectId,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
     }),
     queryFn: async function serveOpenAPIv3QueryFn(
       ctx,
@@ -73,12 +71,7 @@ export function buildServeOpenAPIv3Query(
 }
 
 export function queryKeyServeOpenAPIv3(
-  parameters: {
-    id: string;
-    projectId: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
+  parameters: { id: string; projectId: string },
 ): QueryKey {
   return ["@gram/client", "assets", "serveOpenAPIv3", parameters];
 }

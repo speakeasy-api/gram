@@ -974,21 +974,17 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
   ) => {
     if (tool.type === "prompt") {
       await client.templates.update({
-        updatePromptTemplateForm: {
-          ...tool,
-          ...updates,
-        },
+        ...tool,
+        ...updates,
       });
       invalidateTemplate(queryClient, [{ name: tool.name }]);
     } else {
       await client.variations.upsertGlobal({
-        upsertGlobalToolVariationForm: {
-          ...tool.variation,
-          confirm: tool.variation?.confirm as Confirm,
-          ...updates,
-          srcToolName: tool.canonicalName,
-          srcToolUrn: tool.toolUrn,
-        },
+        ...tool.variation,
+        confirm: tool.variation?.confirm as Confirm,
+        ...updates,
+        srcToolName: tool.canonicalName,
+        srcToolUrn: tool.toolUrn,
       });
     }
 
@@ -1210,9 +1206,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     try {
       const result = await exportMutation.mutateAsync({
         request: {
-          exportMcpMetadataRequestBody: {
-            mcpSlug: toolset.mcpSlug,
-          },
+          mcpSlug: toolset.mcpSlug,
         },
       });
 
@@ -1261,11 +1255,9 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
 
         if (externalMcpSlug) {
           await client.deployments.evolveDeployment({
-            evolveForm: {
-              deploymentId: deployment.id,
-              nonBlocking: true,
-              excludeExternalMcps: [externalMcpSlug],
-            },
+            deploymentId: deployment.id,
+            nonBlocking: true,
+            excludeExternalMcps: [externalMcpSlug],
           });
         }
       }
@@ -1668,20 +1660,16 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
         ...toAttach.map((collectionId) =>
           attachServer.mutateAsync({
             request: {
-              attachServerRequestBody: {
-                collectionId,
-                toolsetId: toolset.id,
-              },
+              collectionId,
+              toolsetId: toolset.id,
             },
           }),
         ),
         ...toDetach.map((collectionId) =>
           detachServer.mutateAsync({
             request: {
-              attachServerRequestBody: {
-                collectionId,
-                toolsetId: toolset.id,
-              },
+              collectionId,
+              toolsetId: toolset.id,
             },
           }),
         ),

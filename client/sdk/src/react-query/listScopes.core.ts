@@ -19,14 +19,12 @@ export type ListScopesQueryData = components.ListScopesResult;
 export function prefetchListScopes(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListScopesRequest | undefined,
   security?: operations.ListScopesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListScopesQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchListScopes(
 
 export function buildListScopesQuery(
   client$: GramCore,
-  request?: operations.ListScopesRequest | undefined,
   security?: operations.ListScopesSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,10 +40,7 @@ export function buildListScopesQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ListScopesQueryData>;
 } {
   return {
-    queryKey: queryKeyListScopes({
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-    }),
+    queryKey: queryKeyListScopes(),
     queryFn: async function listScopesQueryFn(
       ctx,
     ): Promise<ListScopesQueryData> {
@@ -63,7 +57,6 @@ export function buildListScopesQuery(
 
       return unwrapAsync(accessListScopes(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -71,11 +64,6 @@ export function buildListScopesQuery(
   };
 }
 
-export function queryKeyListScopes(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "access", "listScopes", parameters];
+export function queryKeyListScopes(): QueryKey {
+  return ["@gram/client", "access", "listScopes"];
 }

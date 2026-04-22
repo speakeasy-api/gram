@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildSessionInfoQuery,
   prefetchSessionInfo,
@@ -59,7 +55,6 @@ export type SessionInfoQueryError =
  * Provides information about the current authentication status.
  */
 export function useSessionInfo(
-  request?: operations.SessionInfoRequest | undefined,
   security?: operations.SessionInfoSecurity | undefined,
   options?: QueryHookOptions<SessionInfoQueryData, SessionInfoQueryError>,
 ): UseQueryResult<SessionInfoQueryData, SessionInfoQueryError> {
@@ -67,7 +62,6 @@ export function useSessionInfo(
   return useQuery({
     ...buildSessionInfoQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useSessionInfo(
  * Provides information about the current authentication status.
  */
 export function useSessionInfoSuspense(
-  request?: operations.SessionInfoRequest | undefined,
   security?: operations.SessionInfoSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     SessionInfoQueryData,
@@ -93,7 +86,6 @@ export function useSessionInfoSuspense(
   return useSuspenseQuery({
     ...buildSessionInfoQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -103,25 +95,11 @@ export function useSessionInfoSuspense(
 
 export function setSessionInfoData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: SessionInfoQueryData,
 ): SessionInfoQueryData | undefined {
-  const key = queryKeySessionInfo(...queryKeyBase);
+  const key = queryKeySessionInfo();
 
   return client.setQueryData<SessionInfoQueryData>(key, data);
-}
-
-export function invalidateSessionInfo(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "auth", "info", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllSessionInfo(

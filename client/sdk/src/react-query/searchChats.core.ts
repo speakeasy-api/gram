@@ -19,7 +19,7 @@ export type SearchChatsQueryData = components.SearchChatsResult;
 export function prefetchSearchChats(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.SearchChatsRequest,
+  request: components.SearchChatsPayload,
   security?: operations.SearchChatsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -35,7 +35,7 @@ export function prefetchSearchChats(
 
 export function buildSearchChatsQuery(
   client$: GramCore,
-  request: operations.SearchChatsRequest,
+  request: components.SearchChatsPayload,
   security?: operations.SearchChatsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,11 +43,7 @@ export function buildSearchChatsQuery(
   queryFn: (context: QueryFunctionContext) => Promise<SearchChatsQueryData>;
 } {
   return {
-    queryKey: queryKeySearchChats({
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeySearchChats(),
     queryFn: async function searchChatsQueryFn(
       ctx,
     ): Promise<SearchChatsQueryData> {
@@ -72,12 +68,6 @@ export function buildSearchChatsQuery(
   };
 }
 
-export function queryKeySearchChats(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "telemetry", "searchChats", parameters];
+export function queryKeySearchChats(): QueryKey {
+  return ["@gram/client", "telemetry", "searchChats"];
 }

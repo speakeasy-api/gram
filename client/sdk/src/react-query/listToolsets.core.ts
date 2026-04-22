@@ -19,14 +19,12 @@ export type ListToolsetsQueryData = components.ListToolsetsResult;
 export function prefetchListToolsets(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListToolsetsRequest | undefined,
   security?: operations.ListToolsetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListToolsetsQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchListToolsets(
 
 export function buildListToolsetsQuery(
   client$: GramCore,
-  request?: operations.ListToolsetsRequest | undefined,
   security?: operations.ListToolsetsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,11 +40,7 @@ export function buildListToolsetsQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ListToolsetsQueryData>;
 } {
   return {
-    queryKey: queryKeyListToolsets({
-      gramSession: request?.gramSession,
-      gramKey: request?.gramKey,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyListToolsets(),
     queryFn: async function listToolsetsQueryFn(
       ctx,
     ): Promise<ListToolsetsQueryData> {
@@ -64,7 +57,6 @@ export function buildListToolsetsQuery(
 
       return unwrapAsync(toolsetsList(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -72,12 +64,6 @@ export function buildListToolsetsQuery(
   };
 }
 
-export function queryKeyListToolsets(
-  parameters: {
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "toolsets", "list", parameters];
+export function queryKeyListToolsets(): QueryKey {
+  return ["@gram/client", "toolsets", "list"];
 }

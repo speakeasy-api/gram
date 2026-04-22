@@ -47,9 +47,6 @@ export function buildListMCPCatalogQuery(
       registryId: request?.registryId,
       search: request?.search,
       cursor: request?.cursor,
-      gramSession: request?.gramSession,
-      gramKey: request?.gramKey,
-      gramProject: request?.gramProject,
     }),
     queryFn: async function listMCPCatalogQueryFn(
       ctx,
@@ -80,9 +77,6 @@ export function queryKeyListMCPCatalog(
     registryId?: string | undefined;
     search?: string | undefined;
     cursor?: string | undefined;
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-    gramProject?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "mcpRegistries", "listCatalog", parameters];

@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type SetProjectLogoSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type SetProjectLogoSecurityOption2 = {
 export type SetProjectLogoSecurity = {
   option1?: SetProjectLogoSecurityOption1 | undefined;
   option2?: SetProjectLogoSecurityOption2 | undefined;
-};
-
-export type SetProjectLogoRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  getSignedAssetURLForm: components.GetSignedAssetURLForm;
 };
 
 /** @internal */
@@ -135,42 +118,5 @@ export function setProjectLogoSecurityToJSON(
 ): string {
   return JSON.stringify(
     SetProjectLogoSecurity$outboundSchema.parse(setProjectLogoSecurity),
-  );
-}
-
-/** @internal */
-export type SetProjectLogoRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  GetSignedAssetURLForm: components.GetSignedAssetURLForm$Outbound;
-};
-
-/** @internal */
-export const SetProjectLogoRequest$outboundSchema: z.ZodMiniType<
-  SetProjectLogoRequest$Outbound,
-  SetProjectLogoRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    getSignedAssetURLForm: components.GetSignedAssetURLForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      getSignedAssetURLForm: "GetSignedAssetURLForm",
-    });
-  }),
-);
-
-export function setProjectLogoRequestToJSON(
-  setProjectLogoRequest: SetProjectLogoRequest,
-): string {
-  return JSON.stringify(
-    SetProjectLogoRequest$outboundSchema.parse(setProjectLogoRequest),
   );
 }

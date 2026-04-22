@@ -19,14 +19,12 @@ export type ListSlackAppsQueryData = components.ListSlackAppsResult;
 export function prefetchListSlackApps(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListSlackAppsRequest | undefined,
   security?: operations.ListSlackAppsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListSlackAppsQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchListSlackApps(
 
 export function buildListSlackAppsQuery(
   client$: GramCore,
-  request?: operations.ListSlackAppsRequest | undefined,
   security?: operations.ListSlackAppsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,10 +40,7 @@ export function buildListSlackAppsQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ListSlackAppsQueryData>;
 } {
   return {
-    queryKey: queryKeyListSlackApps({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyListSlackApps(),
     queryFn: async function listSlackAppsQueryFn(
       ctx,
     ): Promise<ListSlackAppsQueryData> {
@@ -63,7 +57,6 @@ export function buildListSlackAppsQuery(
 
       return unwrapAsync(slackListSlackApps(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -71,11 +64,6 @@ export function buildListSlackAppsQuery(
   };
 }
 
-export function queryKeyListSlackApps(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "slack", "listSlackApps", parameters];
+export function queryKeyListSlackApps(): QueryKey {
+  return ["@gram/client", "slack", "listSlackApps"];
 }

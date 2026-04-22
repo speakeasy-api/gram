@@ -151,11 +151,9 @@ function CreateSlackAppDialog({
   const handleCreate = async () => {
     const result = await createMutation.mutateAsync({
       request: {
-        createSlackAppRequestBody: {
-          name,
-          toolsetIds: Array.from(selectedToolsetIds),
-          ...(iconAssetId && { iconAssetId }),
-        },
+        name,
+        toolsetIds: Array.from(selectedToolsetIds),
+        ...(iconAssetId && { iconAssetId }),
       },
     });
     handleOpenChange(false);
@@ -292,7 +290,7 @@ export default function SlackAppsIndex() {
 
 function SlackAppsInner() {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const { data, isLoading } = useListSlackApps(undefined, undefined, {
+  const { data, isLoading } = useListSlackApps(undefined, {
     retry: false,
     throwOnError: false,
   });

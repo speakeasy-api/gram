@@ -19,7 +19,7 @@ export type SearchUsersQueryData = components.SearchUsersResult;
 export function prefetchSearchUsers(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.SearchUsersRequest,
+  request: components.SearchUsersPayload,
   security?: operations.SearchUsersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -35,7 +35,7 @@ export function prefetchSearchUsers(
 
 export function buildSearchUsersQuery(
   client$: GramCore,
-  request: operations.SearchUsersRequest,
+  request: components.SearchUsersPayload,
   security?: operations.SearchUsersSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,11 +43,7 @@ export function buildSearchUsersQuery(
   queryFn: (context: QueryFunctionContext) => Promise<SearchUsersQueryData>;
 } {
   return {
-    queryKey: queryKeySearchUsers({
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeySearchUsers(),
     queryFn: async function searchUsersQueryFn(
       ctx,
     ): Promise<SearchUsersQueryData> {
@@ -72,12 +68,6 @@ export function buildSearchUsersQuery(
   };
 }
 
-export function queryKeySearchUsers(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "telemetry", "searchUsers", parameters];
+export function queryKeySearchUsers(): QueryKey {
+  return ["@gram/client", "telemetry", "searchUsers"];
 }

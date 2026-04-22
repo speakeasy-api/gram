@@ -43,11 +43,7 @@ export function buildRoleQuery(
   queryFn: (context: QueryFunctionContext) => Promise<RoleQueryData>;
 } {
   return {
-    queryKey: queryKeyRole({
-      id: request.id,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-    }),
+    queryKey: queryKeyRole({ id: request.id }),
     queryFn: async function roleQueryFn(ctx): Promise<RoleQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -70,12 +66,6 @@ export function buildRoleQuery(
   };
 }
 
-export function queryKeyRole(
-  parameters: {
-    id: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
-): QueryKey {
+export function queryKeyRole(parameters: { id: string }): QueryKey {
   return ["@gram/client", "access", "getRole", parameters];
 }

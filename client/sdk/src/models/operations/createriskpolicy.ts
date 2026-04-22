@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type CreateRiskPolicySecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type CreateRiskPolicySecurityOption2 = {
 export type CreateRiskPolicySecurity = {
   option1?: CreateRiskPolicySecurityOption1 | undefined;
   option2?: CreateRiskPolicySecurityOption2 | undefined;
-};
-
-export type CreateRiskPolicyRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  createRiskPolicyRequestBody: components.CreateRiskPolicyRequestBody;
 };
 
 /** @internal */
@@ -135,43 +118,5 @@ export function createRiskPolicySecurityToJSON(
 ): string {
   return JSON.stringify(
     CreateRiskPolicySecurity$outboundSchema.parse(createRiskPolicySecurity),
-  );
-}
-
-/** @internal */
-export type CreateRiskPolicyRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  CreateRiskPolicyRequestBody: components.CreateRiskPolicyRequestBody$Outbound;
-};
-
-/** @internal */
-export const CreateRiskPolicyRequest$outboundSchema: z.ZodMiniType<
-  CreateRiskPolicyRequest$Outbound,
-  CreateRiskPolicyRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    createRiskPolicyRequestBody:
-      components.CreateRiskPolicyRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      createRiskPolicyRequestBody: "CreateRiskPolicyRequestBody",
-    });
-  }),
-);
-
-export function createRiskPolicyRequestToJSON(
-  createRiskPolicyRequest: CreateRiskPolicyRequest,
-): string {
-  return JSON.stringify(
-    CreateRiskPolicyRequest$outboundSchema.parse(createRiskPolicyRequest),
   );
 }

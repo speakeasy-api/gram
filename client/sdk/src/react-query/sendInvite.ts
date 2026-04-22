@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type SendInviteMutationVariables = {
-  request: operations.SendInviteRequest;
+  request: components.SendInviteRequestBody;
   security?: operations.SendInviteSecurity | undefined;
   options?: RequestOptions;
 };

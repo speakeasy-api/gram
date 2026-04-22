@@ -79,7 +79,7 @@ require (
 	go.temporal.io/sdk/contrib/opentelemetry v0.7.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.4
 	goa.design/clue v1.2.5
-	goa.design/goa/v3 v3.25.3
+	goa.design/goa/v3 v3.26.0
 	golang.org/x/net v0.53.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.43.0

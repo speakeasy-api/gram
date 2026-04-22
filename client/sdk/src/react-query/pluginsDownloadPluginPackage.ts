@@ -113,12 +113,7 @@ export function usePluginsDownloadPluginPackageSuspense(
 export function setPluginsDownloadPluginPackageData(
   client: QueryClient,
   queryKeyBase: [
-    parameters: {
-      pluginId: string;
-      platform: operations.Platform;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
+    parameters: { pluginId: string; platform: operations.Platform },
   ],
   data: PluginsDownloadPluginPackageQueryData,
 ): PluginsDownloadPluginPackageQueryData | undefined {
@@ -130,12 +125,7 @@ export function setPluginsDownloadPluginPackageData(
 export function invalidatePluginsDownloadPluginPackage(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      pluginId: string;
-      platform: operations.Platform;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
+    [parameters: { pluginId: string; platform: operations.Platform }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

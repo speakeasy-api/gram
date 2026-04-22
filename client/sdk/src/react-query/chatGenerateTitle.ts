@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type ChatGenerateTitleMutationVariables = {
-  request: operations.GenerateTitleRequest;
+  request: components.ServeImageForm;
   security?: operations.GenerateTitleSecurity | undefined;
   options?: RequestOptions;
 };

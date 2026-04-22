@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type CreateSignedChatAttachmentURLSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -25,27 +24,6 @@ export type CreateSignedChatAttachmentURLSecurity = {
   option1?: CreateSignedChatAttachmentURLSecurityOption1 | undefined;
   option2?: CreateSignedChatAttachmentURLSecurityOption2 | undefined;
   option3?: CreateSignedChatAttachmentURLSecurityOption3 | undefined;
-};
-
-export type CreateSignedChatAttachmentURLRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * Chat Sessions token header
-   */
-  gramChatSession?: string | undefined;
-  createSignedChatAttachmentURLForm2:
-    components.CreateSignedChatAttachmentURLForm2;
 };
 
 /** @internal */
@@ -199,50 +177,6 @@ export function createSignedChatAttachmentURLSecurityToJSON(
   return JSON.stringify(
     CreateSignedChatAttachmentURLSecurity$outboundSchema.parse(
       createSignedChatAttachmentURLSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type CreateSignedChatAttachmentURLRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Chat-Session"?: string | undefined;
-  CreateSignedChatAttachmentURLForm2:
-    components.CreateSignedChatAttachmentURLForm2$Outbound;
-};
-
-/** @internal */
-export const CreateSignedChatAttachmentURLRequest$outboundSchema: z.ZodMiniType<
-  CreateSignedChatAttachmentURLRequest$Outbound,
-  CreateSignedChatAttachmentURLRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramChatSession: z.optional(z.string()),
-    createSignedChatAttachmentURLForm2:
-      components.CreateSignedChatAttachmentURLForm2$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-      gramSession: "Gram-Session",
-      gramChatSession: "Gram-Chat-Session",
-      createSignedChatAttachmentURLForm2: "CreateSignedChatAttachmentURLForm2",
-    });
-  }),
-);
-
-export function createSignedChatAttachmentURLRequestToJSON(
-  createSignedChatAttachmentURLRequest: CreateSignedChatAttachmentURLRequest,
-): string {
-  return JSON.stringify(
-    CreateSignedChatAttachmentURLRequest$outboundSchema.parse(
-      createSignedChatAttachmentURLRequest,
     ),
   );
 }

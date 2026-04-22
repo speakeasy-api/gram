@@ -47,8 +47,6 @@ export function buildListResourcesQuery(
       cursor: request?.cursor,
       limit: request?.limit,
       deploymentId: request?.deploymentId,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
     }),
     queryFn: async function listResourcesQueryFn(
       ctx,
@@ -79,8 +77,6 @@ export function queryKeyListResources(
     cursor?: string | undefined;
     limit?: number | undefined;
     deploymentId?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "resources", "list", parameters];

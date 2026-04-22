@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RiskCreatePolicyMutationVariables = {
-  request: operations.CreateRiskPolicyRequest;
+  request: components.CreateRiskPolicyRequestBody;
   security?: operations.CreateRiskPolicySecurity | undefined;
   options?: RequestOptions;
 };

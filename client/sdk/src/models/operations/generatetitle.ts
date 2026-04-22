@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type GenerateTitleSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -18,22 +17,6 @@ export type GenerateTitleSecurityOption2 = {
 export type GenerateTitleSecurity = {
   option1?: GenerateTitleSecurityOption1 | undefined;
   option2?: GenerateTitleSecurityOption2 | undefined;
-};
-
-export type GenerateTitleRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  /**
-   * Chat Sessions token header
-   */
-  gramChatSession?: string | undefined;
-  serveImageForm: components.ServeImageForm;
 };
 
 /** @internal */
@@ -132,42 +115,5 @@ export function generateTitleSecurityToJSON(
 ): string {
   return JSON.stringify(
     GenerateTitleSecurity$outboundSchema.parse(generateTitleSecurity),
-  );
-}
-
-/** @internal */
-export type GenerateTitleRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  "Gram-Chat-Session"?: string | undefined;
-  ServeImageForm: components.ServeImageForm$Outbound;
-};
-
-/** @internal */
-export const GenerateTitleRequest$outboundSchema: z.ZodMiniType<
-  GenerateTitleRequest$Outbound,
-  GenerateTitleRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    gramChatSession: z.optional(z.string()),
-    serveImageForm: components.ServeImageForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      gramChatSession: "Gram-Chat-Session",
-      serveImageForm: "ServeImageForm",
-    });
-  }),
-);
-
-export function generateTitleRequestToJSON(
-  generateTitleRequest: GenerateTitleRequest,
-): string {
-  return JSON.stringify(
-    GenerateTitleRequest$outboundSchema.parse(generateTitleRequest),
   );
 }

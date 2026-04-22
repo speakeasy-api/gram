@@ -19,14 +19,12 @@ export type TemplatesQueryData = components.ListPromptTemplatesResult;
 export function prefetchTemplates(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListTemplatesRequest | undefined,
   security?: operations.ListTemplatesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildTemplatesQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchTemplates(
 
 export function buildTemplatesQuery(
   client$: GramCore,
-  request?: operations.ListTemplatesRequest | undefined,
   security?: operations.ListTemplatesSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,11 +40,7 @@ export function buildTemplatesQuery(
   queryFn: (context: QueryFunctionContext) => Promise<TemplatesQueryData>;
 } {
   return {
-    queryKey: queryKeyTemplates({
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyTemplates(),
     queryFn: async function templatesQueryFn(ctx): Promise<TemplatesQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -62,7 +55,6 @@ export function buildTemplatesQuery(
 
       return unwrapAsync(templatesList(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -70,12 +62,6 @@ export function buildTemplatesQuery(
   };
 }
 
-export function queryKeyTemplates(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "templates", "list", parameters];
+export function queryKeyTemplates(): QueryKey {
+  return ["@gram/client", "templates", "list"];
 }

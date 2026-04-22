@@ -159,10 +159,10 @@ function FooterActions({ onCompletion }: { onCompletion?: () => void }) {
   const stepper = useStepper();
   const routes = useRoutes();
 
-  const latestDeployment = useLatestDeployment(undefined, undefined, {
+  const latestDeployment = useLatestDeployment(undefined, {
     enabled: false,
   });
-  const assetsList = useListAssets(undefined, undefined, { enabled: false });
+  const assetsList = useListAssets(undefined, { enabled: false });
 
   const handleContinue = () => {
     assetsList.refetch();

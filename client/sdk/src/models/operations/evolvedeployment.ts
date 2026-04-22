@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type EvolveDeploymentSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type EvolveDeploymentSecurityOption2 = {
 export type EvolveDeploymentSecurity = {
   option1?: EvolveDeploymentSecurityOption1 | undefined;
   option2?: EvolveDeploymentSecurityOption2 | undefined;
-};
-
-export type EvolveDeploymentRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  evolveForm: components.EvolveForm;
 };
 
 /** @internal */
@@ -135,42 +118,5 @@ export function evolveDeploymentSecurityToJSON(
 ): string {
   return JSON.stringify(
     EvolveDeploymentSecurity$outboundSchema.parse(evolveDeploymentSecurity),
-  );
-}
-
-/** @internal */
-export type EvolveDeploymentRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  EvolveForm: components.EvolveForm$Outbound;
-};
-
-/** @internal */
-export const EvolveDeploymentRequest$outboundSchema: z.ZodMiniType<
-  EvolveDeploymentRequest$Outbound,
-  EvolveDeploymentRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    evolveForm: components.EvolveForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      evolveForm: "EvolveForm",
-    });
-  }),
-);
-
-export function evolveDeploymentRequestToJSON(
-  evolveDeploymentRequest: EvolveDeploymentRequest,
-): string {
-  return JSON.stringify(
-    EvolveDeploymentRequest$outboundSchema.parse(evolveDeploymentRequest),
   );
 }

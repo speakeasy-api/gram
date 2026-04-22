@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListCollectionsQuery,
   ListCollectionsQueryData,
@@ -59,7 +55,6 @@ export type ListCollectionsQueryError =
  * List MCP collections in the organization
  */
 export function useListCollections(
-  request?: operations.ListCollectionsRequest | undefined,
   security?: operations.ListCollectionsSecurity | undefined,
   options?: QueryHookOptions<
     ListCollectionsQueryData,
@@ -70,7 +65,6 @@ export function useListCollections(
   return useQuery({
     ...buildListCollectionsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -85,7 +79,6 @@ export function useListCollections(
  * List MCP collections in the organization
  */
 export function useListCollectionsSuspense(
-  request?: operations.ListCollectionsRequest | undefined,
   security?: operations.ListCollectionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListCollectionsQueryData,
@@ -96,7 +89,6 @@ export function useListCollectionsSuspense(
   return useSuspenseQuery({
     ...buildListCollectionsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -106,33 +98,11 @@ export function useListCollectionsSuspense(
 
 export function setListCollectionsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-    },
-  ],
   data: ListCollectionsQueryData,
 ): ListCollectionsQueryData | undefined {
-  const key = queryKeyListCollections(...queryKeyBase);
+  const key = queryKeyListCollections();
 
   return client.setQueryData<ListCollectionsQueryData>(key, data);
-}
-
-export function invalidateListCollections(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "collections", "list", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllListCollections(

@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -35,7 +35,7 @@ import { Result } from "../types/fp.js";
  */
 export function assetsCreateSignedChatAttachmentURL(
   client: GramCore,
-  request: operations.CreateSignedChatAttachmentURLRequest,
+  request: components.CreateSignedChatAttachmentURLForm2,
   security?: operations.CreateSignedChatAttachmentURLSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -62,7 +62,7 @@ export function assetsCreateSignedChatAttachmentURL(
 
 async function $do(
   client: GramCore,
-  request: operations.CreateSignedChatAttachmentURLRequest,
+  request: components.CreateSignedChatAttachmentURLForm2,
   security?: operations.CreateSignedChatAttachmentURLSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -86,7 +86,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        operations.CreateSignedChatAttachmentURLRequest$outboundSchema,
+        components.CreateSignedChatAttachmentURLForm2$outboundSchema,
         value,
       ),
     "Input validation failed",
@@ -95,32 +95,13 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.CreateSignedChatAttachmentURLForm2, {
-    explode: true,
-  });
+  const body = encodeJSON("body", payload, { explode: true });
 
   const path = pathToFunc("/rpc/assets.createSignedChatAttachmentURL")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Chat-Session": encodeSimple(
-      "Gram-Chat-Session",
-      payload["Gram-Chat-Session"],
-      { explode: false, charEncoding: "none" },
-    ),
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
-      explode: false,
-      charEncoding: "none",
-    }),
   }));
 
   const requestSecurity = resolveSecurity(

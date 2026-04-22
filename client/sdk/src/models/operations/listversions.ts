@@ -25,18 +25,6 @@ export type ListVersionsRequest = {
    * The name of the package
    */
   name: string;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -143,30 +131,15 @@ export function listVersionsSecurityToJSON(
 /** @internal */
 export type ListVersionsRequest$Outbound = {
   name: string;
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
 export const ListVersionsRequest$outboundSchema: z.ZodMiniType<
   ListVersionsRequest$Outbound,
   ListVersionsRequest
-> = z.pipe(
-  z.object({
-    name: z.string(),
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
+> = z.object({
+  name: z.string(),
+});
 
 export function listVersionsRequestToJSON(
   listVersionsRequest: ListVersionsRequest,

@@ -32,14 +32,6 @@ export type GetSourceEnvironmentRequest = {
    * The slug of the source
    */
   sourceSlug: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -84,8 +76,6 @@ export const QueryParamSourceKind$outboundSchema: z.ZodMiniEnum<
 export type GetSourceEnvironmentRequest$Outbound = {
   source_kind: string;
   source_slug: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -96,15 +86,11 @@ export const GetSourceEnvironmentRequest$outboundSchema: z.ZodMiniType<
   z.object({
     sourceKind: QueryParamSourceKind$outboundSchema,
     sourceSlug: z.string(),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       sourceKind: "source_kind",
       sourceSlug: "source_slug",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
     });
   }),
 );

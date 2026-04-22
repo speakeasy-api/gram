@@ -4,13 +4,14 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -34,7 +35,7 @@ import { Result } from "../types/fp.js";
  */
 export function domainsRegisterDomain(
   client: GramCore,
-  request: operations.RegisterDomainRequest,
+  request: components.CreateDomainRequestBody,
   security?: operations.RegisterDomainSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -61,7 +62,7 @@ export function domainsRegisterDomain(
 
 async function $do(
   client: GramCore,
-  request: operations.RegisterDomainRequest,
+  request: components.CreateDomainRequestBody,
   security?: operations.RegisterDomainSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -83,26 +84,21 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(operations.RegisterDomainRequest$outboundSchema, value),
+    (value) =>
+      z.parse(components.CreateDomainRequestBody$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.CreateDomainRequestBody, {
-    explode: true,
-  });
+  const body = encodeJSON("body", payload, { explode: true });
 
   const path = pathToFunc("/rpc/domain.register")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
-      explode: false,
-      charEncoding: "none",
-    }),
   }));
 
   const requestSecurity = resolveSecurity(

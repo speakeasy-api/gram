@@ -161,10 +161,24 @@ export function useExternalMcpReleaseWorkflow({
 }: UseExternalMcpReleaseWorkflowOptions): ExternalMcpReleaseWorkflow {
   const client = useSdkClient();
   const { data: toolsetsResult } = useListToolsets(
-    projectSlug ? { gramProject: projectSlug } : undefined,
+    projectSlug
+      ? {
+          option1: {
+            projectSlugHeaderGramProject: projectSlug,
+            sessionHeaderGramSession: "",
+          },
+        }
+      : undefined,
   );
   const { data: latestDeploymentResult } = useLatestDeployment(
-    projectSlug ? { gramProject: projectSlug } : undefined,
+    projectSlug
+      ? {
+          option2: {
+            projectSlugHeaderGramProject: projectSlug,
+            sessionHeaderGramSession: "",
+          },
+        }
+      : undefined,
   );
   const latestDeployment = latestDeploymentResult?.deployment;
 
@@ -282,8 +296,13 @@ export function useExternalMcpReleaseWorkflow({
 
   // Poll deployment status — pass gramProject for cross-project batch flow
   const { data: deploymentData } = useDeployment(
-    { id: deploymentId!, gramProject: projectSlug },
-    undefined,
+    { id: deploymentId! },
+    {
+      option2: {
+        projectSlugHeaderGramProject: projectSlug || "",
+        sessionHeaderGramSession: "",
+      },
+    },
     {
       enabled: !!deploymentId && phase === "deploying",
       refetchInterval: (query) => {
@@ -296,8 +315,13 @@ export function useExternalMcpReleaseWorkflow({
 
   // Poll deployment logs — keep polling in deploying phase OR briefly in error phase to capture final logs
   const { data: logsData } = useDeploymentLogs(
-    { deploymentId: deploymentId!, gramProject: projectSlug },
-    undefined,
+    { deploymentId: deploymentId! },
+    {
+      option2: {
+        sessionHeaderGramSession: "",
+        projectSlugHeaderGramProject: projectSlug || "",
+      },
+    },
     {
       enabled: !!deploymentId && (phase === "deploying" || phase === "error"),
       refetchInterval: phase === "deploying" ? 2000 : false,
@@ -353,14 +377,12 @@ export function useExternalMcpReleaseWorkflow({
         try {
           const toolset = await client.toolsets.create(
             {
-              createToolsetRequestBody: {
-                name: config.name,
-                description:
-                  config.server.description ||
-                  `MCP server: ${config.server.registrySpecifier}`,
-                origin: buildToolsetOrigin(config.server),
-                toolUrns: buildToolUrns(config),
-              },
+              name: config.name,
+              description:
+                config.server.description ||
+                `MCP server: ${config.server.registrySpecifier}`,
+              origin: buildToolsetOrigin(config.server),
+              toolUrns: buildToolUrns(config),
             },
             undefined,
             reqOpts,
@@ -553,21 +575,19 @@ export function useExternalMcpReleaseWorkflow({
     try {
       const result = await client.deployments.evolveDeployment(
         {
-          evolveForm: {
-            deploymentId: latestDeployment?.id,
-            nonBlocking: true,
-            upsertExternalMcps: serverConfigs.map((config) => ({
-              registryId: config.server.registryId,
-              organizationMcpCollectionRegistryId:
-                config.server.organizationMcpCollectionRegistryId,
-              name: config.name,
-              slug: generateSlug(config.name),
-              registryServerSpecifier: config.server.registrySpecifier,
-              selectedRemotes:
-                config.selectedRemotes?.map((r) => r.url) ??
-                config.server.remotes?.map((r) => r.url),
-            })),
-          },
+          deploymentId: latestDeployment?.id,
+          nonBlocking: true,
+          upsertExternalMcps: serverConfigs.map((config) => ({
+            registryId: config.server.registryId,
+            organizationMcpCollectionRegistryId:
+              config.server.organizationMcpCollectionRegistryId,
+            name: config.name,
+            slug: generateSlug(config.name),
+            registryServerSpecifier: config.server.registrySpecifier,
+            selectedRemotes:
+              config.selectedRemotes?.map((r) => r.url) ??
+              config.server.remotes?.map((r) => r.url),
+          })),
         },
         undefined,
         reqOpts,

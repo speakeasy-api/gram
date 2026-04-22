@@ -46,9 +46,6 @@ export function buildDeploymentLogsQuery(
     queryKey: queryKeyDeploymentLogs({
       deploymentId: request.deploymentId,
       cursor: request.cursor,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
     }),
     queryFn: async function deploymentLogsQueryFn(
       ctx,
@@ -75,13 +72,7 @@ export function buildDeploymentLogsQuery(
 }
 
 export function queryKeyDeploymentLogs(
-  parameters: {
-    deploymentId: string;
-    cursor?: string | undefined;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { deploymentId: string; cursor?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "deployments", "logs", parameters];
 }

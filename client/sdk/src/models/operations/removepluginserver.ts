@@ -16,14 +16,6 @@ export type RemovePluginServerRequest = {
    */
   id: string;
   pluginId: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -61,8 +53,6 @@ export function removePluginServerSecurityToJSON(
 export type RemovePluginServerRequest$Outbound = {
   id: string;
   plugin_id: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -73,14 +63,10 @@ export const RemovePluginServerRequest$outboundSchema: z.ZodMiniType<
   z.object({
     id: z.string(),
     pluginId: z.string(),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       pluginId: "plugin_id",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
     });
   }),
 );

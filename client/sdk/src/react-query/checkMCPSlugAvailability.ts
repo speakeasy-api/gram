@@ -112,14 +112,7 @@ export function useCheckMCPSlugAvailabilitySuspense(
 
 export function setCheckMCPSlugAvailabilityData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      slug: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { slug: string }],
   data: CheckMCPSlugAvailabilityQueryData,
 ): CheckMCPSlugAvailabilityQueryData | undefined {
   const key = queryKeyCheckMCPSlugAvailability(...queryKeyBase);
@@ -129,14 +122,7 @@ export function setCheckMCPSlugAvailabilityData(
 
 export function invalidateCheckMCPSlugAvailability(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      slug: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { slug: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

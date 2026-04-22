@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type ListFilterOptionsSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type ListFilterOptionsSecurityOption2 = {
 export type ListFilterOptionsSecurity = {
   option1?: ListFilterOptionsSecurityOption1 | undefined;
   option2?: ListFilterOptionsSecurityOption2 | undefined;
-};
-
-export type ListFilterOptionsRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  listFilterOptionsPayload: components.ListFilterOptionsPayload;
 };
 
 /** @internal */
@@ -135,43 +118,5 @@ export function listFilterOptionsSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListFilterOptionsSecurity$outboundSchema.parse(listFilterOptionsSecurity),
-  );
-}
-
-/** @internal */
-export type ListFilterOptionsRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  ListFilterOptionsPayload: components.ListFilterOptionsPayload$Outbound;
-};
-
-/** @internal */
-export const ListFilterOptionsRequest$outboundSchema: z.ZodMiniType<
-  ListFilterOptionsRequest$Outbound,
-  ListFilterOptionsRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    listFilterOptionsPayload:
-      components.ListFilterOptionsPayload$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      listFilterOptionsPayload: "ListFilterOptionsPayload",
-    });
-  }),
-);
-
-export function listFilterOptionsRequestToJSON(
-  listFilterOptionsRequest: ListFilterOptionsRequest,
-): string {
-  return JSON.stringify(
-    ListFilterOptionsRequest$outboundSchema.parse(listFilterOptionsRequest),
   );
 }

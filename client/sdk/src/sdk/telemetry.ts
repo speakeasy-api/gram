@@ -28,7 +28,7 @@ export class Telemetry extends ClientSDK {
    * Capture a telemetry event and forward it to PostHog
    */
   async captureEvent(
-    request: operations.CaptureEventRequest,
+    request: components.CaptureEventPayload,
     security?: operations.CaptureEventSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.CaptureEventResult> {
@@ -47,7 +47,7 @@ export class Telemetry extends ClientSDK {
    * Get aggregated hooks metrics grouped by server
    */
   async getHooksSummary(
-    request: operations.GetHooksSummaryRequest,
+    request: components.GetHooksSummaryPayload,
     security?: operations.GetHooksSummarySecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GetHooksSummaryResult> {
@@ -66,7 +66,7 @@ export class Telemetry extends ClientSDK {
    * Get observability overview metrics including time series, tool breakdowns, and summary stats
    */
   async getObservabilityOverview(
-    request: operations.GetObservabilityOverviewRequest,
+    request: components.GetObservabilityOverviewPayload,
     security?: operations.GetObservabilityOverviewSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GetObservabilityOverviewResult> {
@@ -85,7 +85,7 @@ export class Telemetry extends ClientSDK {
    * Get aggregated metrics summary for an entire project
    */
   async getProjectMetricsSummary(
-    request: operations.GetProjectMetricsSummaryRequest,
+    request: components.GetProjectMetricsSummaryPayload,
     security?: operations.GetProjectMetricsSummarySecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GetMetricsSummaryResult> {
@@ -104,7 +104,7 @@ export class Telemetry extends ClientSDK {
    * Get project-level overview including total chats, tool calls, active servers/users, and top lists
    */
   async getProjectOverview(
-    request: operations.GetProjectOverviewRequest,
+    request: components.GetProjectMetricsSummaryPayload,
     security?: operations.GetProjectOverviewSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GetProjectOverviewResult> {
@@ -123,7 +123,7 @@ export class Telemetry extends ClientSDK {
    * Get aggregated metrics summary grouped by user
    */
   async getUserMetricsSummary(
-    request: operations.GetUserMetricsSummaryRequest,
+    request: components.GetUserMetricsSummaryPayload,
     security?: operations.GetUserMetricsSummarySecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GetUserMetricsSummaryResult> {
@@ -142,7 +142,7 @@ export class Telemetry extends ClientSDK {
    * List distinct attribute keys available for filtering
    */
   async listAttributeKeys(
-    request: operations.ListAttributeKeysRequest,
+    request: components.GetProjectMetricsSummaryPayload,
     security?: operations.ListAttributeKeysSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListAttributeKeysResult> {
@@ -161,7 +161,7 @@ export class Telemetry extends ClientSDK {
    * List available filter options (API keys or users) for the observability overview
    */
   async listFilterOptions(
-    request: operations.ListFilterOptionsRequest,
+    request: components.ListFilterOptionsPayload,
     security?: operations.ListFilterOptionsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListFilterOptionsResult> {
@@ -180,7 +180,7 @@ export class Telemetry extends ClientSDK {
    * List hook traces aggregated by trace_id with user information
    */
   async listHooksTraces(
-    request: operations.ListHooksTracesRequest,
+    request: components.ListHooksTracesPayload,
     security?: operations.ListHooksTracesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListHooksTracesResult> {
@@ -199,7 +199,7 @@ export class Telemetry extends ClientSDK {
    * Search and list chat session summaries that match a search filter
    */
   async searchChats(
-    request: operations.SearchChatsRequest,
+    request: components.SearchChatsPayload,
     security?: operations.SearchChatsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.SearchChatsResult> {
@@ -218,7 +218,7 @@ export class Telemetry extends ClientSDK {
    * Search and list telemetry logs that match a search filter
    */
   async searchLogs(
-    request: operations.SearchLogsRequest,
+    request: components.SearchLogsPayload,
     security?: operations.SearchLogsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.SearchLogsResult> {
@@ -237,7 +237,7 @@ export class Telemetry extends ClientSDK {
    * Search and list tool calls that match a search filter
    */
   async searchToolCalls(
-    request: operations.SearchToolCallsRequest,
+    request: components.SearchToolCallsPayload,
     security?: operations.SearchToolCallsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.SearchToolCallsResult> {
@@ -256,7 +256,7 @@ export class Telemetry extends ClientSDK {
    * Search and list user usage summaries grouped by user_id or external_user_id
    */
   async searchUsers(
-    request: operations.SearchUsersRequest,
+    request: components.SearchUsersPayload,
     security?: operations.SearchUsersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.SearchUsersResult> {

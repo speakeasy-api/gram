@@ -8,7 +8,7 @@ export function useCustomDomain(enabled = true) {
     data: domain,
     isLoading,
     refetch,
-  } = useGetDomain(undefined, undefined, {
+  } = useGetDomain(undefined, {
     refetchOnWindowFocus: false,
     retry: false,
     throwOnError: false,

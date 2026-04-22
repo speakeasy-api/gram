@@ -4,23 +4,10 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type CreateEnvironmentSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
-};
-
-export type CreateEnvironmentRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  createEnvironmentForm: components.CreateEnvironmentForm;
 };
 
 /** @internal */
@@ -51,39 +38,5 @@ export function createEnvironmentSecurityToJSON(
 ): string {
   return JSON.stringify(
     CreateEnvironmentSecurity$outboundSchema.parse(createEnvironmentSecurity),
-  );
-}
-
-/** @internal */
-export type CreateEnvironmentRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  CreateEnvironmentForm: components.CreateEnvironmentForm$Outbound;
-};
-
-/** @internal */
-export const CreateEnvironmentRequest$outboundSchema: z.ZodMiniType<
-  CreateEnvironmentRequest$Outbound,
-  CreateEnvironmentRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    createEnvironmentForm: components.CreateEnvironmentForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      createEnvironmentForm: "CreateEnvironmentForm",
-    });
-  }),
-);
-
-export function createEnvironmentRequestToJSON(
-  createEnvironmentRequest: CreateEnvironmentRequest,
-): string {
-  return JSON.stringify(
-    CreateEnvironmentRequest$outboundSchema.parse(createEnvironmentRequest),
   );
 }

@@ -4,10 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
-import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
@@ -35,7 +33,6 @@ import { Result } from "../types/fp.js";
  */
 export function hooksServerNamesListServerNameOverrides(
   client: GramCore,
-  request?: operations.ListServerNameOverridesRequest | undefined,
   security?: operations.ListServerNameOverridesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -54,7 +51,6 @@ export function hooksServerNamesListServerNameOverrides(
 > {
   return new APIPromise($do(
     client,
-    request,
     security,
     options,
   ));
@@ -62,7 +58,6 @@ export function hooksServerNamesListServerNameOverrides(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListServerNameOverridesRequest | undefined,
   security?: operations.ListServerNameOverridesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -82,37 +77,10 @@ async function $do(
     APICall,
   ]
 > {
-  const parsed = safeParse(
-    request,
-    (value) =>
-      z.parse(
-        z.optional(operations.ListServerNameOverridesRequest$outboundSchema),
-        value,
-      ),
-    "Input validation failed",
-  );
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-
   const path = pathToFunc("/rpc/hooks.listServerNameOverrides")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
-      explode: false,
-      charEncoding: "none",
-    }),
   }));
 
   const requestSecurity = resolveSecurity(
@@ -163,7 +131,6 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);

@@ -117,33 +117,27 @@ function CreateIntegrationDialog({
 
     if (existingPackage) {
       await client.packages.update({
-        updatePackageForm: {
-          id: existingPackage.id,
-          title: name,
-          summary,
-          keywords,
-          imageAssetId,
-        },
+        id: existingPackage.id,
+        title: name,
+        summary,
+        keywords,
+        imageAssetId,
       });
     } else {
       await client.packages.create({
-        createPackageForm: {
-          title: name,
-          name: packageName,
-          summary,
-          keywords,
-          imageAssetId,
-        },
+        title: name,
+        name: packageName,
+        summary,
+        keywords,
+        imageAssetId,
       });
     }
 
     await client.packages.publish({
-      publishPackageForm: {
-        name: packageName,
-        version,
-        visibility: "public",
-        deploymentId: deployment.deployment.id,
-      },
+      name: packageName,
+      version,
+      visibility: "public",
+      deploymentId: deployment.deployment.id,
     });
 
     await refetchPackages();
@@ -223,15 +217,13 @@ export function IntegrationCard({
 
   const handleEnable = async () => {
     await client.deployments.evolveDeployment({
-      evolveForm: {
-        nonBlocking: true,
-        upsertPackages: [
-          {
-            name: integration.packageName,
-            version: integration.version,
-          },
-        ],
-      },
+      nonBlocking: true,
+      upsertPackages: [
+        {
+          name: integration.packageName,
+          version: integration.version,
+        },
+      ],
     });
 
     telemetry.capture("integration_event", {
@@ -242,10 +234,8 @@ export function IntegrationCard({
 
   const handleDisable = async () => {
     await client.deployments.evolveDeployment({
-      evolveForm: {
-        nonBlocking: true,
-        excludePackages: [integration.packageId],
-      },
+      nonBlocking: true,
+      excludePackages: [integration.packageId],
     });
 
     telemetry.capture("integration_event", {

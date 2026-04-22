@@ -20,7 +20,7 @@ export type GetObservabilityOverviewQueryData =
 export function prefetchGetObservabilityOverview(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetObservabilityOverviewRequest,
+  request: components.GetObservabilityOverviewPayload,
   security?: operations.GetObservabilityOverviewSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -36,7 +36,7 @@ export function prefetchGetObservabilityOverview(
 
 export function buildGetObservabilityOverviewQuery(
   client$: GramCore,
-  request: operations.GetObservabilityOverviewRequest,
+  request: components.GetObservabilityOverviewPayload,
   security?: operations.GetObservabilityOverviewSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -46,11 +46,7 @@ export function buildGetObservabilityOverviewQuery(
   ) => Promise<GetObservabilityOverviewQueryData>;
 } {
   return {
-    queryKey: queryKeyGetObservabilityOverview({
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyGetObservabilityOverview(),
     queryFn: async function getObservabilityOverviewQueryFn(
       ctx,
     ): Promise<GetObservabilityOverviewQueryData> {
@@ -75,12 +71,6 @@ export function buildGetObservabilityOverviewQuery(
   };
 }
 
-export function queryKeyGetObservabilityOverview(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "telemetry", "getObservabilityOverview", parameters];
+export function queryKeyGetObservabilityOverview(): QueryKey {
+  return ["@gram/client", "telemetry", "getObservabilityOverview"];
 }

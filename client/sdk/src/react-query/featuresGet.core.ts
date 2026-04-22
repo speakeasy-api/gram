@@ -19,14 +19,12 @@ export type FeaturesGetQueryData = components.GramProductFeatures;
 export function prefetchFeaturesGet(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetProductFeaturesRequest | undefined,
   security?: operations.GetProductFeaturesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildFeaturesGetQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchFeaturesGet(
 
 export function buildFeaturesGetQuery(
   client$: GramCore,
-  request?: operations.GetProductFeaturesRequest | undefined,
   security?: operations.GetProductFeaturesSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,7 +40,7 @@ export function buildFeaturesGetQuery(
   queryFn: (context: QueryFunctionContext) => Promise<FeaturesGetQueryData>;
 } {
   return {
-    queryKey: queryKeyFeaturesGet({ gramSession: request?.gramSession }),
+    queryKey: queryKeyFeaturesGet(),
     queryFn: async function featuresGetQueryFn(
       ctx,
     ): Promise<FeaturesGetQueryData> {
@@ -60,7 +57,6 @@ export function buildFeaturesGetQuery(
 
       return unwrapAsync(featuresGet(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -68,8 +64,6 @@ export function buildFeaturesGetQuery(
   };
 }
 
-export function queryKeyFeaturesGet(
-  parameters: { gramSession?: string | undefined },
-): QueryKey {
-  return ["@gram/client", "features", "get", parameters];
+export function queryKeyFeaturesGet(): QueryKey {
+  return ["@gram/client", "features", "get"];
 }

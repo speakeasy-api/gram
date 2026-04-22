@@ -100,13 +100,7 @@ export function useTriggerSuspense(
 
 export function setTriggerData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { id: string }],
   data: TriggerQueryData,
 ): TriggerQueryData | undefined {
   const key = queryKeyTrigger(...queryKeyBase);
@@ -116,13 +110,7 @@ export function setTriggerData(
 
 export function invalidateTrigger(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { id: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

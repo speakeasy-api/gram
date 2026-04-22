@@ -23,18 +23,6 @@ export type ServeChatAttachmentRequest = {
    * The project ID that the attachment belongs to
    */
   projectId: string;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * Chat Sessions token header
-   */
-  gramChatSession?: string | undefined;
 };
 
 export type ServeChatAttachmentResponse = {
@@ -83,9 +71,6 @@ export function serveChatAttachmentSecurityToJSON(
 export type ServeChatAttachmentRequest$Outbound = {
   id: string;
   project_id: string;
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Chat-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -96,16 +81,10 @@ export const ServeChatAttachmentRequest$outboundSchema: z.ZodMiniType<
   z.object({
     id: z.string(),
     projectId: z.string(),
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramChatSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       projectId: "project_id",
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramChatSession: "Gram-Chat-Session",
     });
   }),
 );

@@ -32,9 +32,7 @@ export function OpenApiSourceInput({
   const fetchMutation = useMutation({
     mutationFn: async (urlToFetch: string) => {
       const result = await client.assets.fetchOpenAPIv3FromURL({
-        fetchOpenAPIv3FromURLForm2: {
-          url: urlToFetch,
-        },
+        url: urlToFetch,
       });
       return result;
     },

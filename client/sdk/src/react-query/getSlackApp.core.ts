@@ -43,11 +43,7 @@ export function buildGetSlackAppQuery(
   queryFn: (context: QueryFunctionContext) => Promise<GetSlackAppQueryData>;
 } {
   return {
-    queryKey: queryKeyGetSlackApp({
-      id: request.id,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyGetSlackApp({ id: request.id }),
     queryFn: async function getSlackAppQueryFn(
       ctx,
     ): Promise<GetSlackAppQueryData> {
@@ -72,12 +68,6 @@ export function buildGetSlackAppQuery(
   };
 }
 
-export function queryKeyGetSlackApp(
-  parameters: {
-    id: string;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
+export function queryKeyGetSlackApp(parameters: { id: string }): QueryKey {
   return ["@gram/client", "slack", "getSlackApp", parameters];
 }

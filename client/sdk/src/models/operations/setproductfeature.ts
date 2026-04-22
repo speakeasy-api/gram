@@ -4,18 +4,9 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type SetProductFeatureSecurity = {
   sessionHeaderGramSession?: string | undefined;
-};
-
-export type SetProductFeatureRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  setProductFeatureRequestBody: components.SetProductFeatureRequestBody;
 };
 
 /** @internal */
@@ -43,38 +34,5 @@ export function setProductFeatureSecurityToJSON(
 ): string {
   return JSON.stringify(
     SetProductFeatureSecurity$outboundSchema.parse(setProductFeatureSecurity),
-  );
-}
-
-/** @internal */
-export type SetProductFeatureRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  SetProductFeatureRequestBody:
-    components.SetProductFeatureRequestBody$Outbound;
-};
-
-/** @internal */
-export const SetProductFeatureRequest$outboundSchema: z.ZodMiniType<
-  SetProductFeatureRequest$Outbound,
-  SetProductFeatureRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    setProductFeatureRequestBody:
-      components.SetProductFeatureRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      setProductFeatureRequestBody: "SetProductFeatureRequestBody",
-    });
-  }),
-);
-
-export function setProductFeatureRequestToJSON(
-  setProductFeatureRequest: SetProductFeatureRequest,
-): string {
-  return JSON.stringify(
-    SetProductFeatureRequest$outboundSchema.parse(setProductFeatureRequest),
   );
 }

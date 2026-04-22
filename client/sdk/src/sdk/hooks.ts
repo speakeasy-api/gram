@@ -36,7 +36,7 @@ export class Hooks extends ClientSDK {
    * Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, and postToolUseFailure.
    */
   async hooksNumberCursor(
-    request: operations.HooksNumberCursorRequest,
+    request: components.CursorHookPayload,
     security?: operations.HooksNumberCursorSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.CursorHookResult> {
@@ -55,7 +55,7 @@ export class Hooks extends ClientSDK {
    * Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.
    */
   async hooksNumberLogs(
-    request: operations.HooksNumberLogsRequest,
+    request: components.OTELLogsPayload,
     security?: operations.HooksNumberLogsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
@@ -74,7 +74,7 @@ export class Hooks extends ClientSDK {
    * Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.
    */
   async hooksNumberMetrics(
-    request: operations.HooksNumberMetricsRequest,
+    request: components.OTELMetricsPayload,
     security?: operations.HooksNumberMetricsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {

@@ -106,7 +106,7 @@ export function useLatestDeployment(
     LatestDeploymentQueryError
   >,
 ) {
-  return useLatestDeploymentQuery(undefined, undefined, {
+  return useLatestDeploymentQuery(undefined, {
     staleTime: 1000 * 60 * 60, // 1 hour
     ...options,
   });

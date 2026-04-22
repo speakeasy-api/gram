@@ -19,7 +19,7 @@ export type GetHooksSummaryQueryData = components.GetHooksSummaryResult;
 export function prefetchGetHooksSummary(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetHooksSummaryRequest,
+  request: components.GetHooksSummaryPayload,
   security?: operations.GetHooksSummarySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -35,7 +35,7 @@ export function prefetchGetHooksSummary(
 
 export function buildGetHooksSummaryQuery(
   client$: GramCore,
-  request: operations.GetHooksSummaryRequest,
+  request: components.GetHooksSummaryPayload,
   security?: operations.GetHooksSummarySecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,11 +43,7 @@ export function buildGetHooksSummaryQuery(
   queryFn: (context: QueryFunctionContext) => Promise<GetHooksSummaryQueryData>;
 } {
   return {
-    queryKey: queryKeyGetHooksSummary({
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyGetHooksSummary(),
     queryFn: async function getHooksSummaryQueryFn(
       ctx,
     ): Promise<GetHooksSummaryQueryData> {
@@ -72,12 +68,6 @@ export function buildGetHooksSummaryQuery(
   };
 }
 
-export function queryKeyGetHooksSummary(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "telemetry", "getHooksSummary", parameters];
+export function queryKeyGetHooksSummary(): QueryKey {
+  return ["@gram/client", "telemetry", "getHooksSummary"];
 }

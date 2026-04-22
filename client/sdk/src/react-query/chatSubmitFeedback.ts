@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type ChatSubmitFeedbackMutationVariables = {
-  request: operations.SubmitFeedbackRequest;
+  request: components.SubmitFeedbackRequestBody;
   security?: operations.SubmitFeedbackSecurity | undefined;
   options?: RequestOptions;
 };

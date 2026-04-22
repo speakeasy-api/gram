@@ -23,18 +23,6 @@ export type CreateDeploymentSecurity = {
 
 export type CreateDeploymentRequest = {
   /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  /**
    * A unique identifier that will mitigate against duplicate deployments.
    */
   idempotencyKey: string;
@@ -144,9 +132,6 @@ export function createDeploymentSecurityToJSON(
 
 /** @internal */
 export type CreateDeploymentRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
   "Idempotency-Key": string;
   CreateDeploymentRequestBody: components.CreateDeploymentRequestBody$Outbound;
 };
@@ -157,18 +142,12 @@ export const CreateDeploymentRequest$outboundSchema: z.ZodMiniType<
   CreateDeploymentRequest
 > = z.pipe(
   z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
     idempotencyKey: z.string(),
     createDeploymentRequestBody:
       components.CreateDeploymentRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
       idempotencyKey: "Idempotency-Key",
       createDeploymentRequestBody: "CreateDeploymentRequestBody",
     });

@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildGrantsQuery,
   GrantsQueryData,
@@ -59,7 +55,6 @@ export type GrantsQueryError =
  * List the current user's effective grants, including inherited role grants.
  */
 export function useGrants(
-  request?: operations.ListGrantsRequest | undefined,
   security?: operations.ListGrantsSecurity | undefined,
   options?: QueryHookOptions<GrantsQueryData, GrantsQueryError>,
 ): UseQueryResult<GrantsQueryData, GrantsQueryError> {
@@ -67,7 +62,6 @@ export function useGrants(
   return useQuery({
     ...buildGrantsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useGrants(
  * List the current user's effective grants, including inherited role grants.
  */
 export function useGrantsSuspense(
-  request?: operations.ListGrantsRequest | undefined,
   security?: operations.ListGrantsSecurity | undefined,
   options?: SuspenseQueryHookOptions<GrantsQueryData, GrantsQueryError>,
 ): UseSuspenseQueryResult<GrantsQueryData, GrantsQueryError> {
@@ -90,7 +83,6 @@ export function useGrantsSuspense(
   return useSuspenseQuery({
     ...buildGrantsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -100,33 +92,11 @@ export function useGrantsSuspense(
 
 export function setGrantsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    },
-  ],
   data: GrantsQueryData,
 ): GrantsQueryData | undefined {
-  const key = queryKeyGrants(...queryKeyBase);
+  const key = queryKeyGrants();
 
   return client.setQueryData<GrantsQueryData>(key, data);
-}
-
-export function invalidateGrants(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "access", "listGrants", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllGrants(

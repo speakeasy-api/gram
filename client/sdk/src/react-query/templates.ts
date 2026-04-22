@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildTemplatesQuery,
   prefetchTemplates,
@@ -59,7 +55,6 @@ export type TemplatesQueryError =
  * List available prompt template.
  */
 export function useTemplates(
-  request?: operations.ListTemplatesRequest | undefined,
   security?: operations.ListTemplatesSecurity | undefined,
   options?: QueryHookOptions<TemplatesQueryData, TemplatesQueryError>,
 ): UseQueryResult<TemplatesQueryData, TemplatesQueryError> {
@@ -67,7 +62,6 @@ export function useTemplates(
   return useQuery({
     ...buildTemplatesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useTemplates(
  * List available prompt template.
  */
 export function useTemplatesSuspense(
-  request?: operations.ListTemplatesRequest | undefined,
   security?: operations.ListTemplatesSecurity | undefined,
   options?: SuspenseQueryHookOptions<TemplatesQueryData, TemplatesQueryError>,
 ): UseSuspenseQueryResult<TemplatesQueryData, TemplatesQueryError> {
@@ -90,7 +83,6 @@ export function useTemplatesSuspense(
   return useSuspenseQuery({
     ...buildTemplatesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -100,35 +92,11 @@ export function useTemplatesSuspense(
 
 export function setTemplatesData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: TemplatesQueryData,
 ): TemplatesQueryData | undefined {
-  const key = queryKeyTemplates(...queryKeyBase);
+  const key = queryKeyTemplates();
 
   return client.setQueryData<TemplatesQueryData>(key, data);
-}
-
-export function invalidateTemplates(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "templates", "list", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllTemplates(

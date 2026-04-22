@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildGlobalVariationsQuery,
   GlobalVariationsQueryData,
@@ -59,7 +55,6 @@ export type GlobalVariationsQueryError =
  * List globally defined tool variations.
  */
 export function useGlobalVariations(
-  request?: operations.ListGlobalVariationsRequest | undefined,
   security?: operations.ListGlobalVariationsSecurity | undefined,
   options?: QueryHookOptions<
     GlobalVariationsQueryData,
@@ -70,7 +65,6 @@ export function useGlobalVariations(
   return useQuery({
     ...buildGlobalVariationsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -85,7 +79,6 @@ export function useGlobalVariations(
  * List globally defined tool variations.
  */
 export function useGlobalVariationsSuspense(
-  request?: operations.ListGlobalVariationsRequest | undefined,
   security?: operations.ListGlobalVariationsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GlobalVariationsQueryData,
@@ -99,7 +92,6 @@ export function useGlobalVariationsSuspense(
   return useSuspenseQuery({
     ...buildGlobalVariationsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -109,35 +101,11 @@ export function useGlobalVariationsSuspense(
 
 export function setGlobalVariationsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: GlobalVariationsQueryData,
 ): GlobalVariationsQueryData | undefined {
-  const key = queryKeyGlobalVariations(...queryKeyBase);
+  const key = queryKeyGlobalVariations();
 
   return client.setQueryData<GlobalVariationsQueryData>(key, data);
-}
-
-export function invalidateGlobalVariations(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "variations", "listGlobal", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllGlobalVariations(

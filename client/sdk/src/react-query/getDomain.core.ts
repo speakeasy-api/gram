@@ -19,14 +19,12 @@ export type GetDomainQueryData = components.CustomDomain;
 export function prefetchGetDomain(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetDomainRequest | undefined,
   security?: operations.GetDomainSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildGetDomainQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchGetDomain(
 
 export function buildGetDomainQuery(
   client$: GramCore,
-  request?: operations.GetDomainRequest | undefined,
   security?: operations.GetDomainSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,7 +40,7 @@ export function buildGetDomainQuery(
   queryFn: (context: QueryFunctionContext) => Promise<GetDomainQueryData>;
 } {
   return {
-    queryKey: queryKeyGetDomain({ gramSession: request?.gramSession }),
+    queryKey: queryKeyGetDomain(),
     queryFn: async function getDomainQueryFn(ctx): Promise<GetDomainQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -58,7 +55,6 @@ export function buildGetDomainQuery(
 
       return unwrapAsync(domainsGetDomain(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -66,8 +62,6 @@ export function buildGetDomainQuery(
   };
 }
 
-export function queryKeyGetDomain(
-  parameters: { gramSession?: string | undefined },
-): QueryKey {
-  return ["@gram/client", "domains", "getDomain", parameters];
+export function queryKeyGetDomain(): QueryKey {
+  return ["@gram/client", "domains", "getDomain"];
 }

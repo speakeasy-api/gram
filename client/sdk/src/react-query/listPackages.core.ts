@@ -19,14 +19,12 @@ export type ListPackagesQueryData = components.ListPackagesResult;
 export function prefetchListPackages(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListPackagesRequest | undefined,
   security?: operations.ListPackagesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListPackagesQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchListPackages(
 
 export function buildListPackagesQuery(
   client$: GramCore,
-  request?: operations.ListPackagesRequest | undefined,
   security?: operations.ListPackagesSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,11 +40,7 @@ export function buildListPackagesQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ListPackagesQueryData>;
 } {
   return {
-    queryKey: queryKeyListPackages({
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyListPackages(),
     queryFn: async function listPackagesQueryFn(
       ctx,
     ): Promise<ListPackagesQueryData> {
@@ -64,7 +57,6 @@ export function buildListPackagesQuery(
 
       return unwrapAsync(packagesList(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -72,12 +64,6 @@ export function buildListPackagesQuery(
   };
 }
 
-export function queryKeyListPackages(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "packages", "list", parameters];
+export function queryKeyListPackages(): QueryKey {
+  return ["@gram/client", "packages", "list"];
 }

@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type SearchToolCallsSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type SearchToolCallsSecurityOption2 = {
 export type SearchToolCallsSecurity = {
   option1?: SearchToolCallsSecurityOption1 | undefined;
   option2?: SearchToolCallsSecurityOption2 | undefined;
-};
-
-export type SearchToolCallsRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  searchToolCallsPayload: components.SearchToolCallsPayload;
 };
 
 /** @internal */
@@ -135,42 +118,5 @@ export function searchToolCallsSecurityToJSON(
 ): string {
   return JSON.stringify(
     SearchToolCallsSecurity$outboundSchema.parse(searchToolCallsSecurity),
-  );
-}
-
-/** @internal */
-export type SearchToolCallsRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  SearchToolCallsPayload: components.SearchToolCallsPayload$Outbound;
-};
-
-/** @internal */
-export const SearchToolCallsRequest$outboundSchema: z.ZodMiniType<
-  SearchToolCallsRequest$Outbound,
-  SearchToolCallsRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    searchToolCallsPayload: components.SearchToolCallsPayload$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      searchToolCallsPayload: "SearchToolCallsPayload",
-    });
-  }),
-);
-
-export function searchToolCallsRequestToJSON(
-  searchToolCallsRequest: SearchToolCallsRequest,
-): string {
-  return JSON.stringify(
-    SearchToolCallsRequest$outboundSchema.parse(searchToolCallsRequest),
   );
 }

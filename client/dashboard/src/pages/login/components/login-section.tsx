@@ -245,9 +245,7 @@ export function RegisterSection() {
     // Call the register mutation
     registerMutation.mutate({
       request: {
-        registerRequestBody: {
-          orgName: companyName.trim(),
-        },
+        orgName: companyName.trim(),
       },
     });
   };

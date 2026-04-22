@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UpdateSlackAppMutationVariables = {
-  request: operations.UpdateSlackAppRequest;
+  request: components.UpdateSlackAppRequestBody;
   security?: operations.UpdateSlackAppSecurity | undefined;
   options?: RequestOptions;
 };

@@ -28,22 +28,6 @@ export type UploadChatAttachmentSecurity = {
 
 export type UploadChatAttachmentRequest = {
   contentLength: number;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * Chat Sessions token header
-   */
-  gramChatSession?: string | undefined;
 };
 
 /** @internal */
@@ -191,10 +175,6 @@ export function uploadChatAttachmentSecurityToJSON(
 /** @internal */
 export type UploadChatAttachmentRequest$Outbound = {
   "Content-Length": number;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Chat-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -204,18 +184,10 @@ export const UploadChatAttachmentRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     contentLength: z.int(),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramChatSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       contentLength: "Content-Length",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-      gramSession: "Gram-Session",
-      gramChatSession: "Gram-Chat-Session",
     });
   }),
 );

@@ -4,23 +4,10 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type SetPluginAssignmentsSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
-};
-
-export type SetPluginAssignmentsRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  setPluginAssignmentsForm: components.SetPluginAssignmentsForm;
 };
 
 /** @internal */
@@ -52,43 +39,6 @@ export function setPluginAssignmentsSecurityToJSON(
   return JSON.stringify(
     SetPluginAssignmentsSecurity$outboundSchema.parse(
       setPluginAssignmentsSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type SetPluginAssignmentsRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  SetPluginAssignmentsForm: components.SetPluginAssignmentsForm$Outbound;
-};
-
-/** @internal */
-export const SetPluginAssignmentsRequest$outboundSchema: z.ZodMiniType<
-  SetPluginAssignmentsRequest$Outbound,
-  SetPluginAssignmentsRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    setPluginAssignmentsForm:
-      components.SetPluginAssignmentsForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      setPluginAssignmentsForm: "SetPluginAssignmentsForm",
-    });
-  }),
-);
-
-export function setPluginAssignmentsRequestToJSON(
-  setPluginAssignmentsRequest: SetPluginAssignmentsRequest,
-): string {
-  return JSON.stringify(
-    SetPluginAssignmentsRequest$outboundSchema.parse(
-      setPluginAssignmentsRequest,
     ),
   );
 }

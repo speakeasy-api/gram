@@ -198,8 +198,6 @@ export function setAuditLogsData(
       projectSlug?: string | undefined;
       actorId?: string | undefined;
       action?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
     },
   ],
   data: AuditLogsQueryData,
@@ -217,8 +215,6 @@ export function invalidateAuditLogs(
       projectSlug?: string | undefined;
       actorId?: string | undefined;
       action?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

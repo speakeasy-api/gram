@@ -108,8 +108,6 @@ export function setListResourcesData(
       cursor?: string | undefined;
       limit?: number | undefined;
       deploymentId?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
     },
   ],
   data: ListResourcesQueryData,
@@ -126,8 +124,6 @@ export function invalidateListResources(
       cursor?: string | undefined;
       limit?: number | undefined;
       deploymentId?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

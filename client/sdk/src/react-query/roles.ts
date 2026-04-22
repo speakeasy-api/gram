@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildRolesQuery,
   prefetchRoles,
@@ -54,7 +50,6 @@ export type RolesQueryError =
  * List all roles for the current organization.
  */
 export function useRoles(
-  request?: operations.ListRolesRequest | undefined,
   security?: operations.ListRolesSecurity | undefined,
   options?: QueryHookOptions<RolesQueryData, RolesQueryError>,
 ): UseQueryResult<RolesQueryData, RolesQueryError> {
@@ -62,7 +57,6 @@ export function useRoles(
   return useQuery({
     ...buildRolesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -77,7 +71,6 @@ export function useRoles(
  * List all roles for the current organization.
  */
 export function useRolesSuspense(
-  request?: operations.ListRolesRequest | undefined,
   security?: operations.ListRolesSecurity | undefined,
   options?: SuspenseQueryHookOptions<RolesQueryData, RolesQueryError>,
 ): UseSuspenseQueryResult<RolesQueryData, RolesQueryError> {
@@ -85,7 +78,6 @@ export function useRolesSuspense(
   return useSuspenseQuery({
     ...buildRolesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -95,33 +87,11 @@ export function useRolesSuspense(
 
 export function setRolesData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    },
-  ],
   data: RolesQueryData,
 ): RolesQueryData | undefined {
-  const key = queryKeyRoles(...queryKeyBase);
+  const key = queryKeyRoles();
 
   return client.setQueryData<RolesQueryData>(key, data);
-}
-
-export function invalidateRoles(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "access", "listRoles", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllRoles(

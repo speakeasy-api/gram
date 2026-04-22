@@ -123,9 +123,6 @@ export function setListChatsWithResolutionsData(
       offset?: number | undefined;
       sortBy?: operations.SortBy | undefined;
       sortOrder?: operations.SortOrder | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-      gramChatSession?: string | undefined;
     },
   ],
   data: ListChatsWithResolutionsQueryData,
@@ -148,9 +145,6 @@ export function invalidateListChatsWithResolutions(
       offset?: number | undefined;
       sortBy?: operations.SortBy | undefined;
       sortOrder?: operations.SortOrder | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-      gramChatSession?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

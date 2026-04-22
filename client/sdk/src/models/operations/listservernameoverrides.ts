@@ -20,21 +20,6 @@ export type ListServerNameOverridesSecurity = {
   option2?: ListServerNameOverridesSecurityOption2 | undefined;
 };
 
-export type ListServerNameOverridesRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-};
-
 /** @internal */
 export type ListServerNameOverridesSecurityOption1$Outbound = {
   "project_slug_header_Gram-Project": string;
@@ -138,42 +123,6 @@ export function listServerNameOverridesSecurityToJSON(
   return JSON.stringify(
     ListServerNameOverridesSecurity$outboundSchema.parse(
       listServerNameOverridesSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type ListServerNameOverridesRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const ListServerNameOverridesRequest$outboundSchema: z.ZodMiniType<
-  ListServerNameOverridesRequest$Outbound,
-  ListServerNameOverridesRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
-
-export function listServerNameOverridesRequestToJSON(
-  listServerNameOverridesRequest: ListServerNameOverridesRequest,
-): string {
-  return JSON.stringify(
-    ListServerNameOverridesRequest$outboundSchema.parse(
-      listServerNameOverridesRequest,
     ),
   );
 }

@@ -43,13 +43,7 @@ export function buildTemplateQuery(
   queryFn: (context: QueryFunctionContext) => Promise<TemplateQueryData>;
 } {
   return {
-    queryKey: queryKeyTemplate({
-      id: request?.id,
-      name: request?.name,
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyTemplate({ id: request?.id, name: request?.name }),
     queryFn: async function templateQueryFn(ctx): Promise<TemplateQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -73,13 +67,7 @@ export function buildTemplateQuery(
 }
 
 export function queryKeyTemplate(
-  parameters: {
-    id?: string | undefined;
-    name?: string | undefined;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { id?: string | undefined; name?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "templates", "get", parameters];
 }

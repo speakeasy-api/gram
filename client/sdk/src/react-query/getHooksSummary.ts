@@ -10,6 +10,7 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -23,11 +24,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildGetHooksSummaryQuery,
   GetHooksSummaryQueryData,
@@ -59,7 +56,7 @@ export type GetHooksSummaryQueryError =
  * Get aggregated hooks metrics grouped by server
  */
 export function useGetHooksSummary(
-  request: operations.GetHooksSummaryRequest,
+  request: components.GetHooksSummaryPayload,
   security?: operations.GetHooksSummarySecurity | undefined,
   options?: QueryHookOptions<
     GetHooksSummaryQueryData,
@@ -85,7 +82,7 @@ export function useGetHooksSummary(
  * Get aggregated hooks metrics grouped by server
  */
 export function useGetHooksSummarySuspense(
-  request: operations.GetHooksSummaryRequest,
+  request: components.GetHooksSummaryPayload,
   security?: operations.GetHooksSummarySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetHooksSummaryQueryData,
@@ -106,35 +103,11 @@ export function useGetHooksSummarySuspense(
 
 export function setGetHooksSummaryData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: GetHooksSummaryQueryData,
 ): GetHooksSummaryQueryData | undefined {
-  const key = queryKeyGetHooksSummary(...queryKeyBase);
+  const key = queryKeyGetHooksSummary();
 
   return client.setQueryData<GetHooksSummaryQueryData>(key, data);
-}
-
-export function invalidateGetHooksSummary(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "telemetry", "getHooksSummary", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllGetHooksSummary(

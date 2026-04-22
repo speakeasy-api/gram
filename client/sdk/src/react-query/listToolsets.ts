@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListToolsetsQuery,
   ListToolsetsQueryData,
@@ -59,7 +55,6 @@ export type ListToolsetsQueryError =
  * List all toolsets for a project
  */
 export function useListToolsets(
-  request?: operations.ListToolsetsRequest | undefined,
   security?: operations.ListToolsetsSecurity | undefined,
   options?: QueryHookOptions<ListToolsetsQueryData, ListToolsetsQueryError>,
 ): UseQueryResult<ListToolsetsQueryData, ListToolsetsQueryError> {
@@ -67,7 +62,6 @@ export function useListToolsets(
   return useQuery({
     ...buildListToolsetsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useListToolsets(
  * List all toolsets for a project
  */
 export function useListToolsetsSuspense(
-  request?: operations.ListToolsetsRequest | undefined,
   security?: operations.ListToolsetsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListToolsetsQueryData,
@@ -93,7 +86,6 @@ export function useListToolsetsSuspense(
   return useSuspenseQuery({
     ...buildListToolsetsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -103,35 +95,11 @@ export function useListToolsetsSuspense(
 
 export function setListToolsetsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: ListToolsetsQueryData,
 ): ListToolsetsQueryData | undefined {
-  const key = queryKeyListToolsets(...queryKeyBase);
+  const key = queryKeyListToolsets();
 
   return client.setQueryData<ListToolsetsQueryData>(key, data);
-}
-
-export function invalidateListToolsets(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "toolsets", "list", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllListToolsets(

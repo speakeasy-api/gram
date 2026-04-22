@@ -19,7 +19,7 @@ export type GetProjectOverviewQueryData = components.GetProjectOverviewResult;
 export function prefetchGetProjectOverview(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetProjectOverviewRequest,
+  request: components.GetProjectMetricsSummaryPayload,
   security?: operations.GetProjectOverviewSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -35,7 +35,7 @@ export function prefetchGetProjectOverview(
 
 export function buildGetProjectOverviewQuery(
   client$: GramCore,
-  request: operations.GetProjectOverviewRequest,
+  request: components.GetProjectMetricsSummaryPayload,
   security?: operations.GetProjectOverviewSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -45,11 +45,7 @@ export function buildGetProjectOverviewQuery(
   ) => Promise<GetProjectOverviewQueryData>;
 } {
   return {
-    queryKey: queryKeyGetProjectOverview({
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyGetProjectOverview(),
     queryFn: async function getProjectOverviewQueryFn(
       ctx,
     ): Promise<GetProjectOverviewQueryData> {
@@ -74,12 +70,6 @@ export function buildGetProjectOverviewQuery(
   };
 }
 
-export function queryKeyGetProjectOverview(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "telemetry", "getProjectOverview", parameters];
+export function queryKeyGetProjectOverview(): QueryKey {
+  return ["@gram/client", "telemetry", "getProjectOverview"];
 }

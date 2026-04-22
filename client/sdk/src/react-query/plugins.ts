@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildPluginsQuery,
   PluginsQueryData,
@@ -59,7 +55,6 @@ export type PluginsQueryError =
  * List all plugins for the current project.
  */
 export function usePlugins(
-  request?: operations.ListPluginsRequest | undefined,
   security?: operations.ListPluginsSecurity | undefined,
   options?: QueryHookOptions<PluginsQueryData, PluginsQueryError>,
 ): UseQueryResult<PluginsQueryData, PluginsQueryError> {
@@ -67,7 +62,6 @@ export function usePlugins(
   return useQuery({
     ...buildPluginsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function usePlugins(
  * List all plugins for the current project.
  */
 export function usePluginsSuspense(
-  request?: operations.ListPluginsRequest | undefined,
   security?: operations.ListPluginsSecurity | undefined,
   options?: SuspenseQueryHookOptions<PluginsQueryData, PluginsQueryError>,
 ): UseSuspenseQueryResult<PluginsQueryData, PluginsQueryError> {
@@ -90,7 +83,6 @@ export function usePluginsSuspense(
   return useSuspenseQuery({
     ...buildPluginsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -100,33 +92,11 @@ export function usePluginsSuspense(
 
 export function setPluginsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: PluginsQueryData,
 ): PluginsQueryData | undefined {
-  const key = queryKeyPlugins(...queryKeyBase);
+  const key = queryKeyPlugins();
 
   return client.setQueryData<PluginsQueryData>(key, data);
-}
-
-export function invalidatePlugins(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "plugins", "listPlugins", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllPlugins(

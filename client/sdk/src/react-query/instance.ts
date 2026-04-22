@@ -100,15 +100,7 @@ export function useInstanceSuspense(
 
 export function setInstanceData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      toolsetSlug: string;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-      gramKey?: string | undefined;
-      gramChatSession?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { toolsetSlug: string }],
   data: InstanceQueryData,
 ): InstanceQueryData | undefined {
   const key = queryKeyInstance(...queryKeyBase);
@@ -118,15 +110,7 @@ export function setInstanceData(
 
 export function invalidateInstance(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      toolsetSlug: string;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-      gramKey?: string | undefined;
-      gramChatSession?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { toolsetSlug: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

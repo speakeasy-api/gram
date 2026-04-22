@@ -10,6 +10,7 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -23,11 +24,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildGetProjectMetricsSummaryQuery,
   GetProjectMetricsSummaryQueryData,
@@ -59,7 +56,7 @@ export type GetProjectMetricsSummaryQueryError =
  * Get aggregated metrics summary for an entire project
  */
 export function useGetProjectMetricsSummary(
-  request: operations.GetProjectMetricsSummaryRequest,
+  request: components.GetProjectMetricsSummaryPayload,
   security?: operations.GetProjectMetricsSummarySecurity | undefined,
   options?: QueryHookOptions<
     GetProjectMetricsSummaryQueryData,
@@ -88,7 +85,7 @@ export function useGetProjectMetricsSummary(
  * Get aggregated metrics summary for an entire project
  */
 export function useGetProjectMetricsSummarySuspense(
-  request: operations.GetProjectMetricsSummaryRequest,
+  request: components.GetProjectMetricsSummaryPayload,
   security?: operations.GetProjectMetricsSummarySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetProjectMetricsSummaryQueryData,
@@ -112,40 +109,11 @@ export function useGetProjectMetricsSummarySuspense(
 
 export function setGetProjectMetricsSummaryData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: GetProjectMetricsSummaryQueryData,
 ): GetProjectMetricsSummaryQueryData | undefined {
-  const key = queryKeyGetProjectMetricsSummary(...queryKeyBase);
+  const key = queryKeyGetProjectMetricsSummary();
 
   return client.setQueryData<GetProjectMetricsSummaryQueryData>(key, data);
-}
-
-export function invalidateGetProjectMetricsSummary(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: [
-      "@gram/client",
-      "telemetry",
-      "getProjectMetricsSummary",
-      ...queryKeyBase,
-    ],
-  });
 }
 
 export function invalidateAllGetProjectMetricsSummary(

@@ -35,14 +35,6 @@ export type DownloadPluginPackageRequest = {
    * Target platform to download plugins for.
    */
   platform: Platform;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 export type DownloadPluginPackageResponse = {
@@ -92,8 +84,6 @@ export const Platform$outboundSchema: z.ZodMiniEnum<typeof Platform> = z.enum(
 export type DownloadPluginPackageRequest$Outbound = {
   plugin_id: string;
   platform: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -104,14 +94,10 @@ export const DownloadPluginPackageRequest$outboundSchema: z.ZodMiniType<
   z.object({
     pluginId: z.string(),
     platform: Platform$outboundSchema,
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       pluginId: "plugin_id",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
     });
   }),
 );

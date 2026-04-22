@@ -43,12 +43,7 @@ export function buildListVersionsQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ListVersionsQueryData>;
 } {
   return {
-    queryKey: queryKeyListVersions({
-      name: request.name,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyListVersions({ name: request.name }),
     queryFn: async function listVersionsQueryFn(
       ctx,
     ): Promise<ListVersionsQueryData> {
@@ -73,13 +68,6 @@ export function buildListVersionsQuery(
   };
 }
 
-export function queryKeyListVersions(
-  parameters: {
-    name: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
+export function queryKeyListVersions(parameters: { name: string }): QueryKey {
   return ["@gram/client", "packages", "listVersions", parameters];
 }

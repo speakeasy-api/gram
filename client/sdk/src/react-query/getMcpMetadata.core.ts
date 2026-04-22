@@ -43,12 +43,7 @@ export function buildGetMcpMetadataQuery(
   queryFn: (context: QueryFunctionContext) => Promise<GetMcpMetadataQueryData>;
 } {
   return {
-    queryKey: queryKeyGetMcpMetadata({
-      toolsetSlug: request.toolsetSlug,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyGetMcpMetadata({ toolsetSlug: request.toolsetSlug }),
     queryFn: async function getMcpMetadataQueryFn(
       ctx,
     ): Promise<GetMcpMetadataQueryData> {
@@ -74,12 +69,7 @@ export function buildGetMcpMetadataQuery(
 }
 
 export function queryKeyGetMcpMetadata(
-  parameters: {
-    toolsetSlug: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { toolsetSlug: string },
 ): QueryKey {
   return ["@gram/client", "mcpMetadata", "get", parameters];
 }

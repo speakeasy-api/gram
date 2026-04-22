@@ -43,13 +43,7 @@ export function buildInstanceQuery(
   queryFn: (context: QueryFunctionContext) => Promise<InstanceQueryData>;
 } {
   return {
-    queryKey: queryKeyInstance({
-      toolsetSlug: request.toolsetSlug,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-      gramKey: request.gramKey,
-      gramChatSession: request.gramChatSession,
-    }),
+    queryKey: queryKeyInstance({ toolsetSlug: request.toolsetSlug }),
     queryFn: async function instanceQueryFn(ctx): Promise<InstanceQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -73,13 +67,7 @@ export function buildInstanceQuery(
 }
 
 export function queryKeyInstance(
-  parameters: {
-    toolsetSlug: string;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-    gramKey?: string | undefined;
-    gramChatSession?: string | undefined;
-  },
+  parameters: { toolsetSlug: string },
 ): QueryKey {
   return ["@gram/client", "instances", "getBySlug", parameters];
 }

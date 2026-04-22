@@ -2,7 +2,7 @@ import { useListEnvironmentsSuspense } from "@gram/client/react-query/index.js";
 
 export function useEnvironments() {
   const { data: environments, refetch: refetchEnvironments } =
-    useListEnvironmentsSuspense(undefined, undefined, {
+    useListEnvironmentsSuspense(undefined, {
       refetchOnWindowFocus: false,
     });
 

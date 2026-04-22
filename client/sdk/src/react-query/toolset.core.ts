@@ -43,12 +43,7 @@ export function buildToolsetQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ToolsetQueryData>;
 } {
   return {
-    queryKey: queryKeyToolset({
-      slug: request.slug,
-      gramSession: request.gramSession,
-      gramKey: request.gramKey,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyToolset({ slug: request.slug }),
     queryFn: async function toolsetQueryFn(ctx): Promise<ToolsetQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -71,13 +66,6 @@ export function buildToolsetQuery(
   };
 }
 
-export function queryKeyToolset(
-  parameters: {
-    slug: string;
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
+export function queryKeyToolset(parameters: { slug: string }): QueryKey {
   return ["@gram/client", "toolsets", "getBySlug", parameters];
 }

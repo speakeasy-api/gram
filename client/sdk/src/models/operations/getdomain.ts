@@ -9,13 +9,6 @@ export type GetDomainSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type GetDomainRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-};
-
 /** @internal */
 export type GetDomainSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
@@ -41,33 +34,5 @@ export function getDomainSecurityToJSON(
 ): string {
   return JSON.stringify(
     GetDomainSecurity$outboundSchema.parse(getDomainSecurity),
-  );
-}
-
-/** @internal */
-export type GetDomainRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const GetDomainRequest$outboundSchema: z.ZodMiniType<
-  GetDomainRequest$Outbound,
-  GetDomainRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-    });
-  }),
-);
-
-export function getDomainRequestToJSON(
-  getDomainRequest: GetDomainRequest,
-): string {
-  return JSON.stringify(
-    GetDomainRequest$outboundSchema.parse(getDomainRequest),
   );
 }

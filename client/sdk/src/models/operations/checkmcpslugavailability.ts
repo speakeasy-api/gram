@@ -25,18 +25,6 @@ export type CheckMCPSlugAvailabilityRequest = {
    * The slug to check
    */
   slug: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -149,30 +137,15 @@ export function checkMCPSlugAvailabilitySecurityToJSON(
 /** @internal */
 export type CheckMCPSlugAvailabilityRequest$Outbound = {
   slug: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
 export const CheckMCPSlugAvailabilityRequest$outboundSchema: z.ZodMiniType<
   CheckMCPSlugAvailabilityRequest$Outbound,
   CheckMCPSlugAvailabilityRequest
-> = z.pipe(
-  z.object({
-    slug: z.string(),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
+> = z.object({
+  slug: z.string(),
+});
 
 export function checkMCPSlugAvailabilityRequestToJSON(
   checkMCPSlugAvailabilityRequest: CheckMCPSlugAvailabilityRequest,

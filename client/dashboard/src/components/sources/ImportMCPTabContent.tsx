@@ -115,18 +115,16 @@ export default function ImportMCPTabContent({
     try {
       await evolveMutation.mutateAsync({
         request: {
-          evolveForm: {
-            deploymentId: deployment?.id,
-            nonBlocking: true,
-            upsertExternalMcps: [
-              {
-                registryId: server.registryId,
-                name: server.title ?? server.registrySpecifier,
-                slug: generateSlug(server.registrySpecifier),
-                registryServerSpecifier: server.registrySpecifier,
-              },
-            ],
-          },
+          deploymentId: deployment?.id,
+          nonBlocking: true,
+          upsertExternalMcps: [
+            {
+              registryId: server.registryId,
+              name: server.title ?? server.registrySpecifier,
+              slug: generateSlug(server.registrySpecifier),
+              registryServerSpecifier: server.registrySpecifier,
+            },
+          ],
         },
       });
 

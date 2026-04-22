@@ -49,9 +49,6 @@ export function buildMcpRegistriesGetServerDetailsQuery(
     queryKey: queryKeyMcpRegistriesGetServerDetails({
       registryId: request.registryId,
       serverSpecifier: request.serverSpecifier,
-      gramSession: request.gramSession,
-      gramKey: request.gramKey,
-      gramProject: request.gramProject,
     }),
     queryFn: async function mcpRegistriesGetServerDetailsQueryFn(
       ctx,
@@ -78,13 +75,7 @@ export function buildMcpRegistriesGetServerDetailsQuery(
 }
 
 export function queryKeyMcpRegistriesGetServerDetails(
-  parameters: {
-    registryId: string;
-    serverSpecifier: string;
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { registryId: string; serverSpecifier: string },
 ): QueryKey {
   return ["@gram/client", "mcpRegistries", "getServerDetails", parameters];
 }

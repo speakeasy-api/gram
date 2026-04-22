@@ -25,18 +25,6 @@ export type ListDeploymentsRequest = {
    * The cursor to fetch results from
    */
   cursor?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -143,30 +131,15 @@ export function listDeploymentsSecurityToJSON(
 /** @internal */
 export type ListDeploymentsRequest$Outbound = {
   cursor?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
 export const ListDeploymentsRequest$outboundSchema: z.ZodMiniType<
   ListDeploymentsRequest$Outbound,
   ListDeploymentsRequest
-> = z.pipe(
-  z.object({
-    cursor: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
+> = z.object({
+  cursor: z.optional(z.string()),
+});
 
 export function listDeploymentsRequestToJSON(
   listDeploymentsRequest: ListDeploymentsRequest,

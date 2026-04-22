@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type GetProjectOverviewSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type GetProjectOverviewSecurityOption2 = {
 export type GetProjectOverviewSecurity = {
   option1?: GetProjectOverviewSecurityOption1 | undefined;
   option2?: GetProjectOverviewSecurityOption2 | undefined;
-};
-
-export type GetProjectOverviewRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  getProjectMetricsSummaryPayload: components.GetProjectMetricsSummaryPayload;
 };
 
 /** @internal */
@@ -135,44 +118,5 @@ export function getProjectOverviewSecurityToJSON(
 ): string {
   return JSON.stringify(
     GetProjectOverviewSecurity$outboundSchema.parse(getProjectOverviewSecurity),
-  );
-}
-
-/** @internal */
-export type GetProjectOverviewRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  GetProjectMetricsSummaryPayload:
-    components.GetProjectMetricsSummaryPayload$Outbound;
-};
-
-/** @internal */
-export const GetProjectOverviewRequest$outboundSchema: z.ZodMiniType<
-  GetProjectOverviewRequest$Outbound,
-  GetProjectOverviewRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    getProjectMetricsSummaryPayload:
-      components.GetProjectMetricsSummaryPayload$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      getProjectMetricsSummaryPayload: "GetProjectMetricsSummaryPayload",
-    });
-  }),
-);
-
-export function getProjectOverviewRequestToJSON(
-  getProjectOverviewRequest: GetProjectOverviewRequest,
-): string {
-  return JSON.stringify(
-    GetProjectOverviewRequest$outboundSchema.parse(getProjectOverviewRequest),
   );
 }

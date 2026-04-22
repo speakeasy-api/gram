@@ -9,6 +9,7 @@ import { authLogout } from "../funcs/authLogout.js";
 import { authRegister } from "../funcs/authRegister.js";
 import { authSwitchScopes } from "../funcs/authSwitchScopes.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 
@@ -37,13 +38,11 @@ export class Auth extends ClientSDK {
    * Provides information about the current authentication status.
    */
   async info(
-    request?: operations.SessionInfoRequest | undefined,
     security?: operations.SessionInfoSecurity | undefined,
     options?: RequestOptions,
   ): Promise<operations.SessionInfoResponse> {
     return unwrapAsync(authInfo(
       this,
-      request,
       security,
       options,
     ));
@@ -73,13 +72,11 @@ export class Auth extends ClientSDK {
    * Logs out the current user by clearing their session.
    */
   async logout(
-    request?: operations.LogoutRequest | undefined,
     security?: operations.LogoutSecurity | undefined,
     options?: RequestOptions,
   ): Promise<operations.LogoutResponse | undefined> {
     return unwrapAsync(authLogout(
       this,
-      request,
       security,
       options,
     ));
@@ -92,7 +89,7 @@ export class Auth extends ClientSDK {
    * Register a new org for a user with their session information.
    */
   async register(
-    request: operations.RegisterRequest,
+    request: components.RegisterRequestBody,
     security?: operations.RegisterSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {

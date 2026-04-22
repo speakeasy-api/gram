@@ -27,7 +27,7 @@ export const useRedeployDeployment = (
     ...options,
     onMutate: (vars, ctx) => {
       toast.loading("Redeploying...", {
-        id: vars.request.redeployRequestBody.deploymentId,
+        id: vars.request.deploymentId,
       });
       options?.onMutate?.(vars, ctx);
     },
@@ -48,7 +48,7 @@ export const useRedeployDeployment = (
       options?.onError?.(err, vars, onMutateResult, ctx);
     },
     onSettled: (data, err, vars, onMutateResult, ctx) => {
-      toast.dismiss(vars.request.redeployRequestBody.deploymentId);
+      toast.dismiss(vars.request.deploymentId);
       options?.onSettled?.(data, err, vars, onMutateResult, ctx);
     },
   });

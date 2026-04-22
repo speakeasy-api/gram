@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type SetMcpMetadataSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type SetMcpMetadataSecurityOption2 = {
 export type SetMcpMetadataSecurity = {
   option1?: SetMcpMetadataSecurityOption1 | undefined;
   option2?: SetMcpMetadataSecurityOption2 | undefined;
-};
-
-export type SetMcpMetadataRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  setMcpMetadataRequestBody: components.SetMcpMetadataRequestBody;
 };
 
 /** @internal */
@@ -135,43 +118,5 @@ export function setMcpMetadataSecurityToJSON(
 ): string {
   return JSON.stringify(
     SetMcpMetadataSecurity$outboundSchema.parse(setMcpMetadataSecurity),
-  );
-}
-
-/** @internal */
-export type SetMcpMetadataRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  SetMcpMetadataRequestBody: components.SetMcpMetadataRequestBody$Outbound;
-};
-
-/** @internal */
-export const SetMcpMetadataRequest$outboundSchema: z.ZodMiniType<
-  SetMcpMetadataRequest$Outbound,
-  SetMcpMetadataRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    setMcpMetadataRequestBody:
-      components.SetMcpMetadataRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      setMcpMetadataRequestBody: "SetMcpMetadataRequestBody",
-    });
-  }),
-);
-
-export function setMcpMetadataRequestToJSON(
-  setMcpMetadataRequest: SetMcpMetadataRequest,
-): string {
-  return JSON.stringify(
-    SetMcpMetadataRequest$outboundSchema.parse(setMcpMetadataRequest),
   );
 }

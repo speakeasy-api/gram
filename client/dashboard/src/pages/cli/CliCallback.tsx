@@ -56,7 +56,7 @@ export default function CliCallback(props: CliCallbackProps) {
       projectSlug = preferredProject;
     }
 
-    createProducerKey(createKey, session.session)
+    createProducerKey(createKey)
       .then((key) => transmitKey(localCallbackUrl, key, projectSlug))
       .catch((err) => {
         setError(
@@ -115,27 +115,15 @@ function isCallbackLocal(callbackUrl: string): boolean {
   }
 }
 
-interface KeyRequestParams {
-  scopes: string[];
-  sessionId: string;
-}
-function keyRequest(params: KeyRequestParams) {
-  const { scopes, sessionId } = params;
-  const name = generateKeyName();
-
-  return {
-    createKeyForm: { name, scopes },
-    gramSession: sessionId,
-  };
-}
-
 async function createProducerKey(
   createKey: ReturnType<typeof useCreateAPIKeyMutation>["mutateAsync"],
-  sessionId: string,
 ): Promise<string> {
   const scopes = ["producer"];
   const result = await createKey({
-    request: keyRequest({ sessionId, scopes }),
+    request: {
+      name: generateKeyName(),
+      scopes,
+    },
   });
   if (!result.key) throw new Error("No API key returned from server");
 

@@ -112,15 +112,7 @@ export function useMcpRegistriesGetServerDetailsSuspense(
 
 export function setMcpRegistriesGetServerDetailsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      registryId: string;
-      serverSpecifier: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { registryId: string; serverSpecifier: string }],
   data: McpRegistriesGetServerDetailsQueryData,
 ): McpRegistriesGetServerDetailsQueryData | undefined {
   const key = queryKeyMcpRegistriesGetServerDetails(...queryKeyBase);
@@ -131,13 +123,7 @@ export function setMcpRegistriesGetServerDetailsData(
 export function invalidateMcpRegistriesGetServerDetails(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      registryId: string;
-      serverSpecifier: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    }]
+    [parameters: { registryId: string; serverSpecifier: string }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

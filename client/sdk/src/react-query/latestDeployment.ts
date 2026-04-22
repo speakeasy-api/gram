@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildLatestDeploymentQuery,
   LatestDeploymentQueryData,
@@ -59,7 +55,6 @@ export type LatestDeploymentQueryError =
  * Get the latest deployment for a project.
  */
 export function useLatestDeployment(
-  request?: operations.GetLatestDeploymentRequest | undefined,
   security?: operations.GetLatestDeploymentSecurity | undefined,
   options?: QueryHookOptions<
     LatestDeploymentQueryData,
@@ -70,7 +65,6 @@ export function useLatestDeployment(
   return useQuery({
     ...buildLatestDeploymentQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -85,7 +79,6 @@ export function useLatestDeployment(
  * Get the latest deployment for a project.
  */
 export function useLatestDeploymentSuspense(
-  request?: operations.GetLatestDeploymentRequest | undefined,
   security?: operations.GetLatestDeploymentSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     LatestDeploymentQueryData,
@@ -99,7 +92,6 @@ export function useLatestDeploymentSuspense(
   return useSuspenseQuery({
     ...buildLatestDeploymentQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -109,35 +101,11 @@ export function useLatestDeploymentSuspense(
 
 export function setLatestDeploymentData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: LatestDeploymentQueryData,
 ): LatestDeploymentQueryData | undefined {
-  const key = queryKeyLatestDeployment(...queryKeyBase);
+  const key = queryKeyLatestDeployment();
 
   return client.setQueryData<LatestDeploymentQueryData>(key, data);
-}
-
-export function invalidateLatestDeployment(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "deployments", "latest", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllLatestDeployment(

@@ -20,7 +20,7 @@ export class RemoteMcp extends ClientSDK {
    * Create a new remote MCP server
    */
   async createServer(
-    request: operations.CreateRemoteMcpServerRequest,
+    request: components.CreateServerForm,
     security?: operations.CreateRemoteMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.RemoteMcpServer> {
@@ -77,13 +77,11 @@ export class RemoteMcp extends ClientSDK {
    * List all remote MCP servers for a project
    */
   async listServers(
-    request?: operations.ListRemoteMcpServersRequest | undefined,
     security?: operations.ListRemoteMcpServersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListServersResult> {
     return unwrapAsync(remoteMcpListServers(
       this,
-      request,
       security,
       options,
     ));
@@ -96,7 +94,7 @@ export class RemoteMcp extends ClientSDK {
    * Update a remote MCP server
    */
   async updateServer(
-    request: operations.UpdateRemoteMcpServerRequest,
+    request: components.UpdateServerForm,
     security?: operations.UpdateRemoteMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.RemoteMcpServer> {

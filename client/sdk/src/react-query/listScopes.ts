@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListScopesQuery,
   ListScopesQueryData,
@@ -59,7 +55,6 @@ export type ListScopesQueryError =
  * List all available scopes and their resource types.
  */
 export function useListScopes(
-  request?: operations.ListScopesRequest | undefined,
   security?: operations.ListScopesSecurity | undefined,
   options?: QueryHookOptions<ListScopesQueryData, ListScopesQueryError>,
 ): UseQueryResult<ListScopesQueryData, ListScopesQueryError> {
@@ -67,7 +62,6 @@ export function useListScopes(
   return useQuery({
     ...buildListScopesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useListScopes(
  * List all available scopes and their resource types.
  */
 export function useListScopesSuspense(
-  request?: operations.ListScopesRequest | undefined,
   security?: operations.ListScopesSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListScopesQueryData, ListScopesQueryError>,
 ): UseSuspenseQueryResult<ListScopesQueryData, ListScopesQueryError> {
@@ -90,7 +83,6 @@ export function useListScopesSuspense(
   return useSuspenseQuery({
     ...buildListScopesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -100,33 +92,11 @@ export function useListScopesSuspense(
 
 export function setListScopesData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    },
-  ],
   data: ListScopesQueryData,
 ): ListScopesQueryData | undefined {
-  const key = queryKeyListScopes(...queryKeyBase);
+  const key = queryKeyListScopes();
 
   return client.setQueryData<ListScopesQueryData>(key, data);
-}
-
-export function invalidateListScopes(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "access", "listScopes", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllListScopes(

@@ -178,7 +178,7 @@ const FreeTierExceededNotification = () => {
   const productTier = useProductTier();
   // Only fetch usage data for free-tier users — this notification is
   // irrelevant for paid/enterprise tiers and the request takes ~3s.
-  const { data: usage } = useGetPeriodUsage(undefined, undefined, {
+  const { data: usage } = useGetPeriodUsage(undefined, {
     throwOnError: false,
     enabled: productTier === "base",
   });

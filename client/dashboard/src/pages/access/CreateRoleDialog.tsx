@@ -298,30 +298,22 @@ export function CreateRoleDialog({
     if (isEditing) {
       updateRole.mutate({
         request: {
-          updateRoleForm: {
-            id: editingRole.id,
-            name,
-            description,
-            grants: sdkGrants,
-            memberIds:
-              selectedMembers.size > 0
-                ? Array.from(selectedMembers)
-                : undefined,
-          },
+          id: editingRole.id,
+          name,
+          description,
+          grants: sdkGrants,
+          memberIds:
+            selectedMembers.size > 0 ? Array.from(selectedMembers) : undefined,
         },
       });
     } else {
       createRole.mutate({
         request: {
-          createRoleForm: {
-            name,
-            description,
-            grants: sdkGrants,
-            memberIds:
-              selectedMembers.size > 0
-                ? Array.from(selectedMembers)
-                : undefined,
-          },
+          name,
+          description,
+          grants: sdkGrants,
+          memberIds:
+            selectedMembers.size > 0 ? Array.from(selectedMembers) : undefined,
         },
       });
     }

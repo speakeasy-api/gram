@@ -277,7 +277,7 @@ export function ToolsetPanel({
         onSuccess: () => {
           // Invalidate both toolsets and instance queries to refresh the UI
           queryClient.invalidateQueries({
-            queryKey: queryKeyListToolsets({}),
+            queryKey: queryKeyListToolsets(),
           });
           if (selectedToolset) {
             // Use partial query key (toolsetSlug only) to match all instances
@@ -318,7 +318,7 @@ export function ToolsetPanel({
         onSuccess: () => {
           // Invalidate both toolsets and instance queries to refresh the UI
           queryClient.invalidateQueries({
-            queryKey: queryKeyListToolsets({}),
+            queryKey: queryKeyListToolsets(),
           });
           if (selectedToolset) {
             // Use partial query key (toolsetSlug only) to match all instances
@@ -343,10 +343,8 @@ export function ToolsetPanel({
   const handleToolUpdate = async (tool: Tool, updates: ToolUpdatePayload) => {
     if (tool.type === "prompt") {
       await client.templates.update({
-        updatePromptTemplateForm: {
-          ...tool,
-          ...updates,
-        },
+        ...tool,
+        ...updates,
       });
       invalidateTemplate(queryClient, [{ name: tool.name }]);
     } else {
@@ -357,9 +355,7 @@ export function ToolsetPanel({
         srcToolName: tool.canonicalName,
         srcToolUrn: tool.toolUrn,
       };
-      await client.variations.upsertGlobal({
-        upsertGlobalToolVariationForm: form,
-      });
+      await client.variations.upsertGlobal(form);
     }
 
     // Invalidate to refresh tool data in the sidebar

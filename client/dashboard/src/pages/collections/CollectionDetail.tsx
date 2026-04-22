@@ -90,7 +90,13 @@ export default function CollectionDetail() {
   const toolsetQueries = useQueries({
     queries: projects.map((project) => ({
       queryKey: ["toolsets", "list", project.slug],
-      queryFn: () => client.toolsets.list({ gramProject: project.slug }),
+      queryFn: () =>
+        client.toolsets.list({
+          option1: {
+            projectSlugHeaderGramProject: project.slug,
+            sessionHeaderGramSession: "",
+          },
+        }),
       enabled: !!project.slug,
     })),
   });
@@ -402,12 +408,10 @@ export default function CollectionDetail() {
                         // Update collection metadata
                         await updateCollection.mutateAsync({
                           request: {
-                            updateRequestBody: {
-                              collectionId: collection.id,
-                              name: editName,
-                              description: editDescription,
-                              visibility: editVisibility,
-                            },
+                            collectionId: collection.id,
+                            name: editName,
+                            description: editDescription,
+                            visibility: editVisibility,
                           },
                         });
 
@@ -423,20 +427,16 @@ export default function CollectionDetail() {
                           ...toAttach.map((toolsetId) =>
                             attachServer.mutateAsync({
                               request: {
-                                attachServerRequestBody: {
-                                  collectionId: collection.id,
-                                  toolsetId,
-                                },
+                                collectionId: collection.id,
+                                toolsetId,
                               },
                             }),
                           ),
                           ...toDetach.map((toolsetId) =>
                             detachServer.mutateAsync({
                               request: {
-                                attachServerRequestBody: {
-                                  collectionId: collection.id,
-                                  toolsetId,
-                                },
+                                collectionId: collection.id,
+                                toolsetId,
                               },
                             }),
                           ),

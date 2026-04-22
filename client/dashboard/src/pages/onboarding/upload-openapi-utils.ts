@@ -177,16 +177,14 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
         deployment = createResult.deployment;
       } else {
         const createResult = await client.deployments.evolveDeployment({
-          evolveForm: {
-            nonBlocking: true,
-            upsertOpenapiv3Assets: [
-              {
-                assetId: asset.asset.id,
-                name: documentSlug ?? apiName,
-                slug: documentSlug ?? slugify(apiName),
-              },
-            ],
-          },
+          nonBlocking: true,
+          upsertOpenapiv3Assets: [
+            {
+              assetId: asset.asset.id,
+              name: documentSlug ?? apiName,
+              slug: documentSlug ?? slugify(apiName),
+            },
+          ],
         });
 
         deployment = createResult.deployment;
@@ -264,9 +262,17 @@ export function useIsProjectEmpty() {
   const { projectSlug } = useParams();
 
   const { data: deployment, isLoading: isDeploymentLoading } =
-    useLatestDeployment({ gramProject: projectSlug });
+    useLatestDeployment({
+      option2: {
+        projectSlugHeaderGramProject: projectSlug || "",
+        sessionHeaderGramSession: "",
+      },
+    });
   const { data: toolsets, isLoading: isToolsetsLoading } = useListToolsets({
-    gramProject: projectSlug,
+    option1: {
+      projectSlugHeaderGramProject: projectSlug || "",
+      sessionHeaderGramSession: "",
+    },
   });
 
   return {

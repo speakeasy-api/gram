@@ -103,13 +103,7 @@ export function useAuditLogFacetsSuspense(
 
 export function setAuditLogFacetsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      projectSlug?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { projectSlug?: string | undefined }],
   data: AuditLogFacetsQueryData,
 ): AuditLogFacetsQueryData | undefined {
   const key = queryKeyAuditLogFacets(...queryKeyBase);
@@ -120,11 +114,7 @@ export function setAuditLogFacetsData(
 export function invalidateAuditLogFacets(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      projectSlug?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    }]
+    [parameters: { projectSlug?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

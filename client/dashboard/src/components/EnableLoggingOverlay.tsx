@@ -33,10 +33,8 @@ export function EnableLoggingOverlay({ onEnabled }: EnableLoggingOverlayProps) {
     setMutationError(null);
     setLogsFeature({
       request: {
-        setProductFeatureRequestBody: {
-          featureName: FeatureName.Logs,
-          enabled: true,
-        },
+        featureName: FeatureName.Logs,
+        enabled: true,
       },
     });
   };

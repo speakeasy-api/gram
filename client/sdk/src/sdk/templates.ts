@@ -22,7 +22,7 @@ export class Templates extends ClientSDK {
    * Create a new prompt template.
    */
   async create(
-    request: operations.CreateTemplateRequest,
+    request: components.CreatePromptTemplateForm,
     security?: operations.CreateTemplateSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.CreatePromptTemplateResult> {
@@ -79,13 +79,11 @@ export class Templates extends ClientSDK {
    * List available prompt template.
    */
   async list(
-    request?: operations.ListTemplatesRequest | undefined,
     security?: operations.ListTemplatesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListPromptTemplatesResult> {
     return unwrapAsync(templatesList(
       this,
-      request,
       security,
       options,
     ));
@@ -117,7 +115,7 @@ export class Templates extends ClientSDK {
    * Render a prompt template directly with all template fields provided.
    */
   async render(
-    request: operations.RenderTemplateRequest,
+    request: components.RenderTemplateRequestBody,
     security?: operations.RenderTemplateSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.RenderTemplateResult> {
@@ -136,7 +134,7 @@ export class Templates extends ClientSDK {
    * Update a prompt template.
    */
   async update(
-    request: operations.UpdateTemplateRequest,
+    request: components.UpdatePromptTemplateForm,
     security?: operations.UpdateTemplateSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.UpdatePromptTemplateResult> {

@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateRemoteMcpServerMutationVariables = {
-  request: operations.CreateRemoteMcpServerRequest;
+  request: components.CreateServerForm;
   security?: operations.CreateRemoteMcpServerSecurity | undefined;
   options?: RequestOptions;
 };

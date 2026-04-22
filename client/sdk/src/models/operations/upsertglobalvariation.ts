@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type UpsertGlobalVariationSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -19,22 +18,6 @@ export type UpsertGlobalVariationSecurityOption2 = {
 export type UpsertGlobalVariationSecurity = {
   option1?: UpsertGlobalVariationSecurityOption1 | undefined;
   option2?: UpsertGlobalVariationSecurityOption2 | undefined;
-};
-
-export type UpsertGlobalVariationRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  upsertGlobalToolVariationForm: components.UpsertGlobalToolVariationForm;
 };
 
 /** @internal */
@@ -136,47 +119,6 @@ export function upsertGlobalVariationSecurityToJSON(
   return JSON.stringify(
     UpsertGlobalVariationSecurity$outboundSchema.parse(
       upsertGlobalVariationSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type UpsertGlobalVariationRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  UpsertGlobalToolVariationForm:
-    components.UpsertGlobalToolVariationForm$Outbound;
-};
-
-/** @internal */
-export const UpsertGlobalVariationRequest$outboundSchema: z.ZodMiniType<
-  UpsertGlobalVariationRequest$Outbound,
-  UpsertGlobalVariationRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    upsertGlobalToolVariationForm:
-      components.UpsertGlobalToolVariationForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-      upsertGlobalToolVariationForm: "UpsertGlobalToolVariationForm",
-    });
-  }),
-);
-
-export function upsertGlobalVariationRequestToJSON(
-  upsertGlobalVariationRequest: UpsertGlobalVariationRequest,
-): string {
-  return JSON.stringify(
-    UpsertGlobalVariationRequest$outboundSchema.parse(
-      upsertGlobalVariationRequest,
     ),
   );
 }

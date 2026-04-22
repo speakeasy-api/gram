@@ -14,10 +14,6 @@ export type RevokeInviteRequest = {
    * WorkOS invitation ID.
    */
   invitationId: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
 };
 
 /** @internal */
@@ -51,7 +47,6 @@ export function revokeInviteSecurityToJSON(
 /** @internal */
 export type RevokeInviteRequest$Outbound = {
   invitation_id: string;
-  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -61,12 +56,10 @@ export const RevokeInviteRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     invitationId: z.string(),
-    gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       invitationId: "invitation_id",
-      gramSession: "Gram-Session",
     });
   }),
 );

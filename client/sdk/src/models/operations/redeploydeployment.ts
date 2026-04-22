@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type RedeployDeploymentSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type RedeployDeploymentSecurityOption2 = {
 export type RedeployDeploymentSecurity = {
   option1?: RedeployDeploymentSecurityOption1 | undefined;
   option2?: RedeployDeploymentSecurityOption2 | undefined;
-};
-
-export type RedeployDeploymentRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  redeployRequestBody: components.RedeployRequestBody;
 };
 
 /** @internal */
@@ -135,42 +118,5 @@ export function redeployDeploymentSecurityToJSON(
 ): string {
   return JSON.stringify(
     RedeployDeploymentSecurity$outboundSchema.parse(redeployDeploymentSecurity),
-  );
-}
-
-/** @internal */
-export type RedeployDeploymentRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  RedeployRequestBody: components.RedeployRequestBody$Outbound;
-};
-
-/** @internal */
-export const RedeployDeploymentRequest$outboundSchema: z.ZodMiniType<
-  RedeployDeploymentRequest$Outbound,
-  RedeployDeploymentRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    redeployRequestBody: components.RedeployRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      redeployRequestBody: "RedeployRequestBody",
-    });
-  }),
-);
-
-export function redeployDeploymentRequestToJSON(
-  redeployDeploymentRequest: RedeployDeploymentRequest,
-): string {
-  return JSON.stringify(
-    RedeployDeploymentRequest$outboundSchema.parse(redeployDeploymentRequest),
   );
 }

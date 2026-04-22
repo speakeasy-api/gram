@@ -10,17 +10,6 @@ export type ListPluginsSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type ListPluginsRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-};
-
 /** @internal */
 export type ListPluginsSecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
@@ -49,36 +38,5 @@ export function listPluginsSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListPluginsSecurity$outboundSchema.parse(listPluginsSecurity),
-  );
-}
-
-/** @internal */
-export type ListPluginsRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const ListPluginsRequest$outboundSchema: z.ZodMiniType<
-  ListPluginsRequest$Outbound,
-  ListPluginsRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
-
-export function listPluginsRequestToJSON(
-  listPluginsRequest: ListPluginsRequest,
-): string {
-  return JSON.stringify(
-    ListPluginsRequest$outboundSchema.parse(listPluginsRequest),
   );
 }

@@ -79,7 +79,7 @@ interface ServerGroup {
 
 function useMCPServers(enabled: boolean) {
   const organization = useOrganization();
-  const { data } = useListToolsetsForOrg(undefined, undefined, { enabled });
+  const { data } = useListToolsetsForOrg(undefined, { enabled });
 
   return useMemo((): ServerGroup[] => {
     const projectInfo = new Map(

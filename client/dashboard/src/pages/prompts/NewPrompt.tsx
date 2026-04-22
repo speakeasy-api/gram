@@ -36,14 +36,12 @@ export default function NewPromptPage() {
           handleSubmit={(form) => {
             createPrompt({
               request: {
-                createPromptTemplateForm: {
-                  engine: "mustache",
-                  kind: "prompt",
-                  name: form.name,
-                  prompt: form.prompt,
-                  description: form.description ?? void 0,
-                  arguments: form.arguments ?? void 0,
-                },
+                engine: "mustache",
+                kind: "prompt",
+                name: form.name,
+                prompt: form.prompt,
+                description: form.description ?? void 0,
+                arguments: form.arguments ?? void 0,
               },
             });
           }}

@@ -12,13 +12,6 @@ export type LogoutSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type LogoutRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-};
-
 export type LogoutResponse = {
   headers: { [k: string]: Array<string> };
 };
@@ -45,30 +38,6 @@ export const LogoutSecurity$outboundSchema: z.ZodMiniType<
 
 export function logoutSecurityToJSON(logoutSecurity: LogoutSecurity): string {
   return JSON.stringify(LogoutSecurity$outboundSchema.parse(logoutSecurity));
-}
-
-/** @internal */
-export type LogoutRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const LogoutRequest$outboundSchema: z.ZodMiniType<
-  LogoutRequest$Outbound,
-  LogoutRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-    });
-  }),
-);
-
-export function logoutRequestToJSON(logoutRequest: LogoutRequest): string {
-  return JSON.stringify(LogoutRequest$outboundSchema.parse(logoutRequest));
 }
 
 /** @internal */

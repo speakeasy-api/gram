@@ -19,14 +19,12 @@ export type PluginsQueryData = components.ListPluginsResult;
 export function prefetchPlugins(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListPluginsRequest | undefined,
   security?: operations.ListPluginsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildPluginsQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchPlugins(
 
 export function buildPluginsQuery(
   client$: GramCore,
-  request?: operations.ListPluginsRequest | undefined,
   security?: operations.ListPluginsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,10 +40,7 @@ export function buildPluginsQuery(
   queryFn: (context: QueryFunctionContext) => Promise<PluginsQueryData>;
 } {
   return {
-    queryKey: queryKeyPlugins({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyPlugins(),
     queryFn: async function pluginsQueryFn(ctx): Promise<PluginsQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -61,7 +55,6 @@ export function buildPluginsQuery(
 
       return unwrapAsync(pluginsListPlugins(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -69,11 +62,6 @@ export function buildPluginsQuery(
   };
 }
 
-export function queryKeyPlugins(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "plugins", "listPlugins", parameters];
+export function queryKeyPlugins(): QueryKey {
+  return ["@gram/client", "plugins", "listPlugins"];
 }

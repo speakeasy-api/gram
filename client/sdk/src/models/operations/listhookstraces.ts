@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type ListHooksTracesSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type ListHooksTracesSecurityOption2 = {
 export type ListHooksTracesSecurity = {
   option1?: ListHooksTracesSecurityOption1 | undefined;
   option2?: ListHooksTracesSecurityOption2 | undefined;
-};
-
-export type ListHooksTracesRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  listHooksTracesPayload: components.ListHooksTracesPayload;
 };
 
 /** @internal */
@@ -135,42 +118,5 @@ export function listHooksTracesSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListHooksTracesSecurity$outboundSchema.parse(listHooksTracesSecurity),
-  );
-}
-
-/** @internal */
-export type ListHooksTracesRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  ListHooksTracesPayload: components.ListHooksTracesPayload$Outbound;
-};
-
-/** @internal */
-export const ListHooksTracesRequest$outboundSchema: z.ZodMiniType<
-  ListHooksTracesRequest$Outbound,
-  ListHooksTracesRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    listHooksTracesPayload: components.ListHooksTracesPayload$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      listHooksTracesPayload: "ListHooksTracesPayload",
-    });
-  }),
-);
-
-export function listHooksTracesRequestToJSON(
-  listHooksTracesRequest: ListHooksTracesRequest,
-): string {
-  return JSON.stringify(
-    ListHooksTracesRequest$outboundSchema.parse(listHooksTracesRequest),
   );
 }

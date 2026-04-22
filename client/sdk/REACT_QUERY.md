@@ -118,15 +118,13 @@ export function Example() {
         // Read form data here...
 
         mutate({
-          createRoleForm: {
-            description: "swerve hm receptor how",
-            grants: [
-              {
-                scope: "mcp:connect",
-              },
-            ],
-            name: "<value>",
-          },
+          description: "swerve hm receptor how",
+          grants: [
+            {
+              scope: "mcp:connect",
+            },
+          ],
+          name: "<value>",
         });
       }}
     >

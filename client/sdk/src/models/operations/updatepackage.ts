@@ -24,22 +24,6 @@ export type UpdatePackageSecurity = {
   option2?: UpdatePackageSecurityOption2 | undefined;
 };
 
-export type UpdatePackageRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  updatePackageForm: components.UpdatePackageForm;
-};
-
 export type UpdatePackageResponse =
   | components.UpdatePackageResult
   | components.NotModified;
@@ -142,43 +126,6 @@ export function updatePackageSecurityToJSON(
 ): string {
   return JSON.stringify(
     UpdatePackageSecurity$outboundSchema.parse(updatePackageSecurity),
-  );
-}
-
-/** @internal */
-export type UpdatePackageRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  UpdatePackageForm: components.UpdatePackageForm$Outbound;
-};
-
-/** @internal */
-export const UpdatePackageRequest$outboundSchema: z.ZodMiniType<
-  UpdatePackageRequest$Outbound,
-  UpdatePackageRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    updatePackageForm: components.UpdatePackageForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      updatePackageForm: "UpdatePackageForm",
-    });
-  }),
-);
-
-export function updatePackageRequestToJSON(
-  updatePackageRequest: UpdatePackageRequest,
-): string {
-  return JSON.stringify(
-    UpdatePackageRequest$outboundSchema.parse(updatePackageRequest),
   );
 }
 

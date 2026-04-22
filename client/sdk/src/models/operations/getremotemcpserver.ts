@@ -25,18 +25,6 @@ export type GetRemoteMcpServerRequest = {
    * The ID of the remote MCP server
    */
   id: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -143,30 +131,15 @@ export function getRemoteMcpServerSecurityToJSON(
 /** @internal */
 export type GetRemoteMcpServerRequest$Outbound = {
   id: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
 export const GetRemoteMcpServerRequest$outboundSchema: z.ZodMiniType<
   GetRemoteMcpServerRequest$Outbound,
   GetRemoteMcpServerRequest
-> = z.pipe(
-  z.object({
-    id: z.string(),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
+> = z.object({
+  id: z.string(),
+});
 
 export function getRemoteMcpServerRequestToJSON(
   getRemoteMcpServerRequest: GetRemoteMcpServerRequest,

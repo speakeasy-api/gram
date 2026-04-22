@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UpdateTriggerMutationVariables = {
-  request: operations.UpdateTriggerInstanceRequest;
+  request: components.UpdateTriggerInstanceForm;
   security?: operations.UpdateTriggerInstanceSecurity | undefined;
   options?: RequestOptions;
 };

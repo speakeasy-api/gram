@@ -26,18 +26,6 @@ export type UpdateOAuthProxyServerRequest = {
    * The slug of the toolset whose OAuth proxy server to update
    */
   slug: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
   updateOAuthProxyServerRequestBody:
     components.UpdateOAuthProxyServerRequestBody;
 };
@@ -150,9 +138,6 @@ export function updateOAuthProxyServerSecurityToJSON(
 /** @internal */
 export type UpdateOAuthProxyServerRequest$Outbound = {
   slug: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
   UpdateOAuthProxyServerRequestBody:
     components.UpdateOAuthProxyServerRequestBody$Outbound;
 };
@@ -164,17 +149,11 @@ export const UpdateOAuthProxyServerRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     slug: z.string(),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
     updateOAuthProxyServerRequestBody:
       components.UpdateOAuthProxyServerRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
       updateOAuthProxyServerRequestBody: "UpdateOAuthProxyServerRequestBody",
     });
   }),

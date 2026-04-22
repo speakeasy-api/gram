@@ -4,23 +4,10 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type HooksNumberCursorSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   projectSlugHeaderGramProject?: string | undefined;
-};
-
-export type HooksNumberCursorRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  cursorHookPayload: components.CursorHookPayload;
 };
 
 /** @internal */
@@ -51,39 +38,5 @@ export function hooksNumberCursorSecurityToJSON(
 ): string {
   return JSON.stringify(
     HooksNumberCursorSecurity$outboundSchema.parse(hooksNumberCursorSecurity),
-  );
-}
-
-/** @internal */
-export type HooksNumberCursorRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  CursorHookPayload: components.CursorHookPayload$Outbound;
-};
-
-/** @internal */
-export const HooksNumberCursorRequest$outboundSchema: z.ZodMiniType<
-  HooksNumberCursorRequest$Outbound,
-  HooksNumberCursorRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    cursorHookPayload: components.CursorHookPayload$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-      cursorHookPayload: "CursorHookPayload",
-    });
-  }),
-);
-
-export function hooksNumberCursorRequestToJSON(
-  hooksNumberCursorRequest: HooksNumberCursorRequest,
-): string {
-  return JSON.stringify(
-    HooksNumberCursorRequest$outboundSchema.parse(hooksNumberCursorRequest),
   );
 }

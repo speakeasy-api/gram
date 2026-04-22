@@ -19,7 +19,7 @@ export class Keys extends ClientSDK {
    * Create a new api key
    */
   async create(
-    request: operations.CreateAPIKeyRequest,
+    request: components.CreateKeyForm,
     security?: operations.CreateAPIKeySecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.Key> {
@@ -38,13 +38,11 @@ export class Keys extends ClientSDK {
    * List all api keys for an organization
    */
   async list(
-    request?: operations.ListAPIKeysRequest | undefined,
     security?: operations.ListAPIKeysSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListKeysResult> {
     return unwrapAsync(keysList(
       this,
-      request,
       security,
       options,
     ));
@@ -76,13 +74,11 @@ export class Keys extends ClientSDK {
    * Verify an api key
    */
   async validate(
-    request?: operations.ValidateAPIKeyRequest | undefined,
     security?: operations.ValidateAPIKeySecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ValidateKeyResult> {
     return unwrapAsync(keysValidate(
       this,
-      request,
       security,
       options,
     ));

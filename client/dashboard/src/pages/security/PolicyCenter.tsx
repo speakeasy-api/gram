@@ -152,20 +152,16 @@ function PolicyCenterContent() {
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
-          updateRiskPolicyRequestBody: {
-            id: editingPolicy.id,
-            name: formName,
-            enabled: formEnabled,
-          },
+          id: editingPolicy.id,
+          name: formName,
+          enabled: formEnabled,
         },
       });
     } else {
       createMutation.mutate({
         request: {
-          createRiskPolicyRequestBody: {
-            name: formName,
-            enabled: formEnabled,
-          },
+          name: formName,
+          enabled: formEnabled,
         },
       });
     }
@@ -177,18 +173,16 @@ function PolicyCenterContent() {
 
   const handleTrigger = (id: string) => {
     triggerMutation.mutate({
-      request: { triggerRiskAnalysisRequestBody: { id } },
+      request: { id },
     });
   };
 
   const handleToggle = (policy: RiskPolicy, enabled: boolean) => {
     updateMutation.mutate({
       request: {
-        updateRiskPolicyRequestBody: {
-          id: policy.id,
-          name: policy.name,
-          enabled,
-        },
+        id: policy.id,
+        name: policy.name,
+        enabled,
       },
     });
   };
@@ -230,10 +224,8 @@ function PolicyCenterContent() {
               onClick={() =>
                 createMutation.mutate({
                   request: {
-                    createRiskPolicyRequestBody: {
-                      name: "Secret Scanner",
-                      enabled: true,
-                    },
+                    name: "Secret Scanner",
+                    enabled: true,
                   },
                 })
               }

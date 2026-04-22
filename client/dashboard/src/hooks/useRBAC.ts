@@ -43,7 +43,7 @@ export function useRBAC() {
   // broken org membership (404/403) and show a recovery prompt via
   // MembershipSyncGuard. throwOnError is disabled so the error doesn't crash
   // the app; it's surfaced via the returned `error` field instead.
-  const { data, isLoading, error } = useGrants(undefined, undefined, {
+  const { data, isLoading, error } = useGrants(undefined, {
     staleTime: 30_000,
     throwOnError: false,
   });

@@ -15,14 +15,6 @@ export type DeleteEnvironmentRequest = {
    * The slug of the environment to delete
    */
   slug: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -59,27 +51,15 @@ export function deleteEnvironmentSecurityToJSON(
 /** @internal */
 export type DeleteEnvironmentRequest$Outbound = {
   slug: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
 export const DeleteEnvironmentRequest$outboundSchema: z.ZodMiniType<
   DeleteEnvironmentRequest$Outbound,
   DeleteEnvironmentRequest
-> = z.pipe(
-  z.object({
-    slug: z.string(),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
+> = z.object({
+  slug: z.string(),
+});
 
 export function deleteEnvironmentRequestToJSON(
   deleteEnvironmentRequest: DeleteEnvironmentRequest,

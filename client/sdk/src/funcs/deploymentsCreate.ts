@@ -101,18 +101,6 @@ async function $do(
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
-      explode: false,
-      charEncoding: "none",
-    }),
     "Idempotency-Key": encodeSimple(
       "Idempotency-Key",
       payload["Idempotency-Key"],

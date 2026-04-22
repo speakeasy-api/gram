@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildGetCreditUsageQuery,
   GetCreditUsageQueryData,
@@ -59,7 +55,6 @@ export type GetCreditUsageQueryError =
  * Get the total number of chat credits and usage for the current billing period
  */
 export function useGetCreditUsage(
-  request?: operations.CreditUsageRequest | undefined,
   security?: operations.CreditUsageSecurity | undefined,
   options?: QueryHookOptions<GetCreditUsageQueryData, GetCreditUsageQueryError>,
 ): UseQueryResult<GetCreditUsageQueryData, GetCreditUsageQueryError> {
@@ -67,7 +62,6 @@ export function useGetCreditUsage(
   return useQuery({
     ...buildGetCreditUsageQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useGetCreditUsage(
  * Get the total number of chat credits and usage for the current billing period
  */
 export function useGetCreditUsageSuspense(
-  request?: operations.CreditUsageRequest | undefined,
   security?: operations.CreditUsageSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetCreditUsageQueryData,
@@ -93,7 +86,6 @@ export function useGetCreditUsageSuspense(
   return useSuspenseQuery({
     ...buildGetCreditUsageQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -103,25 +95,11 @@ export function useGetCreditUsageSuspense(
 
 export function setGetCreditUsageData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: GetCreditUsageQueryData,
 ): GetCreditUsageQueryData | undefined {
-  const key = queryKeyGetCreditUsage(...queryKeyBase);
+  const key = queryKeyGetCreditUsage();
 
   return client.setQueryData<GetCreditUsageQueryData>(key, data);
-}
-
-export function invalidateGetCreditUsage(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "chat", "creditUsage", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllGetCreditUsage(

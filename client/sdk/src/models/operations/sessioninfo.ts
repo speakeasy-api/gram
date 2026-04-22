@@ -13,13 +13,6 @@ export type SessionInfoSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type SessionInfoRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-};
-
 export type SessionInfoResponse = {
   headers: { [k: string]: Array<string> };
   result: components.InfoResponseBody;
@@ -50,34 +43,6 @@ export function sessionInfoSecurityToJSON(
 ): string {
   return JSON.stringify(
     SessionInfoSecurity$outboundSchema.parse(sessionInfoSecurity),
-  );
-}
-
-/** @internal */
-export type SessionInfoRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const SessionInfoRequest$outboundSchema: z.ZodMiniType<
-  SessionInfoRequest$Outbound,
-  SessionInfoRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-    });
-  }),
-);
-
-export function sessionInfoRequestToJSON(
-  sessionInfoRequest: SessionInfoRequest,
-): string {
-  return JSON.stringify(
-    SessionInfoRequest$outboundSchema.parse(sessionInfoRequest),
   );
 }
 

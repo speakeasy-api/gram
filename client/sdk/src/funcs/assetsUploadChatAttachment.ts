@@ -103,23 +103,6 @@ async function $do(
       payload["Content-Length"],
       { explode: false, charEncoding: "none" },
     ),
-    "Gram-Chat-Session": encodeSimple(
-      "Gram-Chat-Session",
-      payload["Gram-Chat-Session"],
-      { explode: false, charEncoding: "none" },
-    ),
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
-      explode: false,
-      charEncoding: "none",
-    }),
   }));
 
   const requestSecurity = resolveSecurity(

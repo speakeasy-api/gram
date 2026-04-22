@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListPackagesQuery,
   ListPackagesQueryData,
@@ -59,7 +55,6 @@ export type ListPackagesQueryError =
  * List all packages for a project.
  */
 export function useListPackages(
-  request?: operations.ListPackagesRequest | undefined,
   security?: operations.ListPackagesSecurity | undefined,
   options?: QueryHookOptions<ListPackagesQueryData, ListPackagesQueryError>,
 ): UseQueryResult<ListPackagesQueryData, ListPackagesQueryError> {
@@ -67,7 +62,6 @@ export function useListPackages(
   return useQuery({
     ...buildListPackagesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useListPackages(
  * List all packages for a project.
  */
 export function useListPackagesSuspense(
-  request?: operations.ListPackagesRequest | undefined,
   security?: operations.ListPackagesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListPackagesQueryData,
@@ -93,7 +86,6 @@ export function useListPackagesSuspense(
   return useSuspenseQuery({
     ...buildListPackagesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -103,35 +95,11 @@ export function useListPackagesSuspense(
 
 export function setListPackagesData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: ListPackagesQueryData,
 ): ListPackagesQueryData | undefined {
-  const key = queryKeyListPackages(...queryKeyBase);
+  const key = queryKeyListPackages();
 
   return client.setQueryData<ListPackagesQueryData>(key, data);
-}
-
-export function invalidateListPackages(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "packages", "list", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllListPackages(

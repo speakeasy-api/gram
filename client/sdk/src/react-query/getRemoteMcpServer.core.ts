@@ -45,12 +45,7 @@ export function buildGetRemoteMcpServerQuery(
   ) => Promise<GetRemoteMcpServerQueryData>;
 } {
   return {
-    queryKey: queryKeyGetRemoteMcpServer({
-      id: request.id,
-      gramSession: request.gramSession,
-      gramKey: request.gramKey,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyGetRemoteMcpServer({ id: request.id }),
     queryFn: async function getRemoteMcpServerQueryFn(
       ctx,
     ): Promise<GetRemoteMcpServerQueryData> {
@@ -76,12 +71,7 @@ export function buildGetRemoteMcpServerQuery(
 }
 
 export function queryKeyGetRemoteMcpServer(
-  parameters: {
-    id: string;
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { id: string },
 ): QueryKey {
   return ["@gram/client", "remoteMcp", "getServer", parameters];
 }

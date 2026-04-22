@@ -132,11 +132,9 @@ export default function SourceDetails() {
         queryFn: () =>
           unwrapAsync(
             telemetryGetObservabilityOverview(gramClient, {
-              getObservabilityOverviewPayload: {
-                from: telemetryFrom,
-                to: telemetryTo,
-                includeTimeSeries: false,
-              },
+              from: telemetryFrom,
+              to: telemetryTo,
+              includeTimeSeries: false,
             }),
           ),
         enabled: relatedTools.length > 0,

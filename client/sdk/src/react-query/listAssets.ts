@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListAssetsQuery,
   ListAssetsQueryData,
@@ -59,7 +55,6 @@ export type ListAssetsQueryError =
  * List all assets for a project.
  */
 export function useListAssets(
-  request?: operations.ListAssetsRequest | undefined,
   security?: operations.ListAssetsSecurity | undefined,
   options?: QueryHookOptions<ListAssetsQueryData, ListAssetsQueryError>,
 ): UseQueryResult<ListAssetsQueryData, ListAssetsQueryError> {
@@ -67,7 +62,6 @@ export function useListAssets(
   return useQuery({
     ...buildListAssetsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useListAssets(
  * List all assets for a project.
  */
 export function useListAssetsSuspense(
-  request?: operations.ListAssetsRequest | undefined,
   security?: operations.ListAssetsSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListAssetsQueryData, ListAssetsQueryError>,
 ): UseSuspenseQueryResult<ListAssetsQueryData, ListAssetsQueryError> {
@@ -90,7 +83,6 @@ export function useListAssetsSuspense(
   return useSuspenseQuery({
     ...buildListAssetsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -100,35 +92,11 @@ export function useListAssetsSuspense(
 
 export function setListAssetsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-      gramKey?: string | undefined;
-    },
-  ],
   data: ListAssetsQueryData,
 ): ListAssetsQueryData | undefined {
-  const key = queryKeyListAssets(...queryKeyBase);
+  const key = queryKeyListAssets();
 
   return client.setQueryData<ListAssetsQueryData>(key, data);
-}
-
-export function invalidateListAssets(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-      gramKey?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "assets", "listAssets", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllListAssets(

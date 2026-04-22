@@ -109,14 +109,7 @@ export function useGetRemoteMcpServerSuspense(
 
 export function setGetRemoteMcpServerData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { id: string }],
   data: GetRemoteMcpServerQueryData,
 ): GetRemoteMcpServerQueryData | undefined {
   const key = queryKeyGetRemoteMcpServer(...queryKeyBase);
@@ -126,14 +119,7 @@ export function setGetRemoteMcpServerData(
 
 export function invalidateGetRemoteMcpServer(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { id: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

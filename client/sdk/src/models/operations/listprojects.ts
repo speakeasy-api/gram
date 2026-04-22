@@ -15,14 +15,6 @@ export type ListProjectsRequest = {
    * The ID of the organization to list projects for
    */
   organizationId: string;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
 };
 
 /** @internal */
@@ -59,8 +51,6 @@ export function listProjectsSecurityToJSON(
 /** @internal */
 export type ListProjectsRequest$Outbound = {
   organization_id: string;
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -70,14 +60,10 @@ export const ListProjectsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     organizationId: z.string(),
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       organizationId: "organization_id",
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
     });
   }),
 );

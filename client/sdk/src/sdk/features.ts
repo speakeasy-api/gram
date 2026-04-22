@@ -17,13 +17,11 @@ export class Features extends ClientSDK {
    * Get the current state of all product feature flags.
    */
   async get(
-    request?: operations.GetProductFeaturesRequest | undefined,
     security?: operations.GetProductFeaturesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GramProductFeatures> {
     return unwrapAsync(featuresGet(
       this,
-      request,
       security,
       options,
     ));
@@ -36,7 +34,7 @@ export class Features extends ClientSDK {
    * Enable or disable an organization feature flag.
    */
   async set(
-    request: operations.SetProductFeatureRequest,
+    request: components.SetProductFeatureRequestBody,
     security?: operations.SetProductFeatureSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {

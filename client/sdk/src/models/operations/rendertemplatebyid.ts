@@ -32,18 +32,6 @@ export type RenderTemplateByIDRequest = {
    * The ID of the prompt template to render
    */
   id: string;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
   renderTemplateByIDRequestBody: components.RenderTemplateByIDRequestBody;
 };
 
@@ -189,9 +177,6 @@ export function renderTemplateByIDSecurityToJSON(
 /** @internal */
 export type RenderTemplateByIDRequest$Outbound = {
   id: string;
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
   RenderTemplateByIDRequestBody:
     components.RenderTemplateByIDRequestBody$Outbound;
 };
@@ -203,17 +188,11 @@ export const RenderTemplateByIDRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     id: z.string(),
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
     renderTemplateByIDRequestBody:
       components.RenderTemplateByIDRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
       renderTemplateByIDRequestBody: "RenderTemplateByIDRequestBody",
     });
   }),

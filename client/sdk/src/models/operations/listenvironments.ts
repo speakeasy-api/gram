@@ -10,17 +10,6 @@ export type ListEnvironmentsSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type ListEnvironmentsRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-};
-
 /** @internal */
 export type ListEnvironmentsSecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
@@ -49,36 +38,5 @@ export function listEnvironmentsSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListEnvironmentsSecurity$outboundSchema.parse(listEnvironmentsSecurity),
-  );
-}
-
-/** @internal */
-export type ListEnvironmentsRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const ListEnvironmentsRequest$outboundSchema: z.ZodMiniType<
-  ListEnvironmentsRequest$Outbound,
-  ListEnvironmentsRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
-
-export function listEnvironmentsRequestToJSON(
-  listEnvironmentsRequest: ListEnvironmentsRequest,
-): string {
-  return JSON.stringify(
-    ListEnvironmentsRequest$outboundSchema.parse(listEnvironmentsRequest),
   );
 }

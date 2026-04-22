@@ -150,12 +150,10 @@ function DraftState({ app }: { app: SlackAppResult }) {
   const handleConfigure = async () => {
     await configureMutation.mutateAsync({
       request: {
-        configureSlackAppRequestBody: {
-          id: app.id,
-          slackClientId: clientId,
-          slackClientSecret: clientSecret,
-          slackSigningSecret: signingSecret,
-        },
+        id: app.id,
+        slackClientId: clientId,
+        slackClientSecret: clientSecret,
+        slackSigningSecret: signingSecret,
       },
     });
     invalidateGetSlackApp(queryClient, [{ id: app.id }]);
@@ -269,10 +267,8 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
       updateMutation.mutate(
         {
           request: {
-            updateSlackAppRequestBody: {
-              id: app.id,
-              systemPrompt: value,
-            },
+            id: app.id,
+            systemPrompt: value,
           },
         },
         {

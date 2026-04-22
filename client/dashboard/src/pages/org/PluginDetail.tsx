@@ -62,12 +62,10 @@ export default function PluginDetail() {
     updateMutation.mutate({
       security: { sessionHeaderGramSession: "" },
       request: {
-        updatePluginForm: {
-          id: pluginId!,
-          name: fd.get("name") as string,
-          slug: fd.get("slug") as string,
-          description: (fd.get("description") as string) || undefined,
-        },
+        id: pluginId!,
+        name: fd.get("name") as string,
+        slug: fd.get("slug") as string,
+        description: (fd.get("description") as string) || undefined,
       },
     });
   };
@@ -80,12 +78,10 @@ export default function PluginDetail() {
     addServerMutation.mutate({
       security: { sessionHeaderGramSession: "" },
       request: {
-        addPluginServerForm: {
-          pluginId: pluginId!,
-          toolsetId,
-          displayName: toolset?.name ?? toolsetId,
-          policy: "required",
-        },
+        pluginId: pluginId!,
+        toolsetId,
+        displayName: toolset?.name ?? toolsetId,
+        policy: "required",
       },
     });
   };

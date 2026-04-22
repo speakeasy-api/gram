@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type FetchOpenAPIv3FromURLMutationVariables = {
-  request: operations.FetchOpenAPIv3FromURLRequest;
+  request: components.FetchOpenAPIv3FromURLForm2;
   security?: operations.FetchOpenAPIv3FromURLSecurity | undefined;
   options?: RequestOptions;
 };

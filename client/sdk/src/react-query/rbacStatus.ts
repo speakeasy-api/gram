@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildRbacStatusQuery,
   prefetchRbacStatus,
@@ -59,7 +55,6 @@ export type RbacStatusQueryError =
  * Returns whether RBAC is currently enabled for the current organization.
  */
 export function useRbacStatus(
-  request?: operations.GetRBACStatusRequest | undefined,
   security?: operations.GetRBACStatusSecurity | undefined,
   options?: QueryHookOptions<RbacStatusQueryData, RbacStatusQueryError>,
 ): UseQueryResult<RbacStatusQueryData, RbacStatusQueryError> {
@@ -67,7 +62,6 @@ export function useRbacStatus(
   return useQuery({
     ...buildRbacStatusQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useRbacStatus(
  * Returns whether RBAC is currently enabled for the current organization.
  */
 export function useRbacStatusSuspense(
-  request?: operations.GetRBACStatusRequest | undefined,
   security?: operations.GetRBACStatusSecurity | undefined,
   options?: SuspenseQueryHookOptions<RbacStatusQueryData, RbacStatusQueryError>,
 ): UseSuspenseQueryResult<RbacStatusQueryData, RbacStatusQueryError> {
@@ -90,7 +83,6 @@ export function useRbacStatusSuspense(
   return useSuspenseQuery({
     ...buildRbacStatusQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -100,25 +92,11 @@ export function useRbacStatusSuspense(
 
 export function setRbacStatusData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: RbacStatusQueryData,
 ): RbacStatusQueryData | undefined {
-  const key = queryKeyRbacStatus(...queryKeyBase);
+  const key = queryKeyRbacStatus();
 
   return client.setQueryData<RbacStatusQueryData>(key, data);
-}
-
-export function invalidateRbacStatus(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "access", "getRBACStatus", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllRbacStatus(

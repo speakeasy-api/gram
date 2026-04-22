@@ -228,10 +228,8 @@ export function useMcpMetadataMetadataForm(
   const save = useCallback(() => {
     mutation.mutate({
       request: {
-        setMcpMetadataRequestBody: {
-          toolsetSlug,
-          ...metadataParams,
-        },
+        toolsetSlug,
+        ...metadataParams,
       },
     });
   }, [toolsetSlug, metadataParams, mutation]);
@@ -239,10 +237,8 @@ export function useMcpMetadataMetadataForm(
   const saveAsync = useCallback(async () => {
     await mutation.mutateAsync({
       request: {
-        setMcpMetadataRequestBody: {
-          toolsetSlug,
-          ...metadataParams,
-        },
+        toolsetSlug,
+        ...metadataParams,
       },
     });
   }, [toolsetSlug, metadataParams, mutation]);

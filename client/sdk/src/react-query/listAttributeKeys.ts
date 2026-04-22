@@ -10,6 +10,7 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -23,11 +24,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListAttributeKeysQuery,
   ListAttributeKeysQueryData,
@@ -59,7 +56,7 @@ export type ListAttributeKeysQueryError =
  * List distinct attribute keys available for filtering
  */
 export function useListAttributeKeys(
-  request: operations.ListAttributeKeysRequest,
+  request: components.GetProjectMetricsSummaryPayload,
   security?: operations.ListAttributeKeysSecurity | undefined,
   options?: QueryHookOptions<
     ListAttributeKeysQueryData,
@@ -85,7 +82,7 @@ export function useListAttributeKeys(
  * List distinct attribute keys available for filtering
  */
 export function useListAttributeKeysSuspense(
-  request: operations.ListAttributeKeysRequest,
+  request: components.GetProjectMetricsSummaryPayload,
   security?: operations.ListAttributeKeysSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListAttributeKeysQueryData,
@@ -109,40 +106,11 @@ export function useListAttributeKeysSuspense(
 
 export function setListAttributeKeysData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: ListAttributeKeysQueryData,
 ): ListAttributeKeysQueryData | undefined {
-  const key = queryKeyListAttributeKeys(...queryKeyBase);
+  const key = queryKeyListAttributeKeys();
 
   return client.setQueryData<ListAttributeKeysQueryData>(key, data);
-}
-
-export function invalidateListAttributeKeys(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: [
-      "@gram/client",
-      "telemetry",
-      "listAttributeKeys",
-      ...queryKeyBase,
-    ],
-  });
 }
 
 export function invalidateAllListAttributeKeys(

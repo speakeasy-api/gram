@@ -19,14 +19,12 @@ export type RolesQueryData = components.ListRolesResult;
 export function prefetchRoles(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListRolesRequest | undefined,
   security?: operations.ListRolesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildRolesQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchRoles(
 
 export function buildRolesQuery(
   client$: GramCore,
-  request?: operations.ListRolesRequest | undefined,
   security?: operations.ListRolesSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,10 +40,7 @@ export function buildRolesQuery(
   queryFn: (context: QueryFunctionContext) => Promise<RolesQueryData>;
 } {
   return {
-    queryKey: queryKeyRoles({
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-    }),
+    queryKey: queryKeyRoles(),
     queryFn: async function rolesQueryFn(ctx): Promise<RolesQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -61,7 +55,6 @@ export function buildRolesQuery(
 
       return unwrapAsync(accessListRoles(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -69,11 +62,6 @@ export function buildRolesQuery(
   };
 }
 
-export function queryKeyRoles(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "access", "listRoles", parameters];
+export function queryKeyRoles(): QueryKey {
+  return ["@gram/client", "access", "listRoles"];
 }

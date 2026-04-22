@@ -10,21 +10,6 @@ paths:
     post:
       description: Create a new custom role.
       operationId: createRole
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       requestBody:
         content:
           application/json:
@@ -115,20 +100,6 @@ paths:
           schema:
             description: The ID of the role to delete.
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "204":
           description: No Content response.
@@ -200,14 +171,6 @@ paths:
     post:
       description: Disable RBAC enforcement for the current organization.
       operationId: disableRBAC
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           description: OK response.
@@ -278,14 +241,6 @@ paths:
     post:
       description: Enable RBAC for the current organization. Seeds default grants for system roles.
       operationId: enableRBAC
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           description: OK response.
@@ -356,14 +311,6 @@ paths:
     get:
       description: Returns whether RBAC is currently enabled for the current organization.
       operationId: getRBACStatus
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -447,20 +394,6 @@ paths:
           schema:
             description: The ID of the role.
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -536,21 +469,6 @@ paths:
     get:
       description: List the current user's effective grants, including inherited role grants.
       operationId: listGrants
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -626,21 +544,6 @@ paths:
     get:
       description: List all team members with their role assignments.
       operationId: listMembers
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -716,21 +619,6 @@ paths:
     get:
       description: List all roles for the current organization.
       operationId: listRoles
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -806,21 +694,6 @@ paths:
     get:
       description: List all available scopes and their resource types.
       operationId: listScopes
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -896,21 +769,6 @@ paths:
     put:
       description: Change a team member's role assignment.
       operationId: updateMemberRole
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       requestBody:
         content:
           application/json:
@@ -992,21 +850,6 @@ paths:
     put:
       description: Update an existing custom role.
       operationId: updateRole
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       requestBody:
         content:
           application/json:
@@ -1088,35 +931,6 @@ paths:
     post:
       description: Create a time-limited signed URL to access a chat attachment without authentication.
       operationId: createSignedChatAttachmentURL
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
-            type: string
       requestBody:
         content:
           application/json:
@@ -1202,28 +1016,6 @@ paths:
     post:
       description: Fetch an OpenAPI v3 document from a URL and upload it to Gram.
       operationId: fetchOpenAPIv3FromURL
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       requestBody:
         content:
           application/json:
@@ -1307,28 +1099,6 @@ paths:
     get:
       description: List all assets for a project.
       operationId: listAssets
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
       responses:
         "200":
           content:
@@ -1422,27 +1192,6 @@ paths:
           required: true
           schema:
             description: The project ID that the attachment belongs to
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
             type: string
       responses:
         "200":
@@ -1644,20 +1393,6 @@ paths:
           schema:
             description: The procect ID that the asset belongs to
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -1857,20 +1592,6 @@ paths:
           schema:
             description: The procect ID that the asset belongs to
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -1972,34 +1693,6 @@ paths:
           schema:
             format: int64
             type: integer
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
-            type: string
       responses:
         "200":
           content:
@@ -2093,27 +1786,6 @@ paths:
           schema:
             format: int64
             type: integer
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -2212,27 +1884,6 @@ paths:
           schema:
             format: int64
             type: integer
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -2331,27 +1982,6 @@ paths:
           schema:
             format: int64
             type: integer
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -2465,20 +2095,6 @@ paths:
           schema:
             description: Action to filter audit logs to a specific action.
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -2569,20 +2185,6 @@ paths:
           name: project_slug
           schema:
             description: Project slug to filter facet values to a specific project.
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
             type: string
       responses:
         "200":
@@ -2758,14 +2360,6 @@ paths:
     get:
       description: Provides information about the current authentication status.
       operationId: sessionInfo
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -2932,14 +2526,6 @@ paths:
     post:
       description: Logs out the current user by clearing their session.
       operationId: logout
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           description: OK response.
@@ -3016,14 +2602,6 @@ paths:
     post:
       description: Register a new org for a user with their session information.
       operationId: register
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       requestBody:
         content:
           application/json:
@@ -3115,13 +2693,6 @@ paths:
           schema:
             description: The project id to switch scopes too
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           description: OK response.
@@ -3203,14 +2774,6 @@ paths:
     get:
       description: Get the total number of chat credits and usage for the current billing period
       operationId: creditUsage
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -3294,20 +2857,6 @@ paths:
           schema:
             description: The ID of the chat to delete
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "204":
           description: No Content response.
@@ -3377,28 +2926,6 @@ paths:
     post:
       description: Generate a title for a chat based on its messages
       operationId: generateTitle
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
-            type: string
       requestBody:
         content:
           application/json:
@@ -3479,28 +3006,6 @@ paths:
     get:
       description: List all chats for a project
       operationId: listChats
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
-            type: string
       responses:
         "200":
           content:
@@ -3659,27 +3164,6 @@ paths:
               - asc
               - desc
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
-            type: string
       responses:
         "200":
           content:
@@ -3766,27 +3250,6 @@ paths:
           schema:
             description: The ID of the chat
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
-            type: string
       responses:
         "200":
           content:
@@ -3863,28 +3326,6 @@ paths:
     post:
       description: Submit user feedback for a chat (success/failure)
       operationId: submitFeedback
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
-            type: string
       requestBody:
         content:
           application/json:
@@ -3965,28 +3406,6 @@ paths:
     post:
       description: Creates a new chat session token
       operationId: createChatSession
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -4077,27 +3496,6 @@ paths:
           schema:
             description: The chat session token to revoke
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "204":
           description: No Content response.
@@ -4169,21 +3567,6 @@ paths:
     post:
       description: Attach a server (toolset) to a collection
       operationId: attachServerToCollection
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
       requestBody:
         content:
           application/json:
@@ -4263,21 +3646,6 @@ paths:
     post:
       description: Create an MCP collection within the organization
       operationId: createCollection
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
       requestBody:
         content:
           application/json:
@@ -4367,20 +3735,6 @@ paths:
             description: ID of the collection to delete
             format: uuid
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
       responses:
         "204":
           description: No Content response.
@@ -4450,21 +3804,6 @@ paths:
     post:
       description: Detach a server (toolset) from a collection
       operationId: detachServerFromCollection
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
       requestBody:
         content:
           application/json:
@@ -4540,21 +3879,6 @@ paths:
     get:
       description: List MCP collections in the organization
       operationId: listCollections
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
       responses:
         "200":
           content:
@@ -4639,20 +3963,6 @@ paths:
           schema:
             description: Slug of the collection to serve
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
       responses:
         "200":
           content:
@@ -4726,21 +4036,6 @@ paths:
     post:
       description: Update an MCP collection
       operationId: updateCollection
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
       requestBody:
         content:
           application/json:
@@ -4820,28 +4115,6 @@ paths:
     get:
       description: Get the active deployment for a project.
       operationId: getActiveDeployment
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -4920,27 +4193,6 @@ paths:
       description: Create a deployment to load tool definitions.
       operationId: createDeployment
       parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
         - allowEmptyValue: true
           description: A unique identifier that will mitigate against duplicate deployments.
           example: 01jqq0ajmb4qh9eppz48dejr2m
@@ -5034,28 +4286,6 @@ paths:
     post:
       description: Create a new deployment with additional or updated tool sources.
       operationId: evolveDeployment
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -5148,27 +4378,6 @@ paths:
           schema:
             description: The ID of the deployment
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -5246,28 +4455,6 @@ paths:
     get:
       description: Get the latest deployment for a project.
       operationId: getLatestDeployment
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -5352,27 +4539,6 @@ paths:
           name: cursor
           schema:
             description: The cursor to fetch results from
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       responses:
         "200":
@@ -5467,27 +4633,6 @@ paths:
           schema:
             description: The cursor to fetch results from
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -5565,28 +4710,6 @@ paths:
     post:
       description: Redeploys an existing deployment.
       operationId: redeployDeployment
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -5670,14 +4793,6 @@ paths:
     delete:
       description: Delete a custom domain
       operationId: deleteDomain
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           description: OK response.
@@ -5748,14 +4863,6 @@ paths:
     get:
       description: Get the custom domain for an organization
       operationId: getDomain
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -5830,14 +4937,6 @@ paths:
     post:
       description: Create a custom domain for an organization
       operationId: registerDomain
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       requestBody:
         content:
           application/json:
@@ -5914,21 +5013,6 @@ paths:
     post:
       description: Create a new environment
       operationId: createEnvironment
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -6021,20 +5105,6 @@ paths:
             maxLength: 40
             pattern: ^[a-z0-9_-]{1,128}$
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           description: OK response.
@@ -6126,20 +5196,6 @@ paths:
           schema:
             description: The slug of the source
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           description: OK response.
@@ -6220,20 +5276,6 @@ paths:
           schema:
             description: The ID of the toolset
             format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       responses:
         "200":
@@ -6326,20 +5368,6 @@ paths:
           schema:
             description: The slug of the source
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -6425,20 +5453,6 @@ paths:
             description: The ID of the toolset
             format: uuid
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -6514,21 +5528,6 @@ paths:
     get:
       description: List all environments for an organization
       operationId: listEnvironments
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -6604,21 +5603,6 @@ paths:
     put:
       description: Set (upsert) a link between a source and an environment
       operationId: setSourceEnvironmentLink
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -6700,21 +5684,6 @@ paths:
     put:
       description: Set (upsert) a link between a toolset and an environment
       operationId: setToolsetEnvironmentLink
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -6806,20 +5775,6 @@ paths:
             description: A short url-friendly label that uniquely identifies a resource.
             maxLength: 40
             pattern: ^[a-z0-9_-]{1,128}$
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       requestBody:
         content:
@@ -6979,21 +5934,6 @@ paths:
       summary: cursor hooks
       description: Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, and postToolUseFailure.
       operationId: hooks#cursor
-      parameters:
-        - name: Gram-Key
-          in: header
-          description: API Key header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: API Key header
-        - name: Gram-Project
-          in: header
-          description: project header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: project header
       requestBody:
         required: true
         content:
@@ -7072,28 +6012,6 @@ paths:
       summary: delete hooksServerNames
       description: Delete a server name display override
       operationId: deleteServerNameOverride
-      parameters:
-        - name: Gram-Key
-          in: header
-          description: API Key header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: API Key header
-        - name: Gram-Session
-          in: header
-          description: Session header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: Session header
-        - name: Gram-Project
-          in: header
-          description: project header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: project header
       requestBody:
         required: true
         content:
@@ -7170,28 +6088,6 @@ paths:
       summary: list hooksServerNames
       description: List all server name display overrides for a project
       operationId: listServerNameOverrides
-      parameters:
-        - name: Gram-Key
-          in: header
-          description: API Key header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: API Key header
-        - name: Gram-Session
-          in: header
-          description: Session header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: Session header
-        - name: Gram-Project
-          in: header
-          description: project header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: project header
       responses:
         "200":
           description: OK response.
@@ -7268,21 +6164,6 @@ paths:
       summary: logs hooks
       description: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.
       operationId: hooks#logs
-      parameters:
-        - name: Gram-Key
-          in: header
-          description: API Key header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: API Key header
-        - name: Gram-Project
-          in: header
-          description: project header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: project header
       requestBody:
         required: true
         content:
@@ -7357,21 +6238,6 @@ paths:
       summary: metrics hooks
       description: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.
       operationId: hooks#metrics
-      parameters:
-        - name: Gram-Key
-          in: header
-          description: API Key header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: API Key header
-        - name: Gram-Project
-          in: header
-          description: project header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: project header
       requestBody:
         required: true
         content:
@@ -7446,28 +6312,6 @@ paths:
       summary: upsert hooksServerNames
       description: Create or update a server name display override
       operationId: upsertServerNameOverride
-      parameters:
-        - name: Gram-Key
-          in: header
-          description: API Key header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: API Key header
-        - name: Gram-Session
-          in: header
-          description: Session header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: Session header
-        - name: Gram-Project
-          in: header
-          description: project header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: project header
       requestBody:
         required: true
         content:
@@ -7555,34 +6399,6 @@ paths:
             description: A short url-friendly label that uniquely identifies a resource.
             maxLength: 40
             pattern: ^[a-z0-9_-]{1,128}$
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
             type: string
       responses:
         "200":
@@ -7682,20 +6498,6 @@ paths:
           schema:
             type: string
             description: The name of the integration to get (refers to a package name).
-        - name: Gram-Session
-          in: header
-          description: Session header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: Session header
-        - name: Gram-Project
-          in: header
-          description: project header
-          allowEmptyValue: true
-          schema:
-            type: string
-            description: project header
       responses:
         "200":
           description: OK response.
@@ -7776,20 +6578,6 @@ paths:
               maxLength: 20
               type: string
             type: array
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -7865,14 +6653,6 @@ paths:
     post:
       description: Create a new api key
       operationId: createAPIKey
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       requestBody:
         content:
           application/json:
@@ -7953,14 +6733,6 @@ paths:
     get:
       description: List all api keys for an organization
       operationId: listAPIKeys
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -8044,13 +6816,6 @@ paths:
           schema:
             description: The ID of the key to revoke
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           description: OK response.
@@ -8121,14 +6886,6 @@ paths:
     get:
       description: Verify an api key
       operationId: validateAPIKey
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
       responses:
         "200":
           content:
@@ -8203,28 +6960,6 @@ paths:
     post:
       description: Export MCP server details as JSON for documentation and integration purposes.
       operationId: exportMcpMetadata
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -8319,27 +7054,6 @@ paths:
             maxLength: 40
             pattern: ^[a-z0-9_-]{1,128}$
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -8417,28 +7131,6 @@ paths:
     post:
       description: Create or update the metadata that powers the MCP install page.
       operationId: setMcpMetadata
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -8530,27 +7222,6 @@ paths:
             description: The registry to clear cache for
             format: uuid
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "204":
           description: No Content response.
@@ -8639,27 +7310,6 @@ paths:
           required: true
           schema:
             description: Server specifier (e.g., 'io.github.user/server')
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       responses:
         "200":
@@ -8759,27 +7409,6 @@ paths:
           schema:
             description: Pagination cursor
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -8857,28 +7486,6 @@ paths:
     get:
       description: List all MCP registries (admin only)
       operationId: listMCPRegistries
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -9036,14 +7643,6 @@ paths:
     get:
       description: List pending WorkOS invitations for the active organization.
       operationId: listInvites
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -9118,14 +7717,6 @@ paths:
     get:
       description: List users in the active organization from Gram organization_user_relationships.
       operationId: listOrganizationUsers
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -9209,13 +7800,6 @@ paths:
           schema:
             description: Gram user ID to remove.
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "204":
           description: No Content response.
@@ -9295,13 +7879,6 @@ paths:
           schema:
             description: WorkOS invitation ID.
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "204":
           description: No Content response.
@@ -9372,14 +7949,6 @@ paths:
     post:
       description: Send a WorkOS invitation for the active organization.
       operationId: sendInvite
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       requestBody:
         content:
           application/json:
@@ -9460,28 +8029,6 @@ paths:
     post:
       description: Create a new package for a project.
       operationId: createPackage
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -9565,28 +8112,6 @@ paths:
     get:
       description: List all packages for a project.
       operationId: listPackages
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -9673,27 +8198,6 @@ paths:
           schema:
             description: The name of the package
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -9771,28 +8275,6 @@ paths:
     post:
       description: Publish a new version of a package.
       operationId: publish
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -9876,28 +8358,6 @@ paths:
     put:
       description: Update package details.
       operationId: updatePackage
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -9987,21 +8447,6 @@ paths:
     post:
       description: Add an MCP server to a plugin.
       operationId: addPluginServer
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -10083,21 +8528,6 @@ paths:
     post:
       description: Create a new plugin.
       operationId: createPlugin
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -10186,20 +8616,6 @@ paths:
           required: true
           schema:
             format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       responses:
         "204":
@@ -10293,20 +8709,6 @@ paths:
               - claude
               - cursor
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -10396,20 +8798,6 @@ paths:
           schema:
             format: uuid
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -10485,21 +8873,6 @@ paths:
     get:
       description: List all plugins for the current project.
       operationId: listPlugins
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -10592,20 +8965,6 @@ paths:
           schema:
             format: uuid
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "204":
           description: No Content response.
@@ -10677,21 +9036,6 @@ paths:
     put:
       description: Replace all assignments for a plugin with the given list of principal URNs.
       operationId: setPluginAssignments
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -10773,21 +9117,6 @@ paths:
     put:
       description: Update plugin metadata.
       operationId: updatePlugin
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -10869,21 +9198,6 @@ paths:
     put:
       description: Update a server's configuration within a plugin.
       operationId: updatePluginServer
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -10965,14 +9279,6 @@ paths:
     get:
       description: Get the current state of all product feature flags.
       operationId: getProductFeatures
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -11045,14 +9351,6 @@ paths:
     post:
       description: Enable or disable an organization feature flag.
       operationId: setProductFeature
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       requestBody:
         content:
           application/json:
@@ -11127,21 +9425,6 @@ paths:
     post:
       description: Create a new project.
       operationId: createProject
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       requestBody:
         content:
           application/json:
@@ -11233,20 +9516,6 @@ paths:
             description: The id of the project to delete
             format: uuid
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "204":
           description: No Content response.
@@ -11328,20 +9597,6 @@ paths:
             description: A short url-friendly label that uniquely identifies a resource.
             maxLength: 40
             pattern: ^[a-z0-9_-]{1,128}$
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
             type: string
       responses:
         "200":
@@ -11427,20 +9682,6 @@ paths:
           schema:
             description: The ID of the organization to list projects for
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -11516,28 +9757,6 @@ paths:
     get:
       description: List allowed origins for a project.
       operationId: listAllowedOrigins
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -11615,28 +9834,6 @@ paths:
     post:
       description: Uploads a logo for a project.
       operationId: setProjectLogo
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -11720,14 +9917,6 @@ paths:
     post:
       description: Set organization whitelist status (admin only - requires speakeasy-team API key)
       operationId: setOrganizationWhitelist
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
       requestBody:
         content:
           application/json:
@@ -11802,28 +9991,6 @@ paths:
     post:
       description: Upsert an allowed origin for a project.
       operationId: upsertAllowedOrigin
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -11907,28 +10074,6 @@ paths:
     post:
       description: Create a new remote MCP server
       operationId: createRemoteMcpServer
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -12021,27 +10166,6 @@ paths:
           schema:
             description: The ID of the remote MCP server to delete
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           description: OK response.
@@ -12124,27 +10248,6 @@ paths:
           schema:
             description: The ID of the remote MCP server
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -12222,28 +10325,6 @@ paths:
     get:
       description: List all remote MCP servers for a project
       operationId: listRemoteMcpServers
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -12321,28 +10402,6 @@ paths:
     post:
       description: Update a remote MCP server
       operationId: updateRemoteMcpServer
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -12449,20 +10508,6 @@ paths:
           schema:
             description: The deployment ID. If unset, latest deployment will be used.
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -12538,28 +10583,6 @@ paths:
     post:
       description: Create a new risk analysis policy for the current project.
       operationId: createRiskPolicy
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -12655,27 +10678,6 @@ paths:
             description: The policy ID.
             format: uuid
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           description: OK response.
@@ -12758,27 +10760,6 @@ paths:
             description: The policy ID.
             format: uuid
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -12855,28 +10836,6 @@ paths:
     get:
       description: List all risk analysis policies for the current project.
       operationId: listRiskPolicies
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -12965,27 +10924,6 @@ paths:
             description: The policy ID.
             format: uuid
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -13062,28 +11000,6 @@ paths:
     post:
       description: Manually trigger risk analysis for a policy, starting or signaling the drain workflow.
       operationId: triggerRiskAnalysis
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -13162,28 +11078,6 @@ paths:
     put:
       description: Update a risk analysis policy.
       operationId: updateRiskPolicy
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -13273,27 +11167,6 @@ paths:
           name: cursor
           schema:
             description: Cursor to fetch the next page of results.
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       responses:
         "200":
@@ -13397,27 +11270,6 @@ paths:
           schema:
             description: Cursor to fetch the next page of results.
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -13496,21 +11348,6 @@ paths:
     post:
       description: Store Slack credentials (client ID, client secret, signing secret) for an app.
       operationId: configureSlackApp
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -13592,21 +11429,6 @@ paths:
     post:
       description: Create a new Slack app and generate its manifest.
       operationId: createSlackApp
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -13698,20 +11520,6 @@ paths:
             description: The Slack app ID
             format: uuid
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "204":
           description: No Content response.
@@ -13793,20 +11601,6 @@ paths:
             description: The Slack app ID
             format: uuid
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -13882,21 +11676,6 @@ paths:
     get:
       description: List Slack apps for a project.
       operationId: listSlackApps
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -13972,21 +11751,6 @@ paths:
     put:
       description: Update a Slack app's settings.
       operationId: updateSlackApp
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -14068,35 +11832,6 @@ paths:
     post:
       description: Capture a telemetry event and forward it to PostHog
       operationId: captureEvent
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
-            type: string
       requestBody:
         content:
           application/json:
@@ -14179,28 +11914,6 @@ paths:
     post:
       description: Get aggregated hooks metrics grouped by server
       operationId: getHooksSummary
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -14285,28 +11998,6 @@ paths:
     post:
       description: Get observability overview metrics including time series, tool breakdowns, and summary stats
       operationId: getObservabilityOverview
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -14391,28 +12082,6 @@ paths:
     post:
       description: Get aggregated metrics summary for an entire project
       operationId: getProjectMetricsSummary
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -14497,28 +12166,6 @@ paths:
     post:
       description: Get project-level overview including total chats, tool calls, active servers/users, and top lists
       operationId: getProjectOverview
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -14603,28 +12250,6 @@ paths:
     post:
       description: Get aggregated metrics summary grouped by user
       operationId: getUserMetricsSummary
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -14709,28 +12334,6 @@ paths:
     post:
       description: List distinct attribute keys available for filtering
       operationId: listAttributeKeys
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -14815,28 +12418,6 @@ paths:
     post:
       description: List available filter options (API keys or users) for the observability overview
       operationId: listFilterOptions
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -14921,28 +12502,6 @@ paths:
     post:
       description: List hook traces aggregated by trace_id with user information
       operationId: listHooksTraces
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -15027,28 +12586,6 @@ paths:
     post:
       description: Search and list chat session summaries that match a search filter
       operationId: searchChats
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -15133,28 +12670,6 @@ paths:
     post:
       description: Search and list telemetry logs that match a search filter
       operationId: searchLogs
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -15238,28 +12753,6 @@ paths:
     post:
       description: Search and list tool calls that match a search filter
       operationId: searchToolCalls
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -15343,28 +12836,6 @@ paths:
     post:
       description: Search and list user usage summaries grouped by user_id or external_user_id
       operationId: searchUsers
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -15449,28 +12920,6 @@ paths:
     post:
       description: Create a new prompt template.
       operationId: createTemplate
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -15569,27 +13018,6 @@ paths:
           schema:
             description: The name of the prompt template
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "204":
           description: No Content response.
@@ -15678,27 +13106,6 @@ paths:
           schema:
             description: The name of the prompt template
             type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -15778,28 +13185,6 @@ paths:
     get:
       description: List available prompt template.
       operationId: listTemplates
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -15885,27 +13270,6 @@ paths:
           required: true
           schema:
             description: The ID of the prompt template to render
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       requestBody:
         content:
@@ -15993,28 +13357,6 @@ paths:
     post:
       description: Render a prompt template directly with all template fields provided.
       operationId: renderTemplate
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -16101,28 +13443,6 @@ paths:
     post:
       description: Update a prompt template.
       operationId: updateTemplate
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -16236,20 +13556,6 @@ paths:
           schema:
             description: Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -16335,27 +13641,6 @@ paths:
             description: A short url-friendly label that uniquely identifies a resource.
             maxLength: 40
             pattern: ^[a-z0-9_-]{1,128}$
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       requestBody:
         content:
@@ -16451,27 +13736,6 @@ paths:
             maxLength: 40
             pattern: ^[a-z0-9_-]{1,128}$
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -16566,27 +13830,6 @@ paths:
             maxLength: 40
             pattern: ^[a-z0-9_-]{1,128}$
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -16675,20 +13918,6 @@ paths:
             maxLength: 40
             pattern: ^[a-z0-9_-]{1,128}$
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -16766,28 +13995,6 @@ paths:
     post:
       description: Create a new toolset with associated tools
       operationId: createToolset
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -16882,27 +14089,6 @@ paths:
             maxLength: 40
             pattern: ^[a-z0-9_-]{1,128}$
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "204":
           description: No Content response.
@@ -16987,27 +14173,6 @@ paths:
             maxLength: 40
             pattern: ^[a-z0-9_-]{1,128}$
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -17085,28 +14250,6 @@ paths:
     get:
       description: List all toolsets for a project
       operationId: listToolsets
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -17184,21 +14327,6 @@ paths:
     get:
       description: List all toolsets across the organization
       operationId: listToolsetsForOrg
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
       responses:
         "200":
           content:
@@ -17284,27 +14412,6 @@ paths:
             description: A short url-friendly label that uniquely identifies a resource.
             maxLength: 40
             pattern: ^[a-z0-9_-]{1,128}$
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       responses:
         "200":
@@ -17393,27 +14500,6 @@ paths:
             description: A short url-friendly label that uniquely identifies a resource.
             maxLength: 40
             pattern: ^[a-z0-9_-]{1,128}$
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       requestBody:
         content:
@@ -17509,27 +14595,6 @@ paths:
             maxLength: 40
             pattern: ^[a-z0-9_-]{1,128}$
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -17613,21 +14678,6 @@ paths:
     post:
       description: Create a trigger instance.
       operationId: createTriggerInstance
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -17709,21 +14759,6 @@ paths:
     get:
       description: List static trigger definitions available to a project.
       operationId: listTriggerDefinitions
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -17809,20 +14844,6 @@ paths:
             description: The trigger instance ID.
             format: uuid
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           description: OK response.
@@ -17904,20 +14925,6 @@ paths:
             description: The trigger instance ID.
             format: uuid
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -17993,21 +15000,6 @@ paths:
     get:
       description: List trigger instances for the current project.
       operationId: listTriggerInstances
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -18092,20 +15084,6 @@ paths:
           schema:
             description: The trigger instance ID.
             format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
             type: string
       responses:
         "200":
@@ -18192,20 +15170,6 @@ paths:
             description: The trigger instance ID.
             format: uuid
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -18281,21 +15245,6 @@ paths:
     post:
       description: Update a trigger instance.
       operationId: updateTriggerInstance
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:
@@ -18377,14 +15326,6 @@ paths:
     post:
       description: Create a checkout link for upgrading to the business plan
       operationId: createCheckout
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -18459,14 +15400,6 @@ paths:
     post:
       description: Create a customer session for the user
       operationId: createCustomerSession
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -18541,14 +15474,6 @@ paths:
     get:
       description: Get the usage for an organization for a given period
       operationId: getPeriodUsage
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
       responses:
         "200":
           content:
@@ -18703,27 +15628,6 @@ paths:
           schema:
             description: The ID of the variation to delete
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -18801,28 +15705,6 @@ paths:
     get:
       description: List globally defined tool variations.
       operationId: listGlobalVariations
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       responses:
         "200":
           content:
@@ -18900,28 +15782,6 @@ paths:
     post:
       description: Create or update a globally defined tool variation.
       operationId: upsertGlobalVariation
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
       requestBody:
         content:
           application/json:

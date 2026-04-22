@@ -48,8 +48,6 @@ export function buildGetSourceEnvironmentQuery(
     queryKey: queryKeyGetSourceEnvironment({
       sourceKind: request.sourceKind,
       sourceSlug: request.sourceSlug,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
     }),
     queryFn: async function getSourceEnvironmentQueryFn(
       ctx,
@@ -79,8 +77,6 @@ export function queryKeyGetSourceEnvironment(
   parameters: {
     sourceKind: operations.QueryParamSourceKind;
     sourceSlug: string;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "environments", "getBySource", parameters];

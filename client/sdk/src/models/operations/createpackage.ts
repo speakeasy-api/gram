@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type CreatePackageSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type CreatePackageSecurityOption2 = {
 export type CreatePackageSecurity = {
   option1?: CreatePackageSecurityOption1 | undefined;
   option2?: CreatePackageSecurityOption2 | undefined;
-};
-
-export type CreatePackageRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  createPackageForm: components.CreatePackageForm;
 };
 
 /** @internal */
@@ -135,42 +118,5 @@ export function createPackageSecurityToJSON(
 ): string {
   return JSON.stringify(
     CreatePackageSecurity$outboundSchema.parse(createPackageSecurity),
-  );
-}
-
-/** @internal */
-export type CreatePackageRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  CreatePackageForm: components.CreatePackageForm$Outbound;
-};
-
-/** @internal */
-export const CreatePackageRequest$outboundSchema: z.ZodMiniType<
-  CreatePackageRequest$Outbound,
-  CreatePackageRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    createPackageForm: components.CreatePackageForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      createPackageForm: "CreatePackageForm",
-    });
-  }),
-);
-
-export function createPackageRequestToJSON(
-  createPackageRequest: CreatePackageRequest,
-): string {
-  return JSON.stringify(
-    CreatePackageRequest$outboundSchema.parse(createPackageRequest),
   );
 }

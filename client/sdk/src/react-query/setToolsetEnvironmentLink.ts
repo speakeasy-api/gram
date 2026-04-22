@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type SetToolsetEnvironmentLinkMutationVariables = {
-  request: operations.SetToolsetEnvironmentLinkRequest;
+  request: components.SetToolsetEnvironmentLinkRequestBody;
   security?: operations.SetToolsetEnvironmentLinkSecurity | undefined;
   options?: RequestOptions;
 };

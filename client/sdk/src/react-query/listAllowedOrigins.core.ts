@@ -19,14 +19,12 @@ export type ListAllowedOriginsQueryData = components.ListAllowedOriginsResult;
 export function prefetchListAllowedOrigins(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListAllowedOriginsRequest | undefined,
   security?: operations.ListAllowedOriginsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListAllowedOriginsQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchListAllowedOrigins(
 
 export function buildListAllowedOriginsQuery(
   client$: GramCore,
-  request?: operations.ListAllowedOriginsRequest | undefined,
   security?: operations.ListAllowedOriginsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -45,11 +42,7 @@ export function buildListAllowedOriginsQuery(
   ) => Promise<ListAllowedOriginsQueryData>;
 } {
   return {
-    queryKey: queryKeyListAllowedOrigins({
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyListAllowedOrigins(),
     queryFn: async function listAllowedOriginsQueryFn(
       ctx,
     ): Promise<ListAllowedOriginsQueryData> {
@@ -66,7 +59,6 @@ export function buildListAllowedOriginsQuery(
 
       return unwrapAsync(projectsListAllowedOrigins(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -74,12 +66,6 @@ export function buildListAllowedOriginsQuery(
   };
 }
 
-export function queryKeyListAllowedOrigins(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "projects", "listAllowedOrigins", parameters];
+export function queryKeyListAllowedOrigins(): QueryKey {
+  return ["@gram/client", "projects", "listAllowedOrigins"];
 }

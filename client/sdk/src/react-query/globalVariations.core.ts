@@ -19,14 +19,12 @@ export type GlobalVariationsQueryData = components.ListVariationsResult;
 export function prefetchGlobalVariations(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListGlobalVariationsRequest | undefined,
   security?: operations.ListGlobalVariationsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildGlobalVariationsQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchGlobalVariations(
 
 export function buildGlobalVariationsQuery(
   client$: GramCore,
-  request?: operations.ListGlobalVariationsRequest | undefined,
   security?: operations.ListGlobalVariationsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -45,11 +42,7 @@ export function buildGlobalVariationsQuery(
   ) => Promise<GlobalVariationsQueryData>;
 } {
   return {
-    queryKey: queryKeyGlobalVariations({
-      gramSession: request?.gramSession,
-      gramKey: request?.gramKey,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyGlobalVariations(),
     queryFn: async function globalVariationsQueryFn(
       ctx,
     ): Promise<GlobalVariationsQueryData> {
@@ -66,7 +59,6 @@ export function buildGlobalVariationsQuery(
 
       return unwrapAsync(variationsListGlobal(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -74,12 +66,6 @@ export function buildGlobalVariationsQuery(
   };
 }
 
-export function queryKeyGlobalVariations(
-  parameters: {
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "variations", "listGlobal", parameters];
+export function queryKeyGlobalVariations(): QueryKey {
+  return ["@gram/client", "variations", "listGlobal"];
 }

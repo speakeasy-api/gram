@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildFeaturesGetQuery,
   FeaturesGetQueryData,
@@ -59,7 +55,6 @@ export type FeaturesGetQueryError =
  * Get the current state of all product feature flags.
  */
 export function useFeaturesGet(
-  request?: operations.GetProductFeaturesRequest | undefined,
   security?: operations.GetProductFeaturesSecurity | undefined,
   options?: QueryHookOptions<FeaturesGetQueryData, FeaturesGetQueryError>,
 ): UseQueryResult<FeaturesGetQueryData, FeaturesGetQueryError> {
@@ -67,7 +62,6 @@ export function useFeaturesGet(
   return useQuery({
     ...buildFeaturesGetQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useFeaturesGet(
  * Get the current state of all product feature flags.
  */
 export function useFeaturesGetSuspense(
-  request?: operations.GetProductFeaturesRequest | undefined,
   security?: operations.GetProductFeaturesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     FeaturesGetQueryData,
@@ -93,7 +86,6 @@ export function useFeaturesGetSuspense(
   return useSuspenseQuery({
     ...buildFeaturesGetQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -103,25 +95,11 @@ export function useFeaturesGetSuspense(
 
 export function setFeaturesGetData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: FeaturesGetQueryData,
 ): FeaturesGetQueryData | undefined {
-  const key = queryKeyFeaturesGet(...queryKeyBase);
+  const key = queryKeyFeaturesGet();
 
   return client.setQueryData<FeaturesGetQueryData>(key, data);
-}
-
-export function invalidateFeaturesGet(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "features", "get", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllFeaturesGet(

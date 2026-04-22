@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildValidateAPIKeyQuery,
   prefetchValidateAPIKey,
@@ -59,7 +55,6 @@ export type ValidateAPIKeyQueryError =
  * Verify an api key
  */
 export function useValidateAPIKey(
-  request?: operations.ValidateAPIKeyRequest | undefined,
   security?: operations.ValidateAPIKeySecurity | undefined,
   options?: QueryHookOptions<ValidateAPIKeyQueryData, ValidateAPIKeyQueryError>,
 ): UseQueryResult<ValidateAPIKeyQueryData, ValidateAPIKeyQueryError> {
@@ -67,7 +62,6 @@ export function useValidateAPIKey(
   return useQuery({
     ...buildValidateAPIKeyQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useValidateAPIKey(
  * Verify an api key
  */
 export function useValidateAPIKeySuspense(
-  request?: operations.ValidateAPIKeyRequest | undefined,
   security?: operations.ValidateAPIKeySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ValidateAPIKeyQueryData,
@@ -93,7 +86,6 @@ export function useValidateAPIKeySuspense(
   return useSuspenseQuery({
     ...buildValidateAPIKeyQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -103,23 +95,11 @@ export function useValidateAPIKeySuspense(
 
 export function setValidateAPIKeyData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramKey?: string | undefined }],
   data: ValidateAPIKeyQueryData,
 ): ValidateAPIKeyQueryData | undefined {
-  const key = queryKeyValidateAPIKey(...queryKeyBase);
+  const key = queryKeyValidateAPIKey();
 
   return client.setQueryData<ValidateAPIKeyQueryData>(key, data);
-}
-
-export function invalidateValidateAPIKey(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<[parameters: { gramKey?: string | undefined }]>,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "keys", "validate", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllValidateAPIKey(

@@ -222,13 +222,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     setMcpMetadataMutation.mutate(
       {
         request: {
-          setMcpMetadataRequestBody: {
-            ...mcpMetadata,
-            toolsetSlug: toolset.slug,
-            // Omitting defaultEnvironmentId causes the upsert to write NULL, detaching the environment
-            defaultEnvironmentId: undefined,
-            environmentConfigs: mcpMetadata?.environmentConfigs || [],
-          },
+          ...mcpMetadata,
+          toolsetSlug: toolset.slug,
+          // Omitting defaultEnvironmentId causes the upsert to write NULL, detaching the environment
+          defaultEnvironmentId: undefined,
+          environmentConfigs: mcpMetadata?.environmentConfigs || [],
         },
       },
       {
@@ -252,11 +250,9 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
 
     createEnvironmentMutation.mutate({
       request: {
-        createEnvironmentForm: {
-          name: newEnvironmentName.trim(),
-          organizationId: session.activeOrganizationId,
-          entries: [],
-        },
+        name: newEnvironmentName.trim(),
+        organizationId: session.activeOrganizationId,
+        entries: [],
       },
     });
   };
@@ -282,13 +278,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
 
       setMcpMetadataMutation.mutate({
         request: {
-          setMcpMetadataRequestBody: {
-            ...mcpMetadata,
-            toolsetSlug: toolset.slug,
-            defaultEnvironmentId:
-              mcpMetadata?.defaultEnvironmentId || attachedEnvironment.id,
-            environmentConfigs: newEntries,
-          },
+          ...mcpMetadata,
+          toolsetSlug: toolset.slug,
+          defaultEnvironmentId:
+            mcpMetadata?.defaultEnvironmentId || attachedEnvironment.id,
+          environmentConfigs: newEntries,
         },
       });
       toast.success(`Added ${varKey} from ${attachedEnvironment.name}`);
@@ -346,13 +340,11 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
         if (targetEnv) {
           setMcpMetadataMutation.mutate({
             request: {
-              setMcpMetadataRequestBody: {
-                ...mcpMetadata,
-                toolsetSlug: toolset.slug,
-                defaultEnvironmentId:
-                  mcpMetadata?.defaultEnvironmentId || targetEnv.id,
-                environmentConfigs: [...existingEntries, ...newConfigEntries],
-              },
+              ...mcpMetadata,
+              toolsetSlug: toolset.slug,
+              defaultEnvironmentId:
+                mcpMetadata?.defaultEnvironmentId || targetEnv.id,
+              environmentConfigs: [...existingEntries, ...newConfigEntries],
             },
           });
         }
@@ -605,12 +597,10 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       const environmentConfigsToSave = Array.from(updatedEntriesMap.values());
       await setMcpMetadataMutation.mutateAsync({
         request: {
-          setMcpMetadataRequestBody: {
-            ...mcpMetadata,
-            toolsetSlug: toolset.slug,
-            defaultEnvironmentId: mcpMetadata?.defaultEnvironmentId,
-            environmentConfigs: environmentConfigsToSave,
-          },
+          ...mcpMetadata,
+          toolsetSlug: toolset.slug,
+          defaultEnvironmentId: mcpMetadata?.defaultEnvironmentId,
+          environmentConfigs: environmentConfigsToSave,
         },
       });
 
@@ -684,12 +674,10 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     // Set this environment as the default
     setMcpMetadataMutation.mutate({
       request: {
-        setMcpMetadataRequestBody: {
-          ...mcpMetadata,
-          toolsetSlug: toolset.slug,
-          defaultEnvironmentId: targetEnv.id,
-          environmentConfigs: mcpMetadata?.environmentConfigs || [],
-        },
+        ...mcpMetadata,
+        toolsetSlug: toolset.slug,
+        defaultEnvironmentId: targetEnv.id,
+        environmentConfigs: mcpMetadata?.environmentConfigs || [],
       },
     });
 

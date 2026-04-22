@@ -19,7 +19,7 @@ export type ListHooksTracesQueryData = components.ListHooksTracesResult;
 export function prefetchListHooksTraces(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListHooksTracesRequest,
+  request: components.ListHooksTracesPayload,
   security?: operations.ListHooksTracesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -35,7 +35,7 @@ export function prefetchListHooksTraces(
 
 export function buildListHooksTracesQuery(
   client$: GramCore,
-  request: operations.ListHooksTracesRequest,
+  request: components.ListHooksTracesPayload,
   security?: operations.ListHooksTracesSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,11 +43,7 @@ export function buildListHooksTracesQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ListHooksTracesQueryData>;
 } {
   return {
-    queryKey: queryKeyListHooksTraces({
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyListHooksTraces(),
     queryFn: async function listHooksTracesQueryFn(
       ctx,
     ): Promise<ListHooksTracesQueryData> {
@@ -72,12 +68,6 @@ export function buildListHooksTracesQuery(
   };
 }
 
-export function queryKeyListHooksTraces(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "telemetry", "listHooksTraces", parameters];
+export function queryKeyListHooksTraces(): QueryKey {
+  return ["@gram/client", "telemetry", "listHooksTraces"];
 }

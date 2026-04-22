@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UpsertGlobalVariationMutationVariables = {
-  request: operations.UpsertGlobalVariationRequest;
+  request: components.UpsertGlobalToolVariationForm;
   security?: operations.UpsertGlobalVariationSecurity | undefined;
   options?: RequestOptions;
 };

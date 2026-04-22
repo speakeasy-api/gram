@@ -45,8 +45,6 @@ export function buildServeFunctionQuery(
     queryKey: queryKeyServeFunction({
       id: request.id,
       projectId: request.projectId,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
     }),
     queryFn: async function serveFunctionQueryFn(
       ctx,
@@ -73,12 +71,7 @@ export function buildServeFunctionQuery(
 }
 
 export function queryKeyServeFunction(
-  parameters: {
-    id: string;
-    projectId: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
+  parameters: { id: string; projectId: string },
 ): QueryKey {
   return ["@gram/client", "assets", "serveFunction", parameters];
 }

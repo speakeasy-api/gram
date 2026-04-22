@@ -10,17 +10,6 @@ export type ListMembersSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type ListMembersRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-};
-
 /** @internal */
 export type ListMembersSecurity$Outbound = {
   "apikey_header_Gram-Key"?: string | undefined;
@@ -49,36 +38,5 @@ export function listMembersSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListMembersSecurity$outboundSchema.parse(listMembersSecurity),
-  );
-}
-
-/** @internal */
-export type ListMembersRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const ListMembersRequest$outboundSchema: z.ZodMiniType<
-  ListMembersRequest$Outbound,
-  ListMembersRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-    });
-  }),
-);
-
-export function listMembersRequestToJSON(
-  listMembersRequest: ListMembersRequest,
-): string {
-  return JSON.stringify(
-    ListMembersRequest$outboundSchema.parse(listMembersRequest),
   );
 }

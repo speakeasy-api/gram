@@ -418,15 +418,13 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
           if (initial.id) {
             updatePrompt({
               request: {
-                updatePromptTemplateForm: {
-                  id: initial.id,
-                  name,
-                  description,
-                  prompt: higherOrderToolToJSON(higherOrderTool),
-                  arguments: JSON.stringify(argsJsonSchema),
-                  toolsHint: steps.flatMap((step) => step.canonicalTool ?? []),
-                  toolUrnsHint: steps.flatMap((step) => step.toolUrn ?? []),
-                },
+                id: initial.id,
+                name,
+                description,
+                prompt: higherOrderToolToJSON(higherOrderTool),
+                arguments: JSON.stringify(argsJsonSchema),
+                toolsHint: steps.flatMap((step) => step.canonicalTool ?? []),
+                toolUrnsHint: steps.flatMap((step) => step.toolUrn ?? []),
               },
             });
 
@@ -435,15 +433,13 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
             });
           } else {
             const template = await client.templates.create({
-              createPromptTemplateForm: {
-                name,
-                description,
-                kind: PromptTemplateKind.HigherOrderTool,
-                prompt: higherOrderToolToJSON(higherOrderTool),
-                arguments: JSON.stringify(argsJsonSchema),
-                toolsHint: steps.flatMap((step) => step.canonicalTool ?? []),
-                engine: "mustache",
-              },
+              name,
+              description,
+              kind: PromptTemplateKind.HigherOrderTool,
+              prompt: higherOrderToolToJSON(higherOrderTool),
+              arguments: JSON.stringify(argsJsonSchema),
+              toolsHint: steps.flatMap((step) => step.canonicalTool ?? []),
+              engine: "mustache",
             });
 
             telemetry.capture("tool_builder_event", {
@@ -985,12 +981,10 @@ function ChatPanel(props: {
         };
 
         const renderResult = await client.templates.render({
-          renderTemplateRequestBody: {
-            prompt: higherOrderToolToJSON(higherOrderTool),
-            arguments: inputArgs,
-            engine: "mustache",
-            kind: PromptTemplateKind.HigherOrderTool,
-          },
+          prompt: higherOrderToolToJSON(higherOrderTool),
+          arguments: inputArgs,
+          engine: "mustache",
+          kind: PromptTemplateKind.HigherOrderTool,
         });
 
         const renderedPrompt = renderResult.prompt || "";

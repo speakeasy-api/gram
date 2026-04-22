@@ -19,14 +19,12 @@ export type GetCreditUsageQueryData = components.CreditUsageResponseBody;
 export function prefetchGetCreditUsage(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.CreditUsageRequest | undefined,
   security?: operations.CreditUsageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildGetCreditUsageQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchGetCreditUsage(
 
 export function buildGetCreditUsageQuery(
   client$: GramCore,
-  request?: operations.CreditUsageRequest | undefined,
   security?: operations.CreditUsageSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,7 +40,7 @@ export function buildGetCreditUsageQuery(
   queryFn: (context: QueryFunctionContext) => Promise<GetCreditUsageQueryData>;
 } {
   return {
-    queryKey: queryKeyGetCreditUsage({ gramSession: request?.gramSession }),
+    queryKey: queryKeyGetCreditUsage(),
     queryFn: async function getCreditUsageQueryFn(
       ctx,
     ): Promise<GetCreditUsageQueryData> {
@@ -60,7 +57,6 @@ export function buildGetCreditUsageQuery(
 
       return unwrapAsync(chatCreditUsage(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -68,8 +64,6 @@ export function buildGetCreditUsageQuery(
   };
 }
 
-export function queryKeyGetCreditUsage(
-  parameters: { gramSession?: string | undefined },
-): QueryKey {
-  return ["@gram/client", "chat", "creditUsage", parameters];
+export function queryKeyGetCreditUsage(): QueryKey {
+  return ["@gram/client", "chat", "creditUsage"];
 }

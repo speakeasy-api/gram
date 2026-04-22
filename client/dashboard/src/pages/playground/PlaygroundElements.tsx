@@ -118,12 +118,9 @@ export function PlaygroundElements({
     try {
       const result = await createSessionMutation.mutateAsync({
         request: {
-          gramProject: project.id,
-          createRequestBody: {
-            embedOrigin: window.location.origin,
-            expiresAfter: 3600,
-            userIdentifier: session.user.id,
-          },
+          embedOrigin: window.location.origin,
+          expiresAfter: 3600,
+          userIdentifier: session.user.id,
         },
         security: {
           option1: {
@@ -137,13 +134,7 @@ export function PlaygroundElements({
       toast.error("Failed to create session. Please try again.");
       throw error;
     }
-  }, [
-    createSessionMutation,
-    session.session,
-    session.user.id,
-    project.id,
-    project.slug,
-  ]);
+  }, [createSessionMutation, session.session, session.user.id, project.slug]);
 
   const mcpAppSessionQuery = useQuery({
     queryKey: [

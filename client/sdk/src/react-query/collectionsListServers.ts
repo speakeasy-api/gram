@@ -112,13 +112,7 @@ export function useCollectionsListServersSuspense(
 
 export function setCollectionsListServersData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      collectionSlug: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { collectionSlug: string }],
   data: CollectionsListServersQueryData,
 ): CollectionsListServersQueryData | undefined {
   const key = queryKeyCollectionsListServers(...queryKeyBase);
@@ -128,13 +122,7 @@ export function setCollectionsListServersData(
 
 export function invalidateCollectionsListServers(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      collectionSlug: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { collectionSlug: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

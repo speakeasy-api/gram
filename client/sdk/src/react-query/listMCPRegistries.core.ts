@@ -19,14 +19,12 @@ export type ListMCPRegistriesQueryData = components.ListRegistriesResponseBody;
 export function prefetchListMCPRegistries(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListMCPRegistriesRequest | undefined,
   security?: operations.ListMCPRegistriesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListMCPRegistriesQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchListMCPRegistries(
 
 export function buildListMCPRegistriesQuery(
   client$: GramCore,
-  request?: operations.ListMCPRegistriesRequest | undefined,
   security?: operations.ListMCPRegistriesSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -45,11 +42,7 @@ export function buildListMCPRegistriesQuery(
   ) => Promise<ListMCPRegistriesQueryData>;
 } {
   return {
-    queryKey: queryKeyListMCPRegistries({
-      gramSession: request?.gramSession,
-      gramKey: request?.gramKey,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyListMCPRegistries(),
     queryFn: async function listMCPRegistriesQueryFn(
       ctx,
     ): Promise<ListMCPRegistriesQueryData> {
@@ -66,7 +59,6 @@ export function buildListMCPRegistriesQuery(
 
       return unwrapAsync(mcpRegistriesListRegistries(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -74,12 +66,6 @@ export function buildListMCPRegistriesQuery(
   };
 }
 
-export function queryKeyListMCPRegistries(
-  parameters: {
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "mcpRegistries", "listRegistries", parameters];
+export function queryKeyListMCPRegistries(): QueryKey {
+  return ["@gram/client", "mcpRegistries", "listRegistries"];
 }

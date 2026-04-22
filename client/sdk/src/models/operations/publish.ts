@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type PublishSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type PublishSecurityOption2 = {
 export type PublishSecurity = {
   option1?: PublishSecurityOption1 | undefined;
   option2?: PublishSecurityOption2 | undefined;
-};
-
-export type PublishRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  publishPackageForm: components.PublishPackageForm;
 };
 
 /** @internal */
@@ -126,37 +109,4 @@ export function publishSecurityToJSON(
   publishSecurity: PublishSecurity,
 ): string {
   return JSON.stringify(PublishSecurity$outboundSchema.parse(publishSecurity));
-}
-
-/** @internal */
-export type PublishRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  PublishPackageForm: components.PublishPackageForm$Outbound;
-};
-
-/** @internal */
-export const PublishRequest$outboundSchema: z.ZodMiniType<
-  PublishRequest$Outbound,
-  PublishRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    publishPackageForm: components.PublishPackageForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      publishPackageForm: "PublishPackageForm",
-    });
-  }),
-);
-
-export function publishRequestToJSON(publishRequest: PublishRequest): string {
-  return JSON.stringify(PublishRequest$outboundSchema.parse(publishRequest));
 }

@@ -9,13 +9,6 @@ export type DeleteDomainSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type DeleteDomainRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-};
-
 /** @internal */
 export type DeleteDomainSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
@@ -41,33 +34,5 @@ export function deleteDomainSecurityToJSON(
 ): string {
   return JSON.stringify(
     DeleteDomainSecurity$outboundSchema.parse(deleteDomainSecurity),
-  );
-}
-
-/** @internal */
-export type DeleteDomainRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const DeleteDomainRequest$outboundSchema: z.ZodMiniType<
-  DeleteDomainRequest$Outbound,
-  DeleteDomainRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-    });
-  }),
-);
-
-export function deleteDomainRequestToJSON(
-  deleteDomainRequest: DeleteDomainRequest,
-): string {
-  return JSON.stringify(
-    DeleteDomainRequest$outboundSchema.parse(deleteDomainRequest),
   );
 }

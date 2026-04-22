@@ -15,14 +15,6 @@ export type DeleteCollectionRequest = {
    * ID of the collection to delete
    */
   collectionId: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
 };
 
 /** @internal */
@@ -59,8 +51,6 @@ export function deleteCollectionSecurityToJSON(
 /** @internal */
 export type DeleteCollectionRequest$Outbound = {
   collection_id: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
 };
 
 /** @internal */
@@ -70,14 +60,10 @@ export const DeleteCollectionRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     collectionId: z.string(),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       collectionId: "collection_id",
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
     });
   }),
 );

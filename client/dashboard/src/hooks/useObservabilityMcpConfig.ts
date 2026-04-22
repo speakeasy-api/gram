@@ -28,9 +28,7 @@ export function useObservabilityMcpConfig({
     const res = await chatSessionsCreate(
       client,
       {
-        createRequestBody: {
-          embedOrigin: window.location.origin,
-        },
+        embedOrigin: window.location.origin,
       },
       undefined,
       {

@@ -25,18 +25,6 @@ export type GetRiskPolicyRequest = {
    * The policy ID.
    */
   id: string;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -143,30 +131,15 @@ export function getRiskPolicySecurityToJSON(
 /** @internal */
 export type GetRiskPolicyRequest$Outbound = {
   id: string;
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
 export const GetRiskPolicyRequest$outboundSchema: z.ZodMiniType<
   GetRiskPolicyRequest$Outbound,
   GetRiskPolicyRequest
-> = z.pipe(
-  z.object({
-    id: z.string(),
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
+> = z.object({
+  id: z.string(),
+});
 
 export function getRiskPolicyRequestToJSON(
   getRiskPolicyRequest: GetRiskPolicyRequest,

@@ -20,21 +20,6 @@ export type ListToolsetsSecurity = {
   option2?: ListToolsetsSecurityOption2 | undefined;
 };
 
-export type ListToolsetsRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-};
-
 /** @internal */
 export type ListToolsetsSecurityOption1$Outbound = {
   "project_slug_header_Gram-Project": string;
@@ -133,39 +118,5 @@ export function listToolsetsSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListToolsetsSecurity$outboundSchema.parse(listToolsetsSecurity),
-  );
-}
-
-/** @internal */
-export type ListToolsetsRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const ListToolsetsRequest$outboundSchema: z.ZodMiniType<
-  ListToolsetsRequest$Outbound,
-  ListToolsetsRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
-
-export function listToolsetsRequestToJSON(
-  listToolsetsRequest: ListToolsetsRequest,
-): string {
-  return JSON.stringify(
-    ListToolsetsRequest$outboundSchema.parse(listToolsetsRequest),
   );
 }

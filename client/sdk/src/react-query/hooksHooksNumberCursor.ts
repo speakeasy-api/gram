@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type HooksHooksNumberCursorMutationVariables = {
-  request: operations.HooksNumberCursorRequest;
+  request: components.CursorHookPayload;
   security?: operations.HooksNumberCursorSecurity | undefined;
   options?: RequestOptions;
 };

@@ -95,13 +95,7 @@ export function useRoleSuspense(
 
 export function setRoleData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      id: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { id: string }],
   data: RoleQueryData,
 ): RoleQueryData | undefined {
   const key = queryKeyRole(...queryKeyBase);
@@ -111,13 +105,7 @@ export function setRoleData(
 
 export function invalidateRole(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { id: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

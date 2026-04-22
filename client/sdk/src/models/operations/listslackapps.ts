@@ -10,17 +10,6 @@ export type ListSlackAppsSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type ListSlackAppsRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-};
-
 /** @internal */
 export type ListSlackAppsSecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
@@ -49,36 +38,5 @@ export function listSlackAppsSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListSlackAppsSecurity$outboundSchema.parse(listSlackAppsSecurity),
-  );
-}
-
-/** @internal */
-export type ListSlackAppsRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const ListSlackAppsRequest$outboundSchema: z.ZodMiniType<
-  ListSlackAppsRequest$Outbound,
-  ListSlackAppsRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
-
-export function listSlackAppsRequestToJSON(
-  listSlackAppsRequest: ListSlackAppsRequest,
-): string {
-  return JSON.stringify(
-    ListSlackAppsRequest$outboundSchema.parse(listSlackAppsRequest),
   );
 }

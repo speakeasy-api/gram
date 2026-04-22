@@ -26,18 +26,6 @@ export type AddExternalOAuthServerRequest = {
    * The slug of the toolset to update
    */
   slug: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
   addExternalOAuthServerRequestBody:
     components.AddExternalOAuthServerRequestBody;
 };
@@ -150,9 +138,6 @@ export function addExternalOAuthServerSecurityToJSON(
 /** @internal */
 export type AddExternalOAuthServerRequest$Outbound = {
   slug: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
   AddExternalOAuthServerRequestBody:
     components.AddExternalOAuthServerRequestBody$Outbound;
 };
@@ -164,17 +149,11 @@ export const AddExternalOAuthServerRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     slug: z.string(),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
     addExternalOAuthServerRequestBody:
       components.AddExternalOAuthServerRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
       addExternalOAuthServerRequestBody: "AddExternalOAuthServerRequestBody",
     });
   }),

@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type ExportMcpMetadataSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type ExportMcpMetadataSecurityOption2 = {
 export type ExportMcpMetadataSecurity = {
   option1?: ExportMcpMetadataSecurityOption1 | undefined;
   option2?: ExportMcpMetadataSecurityOption2 | undefined;
-};
-
-export type ExportMcpMetadataRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  exportMcpMetadataRequestBody: components.ExportMcpMetadataRequestBody;
 };
 
 /** @internal */
@@ -135,44 +118,5 @@ export function exportMcpMetadataSecurityToJSON(
 ): string {
   return JSON.stringify(
     ExportMcpMetadataSecurity$outboundSchema.parse(exportMcpMetadataSecurity),
-  );
-}
-
-/** @internal */
-export type ExportMcpMetadataRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  ExportMcpMetadataRequestBody:
-    components.ExportMcpMetadataRequestBody$Outbound;
-};
-
-/** @internal */
-export const ExportMcpMetadataRequest$outboundSchema: z.ZodMiniType<
-  ExportMcpMetadataRequest$Outbound,
-  ExportMcpMetadataRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    exportMcpMetadataRequestBody:
-      components.ExportMcpMetadataRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      exportMcpMetadataRequestBody: "ExportMcpMetadataRequestBody",
-    });
-  }),
-);
-
-export function exportMcpMetadataRequestToJSON(
-  exportMcpMetadataRequest: ExportMcpMetadataRequest,
-): string {
-  return JSON.stringify(
-    ExportMcpMetadataRequest$outboundSchema.parse(exportMcpMetadataRequest),
   );
 }

@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListSlackAppsQuery,
   ListSlackAppsQueryData,
@@ -59,7 +55,6 @@ export type ListSlackAppsQueryError =
  * List Slack apps for a project.
  */
 export function useListSlackApps(
-  request?: operations.ListSlackAppsRequest | undefined,
   security?: operations.ListSlackAppsSecurity | undefined,
   options?: QueryHookOptions<ListSlackAppsQueryData, ListSlackAppsQueryError>,
 ): UseQueryResult<ListSlackAppsQueryData, ListSlackAppsQueryError> {
@@ -67,7 +62,6 @@ export function useListSlackApps(
   return useQuery({
     ...buildListSlackAppsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useListSlackApps(
  * List Slack apps for a project.
  */
 export function useListSlackAppsSuspense(
-  request?: operations.ListSlackAppsRequest | undefined,
   security?: operations.ListSlackAppsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListSlackAppsQueryData,
@@ -93,7 +86,6 @@ export function useListSlackAppsSuspense(
   return useSuspenseQuery({
     ...buildListSlackAppsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -103,33 +95,11 @@ export function useListSlackAppsSuspense(
 
 export function setListSlackAppsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: ListSlackAppsQueryData,
 ): ListSlackAppsQueryData | undefined {
-  const key = queryKeyListSlackApps(...queryKeyBase);
+  const key = queryKeyListSlackApps();
 
   return client.setQueryData<ListSlackAppsQueryData>(key, data);
-}
-
-export function invalidateListSlackApps(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "slack", "listSlackApps", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllListSlackApps(

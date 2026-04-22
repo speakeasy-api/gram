@@ -19,7 +19,7 @@ export type ListFilterOptionsQueryData = components.ListFilterOptionsResult;
 export function prefetchListFilterOptions(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListFilterOptionsRequest,
+  request: components.ListFilterOptionsPayload,
   security?: operations.ListFilterOptionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -35,7 +35,7 @@ export function prefetchListFilterOptions(
 
 export function buildListFilterOptionsQuery(
   client$: GramCore,
-  request: operations.ListFilterOptionsRequest,
+  request: components.ListFilterOptionsPayload,
   security?: operations.ListFilterOptionsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -45,11 +45,7 @@ export function buildListFilterOptionsQuery(
   ) => Promise<ListFilterOptionsQueryData>;
 } {
   return {
-    queryKey: queryKeyListFilterOptions({
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyListFilterOptions(),
     queryFn: async function listFilterOptionsQueryFn(
       ctx,
     ): Promise<ListFilterOptionsQueryData> {
@@ -74,12 +70,6 @@ export function buildListFilterOptionsQuery(
   };
 }
 
-export function queryKeyListFilterOptions(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "telemetry", "listFilterOptions", parameters];
+export function queryKeyListFilterOptions(): QueryKey {
+  return ["@gram/client", "telemetry", "listFilterOptions"];
 }

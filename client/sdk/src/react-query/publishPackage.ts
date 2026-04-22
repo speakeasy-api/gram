@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type PublishPackageMutationVariables = {
-  request: operations.PublishRequest;
+  request: components.PublishPackageForm;
   security?: operations.PublishSecurity | undefined;
   options?: RequestOptions;
 };

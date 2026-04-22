@@ -19,14 +19,6 @@ export type IntegrationsNumberGetRequest = {
    * The name of the integration to get (refers to a package name).
    */
   name?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -66,28 +58,16 @@ export function integrationsNumberGetSecurityToJSON(
 export type IntegrationsNumberGetRequest$Outbound = {
   id?: string | undefined;
   name?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
 export const IntegrationsNumberGetRequest$outboundSchema: z.ZodMiniType<
   IntegrationsNumberGetRequest$Outbound,
   IntegrationsNumberGetRequest
-> = z.pipe(
-  z.object({
-    id: z.optional(z.string()),
-    name: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
+> = z.object({
+  id: z.optional(z.string()),
+  name: z.optional(z.string()),
+});
 
 export function integrationsNumberGetRequestToJSON(
   integrationsNumberGetRequest: IntegrationsNumberGetRequest,

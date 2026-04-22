@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type EvolveDeploymentMutationVariables = {
-  request: operations.EvolveDeploymentRequest;
+  request: components.EvolveForm;
   security?: operations.EvolveDeploymentSecurity | undefined;
   options?: RequestOptions;
 };

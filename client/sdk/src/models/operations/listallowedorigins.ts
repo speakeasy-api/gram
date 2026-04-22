@@ -20,21 +20,6 @@ export type ListAllowedOriginsSecurity = {
   option2?: ListAllowedOriginsSecurityOption2 | undefined;
 };
 
-export type ListAllowedOriginsRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-};
-
 /** @internal */
 export type ListAllowedOriginsSecurityOption1$Outbound = {
   "apikey_header_Gram-Key": string;
@@ -133,39 +118,5 @@ export function listAllowedOriginsSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListAllowedOriginsSecurity$outboundSchema.parse(listAllowedOriginsSecurity),
-  );
-}
-
-/** @internal */
-export type ListAllowedOriginsRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const ListAllowedOriginsRequest$outboundSchema: z.ZodMiniType<
-  ListAllowedOriginsRequest$Outbound,
-  ListAllowedOriginsRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
-
-export function listAllowedOriginsRequestToJSON(
-  listAllowedOriginsRequest: ListAllowedOriginsRequest,
-): string {
-  return JSON.stringify(
-    ListAllowedOriginsRequest$outboundSchema.parse(listAllowedOriginsRequest),
   );
 }

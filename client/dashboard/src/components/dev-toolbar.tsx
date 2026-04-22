@@ -181,7 +181,7 @@ function RBACDevToolbarInner() {
     id: project.id,
     label: project.slug,
   }));
-  const { data: toolsetsData } = useListToolsetsForOrg(undefined, undefined, {
+  const { data: toolsetsData } = useListToolsetsForOrg(undefined, {
     throwOnError: false,
   });
   const liveMcps = (toolsetsData?.toolsets ?? []).map((toolset) => ({

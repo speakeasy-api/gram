@@ -77,11 +77,9 @@ export default function ExternalMCPDetails() {
   ) => {
     try {
       await client.deployments.evolveDeployment({
-        evolveForm: {
-          deploymentId: deployment?.deployment?.id,
-          nonBlocking: true,
-          excludeExternalMcps: [slug],
-        },
+        deploymentId: deployment?.deployment?.id,
+        nonBlocking: true,
+        excludeExternalMcps: [slug],
       });
       await refetch();
       toast.success("External MCP source deleted successfully");

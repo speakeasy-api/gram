@@ -102,11 +102,9 @@ export function usePlaygroundEnvironment(
           }
           await createMutation.mutateAsync({
             request: {
-              createEnvironmentForm: {
-                name: slug,
-                organizationId: organization.id,
-                entries: entriesToUpdate,
-              },
+              name: slug,
+              organizationId: organization.id,
+              entries: entriesToUpdate,
             },
           });
           invalidateAllListEnvironments(queryClient);

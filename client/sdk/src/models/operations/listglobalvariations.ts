@@ -20,21 +20,6 @@ export type ListGlobalVariationsSecurity = {
   option2?: ListGlobalVariationsSecurityOption2 | undefined;
 };
 
-export type ListGlobalVariationsRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-};
-
 /** @internal */
 export type ListGlobalVariationsSecurityOption1$Outbound = {
   "project_slug_header_Gram-Project": string;
@@ -134,42 +119,6 @@ export function listGlobalVariationsSecurityToJSON(
   return JSON.stringify(
     ListGlobalVariationsSecurity$outboundSchema.parse(
       listGlobalVariationsSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type ListGlobalVariationsRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const ListGlobalVariationsRequest$outboundSchema: z.ZodMiniType<
-  ListGlobalVariationsRequest$Outbound,
-  ListGlobalVariationsRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
-
-export function listGlobalVariationsRequestToJSON(
-  listGlobalVariationsRequest: ListGlobalVariationsRequest,
-): string {
-  return JSON.stringify(
-    ListGlobalVariationsRequest$outboundSchema.parse(
-      listGlobalVariationsRequest,
     ),
   );
 }

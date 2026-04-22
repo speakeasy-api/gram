@@ -9,13 +9,6 @@ export type CreateCustomerSessionSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type CreateCustomerSessionRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-};
-
 /** @internal */
 export type CreateCustomerSessionSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
@@ -42,36 +35,6 @@ export function createCustomerSessionSecurityToJSON(
   return JSON.stringify(
     CreateCustomerSessionSecurity$outboundSchema.parse(
       createCustomerSessionSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type CreateCustomerSessionRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const CreateCustomerSessionRequest$outboundSchema: z.ZodMiniType<
-  CreateCustomerSessionRequest$Outbound,
-  CreateCustomerSessionRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-    });
-  }),
-);
-
-export function createCustomerSessionRequestToJSON(
-  createCustomerSessionRequest: CreateCustomerSessionRequest,
-): string {
-  return JSON.stringify(
-    CreateCustomerSessionRequest$outboundSchema.parse(
-      createCustomerSessionRequest,
     ),
   );
 }

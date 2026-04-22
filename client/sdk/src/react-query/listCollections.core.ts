@@ -19,14 +19,12 @@ export type ListCollectionsQueryData = components.ListResponseBody;
 export function prefetchListCollections(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListCollectionsRequest | undefined,
   security?: operations.ListCollectionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListCollectionsQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchListCollections(
 
 export function buildListCollectionsQuery(
   client$: GramCore,
-  request?: operations.ListCollectionsRequest | undefined,
   security?: operations.ListCollectionsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,10 +40,7 @@ export function buildListCollectionsQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ListCollectionsQueryData>;
 } {
   return {
-    queryKey: queryKeyListCollections({
-      gramSession: request?.gramSession,
-      gramKey: request?.gramKey,
-    }),
+    queryKey: queryKeyListCollections(),
     queryFn: async function listCollectionsQueryFn(
       ctx,
     ): Promise<ListCollectionsQueryData> {
@@ -63,7 +57,6 @@ export function buildListCollectionsQuery(
 
       return unwrapAsync(collectionsList(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -71,11 +64,6 @@ export function buildListCollectionsQuery(
   };
 }
 
-export function queryKeyListCollections(
-  parameters: {
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "collections", "list", parameters];
+export function queryKeyListCollections(): QueryKey {
+  return ["@gram/client", "collections", "list"];
 }

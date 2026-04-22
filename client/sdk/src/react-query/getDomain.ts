@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildGetDomainQuery,
   GetDomainQueryData,
@@ -59,7 +55,6 @@ export type GetDomainQueryError =
  * Get the custom domain for an organization
  */
 export function useGetDomain(
-  request?: operations.GetDomainRequest | undefined,
   security?: operations.GetDomainSecurity | undefined,
   options?: QueryHookOptions<GetDomainQueryData, GetDomainQueryError>,
 ): UseQueryResult<GetDomainQueryData, GetDomainQueryError> {
@@ -67,7 +62,6 @@ export function useGetDomain(
   return useQuery({
     ...buildGetDomainQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useGetDomain(
  * Get the custom domain for an organization
  */
 export function useGetDomainSuspense(
-  request?: operations.GetDomainRequest | undefined,
   security?: operations.GetDomainSecurity | undefined,
   options?: SuspenseQueryHookOptions<GetDomainQueryData, GetDomainQueryError>,
 ): UseSuspenseQueryResult<GetDomainQueryData, GetDomainQueryError> {
@@ -90,7 +83,6 @@ export function useGetDomainSuspense(
   return useSuspenseQuery({
     ...buildGetDomainQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -100,25 +92,11 @@ export function useGetDomainSuspense(
 
 export function setGetDomainData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: GetDomainQueryData,
 ): GetDomainQueryData | undefined {
-  const key = queryKeyGetDomain(...queryKeyBase);
+  const key = queryKeyGetDomain();
 
   return client.setQueryData<GetDomainQueryData>(key, data);
-}
-
-export function invalidateGetDomain(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "domains", "getDomain", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllGetDomain(

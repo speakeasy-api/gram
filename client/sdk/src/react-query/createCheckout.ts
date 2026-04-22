@@ -28,7 +28,6 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateCheckoutMutationVariables = {
-  request?: operations.CreateCheckoutRequest | undefined;
   security?: operations.CreateCheckoutSecurity | undefined;
   options?: RequestOptions;
 };
@@ -86,7 +85,6 @@ export function buildCreateCheckoutMutation(
   return {
     mutationKey: mutationKeyCreateCheckout(),
     mutationFn: function createCheckoutMutationFn({
-      request,
       security,
       options,
     }): Promise<CreateCheckoutMutationData> {
@@ -104,7 +102,6 @@ export function buildCreateCheckoutMutation(
       };
       return unwrapAsync(usageCreateCheckout(
         client$,
-        request,
         security,
         mergedOptions,
       ));

@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type UpdateTemplateSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -19,22 +18,6 @@ export type UpdateTemplateSecurityOption2 = {
 export type UpdateTemplateSecurity = {
   option1?: UpdateTemplateSecurityOption1 | undefined;
   option2?: UpdateTemplateSecurityOption2 | undefined;
-};
-
-export type UpdateTemplateRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  updatePromptTemplateForm: components.UpdatePromptTemplateForm;
 };
 
 /** @internal */
@@ -135,43 +118,5 @@ export function updateTemplateSecurityToJSON(
 ): string {
   return JSON.stringify(
     UpdateTemplateSecurity$outboundSchema.parse(updateTemplateSecurity),
-  );
-}
-
-/** @internal */
-export type UpdateTemplateRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  UpdatePromptTemplateForm: components.UpdatePromptTemplateForm$Outbound;
-};
-
-/** @internal */
-export const UpdateTemplateRequest$outboundSchema: z.ZodMiniType<
-  UpdateTemplateRequest$Outbound,
-  UpdateTemplateRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    updatePromptTemplateForm:
-      components.UpdatePromptTemplateForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      updatePromptTemplateForm: "UpdatePromptTemplateForm",
-    });
-  }),
-);
-
-export function updateTemplateRequestToJSON(
-  updateTemplateRequest: UpdateTemplateRequest,
-): string {
-  return JSON.stringify(
-    UpdateTemplateRequest$outboundSchema.parse(updateTemplateRequest),
   );
 }

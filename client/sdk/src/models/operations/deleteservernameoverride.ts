@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type DeleteServerNameOverrideSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -19,22 +18,6 @@ export type DeleteServerNameOverrideSecurityOption2 = {
 export type DeleteServerNameOverrideSecurity = {
   option1?: DeleteServerNameOverrideSecurityOption1 | undefined;
   option2?: DeleteServerNameOverrideSecurityOption2 | undefined;
-};
-
-export type DeleteServerNameOverrideRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  deleteRequestBody: components.DeleteRequestBody;
 };
 
 /** @internal */
@@ -140,45 +123,6 @@ export function deleteServerNameOverrideSecurityToJSON(
   return JSON.stringify(
     DeleteServerNameOverrideSecurity$outboundSchema.parse(
       deleteServerNameOverrideSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type DeleteServerNameOverrideRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  DeleteRequestBody: components.DeleteRequestBody$Outbound;
-};
-
-/** @internal */
-export const DeleteServerNameOverrideRequest$outboundSchema: z.ZodMiniType<
-  DeleteServerNameOverrideRequest$Outbound,
-  DeleteServerNameOverrideRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    deleteRequestBody: components.DeleteRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      deleteRequestBody: "DeleteRequestBody",
-    });
-  }),
-);
-
-export function deleteServerNameOverrideRequestToJSON(
-  deleteServerNameOverrideRequest: DeleteServerNameOverrideRequest,
-): string {
-  return JSON.stringify(
-    DeleteServerNameOverrideRequest$outboundSchema.parse(
-      deleteServerNameOverrideRequest,
     ),
   );
 }

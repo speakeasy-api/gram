@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListOrganizationUsersQuery,
   ListOrganizationUsersQueryData,
@@ -59,7 +55,6 @@ export type ListOrganizationUsersQueryError =
  * List users in the active organization from Gram organization_user_relationships.
  */
 export function useListOrganizationUsers(
-  request?: operations.ListOrganizationUsersRequest | undefined,
   security?: operations.ListOrganizationUsersSecurity | undefined,
   options?: QueryHookOptions<
     ListOrganizationUsersQueryData,
@@ -73,7 +68,6 @@ export function useListOrganizationUsers(
   return useQuery({
     ...buildListOrganizationUsersQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -88,7 +82,6 @@ export function useListOrganizationUsers(
  * List users in the active organization from Gram organization_user_relationships.
  */
 export function useListOrganizationUsersSuspense(
-  request?: operations.ListOrganizationUsersRequest | undefined,
   security?: operations.ListOrganizationUsersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListOrganizationUsersQueryData,
@@ -102,7 +95,6 @@ export function useListOrganizationUsersSuspense(
   return useSuspenseQuery({
     ...buildListOrganizationUsersQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -112,25 +104,11 @@ export function useListOrganizationUsersSuspense(
 
 export function setListOrganizationUsersData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: ListOrganizationUsersQueryData,
 ): ListOrganizationUsersQueryData | undefined {
-  const key = queryKeyListOrganizationUsers(...queryKeyBase);
+  const key = queryKeyListOrganizationUsers();
 
   return client.setQueryData<ListOrganizationUsersQueryData>(key, data);
-}
-
-export function invalidateListOrganizationUsers(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "organizations", "listUsers", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllListOrganizationUsers(

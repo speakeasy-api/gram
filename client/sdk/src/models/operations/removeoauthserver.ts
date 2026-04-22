@@ -25,18 +25,6 @@ export type RemoveOAuthServerRequest = {
    * The slug of the toolset
    */
   slug: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -143,30 +131,15 @@ export function removeOAuthServerSecurityToJSON(
 /** @internal */
 export type RemoveOAuthServerRequest$Outbound = {
   slug: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
 export const RemoveOAuthServerRequest$outboundSchema: z.ZodMiniType<
   RemoveOAuthServerRequest$Outbound,
   RemoveOAuthServerRequest
-> = z.pipe(
-  z.object({
-    slug: z.string(),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
+> = z.object({
+  slug: z.string(),
+});
 
 export function removeOAuthServerRequestToJSON(
   removeOAuthServerRequest: RemoveOAuthServerRequest,

@@ -25,18 +25,6 @@ export type GetMcpMetadataRequest = {
    * The slug of the toolset associated with this install page metadata
    */
   toolsetSlug: string;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -143,9 +131,6 @@ export function getMcpMetadataSecurityToJSON(
 /** @internal */
 export type GetMcpMetadataRequest$Outbound = {
   toolset_slug: string;
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -155,16 +140,10 @@ export const GetMcpMetadataRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     toolsetSlug: z.string(),
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       toolsetSlug: "toolset_slug",
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
     });
   }),
 );

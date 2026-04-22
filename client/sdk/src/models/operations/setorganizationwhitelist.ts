@@ -4,19 +4,9 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type SetOrganizationWhitelistSecurity = {
   apikeyHeaderGramKey?: string | undefined;
-};
-
-export type SetOrganizationWhitelistRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  setOrganizationWhitelistRequestBody:
-    components.SetOrganizationWhitelistRequestBody;
 };
 
 /** @internal */
@@ -45,42 +35,6 @@ export function setOrganizationWhitelistSecurityToJSON(
   return JSON.stringify(
     SetOrganizationWhitelistSecurity$outboundSchema.parse(
       setOrganizationWhitelistSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type SetOrganizationWhitelistRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  SetOrganizationWhitelistRequestBody:
-    components.SetOrganizationWhitelistRequestBody$Outbound;
-};
-
-/** @internal */
-export const SetOrganizationWhitelistRequest$outboundSchema: z.ZodMiniType<
-  SetOrganizationWhitelistRequest$Outbound,
-  SetOrganizationWhitelistRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    setOrganizationWhitelistRequestBody:
-      components.SetOrganizationWhitelistRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      setOrganizationWhitelistRequestBody:
-        "SetOrganizationWhitelistRequestBody",
-    });
-  }),
-);
-
-export function setOrganizationWhitelistRequestToJSON(
-  setOrganizationWhitelistRequest: SetOrganizationWhitelistRequest,
-): string {
-  return JSON.stringify(
-    SetOrganizationWhitelistRequest$outboundSchema.parse(
-      setOrganizationWhitelistRequest,
     ),
   );
 }

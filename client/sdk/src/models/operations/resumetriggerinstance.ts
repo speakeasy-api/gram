@@ -15,14 +15,6 @@ export type ResumeTriggerInstanceRequest = {
    * The trigger instance ID.
    */
   id: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -61,27 +53,15 @@ export function resumeTriggerInstanceSecurityToJSON(
 /** @internal */
 export type ResumeTriggerInstanceRequest$Outbound = {
   id: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
 export const ResumeTriggerInstanceRequest$outboundSchema: z.ZodMiniType<
   ResumeTriggerInstanceRequest$Outbound,
   ResumeTriggerInstanceRequest
-> = z.pipe(
-  z.object({
-    id: z.string(),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
+> = z.object({
+  id: z.string(),
+});
 
 export function resumeTriggerInstanceRequestToJSON(
   resumeTriggerInstanceRequest: ResumeTriggerInstanceRequest,

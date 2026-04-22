@@ -19,14 +19,12 @@ export type ListEnvironmentsQueryData = components.ListEnvironmentsResult;
 export function prefetchListEnvironments(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListEnvironmentsRequest | undefined,
   security?: operations.ListEnvironmentsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListEnvironmentsQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchListEnvironments(
 
 export function buildListEnvironmentsQuery(
   client$: GramCore,
-  request?: operations.ListEnvironmentsRequest | undefined,
   security?: operations.ListEnvironmentsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -45,10 +42,7 @@ export function buildListEnvironmentsQuery(
   ) => Promise<ListEnvironmentsQueryData>;
 } {
   return {
-    queryKey: queryKeyListEnvironments({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyListEnvironments(),
     queryFn: async function listEnvironmentsQueryFn(
       ctx,
     ): Promise<ListEnvironmentsQueryData> {
@@ -65,7 +59,6 @@ export function buildListEnvironmentsQuery(
 
       return unwrapAsync(environmentsList(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -73,11 +66,6 @@ export function buildListEnvironmentsQuery(
   };
 }
 
-export function queryKeyListEnvironments(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "environments", "list", parameters];
+export function queryKeyListEnvironments(): QueryKey {
+  return ["@gram/client", "environments", "list"];
 }
