@@ -20,9 +20,10 @@ import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugi
 import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
 import { Plus, Puzzle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
+import { PublishDialog } from "./PublishDialog";
 
 export function PluginsRoot() {
   return <Outlet />;
@@ -99,6 +100,18 @@ export default function Plugins() {
       request: { id: pluginToDelete.id },
     });
   };
+
+  const handlePublish = useCallback(
+    (githubUsername?: string) => {
+      publishMutation.mutate({
+        security: { sessionHeaderGramSession: "" },
+        request: {
+          publishPluginsRequestBody: { githubUsername },
+        },
+      });
+    },
+    [publishMutation],
+  );
 
   const columns: Column<Plugin>[] = [
     {
@@ -301,61 +314,13 @@ export default function Plugins() {
             </Dialog.Footer>
           </Dialog.Content>
         </Dialog>
-        {/* Publish Dialog */}
-        <Dialog
+        <PublishDialog
           open={isPublishDialogOpen}
           onOpenChange={setIsPublishDialogOpen}
-        >
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Publish Plugins</Dialog.Title>
-              <Dialog.Description>
-                Publish all plugins to a GitHub repository. Optionally add a
-                collaborator who will receive read access to the repo.
-              </Dialog.Description>
-              <Dialog.Description>
-                At least one user in your organization will need to be given
-                access to connect the generated repository with Claude/Cursor.
-              </Dialog.Description>
-            </Dialog.Header>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const fd = new FormData(e.currentTarget);
-                const username =
-                  (fd.get("githubUsername") as string) || undefined;
-                publishMutation.mutate({
-                  security: { sessionHeaderGramSession: "" },
-                  request: {
-                    publishPluginsRequestBody: {
-                      githubUsername: username,
-                    },
-                  },
-                });
-                setIsPublishDialogOpen(false);
-              }}
-              className="flex flex-col gap-4"
-            >
-              <InputField
-                label="GitHub Username"
-                name="githubUsername"
-                placeholder="e.g. octocat"
-              />
-              <Dialog.Footer>
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsPublishDialogOpen(false)}
-                  type="button"
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={publishMutation.isPending}>
-                  {publishMutation.isPending ? "Publishing..." : "Publish"}
-                </Button>
-              </Dialog.Footer>
-            </form>
-          </Dialog.Content>
-        </Dialog>
+          onPublish={handlePublish}
+          isPending={publishMutation.isPending}
+        />
+
       </Page.Body>
     </Page>
   );
