@@ -186,7 +186,11 @@ function MessageItem({
   const parsedToolCalls: ToolCall[] | null = useMemo(() => {
     if (!message.toolCalls) return null;
     try {
-      const parsed = JSON.parse(message.toolCalls) as unknown;
+      let parsed: unknown = JSON.parse(message.toolCalls);
+      // Handle double-encoded JSON strings
+      if (typeof parsed === "string") {
+        parsed = JSON.parse(parsed);
+      }
       return Array.isArray(parsed) ? (parsed as ToolCall[]) : null;
     } catch {
       return null;
@@ -251,6 +255,9 @@ function MessageItem({
                   {message.createdAt &&
                     format(new Date(message.createdAt), "HH:mm:ss")}
                 </span>
+                {riskResults && riskResults.length > 0 && (
+                  <RiskBadgePopover results={riskResults} />
+                )}
               </div>
               <div className="bg-background overflow-hidden rounded-lg border text-sm">
                 <div className="bg-muted/30 border-b p-3">
