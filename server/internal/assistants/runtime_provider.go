@@ -15,6 +15,9 @@ import (
 const (
 	RuntimeProviderLocal = runtimeBackendLocal
 	RuntimeProviderFlyIO = runtimeBackendFlyIO
+
+	defaultFlyRuntimeRegion = "us"
+	defaultFlyRuntimePrefix = "gram-asst"
 )
 
 type RuntimeBackendConfig struct {
@@ -50,6 +53,8 @@ func NewRuntimeBackend(logger *slog.Logger, config RuntimeBackendConfig) (Runtim
 	switch normalizeRuntimeProvider(config.Provider) {
 	case RuntimeProviderLocal:
 		return NewRuntimeManager(logger, config.Local), nil
+	case RuntimeProviderFlyIO:
+		return NewFlyRuntimeBackend(logger, config.Fly)
 	default:
 		return nil, fmt.Errorf("unsupported assistant runtime provider %q", config.Provider)
 	}
