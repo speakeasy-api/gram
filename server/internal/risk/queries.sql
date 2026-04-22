@@ -155,17 +155,6 @@ VALUES (
   , @tags
 );
 
--- name: DeleteStaleRiskResults :exec
-DELETE FROM risk_results
-WHERE risk_policy_id = @risk_policy_id
-  AND project_id = @project_id
-  AND risk_policy_version < @risk_policy_version;
-
--- name: DeleteAllRiskResultsForPolicy :exec
-DELETE FROM risk_results
-WHERE risk_policy_id = @risk_policy_id
-  AND project_id = @project_id;
-
 -- name: DeleteRiskResultsForMessages :exec
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
@@ -209,13 +198,6 @@ WHERE cm.chat_id = @chat_id
   AND (sqlc.narg(cursor)::uuid IS NULL OR rr.id <= sqlc.narg(cursor)::uuid)
 ORDER BY rr.id DESC
 LIMIT 51;
-
--- name: ListRiskResultsByMessage :many
-SELECT *
-FROM risk_results
-WHERE chat_message_id = @chat_message_id
-  AND project_id = @project_id
-ORDER BY created_at DESC;
 
 -- name: ListRiskResultsGroupedByChat :many
 SELECT

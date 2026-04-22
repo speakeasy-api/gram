@@ -174,22 +174,6 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 	return i, err
 }
 
-const deleteAllRiskResultsForPolicy = `-- name: DeleteAllRiskResultsForPolicy :exec
-DELETE FROM risk_results
-WHERE risk_policy_id = $1
-  AND project_id = $2
-`
-
-type DeleteAllRiskResultsForPolicyParams struct {
-	RiskPolicyID uuid.UUID
-	ProjectID    uuid.UUID
-}
-
-func (q *Queries) DeleteAllRiskResultsForPolicy(ctx context.Context, arg DeleteAllRiskResultsForPolicyParams) error {
-	_, err := q.db.Exec(ctx, deleteAllRiskResultsForPolicy, arg.RiskPolicyID, arg.ProjectID)
-	return err
-}
-
 const deleteRiskPolicy = `-- name: DeleteRiskPolicy :exec
 UPDATE risk_policies
 SET deleted_at = clock_timestamp()
@@ -224,24 +208,6 @@ type DeleteRiskResultsForMessagesParams struct {
 
 func (q *Queries) DeleteRiskResultsForMessages(ctx context.Context, arg DeleteRiskResultsForMessagesParams) error {
 	_, err := q.db.Exec(ctx, deleteRiskResultsForMessages, arg.RiskPolicyID, arg.ProjectID, arg.MessageIds)
-	return err
-}
-
-const deleteStaleRiskResults = `-- name: DeleteStaleRiskResults :exec
-DELETE FROM risk_results
-WHERE risk_policy_id = $1
-  AND project_id = $2
-  AND risk_policy_version < $3
-`
-
-type DeleteStaleRiskResultsParams struct {
-	RiskPolicyID      uuid.UUID
-	ProjectID         uuid.UUID
-	RiskPolicyVersion int64
-}
-
-func (q *Queries) DeleteStaleRiskResults(ctx context.Context, arg DeleteStaleRiskResultsParams) error {
-	_, err := q.db.Exec(ctx, deleteStaleRiskResults, arg.RiskPolicyID, arg.ProjectID, arg.RiskPolicyVersion)
 	return err
 }
 
@@ -529,56 +495,6 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 			&i.ChatID,
 			&i.ChatTitle,
 			&i.ChatUserID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRiskResultsByMessage = `-- name: ListRiskResultsByMessage :many
-SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, created_at
-FROM risk_results
-WHERE chat_message_id = $1
-  AND project_id = $2
-ORDER BY created_at DESC
-`
-
-type ListRiskResultsByMessageParams struct {
-	ChatMessageID uuid.UUID
-	ProjectID     uuid.UUID
-}
-
-func (q *Queries) ListRiskResultsByMessage(ctx context.Context, arg ListRiskResultsByMessageParams) ([]RiskResult, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsByMessage, arg.ChatMessageID, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RiskResult
-	for rows.Next() {
-		var i RiskResult
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.OrganizationID,
-			&i.RiskPolicyID,
-			&i.RiskPolicyVersion,
-			&i.ChatMessageID,
-			&i.Source,
-			&i.Found,
-			&i.RuleID,
-			&i.Description,
-			&i.Match,
-			&i.StartPos,
-			&i.EndPos,
-			&i.Confidence,
-			&i.Tags,
-			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
