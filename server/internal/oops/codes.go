@@ -11,6 +11,7 @@ const (
 	CodeNotFound           Code = "not_found"
 	CodeConflict           Code = "conflict"
 	CodeUnsupportedMedia   Code = "unsupported_media"
+	CodeRequestTooLarge    Code = "request_too_large"
 	CodeInvalid            Code = "invalid"
 	CodeUnexpected         Code = "unexpected"
 	CodeInvariantViolation Code = "invariant_violation"
@@ -25,6 +26,7 @@ var StatusCodes = map[Code]int{
 	CodeNotFound:           http.StatusNotFound,
 	CodeConflict:           http.StatusConflict,
 	CodeUnsupportedMedia:   http.StatusUnsupportedMediaType,
+	CodeRequestTooLarge:    http.StatusRequestEntityTooLarge,
 	CodeInvalid:            http.StatusUnprocessableEntity,
 	CodeUnexpected:         http.StatusInternalServerError,
 	CodeInvariantViolation: http.StatusUnprocessableEntity,
@@ -46,6 +48,8 @@ func (c Code) UserMessage() string {
 		return "resource already exists"
 	case CodeUnsupportedMedia:
 		return "unsupported media type"
+	case CodeRequestTooLarge:
+		return "request exceeds maximum allowed size"
 	case CodeInvalid:
 		return "request contains one or more invalidation fields"
 	case CodeNotImplemented:

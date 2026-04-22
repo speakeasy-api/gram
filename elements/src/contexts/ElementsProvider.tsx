@@ -15,9 +15,11 @@ import {
   setFrontendToolApprovalConfig,
   toAISDKTools,
   wrapToolsWithApproval,
+  wrapToolsWithByteCap,
   type ApprovalHelpers,
   type FrontendTool,
 } from "@/lib/tools";
+import { compactForModel } from "@/lib/contextCompaction";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/plugins";
 import { ElementsConfig, Model } from "@/types";
@@ -367,10 +369,17 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         } as ToolSet;
 
         // Wrap tools that require approval
-        const tools = wrapToolsWithApproval(
+        const approvedTools = wrapToolsWithApproval(
           combinedTools,
           config.tools?.toolsRequiringApproval,
           getApprovalHelpers(),
+        );
+
+        // Cap oversized tool results so one greedy tool call (e.g. a wide log
+        // search) can't fill the context window in a single step.
+        const tools = wrapToolsWithByteCap(
+          approvedTools,
+          config.tools?.maxOutputBytes,
         );
 
         // Stream the response
@@ -388,7 +397,29 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           const nonSystemMessages = cleanedMessages.filter(
             (m) => m.role !== "system",
           );
-          const modelMessages = convertToModelMessages(nonSystemMessages);
+          const rawModelMessages = convertToModelMessages(nonSystemMessages);
+
+          // Auto-compact older turns if the estimated input is approaching
+          // the model's context window. System prompt + last few turns are
+          // always preserved. No-op when the conversation is small.
+          const compaction = config.contextCompaction?.disabled
+            ? {
+                messages: rawModelMessages,
+                droppedCount: 0,
+                estimatedTokensBefore: 0,
+                estimatedTokensAfter: 0,
+              }
+            : compactForModel(rawModelMessages, model, {
+                maxTokens: config.contextCompaction?.maxTokens,
+                compactAtFraction: config.contextCompaction?.compactAtFraction,
+                keepRecent: config.contextCompaction?.keepRecent,
+              });
+          if (compaction.droppedCount > 0) {
+            console.warn(
+              `[elements] compacted ${compaction.droppedCount} older turn(s) from ${compaction.estimatedTokensBefore} → ${compaction.estimatedTokensAfter} est. tokens (model ${model})`,
+            );
+          }
+          const modelMessages = compaction.messages;
 
           const result = streamText({
             system: systemPrompt,
@@ -457,6 +488,11 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     [
       config.languageModel,
       config.tools?.toolsRequiringApproval,
+      config.tools?.maxOutputBytes,
+      config.contextCompaction?.disabled,
+      config.contextCompaction?.maxTokens,
+      config.contextCompaction?.compactAtFraction,
+      config.contextCompaction?.keepRecent,
       model,
       systemPrompt,
       mcpTools,
