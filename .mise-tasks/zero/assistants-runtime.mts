@@ -5,37 +5,18 @@
 import { $, chalk } from "zx";
 import { mkdirSync } from "node:fs";
 
-const provider = process.env["GRAM_ASSISTANT_RUNTIME_PROVIDER"] || "local";
-if (provider !== "local") {
-  console.log(
-    chalk.yellow(
-      `Skipping local assistant runtime config: GRAM_ASSISTANT_RUNTIME_PROVIDER=${provider}.`,
-    ),
-  );
-  process.exit(0);
-}
-
 const platform = process.platform;
 const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
-const localEnv = (name: string, fallback: string) =>
-  process.env[name] && process.env[name] !== "unset"
-    ? process.env[name]
-    : fallback;
-
 const args: string[] = [
   `GRAM_ASSISTANT_RUNTIME_FIRECRACKER_BIN={{config_root}}/agents/runtime-artifacts/${arch}/firecracker`,
   `GRAM_ASSISTANT_RUNTIME_KERNEL_PATH={{config_root}}/agents/runtime-artifacts/${arch}/vmlinux.bin`,
   `GRAM_ASSISTANT_RUNTIME_ROOTFS_PATH={{config_root}}/agents/runtime-artifacts/${arch}/assistant-rootfs.ext4`,
   `GRAM_ASSISTANT_RUNTIME_WORKDIR={{config_root}}/local/assistant-runtimes`,
-  `GRAM_ASSISTANT_RUNTIME_GUEST_PORT=${localEnv("GRAM_ASSISTANT_RUNTIME_GUEST_PORT", "8081")}`,
-  `GRAM_RUNNER_ADDR=${localEnv("GRAM_RUNNER_ADDR", `0.0.0.0:${localEnv("GRAM_ASSISTANT_RUNTIME_GUEST_PORT", "8081")}`)}`,
 ];
 
 if (platform === "darwin") {
   args.push(`GRAM_ASSISTANT_RUNTIME_HOST_KIND=lima`);
-  args.push(
-    `GRAM_ASSISTANT_RUNTIME_LIMA_INSTANCE=${localEnv("GRAM_ASSISTANT_RUNTIME_LIMA_INSTANCE", "gram-firecracker")}`,
-  );
+  args.push(`GRAM_ASSISTANT_RUNTIME_LIMA_INSTANCE=gram-firecracker`);
   args.push(`GRAM_ASSISTANT_RUNTIME_SERVER_HOSTNAME=host.lima.internal`);
 } else {
   args.push(`GRAM_ASSISTANT_RUNTIME_HOST_KIND=linux`);
@@ -55,7 +36,7 @@ console.log(
 if (platform === "darwin") {
   console.log(
     chalk.yellow(
-      `Firecracker runtime commands will run through the Lima instance named \`${localEnv("GRAM_ASSISTANT_RUNTIME_LIMA_INSTANCE", "gram-firecracker")}\`.`,
+      "Firecracker runtime commands will run through the Lima instance named `gram-firecracker`.",
     ),
   );
 }

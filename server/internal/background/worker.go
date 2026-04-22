@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
@@ -58,6 +59,8 @@ type WorkerOptions struct {
 	MCPRegistryClient   *externalmcp.RegistryClient
 	TelemetryLogger     *telemetry.Logger
 	TriggersApp         *bgtriggers.App
+	AssistantsCore      *assistants.ServiceCore
+	TemporalEnv         *tenv.Environment
 	PIIScanner          risk_analysis.PIIScanner
 }
 
@@ -92,6 +95,8 @@ func ForDeploymentProcessing(
 		TelemetryLogger:     nil,
 		TriggersApp:         nil,
 		CacheAdapter:        nil,
+		AssistantsCore:      nil,
+		TemporalEnv:         nil,
 		PIIScanner:          nil,
 	}
 }
@@ -125,6 +130,8 @@ func NewTemporalWorker(
 		TelemetryLogger:     nil,
 		TriggersApp:         nil,
 		CacheAdapter:        nil,
+		AssistantsCore:      nil,
+		TemporalEnv:         env,
 		PIIScanner:          nil,
 	}
 
@@ -151,6 +158,8 @@ func NewTemporalWorker(
 			TelemetryLogger:     conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
 			TriggersApp:         conv.Default(o.TriggersApp, opts.TriggersApp),
 			CacheAdapter:        conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			AssistantsCore:      conv.Default(o.AssistantsCore, opts.AssistantsCore),
+			TemporalEnv:         conv.Default(o.TemporalEnv, opts.TemporalEnv),
 			PIIScanner:          conv.Default(o.PIIScanner, opts.PIIScanner),
 		}
 	}
@@ -184,10 +193,11 @@ func NewTemporalWorker(
 		opts.FunctionsVersion,
 		opts.RagService,
 		opts.MCPRegistryClient,
-		env.Client(),
+		opts.TemporalEnv,
 		opts.TelemetryLogger,
 		opts.TriggersApp,
 		opts.CacheAdapter,
+		opts.AssistantsCore,
 		opts.PIIScanner,
 	)
 
@@ -221,6 +231,13 @@ func NewTemporalWorker(
 	// Risk analysis activities
 	temporalWorker.RegisterActivity(activities.FetchUnanalyzedMessages)
 	temporalWorker.RegisterActivity(activities.AnalyzeBatch)
+	// Assistant activities
+	temporalWorker.RegisterActivity(activities.AdmitAssistantThreads)
+	temporalWorker.RegisterActivity(activities.ProcessAssistantThread)
+	temporalWorker.RegisterActivity(activities.ExpireAssistantThreadRuntime)
+	temporalWorker.RegisterActivity(activities.ReapStuckAssistantRuntimes)
+	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)
+	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -240,9 +257,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TriggerDispatchWorkflow)
 	// Risk analysis workflow
 	temporalWorker.RegisterWorkflow(DrainRiskAnalysisWorkflow)
-	// Assistant workflows (stub bodies — populated in the workflows PR)
 	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
+	temporalWorker.RegisterWorkflow(AssistantReaperWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -254,6 +271,10 @@ func NewTemporalWorker(
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add refresh billing usage schedule", attr.SlogError(err))
 		}
+	}
+
+	if err := AddAssistantReaperSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add assistant reaper schedule", attr.SlogError(err))
 	}
 
 	return temporalWorker

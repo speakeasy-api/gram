@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -550,6 +551,12 @@ func newWorkerCommand() *cli.Command {
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
 
+			assistantRuntime, err := newAssistantRuntime(ctx, logger, c, guardianPolicy, db, serverURL)
+			if err != nil {
+				return err
+			}
+			assistantsCore := assistants.NewServiceCore(logger, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger)
+
 			/**
 			 * END -- Agent client
 			 */
@@ -582,6 +589,8 @@ func newWorkerCommand() *cli.Command {
 				TelemetryLogger:     telemetryLogger,
 				TriggersApp:         triggerApp,
 				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
+				AssistantsCore:      assistantsCore,
+				TemporalEnv:         temporalEnv,
 				PIIScanner:          piiScanner,
 			})
 

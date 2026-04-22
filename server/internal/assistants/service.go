@@ -264,7 +264,7 @@ func NewServiceCore(
 	return &ServiceCore{
 		logger:          logger,
 		db:              db,
-		runtime:         runtime,
+		runtime:         newTelemetryRuntimeBackend(runtime, telemetryLogger),
 		slackClient:     slackClient,
 		assistantTokens: assistantTokens,
 		serverURL:       serverURL,
@@ -1432,6 +1432,14 @@ func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetR
 	}
 
 	return servers, nil
+}
+
+func (s *ServiceCore) ProcessThreadEventsByThreadID(ctx context.Context, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
+	projectID, err := assistantrepo.New(s.db).ResolveThreadProjectID(ctx, threadID)
+	if err != nil {
+		return ProcessThreadEventsResult{}, fmt.Errorf("resolve assistant thread project id: %w", err)
+	}
+	return s.ProcessThreadEvents(ctx, projectID, threadID)
 }
 
 func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, threadID uuid.UUID) error {
