@@ -8,7 +8,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rbactest"
@@ -37,7 +37,7 @@ func TestToolsets_RBAC_List_FiltersToGrantedToolsets(t *testing.T) {
 	ctx, ti := newTestToolsetsService(t)
 	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-filter-test")
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeMCPRead, Resource: toolset.ID})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Resource: toolset.ID})
 
 	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
 		SessionToken:     nil,
@@ -55,7 +55,7 @@ func TestToolsets_RBAC_List_ReturnsEmptyWithWrongResourceGrant(t *testing.T) {
 	ctx, ti := newTestToolsetsService(t)
 	_ = createMinimalPrivateToolset(t, ctx, ti, "rbac-excluded-test")
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeMCPRead, Resource: uuid.NewString()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Resource: uuid.NewString()})
 
 	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
 		SessionToken:     nil,
@@ -96,7 +96,7 @@ func TestToolsets_RBAC_Create_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeMCPRead, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
@@ -122,7 +122,7 @@ func TestToolsets_RBAC_Create_AllowedWithProjectWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeMCPWrite, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPWrite, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
@@ -147,7 +147,7 @@ func TestToolsets_RBAC_CloneToolset_DeniedWithProjectWriteButNoSourceRead(t *tes
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeMCPWrite, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPWrite, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
 		SessionToken:     nil,
@@ -195,7 +195,7 @@ func TestToolsets_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	ctx, ti := newTestToolsetsService(t)
 	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-write-readonly-test")
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeMCPRead, Resource: toolset.ID})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Resource: toolset.ID})
 
 	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
@@ -224,7 +224,7 @@ func TestToolsets_RBAC_WriteOps_AllowedWithToolsetWriteGrant(t *testing.T) {
 	ctx, ti := newTestToolsetsService(t)
 	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-write-allowed-test")
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeMCPWrite, Resource: toolset.ID})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPWrite, Resource: toolset.ID})
 
 	name := "updated-name"
 	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
@@ -275,7 +275,7 @@ func TestToolsets_RBAC_UpdateOAuthProxyServer_DeniedWithReadOnlyGrant(t *testing
 	ctx, ti := newTestToolsetsService(t)
 	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-update-oauth-proxy-readonly-test")
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeMCPRead, Resource: toolset.ID})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Resource: toolset.ID})
 
 	audience := "https://api.example.com"
 	_, err := ti.service.UpdateOAuthProxyServer(ctx, &gen.UpdateOAuthProxyServerPayload{

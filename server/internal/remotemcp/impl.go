@@ -17,11 +17,11 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/server"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -38,22 +38,22 @@ type Service struct {
 	logger  *slog.Logger
 	db      *pgxpool.Pool
 	auth    *auth.Auth
-	access  *access.Manager
+	authz   *authz.Engine
 	headers *Headers
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, accessManager *access.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 
 	return &Service{
 		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
 		logger:  logger,
 		db:      db,
-		auth:    auth.New(logger, db, sessions, accessManager),
-		access:  accessManager,
+		auth:    auth.New(logger, db, sessions, authzEngine),
+		authz:   authzEngine,
 		headers: NewHeaders(logger, db, enc),
 	}
 }
@@ -74,7 +74,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeRemoteMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeRemoteMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
 
@@ -152,7 +152,7 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeRemoteMCPRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeRemoteMCPRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
 
@@ -194,7 +194,7 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeRemoteMCPRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeRemoteMCPRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
 
@@ -238,7 +238,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeRemoteMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeRemoteMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
 
@@ -409,7 +409,7 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeRemoteMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeRemoteMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return err
 	}
 

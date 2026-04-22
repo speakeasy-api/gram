@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/resources"
-	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rbactest"
@@ -39,7 +39,7 @@ func TestResources_RBAC_List_DeniedWithUnrelatedGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildWrite, Resource: "other-project-id"})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeBuildWrite, Resource: "other-project-id"})
 
 	_, err := ti.service.ListResources(ctx, &gen.ListResourcesPayload{
 		SessionToken:     nil,
@@ -62,7 +62,7 @@ func TestResources_RBAC_List_AllowedWithBuildReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
 
 	result, err := ti.service.ListResources(ctx, &gen.ListResourcesPayload{
 		SessionToken:     nil,
@@ -84,7 +84,7 @@ func TestResources_RBAC_List_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, authz.Grant{Scope: authz.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
 
 	result, err := ti.service.ListResources(ctx, &gen.ListResourcesPayload{
 		SessionToken:     nil,

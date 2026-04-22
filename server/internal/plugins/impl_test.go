@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
-	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -50,7 +50,7 @@ func TestPluginsService_CreatePlugin_ForbiddenWithoutOrgAdmin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestPluginsService(t)
-	ctx = access.GrantsToContext(ctx, nil)
+	ctx = authz.GrantsToContext(ctx, nil)
 
 	_, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{
 		Name: "Forbidden Plugin",

@@ -80,11 +80,11 @@ func NewEngine(logger *slog.Logger, db accessrepo.DBTX, features FeatureChecker,
 	}
 }
 
-// getScopeOverrides returns the parsed scope overrides from the request context
+// GetScopeOverrides returns the parsed scope overrides from the request context
 // if they are present AND the caller is authorised to use them. In local dev
 // any authenticated user may use the override header; in production only
 // superadmins can. Returns nil, false when overrides are absent or disallowed.
-func (e *Engine) getScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
+func (e *Engine) GetScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
 	overrides, ok := readScopeOverrides(ctx)
 	if !ok {
 		return nil, false
@@ -111,8 +111,8 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 
-	if overrides, ok := e.getScopeOverrides(ctx); ok {
-		return GrantsToContext(ctx, grantsFromOverrides(overrides)), nil
+	if overrides, ok := e.GetScopeOverrides(ctx); ok {
+		return GrantsToContext(ctx, GrantsFromOverrides(overrides)), nil
 	}
 
 	if authCtx.AccountType != "enterprise" {
@@ -237,7 +237,7 @@ func (e *Engine) InvalidateAllRoleCaches(ctx context.Context, orgID string) {
 }
 
 func (e *Engine) Require(ctx context.Context, checks ...Check) error {
-	enforce, err := e.shouldEnforce(ctx)
+	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 }
 
 func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
-	enforce, err := e.shouldEnforce(ctx)
+	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return err
 	}
@@ -297,7 +297,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 }
 
 func (e *Engine) Filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, error) {
-	enforce, err := e.shouldEnforce(ctx)
+	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +324,7 @@ func (e *Engine) Filter(ctx context.Context, scope Scope, resourceIDs []string) 
 	return allowed, nil
 }
 
-func (e *Engine) shouldEnforce(ctx context.Context) (bool, error) {
+func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return false, oops.C(oops.CodeUnauthorized)
@@ -338,7 +338,7 @@ func (e *Engine) shouldEnforce(ctx context.Context) (bool, error) {
 	// When the caller has active scope overrides, enforce so the override scopes
 	// take effect regardless of account type or feature flag. Checked after
 	// API key exclusion so the toolbar doesn't interfere with API key auth flows.
-	if _, ok := e.getScopeOverrides(ctx); ok {
+	if _, ok := e.GetScopeOverrides(ctx); ok {
 		return true, nil
 	}
 

@@ -55,7 +55,7 @@ var SystemRoleGrants = map[string][]*RoleGrant{
 // SeedSystemRoleGrants upserts the fixed grant sets for all system roles.
 func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
 	for roleSlug, grants := range SystemRoleGrants {
-		if err := syncGrants(ctx, logger, db, organizationID, roleSlug, grants); err != nil {
+		if err := SyncGrants(ctx, logger, db, organizationID, roleSlug, grants); err != nil {
 			return fmt.Errorf("seed %s grants: %w", roleSlug, err)
 		}
 	}
@@ -84,7 +84,7 @@ func grantsSatisfy(grants []Grant, checks []Check) bool {
 	return false
 }
 
-func syncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, grants []*RoleGrant) error {
+func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, grants []*RoleGrant) error {
 	if orgID == "" {
 		return fmt.Errorf("organization id is required")
 	}

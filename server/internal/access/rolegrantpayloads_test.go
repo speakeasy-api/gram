@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/stretchr/testify/require"
 )
 
@@ -11,8 +12,8 @@ func TestRoleGrantPayloadsPreservesNilAndEmptyResources(t *testing.T) {
 	t.Parallel()
 
 	grants := roleGrantPayloads([]*gen.RoleGrant{
-		{Scope: string(ScopeBuildRead), Resources: nil},
-		{Scope: string(ScopeBuildWrite), Resources: []string{}},
+		{Scope: string(authz.ScopeBuildRead), Resources: nil},
+		{Scope: string(authz.ScopeBuildWrite), Resources: []string{}},
 	})
 
 	require.Len(t, grants, 2)

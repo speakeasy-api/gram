@@ -22,11 +22,11 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/toolsets/server"
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -63,7 +63,7 @@ type Service struct {
 	repo            *repo.Queries
 	environmentRepo *environmentsRepo.Queries
 	auth            *auth.Auth
-	access          *access.Manager
+	authz           *authz.Engine
 	toolsets        *Toolsets
 	domainsRepo     *domainsRepo.Queries
 	usageRepo       *usageRepo.Queries
@@ -74,7 +74,7 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, cacheAdapter cache.Cache, accessManager *access.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, cacheAdapter cache.Cache, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("toolsets"))
 
 	return &Service{
@@ -82,8 +82,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger:          logger,
 		db:              db,
 		repo:            repo.New(db),
-		auth:            auth.New(logger, db, sessions, accessManager),
-		access:          accessManager,
+		auth:            auth.New(logger, db, sessions, authzEngine),
+		authz:           authzEngine,
 		environmentRepo: environmentsRepo.New(db),
 		toolsets:        NewToolsets(db),
 		domainsRepo:     domainsRepo.New(db),
@@ -114,7 +114,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
 
@@ -231,7 +231,7 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 		toolsetIDs[i] = ts.ID.String()
 	}
 
-	allowedIDs, err := s.access.Filter(ctx, access.ScopeMCPRead, toolsetIDs)
+	allowedIDs, err := s.authz.Filter(ctx, authz.ScopeMCPRead, toolsetIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +264,7 @@ func (s *Service) ListToolsetsForOrg(ctx context.Context, payload *gen.ListTools
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -313,7 +313,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: existingToolset.ID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceID: existingToolset.ID.String()}); err != nil {
 		return nil, err
 	}
 	existingView, err := mv.DescribeToolset(ctx, logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(existingToolset.Slug), new(s.toolsetCache.SkipCache()))
@@ -549,7 +549,7 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.E(oops.CodeUnexpected, err, "failed to get toolset").Log(ctx, logger)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: toDelete.ID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceID: toDelete.ID.String()}); err != nil {
 		return err
 	}
 
@@ -595,7 +595,7 @@ func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload
 		return nil, err
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPRead, ResourceID: toolset.ID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceID: toolset.ID}); err != nil {
 		return nil, err
 	}
 
@@ -627,10 +627,10 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
 	}
 
-	if err := s.access.Require(
+	if err := s.authz.Require(
 		ctx,
-		access.Check{Scope: access.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()},
-		access.Check{Scope: access.ScopeMCPRead, ResourceID: originalToolset.ID.String()},
+		authz.Check{Scope: authz.ScopeMCPWrite, ResourceID: authCtx.ProjectID.String()},
+		authz.Check{Scope: authz.ScopeMCPRead, ResourceID: originalToolset.ID.String()},
 	); err != nil {
 		return nil, err
 	}
@@ -808,7 +808,7 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, err
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: existingToolset.ID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceID: existingToolset.ID}); err != nil {
 		return nil, err
 	}
 
@@ -909,7 +909,7 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").Log(ctx, logger)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: existingToolset.ID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceID: existingToolset.ID.String()}); err != nil {
 		return nil, err
 	}
 
@@ -1029,7 +1029,7 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		return nil, err
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeMCPWrite, ResourceID: toolsetDetails.ID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceID: toolsetDetails.ID}); err != nil {
 		return nil, err
 	}
 

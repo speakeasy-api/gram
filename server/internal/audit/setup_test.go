@@ -9,10 +9,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -68,11 +68,11 @@ func newTestAuditService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
 
 	return ctx, &testInstance{
-		service: audit.NewService(logger, tracerProvider, conn, sessionManager, accessManager, func(ctx context.Context, organizationID string) error {
-			return accessManager.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: organizationID})
+		service: audit.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, func(ctx context.Context, organizationID string) error {
+			return authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: organizationID})
 		}),
 		conn:           conn,
 		sessionManager: sessionManager,

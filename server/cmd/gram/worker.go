@@ -16,10 +16,10 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -437,19 +437,19 @@ func newWorkerCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
 
 			// we don't require a real workOS client for workers as they bypass RBAC
-			accessManager := access.NewManager(
+			authzEngine := authz.NewEngine(
 				logger,
 				db,
 				productFeatures,
 				workos.NewStubClient(),
 				cache.NewRedisCacheAdapter(redisClient),
-				access.ManagerOpts{DevMode: c.String("environment") == "local"},
+				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
 
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, sessionCaptureEnabled, posthogClient, accessManager)
+			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
 			/**
 			 * BEGIN -- MCP service setup for agent client
@@ -526,7 +526,7 @@ func newWorkerCommand() *cli.Command {
 				ragService,
 				triggerApp,
 				temporalEnv,
-				accessManager,
+				authzEngine,
 			)
 
 			chatClient := chat.NewAgenticChatClient(

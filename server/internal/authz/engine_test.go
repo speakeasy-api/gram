@@ -327,7 +327,7 @@ func TestCanUseOverride_devPlusAdmin(t *testing.T) {
 	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache, EngineOpts{DevMode: true})
 	ctx := scopeOverrideCtx(t, true, "pro")
 
-	enforce, err := engine.shouldEnforce(ctx)
+	enforce, err := engine.ShouldEnforce(ctx)
 	require.NoError(t, err)
 	require.True(t, enforce)
 }
@@ -337,7 +337,7 @@ func TestCanUseOverride_devPlusNonAdmin(t *testing.T) {
 	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache, EngineOpts{DevMode: true})
 	ctx := scopeOverrideCtx(t, false, "pro")
 
-	enforce, err := engine.shouldEnforce(ctx)
+	enforce, err := engine.ShouldEnforce(ctx)
 	require.NoError(t, err)
 	require.True(t, enforce)
 }
@@ -347,7 +347,7 @@ func TestCanUseOverride_prodPlusAdmin(t *testing.T) {
 	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache)
 	ctx := scopeOverrideCtx(t, true, "pro")
 
-	enforce, err := engine.shouldEnforce(ctx)
+	enforce, err := engine.ShouldEnforce(ctx)
 	require.NoError(t, err)
 	require.True(t, enforce)
 }
@@ -357,7 +357,7 @@ func TestCanUseOverride_prodPlusNonAdmin(t *testing.T) {
 	engine := NewEngine(testLogger(t), nil, stubFeatureChecker{enabled: false}, workos.NewStubClient(), cache.NoopCache)
 	ctx := scopeOverrideCtx(t, false, "pro")
 
-	enforce, err := engine.shouldEnforce(ctx)
+	enforce, err := engine.ShouldEnforce(ctx)
 	require.NoError(t, err)
 	require.False(t, enforce)
 }
