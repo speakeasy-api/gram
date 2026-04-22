@@ -84,6 +84,13 @@ if ! $agent_mode; then
     "
 fi
 
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    check_command "limactl" "
+    Install Lima from here: https://lima-vm.io/ or via Homebrew:
+      brew install lima
+    "
+fi
+
 if [ $onboarding_pass = "false" ]; then
     echo "❌ Onboarding checks failed. Please fix the issues above and rerun this script."
     exit 1
@@ -105,6 +112,20 @@ interactive_only mise run zero:melange
 interactive_only mise run zero:fly
 mise run zero:encryption
 mise run zero:tls
+mise run zero:assistants-runtime
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    mise run zero:assistants-lima
+fi
+
+assistant_arch="$(uname -m)"
+assistant_arch="${assistant_arch/aarch64/aarch64}"
+assistant_arch="${assistant_arch/arm64/aarch64}"
+assistant_arch="${assistant_arch/x86_64/x86_64}"
+assistant_artifact_dir="agents/runtime-artifacts/${assistant_arch}"
+if [ ! -f "${assistant_artifact_dir}/firecracker" ] || [ ! -f "${assistant_artifact_dir}/vmlinux.bin" ] || [ ! -f "${assistant_artifact_dir}/assistant-rootfs.ext4" ]; then
+    echo -e "\n⏳ Building assistant runtime artifacts"
+    mise run build:assistants-local
+fi
 
 echo -e "\n⏳ Building internal SDK"
 mise run build:internal-sdk

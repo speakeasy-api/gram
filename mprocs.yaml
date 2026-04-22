@@ -17,3 +17,11 @@ procs:
     cmd: ["mise", "run", "start:elements"]
     stop:
       send-keys: ["<C-c>"]
+  lima:
+    cmd: ["mise", "run", "start:lima"]
+    stop:
+      send-keys: ["<C-c>"]
+  assistant-runtime:
+    cmd: ["mise", "run", "start:assistant-runtime"]
+    stop:
+      send-keys: ["<C-c>"]
