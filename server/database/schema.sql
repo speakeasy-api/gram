@@ -1949,3 +1949,7 @@ ON risk_results (project_id, risk_policy_id, risk_policy_version, chat_message_i
 
 CREATE INDEX IF NOT EXISTS risk_results_project_chat_message_idx
 ON risk_results (project_id, chat_message_id);
+
+CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
+ON risk_results (project_id, created_at DESC)
+WHERE found IS TRUE;
