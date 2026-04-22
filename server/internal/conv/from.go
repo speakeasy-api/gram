@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -154,6 +155,39 @@ func PtrToPGBool(b *bool) pgtype.Bool {
 	}
 
 	return pgtype.Bool{Bool: *b, Valid: true}
+}
+
+// ToPGTimestamptz converts a time to a valid pgtype.Timestamptz.
+func ToPGTimestamptz(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{
+		Time:             t,
+		InfinityModifier: pgtype.Finite,
+		Valid:            true,
+	}
+}
+
+// ToPGTimestamptzEmpty converts a time to a pgtype.Timestamptz that is only
+// valid when the input is non-zero.
+func ToPGTimestamptzEmpty(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{
+		Time:             t,
+		InfinityModifier: pgtype.Finite,
+		Valid:            !t.IsZero(),
+	}
+}
+
+// PtrToPGTimestamptz converts a time pointer to a pgtype.Timestamptz. A nil
+// pointer produces an invalid value.
+func PtrToPGTimestamptz(t *time.Time) pgtype.Timestamptz {
+	if t == nil {
+		return pgtype.Timestamptz{
+			Time:             time.Time{},
+			InfinityModifier: pgtype.Finite,
+			Valid:            false,
+		}
+	}
+
+	return ToPGTimestamptz(*t)
 }
 
 // FromPGBool converts a pgtype.Bool to a bool or subtype of bool. If Bool is

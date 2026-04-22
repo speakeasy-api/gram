@@ -168,6 +168,39 @@ func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipa
 	return items, nil
 }
 
+const markRoleDeleted = `-- name: MarkRoleDeleted :execrows
+UPDATE organization_roles
+SET workos_deleted_at = $1,
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE organization_id = $3
+  AND workos_slug = $4
+  AND (
+    workos_deleted_at IS NULL
+    OR workos_deleted_at < $1
+  )
+`
+
+type MarkRoleDeletedParams struct {
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	OrganizationID    string
+	WorkosSlug        string
+}
+
+func (q *Queries) MarkRoleDeleted(ctx context.Context, arg MarkRoleDeletedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markRoleDeleted,
+		arg.WorkosDeletedAt,
+		arg.WorkosLastEventID,
+		arg.OrganizationID,
+		arg.WorkosSlug,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const removeResourceFromGrants = `-- name: RemoveResourceFromGrants :execrows
 DELETE FROM principal_grants
 WHERE organization_id = $1
@@ -228,14 +261,32 @@ func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalG
 }
 
 const upsertRole = `-- name: UpsertRole :exec
-INSERT INTO organization_roles (organization_id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO organization_roles (
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)
 ON CONFLICT (organization_id, workos_slug)
 DO UPDATE SET
   workos_name = EXCLUDED.workos_name,
   workos_description = EXCLUDED.workos_description,
   workos_created_at = EXCLUDED.workos_created_at,
   workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_deleted_at = NULL,
+  workos_last_event_id = EXCLUDED.workos_last_event_id,
   updated_at = clock_timestamp()
   WHERE organization_roles.workos_updated_at < EXCLUDED.workos_updated_at
 `
@@ -247,6 +298,7 @@ type UpsertRoleParams struct {
 	WorkosDescription pgtype.Text
 	WorkosCreatedAt   pgtype.Timestamptz
 	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
 }
 
 func (q *Queries) UpsertRole(ctx context.Context, arg UpsertRoleParams) error {
@@ -257,6 +309,7 @@ func (q *Queries) UpsertRole(ctx context.Context, arg UpsertRoleParams) error {
 		arg.WorkosDescription,
 		arg.WorkosCreatedAt,
 		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
 	)
 	return err
 }

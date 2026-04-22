@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -253,7 +254,7 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 		UserID:         "user_1",
 		OrganizationID: "org_workos_test",
 		RoleSlug:       "custom-builder",
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("ListOrgUsers", mock.Anything, "org_workos_test").Return(map[string]thirdpartyworkos.User{
 		"user_1": mockUser("user_1", "Ada", "Lovelace", "ada@example.com"),

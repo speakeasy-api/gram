@@ -3,17 +3,25 @@ package activities
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/workos/workos-go/v6/pkg/events"
 )
 
@@ -117,7 +125,7 @@ func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger
 		}
 
 		orgID := conv.Ternary(orgEvent.Object == "organization", orgEvent.ID, orgEvent.OrganizationID)
-		if orgID != "" {
+		if orgID == "" {
 			return "", oops.E(oops.CodeUnexpected, nil, "unexpected non-organization event object: %s", orgEvent.Object).Log(ctx, logger)
 		}
 
@@ -144,7 +152,7 @@ func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger
 	}
 
 	if eventErr != nil {
-		return "", eventErr
+		return "", fmt.Errorf("process workos organization event page: %w", eventErr)
 	}
 
 	return lastEventID, nil
@@ -165,26 +173,250 @@ type workosOrgEvent struct {
 }
 
 func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
-	switch workos.EventKind(event.Event) {
-	case workos.EventKindOrganizationCreated:
-		// return handleOrganizationCreated(ctx, logger, dbtx, event)
-	case workos.EventKindOrganizationDeleted:
-		//return handleOrganizationDeleted(ctx, logger, dbtx, event)
-	case workos.EventKindOrganizationUpdated:
-		//return handleOrganizationUpdated(ctx, logger, dbtx, event)
-	case workos.EventKindOrganizationMembershipCreated:
-		//return handleOrganizationMembershipCreated(ctx, logger, dbtx, event)
-	case workos.EventKindOrganizationMembershipDeleted:
-		//return handleOrganizationMembershipDeleted(ctx, logger, dbtx, event)
-	case workos.EventKindOrganizationMembershipUpdated:
-		//return handleOrganizationMembershipUpdated(ctx, logger, dbtx, event)
-	case workos.EventKindOrganizationRoleCreated:
-		//return handleOrganizationRoleCreated(ctx, logger, dbtx, event)
-	case workos.EventKindOrganizationRoleDeleted:
-		//return handleOrganizationRoleDeleted(ctx, logger, dbtx, event)
-	case workos.EventKindOrganizationRoleUpdated:
-		//return handleOrganizationRoleUpdated(ctx, logger, dbtx, event)
+	switch event.Event {
+	case string(workos.EventKindOrganizationCreated):
+		return handleOrganizationCreatedOrUpdated(ctx, logger, dbtx, event)
+	case string(workos.EventKindOrganizationDeleted):
+		return handleOrganizationDeleted(ctx, logger, dbtx, event)
+	case string(workos.EventKindOrganizationUpdated):
+		return handleOrganizationCreatedOrUpdated(ctx, logger, dbtx, event)
+	case string(workos.EventKindOrganizationMembershipCreated):
+		return handleOrganizationMembershipUpsert(ctx, logger, dbtx, event)
+	case string(workos.EventKindOrganizationMembershipDeleted):
+		return handleOrganizationMembershipDeleted(ctx, logger, dbtx, event)
+	case string(workos.EventKindOrganizationMembershipUpdated):
+		return handleOrganizationMembershipUpsert(ctx, logger, dbtx, event)
+	case string(workos.EventKindOrganizationRoleCreated):
+		return handleOrganizationRoleUpsert(ctx, logger, dbtx, event)
+	case string(workos.EventKindOrganizationRoleDeleted):
+		return handleOrganizationRoleDeleted(ctx, logger, dbtx, event)
+	case string(workos.EventKindOrganizationRoleUpdated):
+		return handleOrganizationRoleUpsert(ctx, logger, dbtx, event)
 	}
 
 	return oops.Permanent(fmt.Errorf("unhandled workos organization event: %s", event.Event))
+}
+
+type workosOrganizationEvent struct {
+	ID         string `json:"id"`
+	Object     string `json:"object"`
+	Name       string `json:"name"`
+	ExternalID string `json:"external_id"`
+}
+
+func handleOrganizationCreatedOrUpdated(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+	var payload workosOrganizationEvent
+	if err := json.Unmarshal(event.Data, &payload); err != nil {
+		return fmt.Errorf("unmarshal organization event: %w", err)
+	}
+
+	repo := orgrepo.New(dbtx)
+
+	organizationID, err := repo.GetOrganizationIDByWorkosID(ctx, conv.ToPGText(payload.ID))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		organizationID = uuid.NewString()
+	case err != nil:
+		return fmt.Errorf("get organization by workos id %q: %w", payload.ID, err)
+	}
+
+	_, err = repo.UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
+		ID:       organizationID,
+		Name:     payload.Name,
+		Slug:     conv.ToSlug(payload.Name),
+		WorkosID: conv.ToPGText(payload.ID),
+	})
+	if err != nil {
+		return fmt.Errorf("upsert organization %q from workos event: %w", payload.ID, err)
+	}
+
+	return nil
+}
+
+func handleOrganizationDeleted(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+	var payload workosOrganizationEvent
+	if err := json.Unmarshal(event.Data, &payload); err != nil {
+		return fmt.Errorf("unmarshal organization delete event: %w", err)
+	}
+
+	rows, err := orgrepo.New(dbtx).DisableOrganizationByWorkosID(ctx, conv.ToPGText(payload.ID))
+	if err != nil {
+		return fmt.Errorf("disable organization %q: %w", payload.ID, err)
+	}
+	if rows == 0 {
+		logger.DebugContext(ctx, "skipping organization delete for unknown org", attr.SlogWorkOSOrganizationID(payload.ID))
+	}
+
+	return nil
+}
+
+type workosMembershipEvent struct {
+	ID             string    `json:"id"`
+	Object         string    `json:"object"`
+	OrganizationID string    `json:"organization_id"`
+	UserID         string    `json:"user_id"`
+	RoleSlug       string    `json:"role_slug"`
+	Status         string    `json:"status"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+	var payload workosMembershipEvent
+	if err := json.Unmarshal(event.Data, &payload); err != nil {
+		return fmt.Errorf("unmarshal organization membership event: %w", err)
+	}
+
+	organizationID, err := orgrepo.New(dbtx).GetOrganizationIDByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		logger.DebugContext(ctx, "skipping membership event for unknown organization", attr.SlogWorkOSOrganizationID(payload.OrganizationID))
+		return nil
+	case err != nil:
+		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
+
+	}
+
+	userID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(payload.UserID))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		logger.DebugContext(ctx, "skipping membership event for unknown user", attr.SlogWorkOSUserID(payload.UserID))
+		return nil
+	case err != nil:
+		return fmt.Errorf("get user by workos id %q: %w", payload.UserID, err)
+	}
+
+	err = orgrepo.New(dbtx).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+		OrganizationID:     organizationID,
+		UserID:             userID,
+		WorkosMembershipID: conv.ToPGText(payload.ID),
+	})
+	if err != nil {
+		return fmt.Errorf("upsert organization membership %q: %w", payload.ID, err)
+	}
+
+	return nil
+}
+
+func handleOrganizationMembershipDeleted(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+	var payload workosMembershipEvent
+	if err := json.Unmarshal(event.Data, &payload); err != nil {
+		return fmt.Errorf("unmarshal organization membership delete event: %w", err)
+	}
+
+	organizationID, err := orgrepo.New(dbtx).GetOrganizationIDByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		logger.DebugContext(ctx, "skipping membership delete for unknown organization", attr.SlogWorkOSOrganizationID(payload.OrganizationID))
+		return nil
+	case err != nil:
+		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
+	}
+
+	userID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(payload.UserID))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		logger.DebugContext(ctx, "skipping membership delete for unknown user", attr.SlogWorkOSUserID(payload.UserID))
+		return nil
+	case err != nil:
+		return fmt.Errorf("get user by workos id %q: %w", payload.UserID, err)
+	}
+
+	err = orgrepo.New(dbtx).DeleteOrganizationUserRelationship(ctx, orgrepo.DeleteOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         userID,
+	})
+	if err != nil {
+		return fmt.Errorf("delete organization membership %q: %w", payload.ID, err)
+	}
+
+	return nil
+}
+
+type workosRoleEvent struct {
+	ID             string     `json:"id"`
+	Object         string     `json:"object"`
+	OrganizationID string     `json:"organization_id"`
+	Name           string     `json:"name"`
+	Slug           string     `json:"slug"`
+	Description    string     `json:"description"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	DeletedAt      *time.Time `json:"deleted_at"`
+}
+
+func handleOrganizationRoleUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+	var payload workosRoleEvent
+	if err := json.Unmarshal(event.Data, &payload); err != nil {
+		return fmt.Errorf("unmarshal organization role event: %w", err)
+	}
+
+	organizationID, err := orgrepo.New(dbtx).GetOrganizationIDByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		logger.DebugContext(ctx, "skipping role event for unknown organization", attr.SlogWorkOSOrganizationID(payload.OrganizationID))
+		return nil
+	case err != nil:
+		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
+	}
+
+	err = accessrepo.New(dbtx).UpsertRole(ctx, accessrepo.UpsertRoleParams{
+		OrganizationID:    organizationID,
+		WorkosSlug:        payload.Slug,
+		WorkosName:        payload.Name,
+		WorkosDescription: conv.ToPGTextEmpty(payload.Description),
+		WorkosCreatedAt:   conv.ToPGTimestamptzEmpty(payload.CreatedAt),
+		WorkosUpdatedAt:   conv.ToPGTimestamptzEmpty(payload.UpdatedAt),
+		WorkosLastEventID: conv.ToPGText(event.ID),
+	})
+	if err != nil {
+		return fmt.Errorf("upsert organization role %q: %w", payload.Slug, err)
+	}
+
+	return nil
+}
+
+func handleOrganizationRoleDeleted(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+	var payload workosRoleEvent
+	if err := json.Unmarshal(event.Data, &payload); err != nil {
+		return fmt.Errorf("unmarshal organization role delete event: %w", err)
+	}
+
+	organizationID, err := orgrepo.New(dbtx).GetOrganizationIDByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		logger.DebugContext(ctx, "skipping role delete for unknown organization", attr.SlogWorkOSOrganizationID(payload.OrganizationID))
+		return nil
+	case err != nil:
+		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
+	}
+
+	deletedAt := payload.DeletedAt
+	if deletedAt == nil {
+		deletedAt = &event.CreatedAt
+	}
+	if deletedAt.IsZero() {
+		now := time.Now().UTC()
+		deletedAt = &now
+	}
+
+	_, err = accessrepo.New(dbtx).MarkRoleDeleted(ctx, accessrepo.MarkRoleDeletedParams{
+		WorkosDeletedAt:   conv.ToPGTimestamptzEmpty(*deletedAt),
+		WorkosLastEventID: conv.ToPGText(event.ID),
+		OrganizationID:    organizationID,
+		WorkosSlug:        payload.Slug,
+	})
+	if err != nil {
+		return fmt.Errorf("mark role deleted %q: %w", payload.Slug, err)
+	}
+
+	_, err = accessrepo.New(dbtx).DeletePrincipalGrantsByPrincipal(ctx, accessrepo.DeletePrincipalGrantsByPrincipalParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, payload.Slug),
+	})
+	if err != nil {
+		return fmt.Errorf("delete grants for role %q: %w", payload.Slug, err)
+	}
+
+	return nil
 }

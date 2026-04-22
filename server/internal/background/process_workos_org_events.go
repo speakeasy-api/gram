@@ -107,6 +107,7 @@ func ProcessWorkOSOrganizationEventsWorkflow(ctx workflow.Context, params Proces
 	var processRes activities.ProcessWorkOSOrganizationEventsResult
 	if err := workflow.ExecuteActivity(ctx, a.ProcessWorkOSOrganizationEvents, activities.ProcessWorkOSOrganizationEventsParams{
 		WorkOSOrganizationID: params.WorkOSOrganizationID,
+		SinceEventID:         nil,
 	}).Get(ctx, &processRes); err != nil {
 		return nil, fmt.Errorf("failed to process WorkOS events: %w", err)
 	}

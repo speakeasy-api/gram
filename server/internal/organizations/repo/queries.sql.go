@@ -59,6 +59,36 @@ func (q *Queries) DeleteOrganizationUserRelationship(ctx context.Context, arg De
 	return err
 }
 
+const disableOrganizationByWorkosID = `-- name: DisableOrganizationByWorkosID :execrows
+UPDATE organization_metadata
+SET disabled_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE workos_id = $1
+  AND disabled_at IS NULL
+`
+
+func (q *Queries) DisableOrganizationByWorkosID(ctx context.Context, workosID pgtype.Text) (int64, error) {
+	result, err := q.db.Exec(ctx, disableOrganizationByWorkosID, workosID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getOrganizationIDByWorkosID = `-- name: GetOrganizationIDByWorkosID :one
+SELECT id
+FROM organization_metadata
+WHERE workos_id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetOrganizationIDByWorkosID(ctx context.Context, workosID pgtype.Text) (string, error) {
+	row := q.db.QueryRow(ctx, getOrganizationIDByWorkosID, workosID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
 SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 FROM organization_metadata
@@ -367,6 +397,59 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 	return i, err
 }
 
+const upsertOrganizationMetadataFromWorkOS = `-- name: UpsertOrganizationMetadataFromWorkOS :one
+INSERT INTO organization_metadata (
+    id,
+    name,
+    slug,
+    workos_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    slug = COALESCE(organization_metadata.slug, EXCLUDED.slug),
+    workos_id = EXCLUDED.workos_id,
+    disabled_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+`
+
+type UpsertOrganizationMetadataFromWorkOSParams struct {
+	ID       string
+	Name     string
+	Slug     string
+	WorkosID pgtype.Text
+}
+
+func (q *Queries) UpsertOrganizationMetadataFromWorkOS(ctx context.Context, arg UpsertOrganizationMetadataFromWorkOSParams) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationMetadataFromWorkOS,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.WorkosID,
+	)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.SsoConnectionID,
+		&i.WorkosID,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const upsertOrganizationUserRelationship = `-- name: UpsertOrganizationUserRelationship :one
 INSERT INTO organization_user_relationships (
     organization_id,
@@ -399,4 +482,31 @@ func (q *Queries) UpsertOrganizationUserRelationship(ctx context.Context, arg Up
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const upsertWorkOSMembership = `-- name: UpsertWorkOSMembership :exec
+INSERT INTO organization_user_relationships (
+    organization_id,
+    user_id,
+    workos_membership_id
+) VALUES (
+    $1,
+    $2,
+    $3
+)
+ON CONFLICT (organization_id, user_id) DO UPDATE SET
+    workos_membership_id = EXCLUDED.workos_membership_id,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+`
+
+type UpsertWorkOSMembershipParams struct {
+	OrganizationID     string
+	UserID             string
+	WorkosMembershipID pgtype.Text
+}
+
+func (q *Queries) UpsertWorkOSMembership(ctx context.Context, arg UpsertWorkOSMembershipParams) error {
+	_, err := q.db.Exec(ctx, upsertWorkOSMembership, arg.OrganizationID, arg.UserID, arg.WorkosMembershipID)
+	return err
 }

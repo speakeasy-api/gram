@@ -55,13 +55,43 @@ WHERE organization_id = @organization_id
   AND resource = @resource;
 
 -- name: UpsertRole :exec
-INSERT INTO organization_roles (organization_id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at)
-VALUES (@organization_id, @workos_slug, @workos_name, @workos_description, @workos_created_at, @workos_updated_at)
+INSERT INTO organization_roles (
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+)
+VALUES (
+    @organization_id,
+    @workos_slug,
+    @workos_name,
+    @workos_description,
+    @workos_created_at,
+    @workos_updated_at,
+    @workos_last_event_id
+)
 ON CONFLICT (organization_id, workos_slug)
 DO UPDATE SET
   workos_name = EXCLUDED.workos_name,
   workos_description = EXCLUDED.workos_description,
   workos_created_at = EXCLUDED.workos_created_at,
   workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_deleted_at = NULL,
+  workos_last_event_id = EXCLUDED.workos_last_event_id,
   updated_at = clock_timestamp()
   WHERE organization_roles.workos_updated_at < EXCLUDED.workos_updated_at;
+
+-- name: MarkRoleDeleted :execrows
+UPDATE organization_roles
+SET workos_deleted_at = @workos_deleted_at,
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workos_slug = @workos_slug
+  AND (
+    workos_deleted_at IS NULL
+    OR workos_deleted_at < @workos_deleted_at
+  );

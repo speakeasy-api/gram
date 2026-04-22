@@ -40,6 +40,39 @@ FROM organization_metadata
 WHERE workos_id = @workos_id
 LIMIT 1;
 
+-- name: GetOrganizationIDByWorkosID :one
+SELECT id
+FROM organization_metadata
+WHERE workos_id = @workos_id
+LIMIT 1;
+
+-- name: UpsertOrganizationMetadataFromWorkOS :one
+INSERT INTO organization_metadata (
+    id,
+    name,
+    slug,
+    workos_id
+) VALUES (
+    @id,
+    @name,
+    @slug,
+    @workos_id
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    slug = COALESCE(organization_metadata.slug, EXCLUDED.slug),
+    workos_id = EXCLUDED.workos_id,
+    disabled_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: DisableOrganizationByWorkosID :execrows
+UPDATE organization_metadata
+SET disabled_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE workos_id = @workos_id
+  AND disabled_at IS NULL;
+
 -- name: UpsertOrganizationUserRelationship :one
 INSERT INTO organization_user_relationships (
     organization_id,
@@ -103,6 +136,21 @@ ON CONFLICT (organization_id, user_id) DO UPDATE SET
     workos_membership_id = COALESCE(organization_user_relationships.workos_membership_id, EXCLUDED.workos_membership_id),
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.deleted_at IS NULL;
+
+-- name: UpsertWorkOSMembership :exec
+INSERT INTO organization_user_relationships (
+    organization_id,
+    user_id,
+    workos_membership_id
+) VALUES (
+    @organization_id,
+    @user_id,
+    @workos_membership_id
+)
+ON CONFLICT (organization_id, user_id) DO UPDATE SET
+    workos_membership_id = EXCLUDED.workos_membership_id,
+    deleted_at = NULL,
+    updated_at = clock_timestamp();
 
 -- name: SetUserWorkOSMemberships :exec
 -- Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs

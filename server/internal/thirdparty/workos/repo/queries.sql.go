@@ -7,8 +7,6 @@ package repo
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getOrganizationSyncLastEventID = `-- name: GetOrganizationSyncLastEventID :one
@@ -22,48 +20,6 @@ func (q *Queries) GetOrganizationSyncLastEventID(ctx context.Context, workosOrga
 	var last_event_id string
 	err := row.Scan(&last_event_id)
 	return last_event_id, err
-}
-
-const onboardWorkOSOrganization = `-- name: OnboardWorkOSOrganization :one
-INSERT INTO organization_metadata (
-    id
-  , workos_id
-  , name
-  , slug
-)
-VALUES (
-    $1
-  , $2
-  , $3
-  , $4
-)
-ON CONFLICT (id) DO UPDATE
-SET
-    workos_id = EXCLUDED.workos_id
-  , name = EXCLUDED.name
-  , slug = COALESCE(organization_metadata.slug, EXCLUDED.slug)
-  , updated_at = clock_timestamp()
-  , deleted_at = NULL
-RETURNING id
-`
-
-type OnboardWorkOSOrganizationParams struct {
-	SpeakeasyID string
-	WorkosID    pgtype.Text
-	Name        string
-	Slug        string
-}
-
-func (q *Queries) OnboardWorkOSOrganization(ctx context.Context, arg OnboardWorkOSOrganizationParams) (string, error) {
-	row := q.db.QueryRow(ctx, onboardWorkOSOrganization,
-		arg.SpeakeasyID,
-		arg.WorkosID,
-		arg.Name,
-		arg.Slug,
-	)
-	var id string
-	err := row.Scan(&id)
-	return id, err
 }
 
 const setOrganizationSyncLastEventID = `-- name: SetOrganizationSyncLastEventID :one
