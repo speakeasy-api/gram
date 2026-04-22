@@ -102,19 +102,21 @@ export default function Plugins() {
     });
   };
 
-  // Depend on .mutate (referentially stable per TanStack Query) rather than
-  // the wrapper object (fresh on every render), so memo() on PublishDialog
-  // can actually skip renders.
+  // Destructure mutate so the dep array references the stable function
+  // directly (TanStack Query keeps mutate referentially stable, but the
+  // wrapper object is fresh per render). Keeps memo() on PublishDialog
+  // effective and satisfies react-hooks/exhaustive-deps.
+  const { mutate: publishMutate } = publishMutation;
   const handlePublish = useCallback(
     (githubUsername?: string) => {
-      publishMutation.mutate({
+      publishMutate({
         security: { sessionHeaderGramSession: "" },
         request: {
           publishPluginsRequestBody: { githubUsername },
         },
       });
     },
-    [publishMutation.mutate],
+    [publishMutate],
   );
 
   const columns: Column<Plugin>[] = [
