@@ -399,7 +399,6 @@ export default function CollectionDetail() {
                         // Update collection metadata
                         await updateCollection.mutateAsync({
                           request: {
-                            gramProject: defaultProjectSlug,
                             updateRequestBody: {
                               collectionId: collection.id,
                               name: editName,
@@ -421,7 +420,6 @@ export default function CollectionDetail() {
                           ...toAttach.map((toolsetId) =>
                             attachServer.mutateAsync({
                               request: {
-                                gramProject: defaultProjectSlug,
                                 attachServerRequestBody: {
                                   collectionId: collection.id,
                                   toolsetId,
@@ -432,7 +430,6 @@ export default function CollectionDetail() {
                           ...toDetach.map((toolsetId) =>
                             detachServer.mutateAsync({
                               request: {
-                                gramProject: defaultProjectSlug,
                                 attachServerRequestBody: {
                                   collectionId: collection.id,
                                   toolsetId,
@@ -569,7 +566,6 @@ export default function CollectionDetail() {
                     onClick={async () => {
                       await deleteCollection.mutateAsync({
                         request: {
-                          gramProject: defaultProjectSlug,
                           collectionId: collection.id,
                         },
                       });

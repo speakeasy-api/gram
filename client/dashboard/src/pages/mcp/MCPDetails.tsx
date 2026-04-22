@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { RequireScope } from "@/components/require-scope";
-import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -1590,8 +1589,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
 
 function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
   const client = useSdkClient();
-  const organization = useOrganization();
-  const defaultProjectSlug = organization.projects?.[0]?.slug;
   const { data: collections, isLoading: collectionsLoading } = useCollections();
   const attachServer = useAttachServer();
   const detachServer = useDetachServer();
@@ -1602,9 +1599,8 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
     queries: collections.map((collection) => ({
       ...buildCollectionsListServersQuery(client, {
         collectionSlug: collection.slug!,
-        gramProject: defaultProjectSlug,
       }),
-      enabled: !!collection.slug && !!defaultProjectSlug,
+      enabled: !!collection.slug,
     })),
   });
 
@@ -1656,7 +1652,7 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
   };
 
   const handleSave = async () => {
-    if (!selectedIds || !defaultProjectSlug) return;
+    if (!selectedIds) return;
 
     setIsSaving(true);
     try {
@@ -1671,7 +1667,6 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
         ...toAttach.map((collectionId) =>
           attachServer.mutateAsync({
             request: {
-              gramProject: defaultProjectSlug,
               attachServerRequestBody: {
                 collectionId,
                 toolsetId: toolset.id,
@@ -1682,7 +1677,6 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
         ...toDetach.map((collectionId) =>
           detachServer.mutateAsync({
             request: {
-              gramProject: defaultProjectSlug,
               attachServerRequestBody: {
                 collectionId,
                 toolsetId: toolset.id,
@@ -1703,8 +1697,7 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
   };
 
   const isLoading =
-    collectionsLoading ||
-    (!!defaultProjectSlug && serveQueries.some((query) => query.isLoading));
+    collectionsLoading || serveQueries.some((query) => query.isLoading);
 
   return (
     <PageSection
@@ -1713,11 +1706,7 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
     >
       <Block label="Collections" className="p-0">
         <BlockInner>
-          {!defaultProjectSlug ? (
-            <Type muted small>
-              No project available for publishing.
-            </Type>
-          ) : !toolset.mcpEnabled || !toolset.mcpSlug ? (
+          {!toolset.mcpEnabled || !toolset.mcpSlug ? (
             <Type muted small>
               Enable this MCP server before publishing it to a collection.
             </Type>

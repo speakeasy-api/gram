@@ -2,8 +2,8 @@ speakeasyVersion: 1.761.5
 sources:
     Gram-Internal:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:7c6f2bab5302d20a640df961365bbcd30ee8c8cc78aca1ec2c614f177fdc7b5c
-        sourceBlobDigest: sha256:e03b2d1157a162fd319d382341948c25ba8daa09d805d14e73cb311dccdcf675
+        sourceRevisionDigest: sha256:125f09c0d8706c91bf8ab38340d80ca12e911b511515bf76959d25336c068303
+        sourceBlobDigest: sha256:375ef247e7c0a3342a0b4b76c858a2915c7ce25a0f8e8eb8ee4ae4b9597a947b
         tags:
             - latest
             - 0.0.1
@@ -11,8 +11,8 @@ targets:
     gram-internal:
         source: Gram-Internal
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:7c6f2bab5302d20a640df961365bbcd30ee8c8cc78aca1ec2c614f177fdc7b5c
-        sourceBlobDigest: sha256:e03b2d1157a162fd319d382341948c25ba8daa09d805d14e73cb311dccdcf675
+        sourceRevisionDigest: sha256:125f09c0d8706c91bf8ab38340d80ca12e911b511515bf76959d25336c068303
+        sourceBlobDigest: sha256:375ef247e7c0a3342a0b4b76c858a2915c7ce25a0f8e8eb8ee4ae4b9597a947b
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: pinned
