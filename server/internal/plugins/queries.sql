@@ -124,7 +124,7 @@ SELECT
   t.mcp_is_public AS toolset_is_public
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
-JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
+JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
 WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC;

@@ -16,6 +16,7 @@ import (
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // mockGitHubPublisher records calls for testing.
@@ -672,6 +673,51 @@ func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
 
 	// Verify NO Gram API key is injected for public servers.
 	require.NotContains(t, string(cursorMCP), "gram_local_")
+}
+
+// AddPluginServer rejects toolsets without mcp_enabled, but mcp can be
+// disabled later without removing the persisted mcp_slug. The publish path
+// must filter those out so generated configs don't reference dead URLs.
+func TestPluginsService_PublishPlugins_SkipsDisabledMCPToolsets(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Mixed"})
+	require.NoError(t, err)
+
+	enabled := createTestToolset(t, ctx, ti.conn, "enabled-toolset")
+	disabled := createTestToolset(t, ctx, ti.conn, "disabled-toolset")
+
+	for _, ts := range []toolsetsrepo.Toolset{enabled, disabled} {
+		_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+			PluginID:    plugin.ID,
+			ToolsetID:   ts.ID.String(),
+			DisplayName: "Server " + ts.Name,
+			Policy:      "required",
+			SortOrder:   0,
+		})
+		require.NoError(t, err)
+	}
+
+	// Disable MCP after the server was added (slug stays persisted).
+	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_enabled = FALSE WHERE id = $1", disabled.ID)
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	cursorMCP := mock.lastPushedFiles["mixed-cursor/mcp.json"]
+	require.NotNil(t, cursorMCP)
+
+	var cursorConfig struct {
+		MCPServers map[string]json.RawMessage `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(cursorMCP, &cursorConfig))
+
+	require.Contains(t, cursorConfig.MCPServers, "Server enabled-toolset", "enabled toolset should appear in published config")
+	require.NotContains(t, cursorConfig.MCPServers, "Server disabled-toolset", "disabled toolset must be filtered out by ListPluginsWithServersForProject")
 }
 
 // A public toolset with no mcp_metadata row should publish cleanly. The
