@@ -3,7 +3,6 @@ package github
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -161,22 +160,22 @@ func (c *Client) getRef(ctx context.Context, installationID int64, owner, repo, 
 func (c *Client) createTree(ctx context.Context, installationID int64, owner, repo string, files map[string][]byte) (string, error) {
 	treeEntries := make([]map[string]string, 0, len(files))
 	for path, content := range files {
+		// The Trees API treats `content` as UTF-8 text; binary content must be
+		// uploaded via the Blobs API and referenced by `sha`. Fail loudly here
+		// rather than silently corrupting binary files.
+		if !utf8.Valid(content) {
+			return "", fmt.Errorf("create tree: %q is not valid UTF-8 (binary content requires the Blobs API)", path)
+		}
 		mode := "100644"
 		if strings.HasSuffix(path, ".sh") {
 			mode = "100755"
 		}
-		entry := map[string]string{
-			"path": path,
-			"mode": mode,
-			"type": "blob",
-		}
-		if utf8.Valid(content) {
-			entry["content"] = string(content)
-		} else {
-			entry["encoding"] = "base64"
-			entry["content"] = base64.StdEncoding.EncodeToString(content)
-		}
-		treeEntries = append(treeEntries, entry)
+		treeEntries = append(treeEntries, map[string]string{
+			"path":    path,
+			"mode":    mode,
+			"type":    "blob",
+			"content": string(content),
+		})
 	}
 
 	// Omit base_tree to build a clean tree from scratch. This ensures
