@@ -126,13 +126,13 @@ func withauthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, gran
 
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	for _, grant := range grants {
-		selectorBytes, _ := grant.Selector.MarshalJSON()
+		selectors, _ := grant.Selector.MarshalJSON()
 		_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PrincipalUrn:   userPrincipal,
 			Scope:          string(grant.Scope),
 			Resource:       grant.Selector.ResourceID(),
-			Selectors:      selectorBytes,
+			Selectors:      selectors,
 		})
 		require.NoError(t, err)
 	}

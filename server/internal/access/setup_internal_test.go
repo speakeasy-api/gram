@@ -47,7 +47,7 @@ func seedInternalOrganization(t *testing.T, ctx context.Context, conn *pgxpool.P
 func seedInternalGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope string, resource string) {
 	t.Helper()
 
-	selectorBytes, err := ForResource(resource).MarshalJSON()
+	selectors, err := ForResource(resource).MarshalJSON()
 	require.NoError(t, err)
 
 	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
@@ -55,7 +55,7 @@ func seedInternalGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 		PrincipalUrn:   principal,
 		Scope:          scope,
 		Resource:       resource,
-		Selectors:      selectorBytes,
+		Selectors:      selectors,
 	})
 	require.NoError(t, err)
 }

@@ -107,7 +107,7 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 		}
 
 		if grant.Resources == nil {
-			selectorBytes, err := ForResource(WildcardResource).MarshalJSON()
+			selectors, err := ForResource(WildcardResource).MarshalJSON()
 			if err != nil {
 				return fmt.Errorf("marshal wildcard selector for %q: %w", grant.Scope, err)
 			}
@@ -116,7 +116,7 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 				PrincipalUrn:   principalURN,
 				Scope:          grant.Scope,
 				Resource:       WildcardResource,
-				Selectors:      selectorBytes,
+				Selectors:      selectors,
 			}); err != nil {
 				return fmt.Errorf("upsert unrestricted grant %q for role %q: %w", grant.Scope, roleSlug, err)
 			}
@@ -125,7 +125,7 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 		}
 
 		for _, resource := range grant.Resources {
-			selectorBytes, err := ForResource(resource).MarshalJSON()
+			selectors, err := ForResource(resource).MarshalJSON()
 			if err != nil {
 				return fmt.Errorf("marshal selector for resource %q: %w", resource, err)
 			}
@@ -134,7 +134,7 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 				PrincipalUrn:   principalURN,
 				Scope:          grant.Scope,
 				Resource:       resource,
-				Selectors:      selectorBytes,
+				Selectors:      selectors,
 			}); err != nil {
 				return fmt.Errorf("upsert grant %q on resource %q for role %q: %w", grant.Scope, resource, roleSlug, err)
 			}

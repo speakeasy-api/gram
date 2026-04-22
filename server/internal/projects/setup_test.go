@@ -138,7 +138,7 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope authz.Scope, resource string) {
 	t.Helper()
 
-	selectorBytes, err := access.ForResource(resource).MarshalJSON()
+	selectors, err := access.ForResource(resource).MarshalJSON()
 	require.NoError(t, err)
 
 	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
@@ -146,7 +146,7 @@ func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizati
 		PrincipalUrn:   principal,
 		Scope:          string(scope),
 		Resource:       resource,
-		Selectors:      selectorBytes,
+		Selectors:      selectors,
 	})
 	require.NoError(t, err)
 }
