@@ -128,7 +128,7 @@ func TestCreateServer_RBACForbidden(t *testing.T) {
 	require.True(t, ok)
 
 	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{
-		Scope:    access.ScopeRemoteMCPRead,
+		Scope:    access.ScopeMCPRead,
 		Resource: authCtx.ProjectID.String(),
 	})
 

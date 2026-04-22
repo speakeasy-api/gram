@@ -6,13 +6,10 @@ export type Scope =
   | "build:write"
   | "mcp:read"
   | "mcp:write"
-  | "mcp:connect"
-  | "remote-mcp:read"
-  | "remote-mcp:write"
-  | "remote-mcp:connect";
+  | "mcp:connect";
 
 /** What kind of resource a scope protects. */
-export type ResourceType = "org" | "project" | "mcp" | "remote-mcp";
+export type ResourceType = "org" | "project" | "mcp";
 
 /** The 4 MCP tool annotation hint keys. */
 export type AnnotationHint =

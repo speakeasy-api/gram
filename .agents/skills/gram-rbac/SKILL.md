@@ -15,7 +15,7 @@ Gram's RBAC is a scope-and-grant model. The server ships with a fixed set of **s
 
 **Scope.** A named permission that authorizes an operation on a particular kind of resource.
 
-**Resource type.** The kind of resource a scope protects — currently `org`, `project`, `mcp`, or `remote-mcp`. Every scope has exactly one resource type.
+**Resource type.** The kind of resource a scope protects — currently `org`, `project`, or `mcp`. Every scope has exactly one resource type.
 
 **Scope expansion.** Higher-privilege scopes satisfy lower-privilege ones, so a handler that needs `mcp:read` is also reachable by callers who hold `mcp:write` or `mcp:connect`. For a typical read/write/connect triple the wiring is: write satisfies read; connect satisfies both read and write.
 
