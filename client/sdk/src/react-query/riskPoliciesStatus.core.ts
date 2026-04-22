@@ -8,15 +8,15 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { riskGetPolicyStatus } from "../funcs/riskGetPolicyStatus.js";
+import { riskPoliciesStatus } from "../funcs/riskPoliciesStatus.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskGetPolicyStatusQueryData = components.RiskPolicyStatus;
+export type RiskPoliciesStatusQueryData = components.RiskPolicyStatus;
 
-export function prefetchRiskGetPolicyStatus(
+export function prefetchRiskPoliciesStatus(
   queryClient: QueryClient,
   client$: GramCore,
   request: operations.GetRiskPolicyStatusRequest,
@@ -24,7 +24,7 @@ export function prefetchRiskGetPolicyStatus(
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildRiskGetPolicyStatusQuery(
+    ...buildRiskPoliciesStatusQuery(
       client$,
       request,
       security,
@@ -33,7 +33,7 @@ export function prefetchRiskGetPolicyStatus(
   });
 }
 
-export function buildRiskGetPolicyStatusQuery(
+export function buildRiskPoliciesStatusQuery(
   client$: GramCore,
   request: operations.GetRiskPolicyStatusRequest,
   security?: operations.GetRiskPolicyStatusSecurity | undefined,
@@ -42,18 +42,18 @@ export function buildRiskGetPolicyStatusQuery(
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<RiskGetPolicyStatusQueryData>;
+  ) => Promise<RiskPoliciesStatusQueryData>;
 } {
   return {
-    queryKey: queryKeyRiskGetPolicyStatus({
+    queryKey: queryKeyRiskPoliciesStatus({
       id: request.id,
       gramKey: request.gramKey,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
     }),
-    queryFn: async function riskGetPolicyStatusQueryFn(
+    queryFn: async function riskPoliciesStatusQueryFn(
       ctx,
-    ): Promise<RiskGetPolicyStatusQueryData> {
+    ): Promise<RiskPoliciesStatusQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -65,7 +65,7 @@ export function buildRiskGetPolicyStatusQuery(
         signal: sig,
       };
 
-      return unwrapAsync(riskGetPolicyStatus(
+      return unwrapAsync(riskPoliciesStatus(
         client$,
         request,
         security,
@@ -75,7 +75,7 @@ export function buildRiskGetPolicyStatusQuery(
   };
 }
 
-export function queryKeyRiskGetPolicyStatus(
+export function queryKeyRiskPoliciesStatus(
   parameters: {
     id: string;
     gramKey?: string | undefined;
@@ -83,5 +83,5 @@ export function queryKeyRiskGetPolicyStatus(
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "risk", "getPolicyStatus", parameters];
+  return ["@gram/client", "policies", "status", parameters];
 }

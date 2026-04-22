@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -10,18 +11,36 @@ import { RiskResult, RiskResult$inboundSchema } from "./riskresult.js";
 
 export type ListRiskResultsResult = {
   /**
+   * Cursor for the next page of results.
+   */
+  nextCursor?: string | undefined;
+  /**
    * The list of risk results.
    */
   results: Array<RiskResult>;
+  /**
+   * Total number of findings across all enabled policies.
+   */
+  totalCount: number;
 };
 
 /** @internal */
 export const ListRiskResultsResult$inboundSchema: z.ZodMiniType<
   ListRiskResultsResult,
   unknown
-> = z.object({
-  results: z.array(RiskResult$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    next_cursor: z.optional(z.string()),
+    results: z.array(RiskResult$inboundSchema),
+    total_count: z.int(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "next_cursor": "nextCursor",
+      "total_count": "totalCount",
+    });
+  }),
+);
 
 export function listRiskResultsResultFromJSON(
   jsonString: string,

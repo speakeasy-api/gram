@@ -20,6 +20,8 @@ type RiskResult struct {
 	ChatID *string
 	// Title of the chat session.
 	ChatTitle *string
+	// The user who owns the chat session.
+	UserID *string
 	// Detection source (e.g. gitleaks).
 	Source string
 	// The matched rule identifier.

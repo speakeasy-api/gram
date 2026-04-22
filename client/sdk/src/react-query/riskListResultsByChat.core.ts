@@ -8,23 +8,24 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { riskGetPolicy } from "../funcs/riskGetPolicy.js";
+import { riskResultsByChat } from "../funcs/riskResultsByChat.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskGetPolicyQueryData = components.RiskPolicy;
+export type RiskListResultsByChatQueryData =
+  components.ListRiskResultsByChatResult;
 
-export function prefetchRiskGetPolicy(
+export function prefetchRiskListResultsByChat(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetRiskPolicyRequest,
-  security?: operations.GetRiskPolicySecurity | undefined,
+  request?: operations.ListRiskResultsByChatRequest | undefined,
+  security?: operations.ListRiskResultsByChatSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildRiskGetPolicyQuery(
+    ...buildRiskListResultsByChatQuery(
       client$,
       request,
       security,
@@ -33,25 +34,27 @@ export function prefetchRiskGetPolicy(
   });
 }
 
-export function buildRiskGetPolicyQuery(
+export function buildRiskListResultsByChatQuery(
   client$: GramCore,
-  request: operations.GetRiskPolicyRequest,
-  security?: operations.GetRiskPolicySecurity | undefined,
+  request?: operations.ListRiskResultsByChatRequest | undefined,
+  security?: operations.ListRiskResultsByChatSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<RiskGetPolicyQueryData>;
+  queryFn: (
+    context: QueryFunctionContext,
+  ) => Promise<RiskListResultsByChatQueryData>;
 } {
   return {
-    queryKey: queryKeyRiskGetPolicy({
-      id: request.id,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
+    queryKey: queryKeyRiskListResultsByChat({
+      cursor: request?.cursor,
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
     }),
-    queryFn: async function riskGetPolicyQueryFn(
+    queryFn: async function riskListResultsByChatQueryFn(
       ctx,
-    ): Promise<RiskGetPolicyQueryData> {
+    ): Promise<RiskListResultsByChatQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -63,7 +66,7 @@ export function buildRiskGetPolicyQuery(
         signal: sig,
       };
 
-      return unwrapAsync(riskGetPolicy(
+      return unwrapAsync(riskResultsByChat(
         client$,
         request,
         security,
@@ -73,13 +76,13 @@ export function buildRiskGetPolicyQuery(
   };
 }
 
-export function queryKeyRiskGetPolicy(
+export function queryKeyRiskListResultsByChat(
   parameters: {
-    id: string;
+    cursor?: string | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "risk", "getPolicy", parameters];
+  return ["@gram/client", "results", "byChat", parameters];
 }

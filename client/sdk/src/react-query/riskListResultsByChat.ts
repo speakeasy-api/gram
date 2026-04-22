@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildRiskListResultsQuery,
-  prefetchRiskListResults,
-  queryKeyRiskListResults,
-  RiskListResultsQueryData,
-} from "./riskListResults.core.js";
+  buildRiskListResultsByChatQuery,
+  prefetchRiskListResultsByChat,
+  queryKeyRiskListResultsByChat,
+  RiskListResultsByChatQueryData,
+} from "./riskListResultsByChat.core.js";
 export {
-  buildRiskListResultsQuery,
-  prefetchRiskListResults,
-  queryKeyRiskListResults,
-  type RiskListResultsQueryData,
+  buildRiskListResultsByChatQuery,
+  prefetchRiskListResultsByChat,
+  queryKeyRiskListResultsByChat,
+  type RiskListResultsByChatQueryData,
 };
 
-export type RiskListResultsQueryError =
+export type RiskListResultsByChatQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,22 +53,25 @@ export type RiskListResultsQueryError =
   | SDKValidationError;
 
 /**
- * listRiskResults risk
+ * listRiskResultsByChat risk
  *
  * @remarks
- * List risk analysis results for the current project.
+ * List risk results grouped by chat session for the current project.
  */
-export function useRiskListResults(
-  request?: operations.ListRiskResultsRequest | undefined,
-  security?: operations.ListRiskResultsSecurity | undefined,
+export function useRiskListResultsByChat(
+  request?: operations.ListRiskResultsByChatRequest | undefined,
+  security?: operations.ListRiskResultsByChatSecurity | undefined,
   options?: QueryHookOptions<
-    RiskListResultsQueryData,
-    RiskListResultsQueryError
+    RiskListResultsByChatQueryData,
+    RiskListResultsByChatQueryError
   >,
-): UseQueryResult<RiskListResultsQueryData, RiskListResultsQueryError> {
+): UseQueryResult<
+  RiskListResultsByChatQueryData,
+  RiskListResultsByChatQueryError
+> {
   const client = useGramContext();
   return useQuery({
-    ...buildRiskListResultsQuery(
+    ...buildRiskListResultsByChatQuery(
       client,
       request,
       security,
@@ -79,22 +82,25 @@ export function useRiskListResults(
 }
 
 /**
- * listRiskResults risk
+ * listRiskResultsByChat risk
  *
  * @remarks
- * List risk analysis results for the current project.
+ * List risk results grouped by chat session for the current project.
  */
-export function useRiskListResultsSuspense(
-  request?: operations.ListRiskResultsRequest | undefined,
-  security?: operations.ListRiskResultsSecurity | undefined,
+export function useRiskListResultsByChatSuspense(
+  request?: operations.ListRiskResultsByChatRequest | undefined,
+  security?: operations.ListRiskResultsByChatSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    RiskListResultsQueryData,
-    RiskListResultsQueryError
+    RiskListResultsByChatQueryData,
+    RiskListResultsByChatQueryError
   >,
-): UseSuspenseQueryResult<RiskListResultsQueryData, RiskListResultsQueryError> {
+): UseSuspenseQueryResult<
+  RiskListResultsByChatQueryData,
+  RiskListResultsByChatQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildRiskListResultsQuery(
+    ...buildRiskListResultsByChatQuery(
       client,
       request,
       security,
@@ -104,31 +110,27 @@ export function useRiskListResultsSuspense(
   });
 }
 
-export function setRiskListResultsData(
+export function setRiskListResultsByChatData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      policyId?: string | undefined;
-      chatId?: string | undefined;
       cursor?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
   ],
-  data: RiskListResultsQueryData,
-): RiskListResultsQueryData | undefined {
-  const key = queryKeyRiskListResults(...queryKeyBase);
+  data: RiskListResultsByChatQueryData,
+): RiskListResultsByChatQueryData | undefined {
+  const key = queryKeyRiskListResultsByChat(...queryKeyBase);
 
-  return client.setQueryData<RiskListResultsQueryData>(key, data);
+  return client.setQueryData<RiskListResultsByChatQueryData>(key, data);
 }
 
-export function invalidateRiskListResults(
+export function invalidateRiskListResultsByChat(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      policyId?: string | undefined;
-      chatId?: string | undefined;
       cursor?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
@@ -139,16 +141,16 @@ export function invalidateRiskListResults(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "results", "list", ...queryKeyBase],
+    queryKey: ["@gram/client", "results", "byChat", ...queryKeyBase],
   });
 }
 
-export function invalidateAllRiskListResults(
+export function invalidateAllRiskListResultsByChat(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "results", "list"],
+    queryKey: ["@gram/client", "results", "byChat"],
   });
 }

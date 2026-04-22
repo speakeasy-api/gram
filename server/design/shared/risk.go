@@ -46,6 +46,7 @@ var RiskResult = Type("RiskResult", func() {
 		Format(FormatUUID)
 	})
 	Attribute("chat_title", String, "Title of the chat session.")
+	Attribute("user_id", String, "The user who owns the chat session.")
 	Attribute("source", String, "Detection source (e.g. gitleaks).")
 	Attribute("rule_id", String, "The matched rule identifier.")
 	Attribute("description", String, "Human-readable description of the finding.")
@@ -59,6 +60,22 @@ var RiskResult = Type("RiskResult", func() {
 	})
 
 	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at")
+})
+
+var RiskChatSummary = Type("RiskChatSummary", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("chat_id", String, "The chat session ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("chat_title", String, "Title of the chat session.")
+	Attribute("user_id", String, "The user who owns the chat session.")
+	Attribute("findings_count", Int64, "Number of findings in this chat.")
+	Attribute("latest_detected", String, "When the most recent finding was detected.", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("chat_id", "findings_count", "latest_detected")
 })
 
 var RiskPolicyStatus = Type("RiskPolicyStatus", func() {

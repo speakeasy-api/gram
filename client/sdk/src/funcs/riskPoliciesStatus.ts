@@ -28,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getRiskPolicy risk
+ * getRiskPolicyStatus risk
  *
  * @remarks
- * Get a risk analysis policy by ID.
+ * Get the analysis status of a risk policy including progress and workflow state.
  */
-export function riskGetPolicy(
+export function riskPoliciesStatus(
   client: GramCore,
-  request: operations.GetRiskPolicyRequest,
-  security?: operations.GetRiskPolicySecurity | undefined,
+  request: operations.GetRiskPolicyStatusRequest,
+  security?: operations.GetRiskPolicyStatusSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.RiskPolicy,
+    components.RiskPolicyStatus,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +62,13 @@ export function riskGetPolicy(
 
 async function $do(
   client: GramCore,
-  request: operations.GetRiskPolicyRequest,
-  security?: operations.GetRiskPolicySecurity | undefined,
+  request: operations.GetRiskPolicyStatusRequest,
+  security?: operations.GetRiskPolicyStatusSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.RiskPolicy,
+      components.RiskPolicyStatus,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -84,7 +84,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(operations.GetRiskPolicyRequest$outboundSchema, value),
+    (value) =>
+      z.parse(operations.GetRiskPolicyStatusRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -93,7 +94,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.policies.get")();
+  const path = pathToFunc("/rpc/risk.policies.status")();
 
   const query = encodeFormQuery({
     "id": payload.id,
@@ -145,7 +146,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getRiskPolicy",
+    operationID: "getRiskPolicyStatus",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -201,7 +202,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.RiskPolicy,
+    components.RiskPolicyStatus,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -212,7 +213,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.RiskPolicy$inboundSchema),
+    M.json(200, components.RiskPolicyStatus$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

@@ -5,30 +5,22 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type ListRiskResultsSecurityOption1 = {
+export type ListRiskResultsByChatSecurityOption1 = {
   apikeyHeaderGramKey: string;
   projectSlugHeaderGramProject: string;
 };
 
-export type ListRiskResultsSecurityOption2 = {
+export type ListRiskResultsByChatSecurityOption2 = {
   projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
-export type ListRiskResultsSecurity = {
-  option1?: ListRiskResultsSecurityOption1 | undefined;
-  option2?: ListRiskResultsSecurityOption2 | undefined;
+export type ListRiskResultsByChatSecurity = {
+  option1?: ListRiskResultsByChatSecurityOption1 | undefined;
+  option2?: ListRiskResultsByChatSecurityOption2 | undefined;
 };
 
-export type ListRiskResultsRequest = {
-  /**
-   * Optional policy ID to filter by.
-   */
-  policyId?: string | undefined;
-  /**
-   * Optional chat ID to filter by.
-   */
-  chatId?: string | undefined;
+export type ListRiskResultsByChatRequest = {
   /**
    * Cursor to fetch the next page of results.
    */
@@ -48,15 +40,15 @@ export type ListRiskResultsRequest = {
 };
 
 /** @internal */
-export type ListRiskResultsSecurityOption1$Outbound = {
+export type ListRiskResultsByChatSecurityOption1$Outbound = {
   "apikey_header_Gram-Key": string;
   "project_slug_header_Gram-Project": string;
 };
 
 /** @internal */
-export const ListRiskResultsSecurityOption1$outboundSchema: z.ZodMiniType<
-  ListRiskResultsSecurityOption1$Outbound,
-  ListRiskResultsSecurityOption1
+export const ListRiskResultsByChatSecurityOption1$outboundSchema: z.ZodMiniType<
+  ListRiskResultsByChatSecurityOption1$Outbound,
+  ListRiskResultsByChatSecurityOption1
 > = z.pipe(
   z.object({
     apikeyHeaderGramKey: z.string(),
@@ -70,26 +62,26 @@ export const ListRiskResultsSecurityOption1$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listRiskResultsSecurityOption1ToJSON(
-  listRiskResultsSecurityOption1: ListRiskResultsSecurityOption1,
+export function listRiskResultsByChatSecurityOption1ToJSON(
+  listRiskResultsByChatSecurityOption1: ListRiskResultsByChatSecurityOption1,
 ): string {
   return JSON.stringify(
-    ListRiskResultsSecurityOption1$outboundSchema.parse(
-      listRiskResultsSecurityOption1,
+    ListRiskResultsByChatSecurityOption1$outboundSchema.parse(
+      listRiskResultsByChatSecurityOption1,
     ),
   );
 }
 
 /** @internal */
-export type ListRiskResultsSecurityOption2$Outbound = {
+export type ListRiskResultsByChatSecurityOption2$Outbound = {
   "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
 };
 
 /** @internal */
-export const ListRiskResultsSecurityOption2$outboundSchema: z.ZodMiniType<
-  ListRiskResultsSecurityOption2$Outbound,
-  ListRiskResultsSecurityOption2
+export const ListRiskResultsByChatSecurityOption2$outboundSchema: z.ZodMiniType<
+  ListRiskResultsByChatSecurityOption2$Outbound,
+  ListRiskResultsByChatSecurityOption2
 > = z.pipe(
   z.object({
     projectSlugHeaderGramProject: z.string(),
@@ -103,33 +95,33 @@ export const ListRiskResultsSecurityOption2$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listRiskResultsSecurityOption2ToJSON(
-  listRiskResultsSecurityOption2: ListRiskResultsSecurityOption2,
+export function listRiskResultsByChatSecurityOption2ToJSON(
+  listRiskResultsByChatSecurityOption2: ListRiskResultsByChatSecurityOption2,
 ): string {
   return JSON.stringify(
-    ListRiskResultsSecurityOption2$outboundSchema.parse(
-      listRiskResultsSecurityOption2,
+    ListRiskResultsByChatSecurityOption2$outboundSchema.parse(
+      listRiskResultsByChatSecurityOption2,
     ),
   );
 }
 
 /** @internal */
-export type ListRiskResultsSecurity$Outbound = {
-  Option1?: ListRiskResultsSecurityOption1$Outbound | undefined;
-  Option2?: ListRiskResultsSecurityOption2$Outbound | undefined;
+export type ListRiskResultsByChatSecurity$Outbound = {
+  Option1?: ListRiskResultsByChatSecurityOption1$Outbound | undefined;
+  Option2?: ListRiskResultsByChatSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
-export const ListRiskResultsSecurity$outboundSchema: z.ZodMiniType<
-  ListRiskResultsSecurity$Outbound,
-  ListRiskResultsSecurity
+export const ListRiskResultsByChatSecurity$outboundSchema: z.ZodMiniType<
+  ListRiskResultsByChatSecurity$Outbound,
+  ListRiskResultsByChatSecurity
 > = z.pipe(
   z.object({
     option1: z.optional(
-      z.lazy(() => ListRiskResultsSecurityOption1$outboundSchema),
+      z.lazy(() => ListRiskResultsByChatSecurityOption1$outboundSchema),
     ),
     option2: z.optional(
-      z.lazy(() => ListRiskResultsSecurityOption2$outboundSchema),
+      z.lazy(() => ListRiskResultsByChatSecurityOption2$outboundSchema),
     ),
   }),
   z.transform((v) => {
@@ -140,18 +132,18 @@ export const ListRiskResultsSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listRiskResultsSecurityToJSON(
-  listRiskResultsSecurity: ListRiskResultsSecurity,
+export function listRiskResultsByChatSecurityToJSON(
+  listRiskResultsByChatSecurity: ListRiskResultsByChatSecurity,
 ): string {
   return JSON.stringify(
-    ListRiskResultsSecurity$outboundSchema.parse(listRiskResultsSecurity),
+    ListRiskResultsByChatSecurity$outboundSchema.parse(
+      listRiskResultsByChatSecurity,
+    ),
   );
 }
 
 /** @internal */
-export type ListRiskResultsRequest$Outbound = {
-  policy_id?: string | undefined;
-  chat_id?: string | undefined;
+export type ListRiskResultsByChatRequest$Outbound = {
   cursor?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
@@ -159,13 +151,11 @@ export type ListRiskResultsRequest$Outbound = {
 };
 
 /** @internal */
-export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
-  ListRiskResultsRequest$Outbound,
-  ListRiskResultsRequest
+export const ListRiskResultsByChatRequest$outboundSchema: z.ZodMiniType<
+  ListRiskResultsByChatRequest$Outbound,
+  ListRiskResultsByChatRequest
 > = z.pipe(
   z.object({
-    policyId: z.optional(z.string()),
-    chatId: z.optional(z.string()),
     cursor: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
@@ -173,8 +163,6 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      policyId: "policy_id",
-      chatId: "chat_id",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
@@ -182,10 +170,12 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listRiskResultsRequestToJSON(
-  listRiskResultsRequest: ListRiskResultsRequest,
+export function listRiskResultsByChatRequestToJSON(
+  listRiskResultsByChatRequest: ListRiskResultsByChatRequest,
 ): string {
   return JSON.stringify(
-    ListRiskResultsRequest$outboundSchema.parse(listRiskResultsRequest),
+    ListRiskResultsByChatRequest$outboundSchema.parse(
+      listRiskResultsByChatRequest,
+    ),
   );
 }

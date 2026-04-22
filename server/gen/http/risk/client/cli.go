@@ -10,7 +10,6 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	risk "github.com/speakeasy-api/gram/server/gen/risk"
 	goa "goa.design/goa/v3/pkg"
@@ -222,7 +221,7 @@ func BuildDeleteRiskPolicyPayload(riskDeleteRiskPolicyID string, riskDeleteRiskP
 
 // BuildListRiskResultsPayload builds the payload for the risk listRiskResults
 // endpoint from CLI flags.
-func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
+func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCursor string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -244,15 +243,10 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 			}
 		}
 	}
-	var limit int
+	var cursor *string
 	{
-		if riskListRiskResultsLimit != "" {
-			var v int64
-			v, err = strconv.ParseInt(riskListRiskResultsLimit, 10, strconv.IntSize)
-			limit = int(v)
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for limit, must be INT")
-			}
+		if riskListRiskResultsCursor != "" {
+			cursor = &riskListRiskResultsCursor
 		}
 	}
 	var apikeyToken *string
@@ -276,7 +270,43 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	v := &risk.ListRiskResultsPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
-	v.Limit = limit
+	v.Cursor = cursor
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListRiskResultsByChatPayload builds the payload for the risk
+// listRiskResultsByChat endpoint from CLI flags.
+func BuildListRiskResultsByChatPayload(riskListRiskResultsByChatCursor string, riskListRiskResultsByChatApikeyToken string, riskListRiskResultsByChatSessionToken string, riskListRiskResultsByChatProjectSlugInput string) (*risk.ListRiskResultsByChatPayload, error) {
+	var cursor *string
+	{
+		if riskListRiskResultsByChatCursor != "" {
+			cursor = &riskListRiskResultsByChatCursor
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskListRiskResultsByChatApikeyToken != "" {
+			apikeyToken = &riskListRiskResultsByChatApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListRiskResultsByChatSessionToken != "" {
+			sessionToken = &riskListRiskResultsByChatSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListRiskResultsByChatProjectSlugInput != "" {
+			projectSlugInput = &riskListRiskResultsByChatProjectSlugInput
+		}
+	}
+	v := &risk.ListRiskResultsByChatPayload{}
+	v.Cursor = cursor
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

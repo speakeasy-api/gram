@@ -12493,7 +12493,8 @@ paths:
             summary: createRiskPolicy risk
             tags:
                 - risk
-            x-speakeasy-name-override: createPolicy
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: RiskCreatePolicy
                 type: mutation
@@ -12597,7 +12598,8 @@ paths:
             summary: deleteRiskPolicy risk
             tags:
                 - risk
-            x-speakeasy-name-override: deletePolicy
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: delete
     /rpc/risk.policies.get:
         get:
             description: Get a risk analysis policy by ID.
@@ -12702,7 +12704,8 @@ paths:
             summary: getRiskPolicy risk
             tags:
                 - risk
-            x-speakeasy-name-override: getPolicy
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: get
     /rpc/risk.policies.list:
         get:
             description: List all risk analysis policies for the current project.
@@ -12798,7 +12801,8 @@ paths:
             summary: listRiskPolicies risk
             tags:
                 - risk
-            x-speakeasy-name-override: listPolicies
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: RiskListPolicies
     /rpc/risk.policies.status:
@@ -12905,7 +12909,8 @@ paths:
             summary: getRiskPolicyStatus risk
             tags:
                 - risk
-            x-speakeasy-name-override: getPolicyStatus
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: status
     /rpc/risk.policies.trigger:
         post:
             description: Manually trigger risk analysis for a policy, starting or signaling the drain workflow.
@@ -13003,7 +13008,8 @@ paths:
             summary: triggerRiskAnalysis risk
             tags:
                 - risk
-            x-speakeasy-name-override: triggerAnalysis
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: trigger
     /rpc/risk.policies.update:
         put:
             description: Update a risk analysis policy.
@@ -13105,7 +13111,114 @@ paths:
             summary: updateRiskPolicy risk
             tags:
                 - risk
-            x-speakeasy-name-override: updatePolicy
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: update
+    /rpc/risk.results.byChat:
+        get:
+            description: List risk results grouped by chat session for the current project.
+            operationId: listRiskResultsByChat
+            parameters:
+                - allowEmptyValue: true
+                  description: Cursor to fetch the next page of results.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor to fetch the next page of results.
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRiskResultsByChatResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listRiskResultsByChat risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.results
+            x-speakeasy-name-override: byChat
+            x-speakeasy-react-hook:
+                name: RiskListResultsByChat
     /rpc/risk.results.list:
         get:
             description: List risk analysis results for the current project.
@@ -13128,14 +13241,12 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
-                  description: Maximum number of results to return.
+                  description: Cursor to fetch the next page of results.
                   in: query
-                  name: limit
+                  name: cursor
                   schema:
-                    default: 100
-                    description: Maximum number of results to return.
-                    format: int64
-                    type: integer
+                    description: Cursor to fetch the next page of results.
+                    type: string
                 - allowEmptyValue: true
                   description: API Key header
                   in: header
@@ -13226,7 +13337,8 @@ paths:
             summary: listRiskResults risk
             tags:
                 - risk
-            x-speakeasy-name-override: listResults
+            x-speakeasy-group: risk.results
+            x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: RiskListResults
     /rpc/slack-apps.configure:
@@ -22778,16 +22890,37 @@ components:
                     description: The list of risk policies.
             required:
                 - policies
+        ListRiskResultsByChatResult:
+            type: object
+            properties:
+                chats:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskChatSummary'
+                    description: Risk results grouped by chat.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of results.
+            required:
+                - chats
         ListRiskResultsResult:
             type: object
             properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of results.
                 results:
                     type: array
                     items:
                         $ref: '#/components/schemas/RiskResult'
                     description: The list of risk results.
+                total_count:
+                    type: integer
+                    description: Total number of findings across all enabled policies.
+                    format: int64
             required:
                 - results
+                - total_count
         ListRoleGrant:
             type: object
             properties:
@@ -24766,6 +24899,31 @@ components:
                 - type
                 - status_codes
                 - content_types
+        RiskChatSummary:
+            type: object
+            properties:
+                chat_id:
+                    type: string
+                    description: The chat session ID.
+                    format: uuid
+                chat_title:
+                    type: string
+                    description: Title of the chat session.
+                findings_count:
+                    type: integer
+                    description: Number of findings in this chat.
+                    format: int64
+                latest_detected:
+                    type: string
+                    description: When the most recent finding was detected.
+                    format: date-time
+                user_id:
+                    type: string
+                    description: The user who owns the chat session.
+            required:
+                - chat_id
+                - findings_count
+                - latest_detected
         RiskPolicy:
             type: object
             properties:
@@ -24920,6 +25078,9 @@ components:
                     items:
                         type: string
                     description: Tags from the detection rule.
+                user_id:
+                    type: string
+                    description: The user who owns the chat session.
             required:
                 - id
                 - policy_id

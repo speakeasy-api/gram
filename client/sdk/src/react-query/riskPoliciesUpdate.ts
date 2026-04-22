@@ -8,9 +8,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { riskTriggerAnalysis } from "../funcs/riskTriggerAnalysis.js";
+import { riskPoliciesUpdate } from "../funcs/riskPoliciesUpdate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -27,15 +28,15 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type RiskTriggerAnalysisMutationVariables = {
-  request: operations.TriggerRiskAnalysisRequest;
-  security?: operations.TriggerRiskAnalysisSecurity | undefined;
+export type RiskPoliciesUpdateMutationVariables = {
+  request: operations.UpdateRiskPolicyRequest;
+  security?: operations.UpdateRiskPolicySecurity | undefined;
   options?: RequestOptions;
 };
 
-export type RiskTriggerAnalysisMutationData = void;
+export type RiskPoliciesUpdateMutationData = components.RiskPolicy;
 
-export type RiskTriggerAnalysisMutationError =
+export type RiskPoliciesUpdateMutationError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -47,49 +48,49 @@ export type RiskTriggerAnalysisMutationError =
   | SDKValidationError;
 
 /**
- * triggerRiskAnalysis risk
+ * updateRiskPolicy risk
  *
  * @remarks
- * Manually trigger risk analysis for a policy, starting or signaling the drain workflow.
+ * Update a risk analysis policy.
  */
-export function useRiskTriggerAnalysisMutation(
+export function useRiskPoliciesUpdateMutation(
   options?: MutationHookOptions<
-    RiskTriggerAnalysisMutationData,
-    RiskTriggerAnalysisMutationError,
-    RiskTriggerAnalysisMutationVariables
+    RiskPoliciesUpdateMutationData,
+    RiskPoliciesUpdateMutationError,
+    RiskPoliciesUpdateMutationVariables
   >,
 ): UseMutationResult<
-  RiskTriggerAnalysisMutationData,
-  RiskTriggerAnalysisMutationError,
-  RiskTriggerAnalysisMutationVariables
+  RiskPoliciesUpdateMutationData,
+  RiskPoliciesUpdateMutationError,
+  RiskPoliciesUpdateMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildRiskTriggerAnalysisMutation(client, options),
+    ...buildRiskPoliciesUpdateMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyRiskTriggerAnalysis(): MutationKey {
-  return ["@gram/client", "risk", "triggerAnalysis"];
+export function mutationKeyRiskPoliciesUpdate(): MutationKey {
+  return ["@gram/client", "policies", "update"];
 }
 
-export function buildRiskTriggerAnalysisMutation(
+export function buildRiskPoliciesUpdateMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: RiskTriggerAnalysisMutationVariables,
-  ) => Promise<RiskTriggerAnalysisMutationData>;
+    variables: RiskPoliciesUpdateMutationVariables,
+  ) => Promise<RiskPoliciesUpdateMutationData>;
 } {
   return {
-    mutationKey: mutationKeyRiskTriggerAnalysis(),
-    mutationFn: function riskTriggerAnalysisMutationFn({
+    mutationKey: mutationKeyRiskPoliciesUpdate(),
+    mutationFn: function riskPoliciesUpdateMutationFn({
       request,
       security,
       options,
-    }): Promise<RiskTriggerAnalysisMutationData> {
+    }): Promise<RiskPoliciesUpdateMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -102,7 +103,7 @@ export function buildRiskTriggerAnalysisMutation(
           ),
         },
       };
-      return unwrapAsync(riskTriggerAnalysis(
+      return unwrapAsync(riskPoliciesUpdate(
         client$,
         request,
         security,
