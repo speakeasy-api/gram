@@ -150,10 +150,16 @@ type RiskAnalysisSignaler interface {
 // TemporalRiskAnalysisSignaler implements RiskAnalysisSignaler using Temporal.
 type TemporalRiskAnalysisSignaler struct {
 	TemporalEnv *tenv.Environment
+	Logger      *slog.Logger
 }
 
 func (s *TemporalRiskAnalysisSignaler) SignalNewMessages(ctx context.Context, params DrainRiskAnalysisParams) error {
 	if s.TemporalEnv == nil {
+		if s.Logger != nil {
+			s.Logger.WarnContext(ctx, "temporal env is nil, skipping risk signal",
+				attr.SlogRiskPolicyID(params.RiskPolicyID.String()),
+			)
+		}
 		return nil
 	}
 
@@ -178,6 +184,13 @@ func (s *TemporalRiskAnalysisSignaler) SignalNewMessages(ctx context.Context, pa
 	if err != nil {
 		return fmt.Errorf("signal-with-start drain workflow: %w", err)
 	}
+
+	if s.Logger != nil {
+		s.Logger.DebugContext(ctx, "temporal signal-with-start sent",
+			attr.SlogRiskPolicyID(params.RiskPolicyID.String()),
+			attr.SlogTemporalWorkflowID(wfID),
+		)
+	}
 	return nil
 }
 
@@ -192,23 +205,34 @@ func drainWorkflowID(policyID uuid.UUID) string {
 // are coalesced into a single trailing signal when the window expires.
 type ThrottledSignaler struct {
 	inner    RiskAnalysisSignaler
+	logger   *slog.Logger
 	throttle *throttle.Throttle[uuid.UUID, DrainRiskAnalysisParams]
 }
 
 // NewThrottledSignaler wraps inner with a per-policy cooldown. A zero or
 // negative cooldown disables throttling.
 func NewThrottledSignaler(inner RiskAnalysisSignaler, cooldown time.Duration, logger *slog.Logger) *ThrottledSignaler {
-	return &ThrottledSignaler{
-		inner: inner,
-		throttle: throttle.New(cooldown, func(params DrainRiskAnalysisParams) uuid.UUID {
-			return params.RiskPolicyID
-		}, func(params DrainRiskAnalysisParams) error {
-			if err := inner.SignalNewMessages(context.Background(), params); err != nil {
-				logger.ErrorContext(context.Background(), "throttled trailing signal failed", attr.SlogError(err))
-			}
-			return nil
-		}),
+	ts := &ThrottledSignaler{
+		inner:    inner,
+		logger:   logger,
+		throttle: nil,
 	}
+	ts.throttle = throttle.New(cooldown, func(params DrainRiskAnalysisParams) uuid.UUID {
+		return params.RiskPolicyID
+	}, func(params DrainRiskAnalysisParams) error {
+		if err := inner.SignalNewMessages(context.Background(), params); err != nil {
+			logger.ErrorContext(context.Background(), "throttled trailing signal failed",
+				attr.SlogError(err),
+				attr.SlogRiskPolicyID(params.RiskPolicyID.String()),
+			)
+			return fmt.Errorf("throttled trailing signal: %w", err)
+		}
+		logger.DebugContext(context.Background(), "risk signal fired (trailing edge)",
+			attr.SlogRiskPolicyID(params.RiskPolicyID.String()),
+		)
+		return nil
+	})
+	return ts
 }
 
 func (t *ThrottledSignaler) SignalNewMessages(ctx context.Context, params DrainRiskAnalysisParams) error {
@@ -219,9 +243,23 @@ func (t *ThrottledSignaler) SignalNewMessages(ctx context.Context, params DrainR
 		return nil
 	}
 	if t.throttle.Do(params) {
+		t.logger.DebugContext(ctx, "risk signal fired (leading edge)",
+			attr.SlogRiskPolicyID(params.RiskPolicyID.String()),
+		)
 		if err := t.inner.SignalNewMessages(ctx, params); err != nil {
 			return fmt.Errorf("signal new messages: %w", err)
 		}
+	} else {
+		t.logger.DebugContext(ctx, "risk signal throttled (pending trailing)",
+			attr.SlogRiskPolicyID(params.RiskPolicyID.String()),
+		)
 	}
 	return nil
+}
+
+// Shutdown flushes any pending throttled signals. Call during graceful shutdown
+// to prevent losing trailing signals when a pod restarts.
+func (t *ThrottledSignaler) Shutdown() {
+	t.logger.InfoContext(context.Background(), "flushing pending risk analysis signals")
+	t.throttle.Flush()
 }

@@ -82,6 +82,11 @@ func (s *ChatMessageCaptureStrategy) notifyObservers(ctx context.Context, projec
 		stop := context.AfterFunc(s.shutdownCtx, cancel)
 		defer stop()
 
+		s.logger.DebugContext(ctx, "notifying message observers",
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogObserverCount(len(s.observers)),
+		)
+
 		for _, obs := range s.observers {
 			obs.OnMessagesStored(ctx, projectID)
 		}
