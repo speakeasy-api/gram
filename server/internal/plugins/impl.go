@@ -699,6 +699,12 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid github username")
 	}
 
+	// PublishPlugins is session-only — repo names embed the project slug,
+	// which API key auth doesn't populate.
+	if ac.ProjectSlug == nil {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "publish requires a session-authenticated context")
+	}
+
 	apiKey, err := s.createPluginAPIKey(ctx, ac)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create plugin api key").Log(ctx, s.logger)
@@ -920,7 +926,7 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug string) Gen
 
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || ac == nil || ac.ProjectID == nil || ac.ProjectSlug == nil {
+	if !ok || ac == nil || ac.ProjectID == nil {
 		return nil, errors.New("missing auth context")
 	}
 	return ac, nil

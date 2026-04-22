@@ -108,6 +108,30 @@ func TestPluginsService_GetPlugin(t *testing.T) {
 	require.Equal(t, "Get Test", result.Name)
 }
 
+// API key auth populates ProjectID but leaves ProjectSlug nil
+// (server/internal/auth/key.go:168). Non-publish endpoints must still work
+// in that mode — only PublishPlugins genuinely needs the slug.
+func TestPluginsService_ReadEndpoints_WorkWithoutProjectSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	created, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "API Key Test"})
+	require.NoError(t, err)
+
+	// Simulate API key auth by clearing ProjectSlug on the existing context.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.ProjectSlug = nil
+	apiKeyCtx := contextvalues.SetAuthContext(ctx, authCtx)
+
+	_, err = ti.service.GetPlugin(apiKeyCtx, &gen.GetPluginPayload{ID: created.ID})
+	require.NoError(t, err, "GetPlugin must work with API key auth (nil ProjectSlug)")
+
+	_, err = ti.service.ListPlugins(apiKeyCtx, &gen.ListPluginsPayload{})
+	require.NoError(t, err, "ListPlugins must work with API key auth (nil ProjectSlug)")
+}
+
 func TestPluginsService_GetPlugin_NotFound(t *testing.T) {
 	t.Parallel()
 
