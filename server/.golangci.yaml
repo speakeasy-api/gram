@@ -58,7 +58,7 @@ linters:
       - path: internal/billing/stub\.go
         linters:
           - musttag
-      - path: _test\.go|internal/testenv/|cmd/|internal/dns/
+      - path: cmd/|internal/dns/
         linters:
           - forbidigo
       - path: internal/dns/net_resolver\.go
@@ -104,6 +104,11 @@ linters:
         linters:
           - glint
         text: enforceo11yconventions
+      # Not interesting to enforce this in tests
+      - path: _test\.go|internal/testenv/
+        linters:
+          - forbidigo
+        text: GG001|GG002
   settings:
     custom:
       glint:
@@ -143,9 +148,12 @@ linters:
         - pattern: ^otel\.Tracer$
           pkg: ^go\.opentelemetry\.io/otel$
           msg: "GG003: pass a trace.TracerProvider to functions instead of using otel.Tracer directly."
+        - pattern: ^testing\.T\.(Skip|SkipNow|Skipf)$
+          pkg: ^testing$
+          msg: "GG004: avoid committing skipped tests."
         - pattern: ^net\.Lookup(Addr|CNAME|Host|IP|MX|NS|Port|SRV|TXT)$
           pkg: ^net$
-          msg: "Use dns.NewNetResolver() instead of net.Lookup* for testability."
+          msg: "GG005: Use dns.NewNetResolver() instead of net.Lookup* for testability."
     sloglint:
       no-mixed-args: true
       attr-only: true

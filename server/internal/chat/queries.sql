@@ -24,11 +24,6 @@ VALUES (
 ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
 RETURNING id;
 
--- name: InsertChatMessage :one
-INSERT INTO chat_messages (chat_id, project_id, role, content)
-VALUES (@chat_id, @project_id, @role, @content)
-RETURNING id;
-
 -- name: CreateChatMessage :copyfrom
 INSERT INTO chat_messages (
     chat_id

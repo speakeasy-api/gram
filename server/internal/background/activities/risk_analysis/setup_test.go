@@ -16,6 +16,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 var infra *testenv.Environment
@@ -112,10 +113,10 @@ func seedMessages(t *testing.T, conn *pgxpool.Pool, td testData, count int) []uu
 	t.Helper()
 	ctx := t.Context()
 
-	chatQueries := chatrepo.New(conn)
+	testQueries := testrepo.New(conn)
 	var ids []uuid.UUID
 	for range count {
-		msgID, err := chatQueries.InsertChatMessage(ctx, chatrepo.InsertChatMessageParams{
+		msgID, err := testQueries.InsertChatMessage(ctx, testrepo.InsertChatMessageParams{
 			ChatID:    td.chatID,
 			ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
 			Role:      "user",
