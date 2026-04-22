@@ -43,6 +43,26 @@ func TestRuntimeManagerRuntimeRequestDirectHonorsMaxTimeSeconds(t *testing.T) {
 	require.Less(t, time.Since(start), 1400*time.Millisecond)
 }
 
+func TestFlyRuntimeRequestHonorsMaxTimeSeconds(t *testing.T) {
+	t.Parallel()
+
+	server := newSlowAssistantRuntimeServer(t, 1500*time.Millisecond)
+
+	backend := &FlyRuntimeBackend{
+		httpClient: server.Client(),
+	}
+
+	start := time.Now()
+	_, err := backend.runtimeRequest(context.Background(), flyRuntimeTarget{URL: server.URL}, runtimeHTTPRequest{
+		Method:         http.MethodGet,
+		Path:           "/slow",
+		MaxTimeSeconds: 1,
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "context deadline exceeded")
+	require.Less(t, time.Since(start), 1400*time.Millisecond)
+}
+
 func newSlowAssistantRuntimeServer(t *testing.T, delay time.Duration) *httptest.Server {
 	t.Helper()
 
