@@ -252,12 +252,10 @@ WHERE cm.project_id = $1
   AND NOT EXISTS (
     SELECT 1
     FROM risk_results rr
-    WHERE rr.project_id = $1
-      AND rr.chat_message_id = cm.id
+    WHERE rr.chat_message_id = cm.id
       AND rr.risk_policy_id = $2
       AND rr.risk_policy_version = $3
   )
-ORDER BY cm.seq ASC
 LIMIT $4
 `
 

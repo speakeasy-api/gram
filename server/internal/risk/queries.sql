@@ -107,12 +107,10 @@ WHERE cm.project_id = @project_id
   AND NOT EXISTS (
     SELECT 1
     FROM risk_results rr
-    WHERE rr.project_id = @project_id
-      AND rr.chat_message_id = cm.id
+    WHERE rr.chat_message_id = cm.id
       AND rr.risk_policy_id = @risk_policy_id
       AND rr.risk_policy_version = @risk_policy_version
   )
-ORDER BY cm.seq ASC
 LIMIT @batch_limit;
 
 -- name: GetMessageContentBatch :many
