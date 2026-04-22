@@ -21,7 +21,7 @@ export class Slack extends ClientSDK {
    * Store Slack credentials (client ID, client secret, signing secret) for an app.
    */
   async configureSlackApp(
-    request: operations.ConfigureSlackAppRequest,
+    request: components.ConfigureSlackAppRequestBody,
     security?: operations.ConfigureSlackAppSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.SlackAppResult> {
@@ -40,7 +40,7 @@ export class Slack extends ClientSDK {
    * Create a new Slack app and generate its manifest.
    */
   async createSlackApp(
-    request: operations.CreateSlackAppRequest,
+    request: components.CreateSlackAppRequestBody,
     security?: operations.CreateSlackAppSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.CreateSlackAppResult> {
@@ -97,13 +97,11 @@ export class Slack extends ClientSDK {
    * List Slack apps for a project.
    */
   async listSlackApps(
-    request?: operations.ListSlackAppsRequest | undefined,
     security?: operations.ListSlackAppsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListSlackAppsResult> {
     return unwrapAsync(slackListSlackApps(
       this,
-      request,
       security,
       options,
     ));
@@ -116,7 +114,7 @@ export class Slack extends ClientSDK {
    * Update a Slack app's settings.
    */
   async updateSlackApp(
-    request: operations.UpdateSlackAppRequest,
+    request: components.UpdateSlackAppRequestBody,
     security?: operations.UpdateSlackAppSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.SlackAppResult> {

@@ -10,6 +10,7 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -23,11 +24,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildGetObservabilityOverviewQuery,
   GetObservabilityOverviewQueryData,
@@ -59,7 +56,7 @@ export type GetObservabilityOverviewQueryError =
  * Get observability overview metrics including time series, tool breakdowns, and summary stats
  */
 export function useGetObservabilityOverview(
-  request: operations.GetObservabilityOverviewRequest,
+  request: components.GetObservabilityOverviewPayload,
   security?: operations.GetObservabilityOverviewSecurity | undefined,
   options?: QueryHookOptions<
     GetObservabilityOverviewQueryData,
@@ -88,7 +85,7 @@ export function useGetObservabilityOverview(
  * Get observability overview metrics including time series, tool breakdowns, and summary stats
  */
 export function useGetObservabilityOverviewSuspense(
-  request: operations.GetObservabilityOverviewRequest,
+  request: components.GetObservabilityOverviewPayload,
   security?: operations.GetObservabilityOverviewSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetObservabilityOverviewQueryData,
@@ -112,40 +109,11 @@ export function useGetObservabilityOverviewSuspense(
 
 export function setGetObservabilityOverviewData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: GetObservabilityOverviewQueryData,
 ): GetObservabilityOverviewQueryData | undefined {
-  const key = queryKeyGetObservabilityOverview(...queryKeyBase);
+  const key = queryKeyGetObservabilityOverview();
 
   return client.setQueryData<GetObservabilityOverviewQueryData>(key, data);
-}
-
-export function invalidateGetObservabilityOverview(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: [
-      "@gram/client",
-      "telemetry",
-      "getObservabilityOverview",
-      ...queryKeyBase,
-    ],
-  });
 }
 
 export function invalidateAllGetObservabilityOverview(

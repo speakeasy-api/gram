@@ -4,24 +4,10 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type SetToolsetEnvironmentLinkSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
-};
-
-export type SetToolsetEnvironmentLinkRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  setToolsetEnvironmentLinkRequestBody:
-    components.SetToolsetEnvironmentLinkRequestBody;
 };
 
 /** @internal */
@@ -53,45 +39,6 @@ export function setToolsetEnvironmentLinkSecurityToJSON(
   return JSON.stringify(
     SetToolsetEnvironmentLinkSecurity$outboundSchema.parse(
       setToolsetEnvironmentLinkSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type SetToolsetEnvironmentLinkRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  SetToolsetEnvironmentLinkRequestBody:
-    components.SetToolsetEnvironmentLinkRequestBody$Outbound;
-};
-
-/** @internal */
-export const SetToolsetEnvironmentLinkRequest$outboundSchema: z.ZodMiniType<
-  SetToolsetEnvironmentLinkRequest$Outbound,
-  SetToolsetEnvironmentLinkRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    setToolsetEnvironmentLinkRequestBody:
-      components.SetToolsetEnvironmentLinkRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      setToolsetEnvironmentLinkRequestBody:
-        "SetToolsetEnvironmentLinkRequestBody",
-    });
-  }),
-);
-
-export function setToolsetEnvironmentLinkRequestToJSON(
-  setToolsetEnvironmentLinkRequest: SetToolsetEnvironmentLinkRequest,
-): string {
-  return JSON.stringify(
-    SetToolsetEnvironmentLinkRequest$outboundSchema.parse(
-      setToolsetEnvironmentLinkRequest,
     ),
   );
 }

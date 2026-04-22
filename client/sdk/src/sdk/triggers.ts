@@ -23,7 +23,7 @@ export class Triggers extends ClientSDK {
    * Create a trigger instance.
    */
   async create(
-    request: operations.CreateTriggerInstanceRequest,
+    request: components.CreateTriggerInstanceForm,
     security?: operations.CreateTriggerInstanceSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.TriggerInstance> {
@@ -42,13 +42,11 @@ export class Triggers extends ClientSDK {
    * List static trigger definitions available to a project.
    */
   async listDefinitions(
-    request?: operations.ListTriggerDefinitionsRequest | undefined,
     security?: operations.ListTriggerDefinitionsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListTriggerDefinitionsResult> {
     return unwrapAsync(triggersListDefinitions(
       this,
-      request,
       security,
       options,
     ));
@@ -99,13 +97,11 @@ export class Triggers extends ClientSDK {
    * List trigger instances for the current project.
    */
   async list(
-    request?: operations.ListTriggerInstancesRequest | undefined,
     security?: operations.ListTriggerInstancesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListTriggerInstancesResult> {
     return unwrapAsync(triggersList(
       this,
-      request,
       security,
       options,
     ));
@@ -156,7 +152,7 @@ export class Triggers extends ClientSDK {
    * Update a trigger instance.
    */
   async update(
-    request: operations.UpdateTriggerInstanceRequest,
+    request: components.UpdateTriggerInstanceForm,
     security?: operations.UpdateTriggerInstanceSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.TriggerInstance> {

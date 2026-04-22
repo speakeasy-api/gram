@@ -27,7 +27,7 @@ export class Assets extends ClientSDK {
    * Create a time-limited signed URL to access a chat attachment without authentication.
    */
   async createSignedChatAttachmentURL(
-    request: operations.CreateSignedChatAttachmentURLRequest,
+    request: components.CreateSignedChatAttachmentURLForm2,
     security?: operations.CreateSignedChatAttachmentURLSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.CreateSignedChatAttachmentURLResult> {
@@ -46,7 +46,7 @@ export class Assets extends ClientSDK {
    * Fetch an OpenAPI v3 document from a URL and upload it to Gram.
    */
   async fetchOpenAPIv3FromURL(
-    request: operations.FetchOpenAPIv3FromURLRequest,
+    request: components.FetchOpenAPIv3FromURLForm2,
     security?: operations.FetchOpenAPIv3FromURLSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.UploadOpenAPIv3Result> {
@@ -65,13 +65,11 @@ export class Assets extends ClientSDK {
    * List all assets for a project.
    */
   async listAssets(
-    request?: operations.ListAssetsRequest | undefined,
     security?: operations.ListAssetsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListAssetsResult> {
     return unwrapAsync(assetsListAssets(
       this,
-      request,
       security,
       options,
     ));

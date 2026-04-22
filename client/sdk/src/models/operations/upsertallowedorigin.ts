@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type UpsertAllowedOriginSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type UpsertAllowedOriginSecurityOption2 = {
 export type UpsertAllowedOriginSecurity = {
   option1?: UpsertAllowedOriginSecurityOption1 | undefined;
   option2?: UpsertAllowedOriginSecurityOption2 | undefined;
-};
-
-export type UpsertAllowedOriginRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  upsertAllowedOriginForm: components.UpsertAllowedOriginForm;
 };
 
 /** @internal */
@@ -137,42 +120,5 @@ export function upsertAllowedOriginSecurityToJSON(
     UpsertAllowedOriginSecurity$outboundSchema.parse(
       upsertAllowedOriginSecurity,
     ),
-  );
-}
-
-/** @internal */
-export type UpsertAllowedOriginRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  UpsertAllowedOriginForm: components.UpsertAllowedOriginForm$Outbound;
-};
-
-/** @internal */
-export const UpsertAllowedOriginRequest$outboundSchema: z.ZodMiniType<
-  UpsertAllowedOriginRequest$Outbound,
-  UpsertAllowedOriginRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    upsertAllowedOriginForm: components.UpsertAllowedOriginForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      upsertAllowedOriginForm: "UpsertAllowedOriginForm",
-    });
-  }),
-);
-
-export function upsertAllowedOriginRequestToJSON(
-  upsertAllowedOriginRequest: UpsertAllowedOriginRequest,
-): string {
-  return JSON.stringify(
-    UpsertAllowedOriginRequest$outboundSchema.parse(upsertAllowedOriginRequest),
   );
 }

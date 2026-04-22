@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type GetUserMetricsSummarySecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type GetUserMetricsSummarySecurityOption2 = {
 export type GetUserMetricsSummarySecurity = {
   option1?: GetUserMetricsSummarySecurityOption1 | undefined;
   option2?: GetUserMetricsSummarySecurityOption2 | undefined;
-};
-
-export type GetUserMetricsSummaryRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  getUserMetricsSummaryPayload: components.GetUserMetricsSummaryPayload;
 };
 
 /** @internal */
@@ -136,47 +119,6 @@ export function getUserMetricsSummarySecurityToJSON(
   return JSON.stringify(
     GetUserMetricsSummarySecurity$outboundSchema.parse(
       getUserMetricsSummarySecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type GetUserMetricsSummaryRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  GetUserMetricsSummaryPayload:
-    components.GetUserMetricsSummaryPayload$Outbound;
-};
-
-/** @internal */
-export const GetUserMetricsSummaryRequest$outboundSchema: z.ZodMiniType<
-  GetUserMetricsSummaryRequest$Outbound,
-  GetUserMetricsSummaryRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    getUserMetricsSummaryPayload:
-      components.GetUserMetricsSummaryPayload$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      getUserMetricsSummaryPayload: "GetUserMetricsSummaryPayload",
-    });
-  }),
-);
-
-export function getUserMetricsSummaryRequestToJSON(
-  getUserMetricsSummaryRequest: GetUserMetricsSummaryRequest,
-): string {
-  return JSON.stringify(
-    GetUserMetricsSummaryRequest$outboundSchema.parse(
-      getUserMetricsSummaryRequest,
     ),
   );
 }

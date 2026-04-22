@@ -46,12 +46,7 @@ export function buildRiskListResultsByChatQuery(
   ) => Promise<RiskListResultsByChatQueryData>;
 } {
   return {
-    queryKey: queryKeyRiskListResultsByChat({
-      cursor: request?.cursor,
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyRiskListResultsByChat({ cursor: request?.cursor }),
     queryFn: async function riskListResultsByChatQueryFn(
       ctx,
     ): Promise<RiskListResultsByChatQueryData> {
@@ -77,12 +72,7 @@ export function buildRiskListResultsByChatQuery(
 }
 
 export function queryKeyRiskListResultsByChat(
-  parameters: {
-    cursor?: string | undefined;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { cursor?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "results", "byChat", parameters];
 }

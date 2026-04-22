@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type SearchLogsSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type SearchLogsSecurityOption2 = {
 export type SearchLogsSecurity = {
   option1?: SearchLogsSecurityOption1 | undefined;
   option2?: SearchLogsSecurityOption2 | undefined;
-};
-
-export type SearchLogsRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  searchLogsPayload: components.SearchLogsPayload;
 };
 
 /** @internal */
@@ -127,42 +110,5 @@ export function searchLogsSecurityToJSON(
 ): string {
   return JSON.stringify(
     SearchLogsSecurity$outboundSchema.parse(searchLogsSecurity),
-  );
-}
-
-/** @internal */
-export type SearchLogsRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  SearchLogsPayload: components.SearchLogsPayload$Outbound;
-};
-
-/** @internal */
-export const SearchLogsRequest$outboundSchema: z.ZodMiniType<
-  SearchLogsRequest$Outbound,
-  SearchLogsRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    searchLogsPayload: components.SearchLogsPayload$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      searchLogsPayload: "SearchLogsPayload",
-    });
-  }),
-);
-
-export function searchLogsRequestToJSON(
-  searchLogsRequest: SearchLogsRequest,
-): string {
-  return JSON.stringify(
-    SearchLogsRequest$outboundSchema.parse(searchLogsRequest),
   );
 }

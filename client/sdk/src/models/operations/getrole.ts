@@ -15,14 +15,6 @@ export type GetRoleRequest = {
    * The ID of the role.
    */
   id: string;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
 };
 
 /** @internal */
@@ -57,27 +49,15 @@ export function getRoleSecurityToJSON(
 /** @internal */
 export type GetRoleRequest$Outbound = {
   id: string;
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
 export const GetRoleRequest$outboundSchema: z.ZodMiniType<
   GetRoleRequest$Outbound,
   GetRoleRequest
-> = z.pipe(
-  z.object({
-    id: z.string(),
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-    });
-  }),
-);
+> = z.object({
+  id: z.string(),
+});
 
 export function getRoleRequestToJSON(getRoleRequest: GetRoleRequest): string {
   return JSON.stringify(GetRoleRequest$outboundSchema.parse(getRoleRequest));

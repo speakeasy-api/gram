@@ -15,14 +15,6 @@ export type ListAuditLogFacetsRequest = {
    * Project slug to filter facet values to a specific project.
    */
   projectSlug?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
 };
 
 /** @internal */
@@ -59,8 +51,6 @@ export function listAuditLogFacetsSecurityToJSON(
 /** @internal */
 export type ListAuditLogFacetsRequest$Outbound = {
   project_slug?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -70,14 +60,10 @@ export const ListAuditLogFacetsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     projectSlug: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       projectSlug: "project_slug",
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
     });
   }),
 );

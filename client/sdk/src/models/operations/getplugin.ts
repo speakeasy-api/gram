@@ -12,14 +12,6 @@ export type GetPluginSecurity = {
 
 export type GetPluginRequest = {
   id: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -56,27 +48,15 @@ export function getPluginSecurityToJSON(
 /** @internal */
 export type GetPluginRequest$Outbound = {
   id: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
 export const GetPluginRequest$outboundSchema: z.ZodMiniType<
   GetPluginRequest$Outbound,
   GetPluginRequest
-> = z.pipe(
-  z.object({
-    id: z.string(),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
+> = z.object({
+  id: z.string(),
+});
 
 export function getPluginRequestToJSON(
   getPluginRequest: GetPluginRequest,

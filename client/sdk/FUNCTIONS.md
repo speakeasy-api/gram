@@ -28,15 +28,13 @@ const gram = new GramCore();
 
 async function run() {
   const res = await accessCreateRole(gram, {
-    createRoleForm: {
-      description: "swerve hm receptor how",
-      grants: [
-        {
-          scope: "mcp:connect",
-        },
-      ],
-      name: "<value>",
-    },
+    description: "swerve hm receptor how",
+    grants: [
+      {
+        scope: "mcp:connect",
+      },
+    ],
+    name: "<value>",
   });
   if (res.ok) {
     const { value: result } = res;

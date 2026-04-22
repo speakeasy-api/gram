@@ -49,8 +49,6 @@ export function buildIntegrationsIntegrationsNumberGetQuery(
     queryKey: queryKeyIntegrationsIntegrationsNumberGet({
       id: request?.id,
       name: request?.name,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
     }),
     queryFn: async function integrationsIntegrationsNumberGetQueryFn(
       ctx,
@@ -77,12 +75,7 @@ export function buildIntegrationsIntegrationsNumberGetQuery(
 }
 
 export function queryKeyIntegrationsIntegrationsNumberGet(
-  parameters: {
-    id?: string | undefined;
-    name?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { id?: string | undefined; name?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "integrations", "integrationsNumberGet", parameters];
 }

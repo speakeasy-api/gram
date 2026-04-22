@@ -19,14 +19,12 @@ export type TriggersQueryData = components.ListTriggerInstancesResult;
 export function prefetchTriggers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListTriggerInstancesRequest | undefined,
   security?: operations.ListTriggerInstancesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildTriggersQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchTriggers(
 
 export function buildTriggersQuery(
   client$: GramCore,
-  request?: operations.ListTriggerInstancesRequest | undefined,
   security?: operations.ListTriggerInstancesSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,10 +40,7 @@ export function buildTriggersQuery(
   queryFn: (context: QueryFunctionContext) => Promise<TriggersQueryData>;
 } {
   return {
-    queryKey: queryKeyTriggers({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyTriggers(),
     queryFn: async function triggersQueryFn(ctx): Promise<TriggersQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -61,7 +55,6 @@ export function buildTriggersQuery(
 
       return unwrapAsync(triggersList(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -69,11 +62,6 @@ export function buildTriggersQuery(
   };
 }
 
-export function queryKeyTriggers(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "triggers", "list", parameters];
+export function queryKeyTriggers(): QueryKey {
+  return ["@gram/client", "triggers", "list"];
 }

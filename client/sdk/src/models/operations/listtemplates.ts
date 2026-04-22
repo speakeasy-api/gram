@@ -20,21 +20,6 @@ export type ListTemplatesSecurity = {
   option2?: ListTemplatesSecurityOption2 | undefined;
 };
 
-export type ListTemplatesRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-};
-
 /** @internal */
 export type ListTemplatesSecurityOption1$Outbound = {
   "project_slug_header_Gram-Project": string;
@@ -133,39 +118,5 @@ export function listTemplatesSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListTemplatesSecurity$outboundSchema.parse(listTemplatesSecurity),
-  );
-}
-
-/** @internal */
-export type ListTemplatesRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const ListTemplatesRequest$outboundSchema: z.ZodMiniType<
-  ListTemplatesRequest$Outbound,
-  ListTemplatesRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
-
-export function listTemplatesRequestToJSON(
-  listTemplatesRequest: ListTemplatesRequest,
-): string {
-  return JSON.stringify(
-    ListTemplatesRequest$outboundSchema.parse(listTemplatesRequest),
   );
 }

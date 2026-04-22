@@ -14,10 +14,6 @@ export type RemoveOrganizationUserRequest = {
    * Gram user ID to remove.
    */
   userId: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
 };
 
 /** @internal */
@@ -53,7 +49,6 @@ export function removeOrganizationUserSecurityToJSON(
 /** @internal */
 export type RemoveOrganizationUserRequest$Outbound = {
   user_id: string;
-  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -63,12 +58,10 @@ export const RemoveOrganizationUserRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     userId: z.string(),
-    gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       userId: "user_id",
-      gramSession: "Gram-Session",
     });
   }),
 );

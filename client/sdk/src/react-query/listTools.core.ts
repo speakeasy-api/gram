@@ -48,8 +48,6 @@ export function buildListToolsQuery(
       limit: request?.limit,
       deploymentId: request?.deploymentId,
       urnPrefix: request?.urnPrefix,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
     }),
     queryFn: async function listToolsQueryFn(ctx): Promise<ListToolsQueryData> {
       const sig = combineSignals(
@@ -79,8 +77,6 @@ export function queryKeyListTools(
     limit?: number | undefined;
     deploymentId?: string | undefined;
     urnPrefix?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "tools", "list", parameters];

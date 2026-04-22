@@ -19,14 +19,12 @@ export type ValidateAPIKeyQueryData = components.ValidateKeyResult;
 export function prefetchValidateAPIKey(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ValidateAPIKeyRequest | undefined,
   security?: operations.ValidateAPIKeySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildValidateAPIKeyQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchValidateAPIKey(
 
 export function buildValidateAPIKeyQuery(
   client$: GramCore,
-  request?: operations.ValidateAPIKeyRequest | undefined,
   security?: operations.ValidateAPIKeySecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,7 +40,7 @@ export function buildValidateAPIKeyQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ValidateAPIKeyQueryData>;
 } {
   return {
-    queryKey: queryKeyValidateAPIKey({ gramKey: request?.gramKey }),
+    queryKey: queryKeyValidateAPIKey(),
     queryFn: async function validateAPIKeyQueryFn(
       ctx,
     ): Promise<ValidateAPIKeyQueryData> {
@@ -60,7 +57,6 @@ export function buildValidateAPIKeyQuery(
 
       return unwrapAsync(keysValidate(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -68,8 +64,6 @@ export function buildValidateAPIKeyQuery(
   };
 }
 
-export function queryKeyValidateAPIKey(
-  parameters: { gramKey?: string | undefined },
-): QueryKey {
-  return ["@gram/client", "keys", "validate", parameters];
+export function queryKeyValidateAPIKey(): QueryKey {
+  return ["@gram/client", "keys", "validate"];
 }

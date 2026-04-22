@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateEnvironmentMutationVariables = {
-  request: operations.CreateEnvironmentRequest;
+  request: components.CreateEnvironmentForm;
   security?: operations.CreateEnvironmentSecurity | undefined;
   options?: RequestOptions;
 };

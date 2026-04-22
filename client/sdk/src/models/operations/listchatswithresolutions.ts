@@ -82,18 +82,6 @@ export type ListChatsWithResolutionsRequest = {
    * Sort order
    */
   sortOrder?: SortOrder | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  /**
-   * Chat Sessions token header
-   */
-  gramChatSession?: string | undefined;
 };
 
 /** @internal */
@@ -222,9 +210,6 @@ export type ListChatsWithResolutionsRequest$Outbound = {
   offset: number;
   sort_by: string;
   sort_order: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  "Gram-Chat-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -242,9 +227,6 @@ export const ListChatsWithResolutionsRequest$outboundSchema: z.ZodMiniType<
     offset: z._default(z.int(), 0),
     sortBy: z._default(SortBy$outboundSchema, "created_at"),
     sortOrder: z._default(SortOrder$outboundSchema, "desc"),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    gramChatSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -252,9 +234,6 @@ export const ListChatsWithResolutionsRequest$outboundSchema: z.ZodMiniType<
       resolutionStatus: "resolution_status",
       sortBy: "sort_by",
       sortOrder: "sort_order",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      gramChatSession: "Gram-Chat-Session",
     });
   }),
 );

@@ -19,14 +19,12 @@ export type ActiveDeploymentQueryData = components.GetActiveDeploymentResult;
 export function prefetchActiveDeployment(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetActiveDeploymentRequest | undefined,
   security?: operations.GetActiveDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildActiveDeploymentQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchActiveDeployment(
 
 export function buildActiveDeploymentQuery(
   client$: GramCore,
-  request?: operations.GetActiveDeploymentRequest | undefined,
   security?: operations.GetActiveDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -45,11 +42,7 @@ export function buildActiveDeploymentQuery(
   ) => Promise<ActiveDeploymentQueryData>;
 } {
   return {
-    queryKey: queryKeyActiveDeployment({
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyActiveDeployment(),
     queryFn: async function activeDeploymentQueryFn(
       ctx,
     ): Promise<ActiveDeploymentQueryData> {
@@ -66,7 +59,6 @@ export function buildActiveDeploymentQuery(
 
       return unwrapAsync(deploymentsActive(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -74,12 +66,6 @@ export function buildActiveDeploymentQuery(
   };
 }
 
-export function queryKeyActiveDeployment(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "deployments", "active", parameters];
+export function queryKeyActiveDeployment(): QueryKey {
+  return ["@gram/client", "deployments", "active"];
 }

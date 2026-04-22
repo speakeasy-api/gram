@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   ActiveDeploymentQueryData,
   buildActiveDeploymentQuery,
@@ -59,7 +55,6 @@ export type ActiveDeploymentQueryError =
  * Get the active deployment for a project.
  */
 export function useActiveDeployment(
-  request?: operations.GetActiveDeploymentRequest | undefined,
   security?: operations.GetActiveDeploymentSecurity | undefined,
   options?: QueryHookOptions<
     ActiveDeploymentQueryData,
@@ -70,7 +65,6 @@ export function useActiveDeployment(
   return useQuery({
     ...buildActiveDeploymentQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -85,7 +79,6 @@ export function useActiveDeployment(
  * Get the active deployment for a project.
  */
 export function useActiveDeploymentSuspense(
-  request?: operations.GetActiveDeploymentRequest | undefined,
   security?: operations.GetActiveDeploymentSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ActiveDeploymentQueryData,
@@ -99,7 +92,6 @@ export function useActiveDeploymentSuspense(
   return useSuspenseQuery({
     ...buildActiveDeploymentQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -109,35 +101,11 @@ export function useActiveDeploymentSuspense(
 
 export function setActiveDeploymentData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: ActiveDeploymentQueryData,
 ): ActiveDeploymentQueryData | undefined {
-  const key = queryKeyActiveDeployment(...queryKeyBase);
+  const key = queryKeyActiveDeployment();
 
   return client.setQueryData<ActiveDeploymentQueryData>(key, data);
-}
-
-export function invalidateActiveDeployment(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "deployments", "active", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllActiveDeployment(

@@ -15,14 +15,6 @@ export type ListIntegrationsRequest = {
    * Keywords to filter integrations by
    */
   keywords?: Array<string> | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -59,27 +51,15 @@ export function listIntegrationsSecurityToJSON(
 /** @internal */
 export type ListIntegrationsRequest$Outbound = {
   keywords?: Array<string> | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
 export const ListIntegrationsRequest$outboundSchema: z.ZodMiniType<
   ListIntegrationsRequest$Outbound,
   ListIntegrationsRequest
-> = z.pipe(
-  z.object({
-    keywords: z.optional(z.array(z.string())),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
+> = z.object({
+  keywords: z.optional(z.array(z.string())),
+});
 
 export function listIntegrationsRequestToJSON(
   listIntegrationsRequest: ListIntegrationsRequest,

@@ -104,13 +104,7 @@ export function useDeploymentLogsSuspense(
 export function setDeploymentLogsData(
   client: QueryClient,
   queryKeyBase: [
-    parameters: {
-      deploymentId: string;
-      cursor?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
+    parameters: { deploymentId: string; cursor?: string | undefined },
   ],
   data: DeploymentLogsQueryData,
 ): DeploymentLogsQueryData | undefined {
@@ -122,13 +116,7 @@ export function setDeploymentLogsData(
 export function invalidateDeploymentLogs(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      deploymentId: string;
-      cursor?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
+    [parameters: { deploymentId: string; cursor?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

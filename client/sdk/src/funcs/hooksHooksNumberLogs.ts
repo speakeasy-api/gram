@@ -4,13 +4,14 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -34,7 +35,7 @@ import { Result } from "../types/fp.js";
  */
 export function hooksHooksNumberLogs(
   client: GramCore,
-  request: operations.HooksNumberLogsRequest,
+  request: components.OTELLogsPayload,
   security?: operations.HooksNumberLogsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -61,7 +62,7 @@ export function hooksHooksNumberLogs(
 
 async function $do(
   client: GramCore,
-  request: operations.HooksNumberLogsRequest,
+  request: components.OTELLogsPayload,
   security?: operations.HooksNumberLogsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -83,28 +84,20 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(operations.HooksNumberLogsRequest$outboundSchema, value),
+    (value) => z.parse(components.OTELLogsPayload$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.OTELLogsPayload, { explode: true });
+  const body = encodeJSON("body", payload, { explode: true });
 
   const path = pathToFunc("/rpc/hooks.otel/v1/logs")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
-      explode: false,
-      charEncoding: "none",
-    }),
   }));
 
   const requestSecurity = resolveSecurity(

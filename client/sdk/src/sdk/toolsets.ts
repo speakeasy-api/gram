@@ -103,7 +103,7 @@ export class Toolsets extends ClientSDK {
    * Create a new toolset with associated tools
    */
   async create(
-    request: operations.CreateToolsetRequest,
+    request: components.CreateToolsetRequestBody,
     security?: operations.CreateToolsetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.Toolset> {
@@ -160,13 +160,11 @@ export class Toolsets extends ClientSDK {
    * List all toolsets for a project
    */
   async list(
-    request?: operations.ListToolsetsRequest | undefined,
     security?: operations.ListToolsetsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListToolsetsResult> {
     return unwrapAsync(toolsetsList(
       this,
-      request,
       security,
       options,
     ));
@@ -179,13 +177,11 @@ export class Toolsets extends ClientSDK {
    * List all toolsets across the organization
    */
   async listForOrg(
-    request?: operations.ListToolsetsForOrgRequest | undefined,
     security?: operations.ListToolsetsForOrgSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListToolsetsResult> {
     return unwrapAsync(toolsetsListForOrg(
       this,
-      request,
       security,
       options,
     ));

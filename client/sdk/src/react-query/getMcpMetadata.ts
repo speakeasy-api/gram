@@ -103,14 +103,7 @@ export function useGetMcpMetadataSuspense(
 
 export function setGetMcpMetadataData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      toolsetSlug: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { toolsetSlug: string }],
   data: GetMcpMetadataQueryData,
 ): GetMcpMetadataQueryData | undefined {
   const key = queryKeyGetMcpMetadata(...queryKeyBase);
@@ -120,14 +113,7 @@ export function setGetMcpMetadataData(
 
 export function invalidateGetMcpMetadata(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      toolsetSlug: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { toolsetSlug: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

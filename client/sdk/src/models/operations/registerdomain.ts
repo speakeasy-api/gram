@@ -4,18 +4,9 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type RegisterDomainSecurity = {
   sessionHeaderGramSession?: string | undefined;
-};
-
-export type RegisterDomainRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  createDomainRequestBody: components.CreateDomainRequestBody;
 };
 
 /** @internal */
@@ -43,36 +34,5 @@ export function registerDomainSecurityToJSON(
 ): string {
   return JSON.stringify(
     RegisterDomainSecurity$outboundSchema.parse(registerDomainSecurity),
-  );
-}
-
-/** @internal */
-export type RegisterDomainRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  CreateDomainRequestBody: components.CreateDomainRequestBody$Outbound;
-};
-
-/** @internal */
-export const RegisterDomainRequest$outboundSchema: z.ZodMiniType<
-  RegisterDomainRequest$Outbound,
-  RegisterDomainRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    createDomainRequestBody: components.CreateDomainRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      createDomainRequestBody: "CreateDomainRequestBody",
-    });
-  }),
-);
-
-export function registerDomainRequestToJSON(
-  registerDomainRequest: RegisterDomainRequest,
-): string {
-  return JSON.stringify(
-    RegisterDomainRequest$outboundSchema.parse(registerDomainRequest),
   );
 }

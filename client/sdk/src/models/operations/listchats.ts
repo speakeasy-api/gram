@@ -19,21 +19,6 @@ export type ListChatsSecurity = {
   option2?: ListChatsSecurityOption2 | undefined;
 };
 
-export type ListChatsRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  /**
-   * Chat Sessions token header
-   */
-  gramChatSession?: string | undefined;
-};
-
 /** @internal */
 export type ListChatsSecurityOption1$Outbound = {
   "project_slug_header_Gram-Project": string;
@@ -122,39 +107,5 @@ export function listChatsSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListChatsSecurity$outboundSchema.parse(listChatsSecurity),
-  );
-}
-
-/** @internal */
-export type ListChatsRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  "Gram-Chat-Session"?: string | undefined;
-};
-
-/** @internal */
-export const ListChatsRequest$outboundSchema: z.ZodMiniType<
-  ListChatsRequest$Outbound,
-  ListChatsRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    gramChatSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      gramChatSession: "Gram-Chat-Session",
-    });
-  }),
-);
-
-export function listChatsRequestToJSON(
-  listChatsRequest: ListChatsRequest,
-): string {
-  return JSON.stringify(
-    ListChatsRequest$outboundSchema.parse(listChatsRequest),
   );
 }

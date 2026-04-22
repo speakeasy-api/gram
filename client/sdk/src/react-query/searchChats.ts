@@ -10,6 +10,7 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -23,11 +24,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildSearchChatsQuery,
   prefetchSearchChats,
@@ -59,7 +56,7 @@ export type SearchChatsQueryError =
  * Search and list chat session summaries that match a search filter
  */
 export function useSearchChats(
-  request: operations.SearchChatsRequest,
+  request: components.SearchChatsPayload,
   security?: operations.SearchChatsSecurity | undefined,
   options?: QueryHookOptions<SearchChatsQueryData, SearchChatsQueryError>,
 ): UseQueryResult<SearchChatsQueryData, SearchChatsQueryError> {
@@ -82,7 +79,7 @@ export function useSearchChats(
  * Search and list chat session summaries that match a search filter
  */
 export function useSearchChatsSuspense(
-  request: operations.SearchChatsRequest,
+  request: components.SearchChatsPayload,
   security?: operations.SearchChatsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     SearchChatsQueryData,
@@ -103,35 +100,11 @@ export function useSearchChatsSuspense(
 
 export function setSearchChatsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: SearchChatsQueryData,
 ): SearchChatsQueryData | undefined {
-  const key = queryKeySearchChats(...queryKeyBase);
+  const key = queryKeySearchChats();
 
   return client.setQueryData<SearchChatsQueryData>(key, data);
-}
-
-export function invalidateSearchChats(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "telemetry", "searchChats", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllSearchChats(

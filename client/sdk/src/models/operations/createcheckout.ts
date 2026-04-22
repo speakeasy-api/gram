@@ -9,13 +9,6 @@ export type CreateCheckoutSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type CreateCheckoutRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-};
-
 /** @internal */
 export type CreateCheckoutSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
@@ -41,33 +34,5 @@ export function createCheckoutSecurityToJSON(
 ): string {
   return JSON.stringify(
     CreateCheckoutSecurity$outboundSchema.parse(createCheckoutSecurity),
-  );
-}
-
-/** @internal */
-export type CreateCheckoutRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const CreateCheckoutRequest$outboundSchema: z.ZodMiniType<
-  CreateCheckoutRequest$Outbound,
-  CreateCheckoutRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-    });
-  }),
-);
-
-export function createCheckoutRequestToJSON(
-  createCheckoutRequest: CreateCheckoutRequest,
-): string {
-  return JSON.stringify(
-    CreateCheckoutRequest$outboundSchema.parse(createCheckoutRequest),
   );
 }

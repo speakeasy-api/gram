@@ -116,8 +116,6 @@ export function setGetSourceEnvironmentData(
     parameters: {
       sourceKind: operations.QueryParamSourceKind;
       sourceSlug: string;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
     },
   ],
   data: GetSourceEnvironmentQueryData,
@@ -133,8 +131,6 @@ export function invalidateGetSourceEnvironment(
     [parameters: {
       sourceKind: operations.QueryParamSourceKind;
       sourceSlug: string;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

@@ -25,7 +25,7 @@ export class Environments extends ClientSDK {
    * Create a new environment
    */
   async create(
-    request: operations.CreateEnvironmentRequest,
+    request: components.CreateEnvironmentForm,
     security?: operations.CreateEnvironmentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.Environment> {
@@ -139,13 +139,11 @@ export class Environments extends ClientSDK {
    * List all environments for an organization
    */
   async list(
-    request?: operations.ListEnvironmentsRequest | undefined,
     security?: operations.ListEnvironmentsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListEnvironmentsResult> {
     return unwrapAsync(environmentsList(
       this,
-      request,
       security,
       options,
     ));
@@ -158,7 +156,7 @@ export class Environments extends ClientSDK {
    * Set (upsert) a link between a source and an environment
    */
   async setSourceLink(
-    request: operations.SetSourceEnvironmentLinkRequest,
+    request: components.SetSourceEnvironmentLinkRequestBody,
     security?: operations.SetSourceEnvironmentLinkSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.SourceEnvironmentLink> {
@@ -177,7 +175,7 @@ export class Environments extends ClientSDK {
    * Set (upsert) a link between a toolset and an environment
    */
   async setToolsetLink(
-    request: operations.SetToolsetEnvironmentLinkRequest,
+    request: components.SetToolsetEnvironmentLinkRequestBody,
     security?: operations.SetToolsetEnvironmentLinkSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ToolsetEnvironmentLink> {

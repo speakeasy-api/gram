@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListInvitesQuery,
   ListInvitesQueryData,
@@ -59,7 +55,6 @@ export type ListInvitesQueryError =
  * List pending WorkOS invitations for the active organization.
  */
 export function useListInvites(
-  request?: operations.ListInvitesRequest | undefined,
   security?: operations.ListInvitesSecurity | undefined,
   options?: QueryHookOptions<ListInvitesQueryData, ListInvitesQueryError>,
 ): UseQueryResult<ListInvitesQueryData, ListInvitesQueryError> {
@@ -67,7 +62,6 @@ export function useListInvites(
   return useQuery({
     ...buildListInvitesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useListInvites(
  * List pending WorkOS invitations for the active organization.
  */
 export function useListInvitesSuspense(
-  request?: operations.ListInvitesRequest | undefined,
   security?: operations.ListInvitesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListInvitesQueryData,
@@ -93,7 +86,6 @@ export function useListInvitesSuspense(
   return useSuspenseQuery({
     ...buildListInvitesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -103,25 +95,11 @@ export function useListInvitesSuspense(
 
 export function setListInvitesData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: ListInvitesQueryData,
 ): ListInvitesQueryData | undefined {
-  const key = queryKeyListInvites(...queryKeyBase);
+  const key = queryKeyListInvites();
 
   return client.setQueryData<ListInvitesQueryData>(key, data);
-}
-
-export function invalidateListInvites(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "organizations", "listInvites", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllListInvites(

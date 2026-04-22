@@ -20,7 +20,7 @@ export class Packages extends ClientSDK {
    * Create a new package for a project.
    */
   async create(
-    request: operations.CreatePackageRequest,
+    request: components.CreatePackageForm,
     security?: operations.CreatePackageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.CreatePackageResult> {
@@ -39,13 +39,11 @@ export class Packages extends ClientSDK {
    * List all packages for a project.
    */
   async list(
-    request?: operations.ListPackagesRequest | undefined,
     security?: operations.ListPackagesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListPackagesResult> {
     return unwrapAsync(packagesList(
       this,
-      request,
       security,
       options,
     ));
@@ -77,7 +75,7 @@ export class Packages extends ClientSDK {
    * Publish a new version of a package.
    */
   async publish(
-    request: operations.PublishRequest,
+    request: components.PublishPackageForm,
     security?: operations.PublishSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.PublishPackageResult> {
@@ -96,7 +94,7 @@ export class Packages extends ClientSDK {
    * Update package details.
    */
   async update(
-    request: operations.UpdatePackageRequest,
+    request: components.UpdatePackageForm,
     security?: operations.UpdatePackageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<operations.UpdatePackageResponse> {

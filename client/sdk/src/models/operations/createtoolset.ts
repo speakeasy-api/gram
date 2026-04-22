@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type CreateToolsetSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -19,22 +18,6 @@ export type CreateToolsetSecurityOption2 = {
 export type CreateToolsetSecurity = {
   option1?: CreateToolsetSecurityOption1 | undefined;
   option2?: CreateToolsetSecurityOption2 | undefined;
-};
-
-export type CreateToolsetRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  createToolsetRequestBody: components.CreateToolsetRequestBody;
 };
 
 /** @internal */
@@ -135,43 +118,5 @@ export function createToolsetSecurityToJSON(
 ): string {
   return JSON.stringify(
     CreateToolsetSecurity$outboundSchema.parse(createToolsetSecurity),
-  );
-}
-
-/** @internal */
-export type CreateToolsetRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  CreateToolsetRequestBody: components.CreateToolsetRequestBody$Outbound;
-};
-
-/** @internal */
-export const CreateToolsetRequest$outboundSchema: z.ZodMiniType<
-  CreateToolsetRequest$Outbound,
-  CreateToolsetRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    createToolsetRequestBody:
-      components.CreateToolsetRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-      createToolsetRequestBody: "CreateToolsetRequestBody",
-    });
-  }),
-);
-
-export function createToolsetRequestToJSON(
-  createToolsetRequest: CreateToolsetRequest,
-): string {
-  return JSON.stringify(
-    CreateToolsetRequest$outboundSchema.parse(createToolsetRequest),
   );
 }

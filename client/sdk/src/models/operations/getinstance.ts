@@ -36,22 +36,6 @@ export type GetInstanceRequest = {
    * The slug of the toolset to load
    */
   toolsetSlug: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Chat Sessions token header
-   */
-  gramChatSession?: string | undefined;
 };
 
 /** @internal */
@@ -224,10 +208,6 @@ export function getInstanceSecurityToJSON(
 /** @internal */
 export type GetInstanceRequest$Outbound = {
   toolset_slug: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Chat-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -237,18 +217,10 @@ export const GetInstanceRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     toolsetSlug: z.string(),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramChatSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       toolsetSlug: "toolset_slug",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      gramKey: "Gram-Key",
-      gramChatSession: "Gram-Chat-Session",
     });
   }),
 );

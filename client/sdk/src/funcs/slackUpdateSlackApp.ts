@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -35,7 +35,7 @@ import { Result } from "../types/fp.js";
  */
 export function slackUpdateSlackApp(
   client: GramCore,
-  request: operations.UpdateSlackAppRequest,
+  request: components.UpdateSlackAppRequestBody,
   security?: operations.UpdateSlackAppSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -62,7 +62,7 @@ export function slackUpdateSlackApp(
 
 async function $do(
   client: GramCore,
-  request: operations.UpdateSlackAppRequest,
+  request: components.UpdateSlackAppRequestBody,
   security?: operations.UpdateSlackAppSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -84,30 +84,21 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(operations.UpdateSlackAppRequest$outboundSchema, value),
+    (value) =>
+      z.parse(components.UpdateSlackAppRequestBody$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.UpdateSlackAppRequestBody, {
-    explode: true,
-  });
+  const body = encodeJSON("body", payload, { explode: true });
 
   const path = pathToFunc("/rpc/slack-apps.update")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
-      explode: false,
-      charEncoding: "none",
-    }),
   }));
 
   const requestSecurity = resolveSecurity(

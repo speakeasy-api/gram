@@ -43,12 +43,7 @@ export function buildRiskPoliciesGetQuery(
   queryFn: (context: QueryFunctionContext) => Promise<RiskPoliciesGetQueryData>;
 } {
   return {
-    queryKey: queryKeyRiskPoliciesGet({
-      id: request.id,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyRiskPoliciesGet({ id: request.id }),
     queryFn: async function riskPoliciesGetQueryFn(
       ctx,
     ): Promise<RiskPoliciesGetQueryData> {
@@ -73,13 +68,6 @@ export function buildRiskPoliciesGetQuery(
   };
 }
 
-export function queryKeyRiskPoliciesGet(
-  parameters: {
-    id: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
+export function queryKeyRiskPoliciesGet(parameters: { id: string }): QueryKey {
   return ["@gram/client", "policies", "get", parameters];
 }

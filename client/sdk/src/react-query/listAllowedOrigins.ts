@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListAllowedOriginsQuery,
   ListAllowedOriginsQueryData,
@@ -59,7 +55,6 @@ export type ListAllowedOriginsQueryError =
  * List allowed origins for a project.
  */
 export function useListAllowedOrigins(
-  request?: operations.ListAllowedOriginsRequest | undefined,
   security?: operations.ListAllowedOriginsSecurity | undefined,
   options?: QueryHookOptions<
     ListAllowedOriginsQueryData,
@@ -70,7 +65,6 @@ export function useListAllowedOrigins(
   return useQuery({
     ...buildListAllowedOriginsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -85,7 +79,6 @@ export function useListAllowedOrigins(
  * List allowed origins for a project.
  */
 export function useListAllowedOriginsSuspense(
-  request?: operations.ListAllowedOriginsRequest | undefined,
   security?: operations.ListAllowedOriginsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListAllowedOriginsQueryData,
@@ -99,7 +92,6 @@ export function useListAllowedOriginsSuspense(
   return useSuspenseQuery({
     ...buildListAllowedOriginsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -109,40 +101,11 @@ export function useListAllowedOriginsSuspense(
 
 export function setListAllowedOriginsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: ListAllowedOriginsQueryData,
 ): ListAllowedOriginsQueryData | undefined {
-  const key = queryKeyListAllowedOrigins(...queryKeyBase);
+  const key = queryKeyListAllowedOrigins();
 
   return client.setQueryData<ListAllowedOriginsQueryData>(key, data);
-}
-
-export function invalidateListAllowedOrigins(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: [
-      "@gram/client",
-      "projects",
-      "listAllowedOrigins",
-      ...queryKeyBase,
-    ],
-  });
 }
 
 export function invalidateAllListAllowedOrigins(

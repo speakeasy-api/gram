@@ -31,14 +31,6 @@ export type ListAuditLogsRequest = {
    * Action to filter audit logs to a specific action.
    */
   action?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
 };
 
 export type ListAuditLogsResponse = {
@@ -82,8 +74,6 @@ export type ListAuditLogsRequest$Outbound = {
   project_slug?: string | undefined;
   actor_id?: string | undefined;
   action?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -96,15 +86,11 @@ export const ListAuditLogsRequest$outboundSchema: z.ZodMiniType<
     projectSlug: z.optional(z.string()),
     actorId: z.optional(z.string()),
     action: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       projectSlug: "project_slug",
       actorId: "actor_id",
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
     });
   }),
 );

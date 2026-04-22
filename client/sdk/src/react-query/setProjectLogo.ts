@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type SetProjectLogoMutationVariables = {
-  request: operations.SetProjectLogoRequest;
+  request: components.GetSignedAssetURLForm;
   security?: operations.SetProjectLogoSecurity | undefined;
   options?: RequestOptions;
 };

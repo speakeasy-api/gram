@@ -19,14 +19,12 @@ export type ListInvitesQueryData = components.ListInvitesResult;
 export function prefetchListInvites(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListInvitesRequest | undefined,
   security?: operations.ListInvitesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListInvitesQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchListInvites(
 
 export function buildListInvitesQuery(
   client$: GramCore,
-  request?: operations.ListInvitesRequest | undefined,
   security?: operations.ListInvitesSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,7 +40,7 @@ export function buildListInvitesQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ListInvitesQueryData>;
 } {
   return {
-    queryKey: queryKeyListInvites({ gramSession: request?.gramSession }),
+    queryKey: queryKeyListInvites(),
     queryFn: async function listInvitesQueryFn(
       ctx,
     ): Promise<ListInvitesQueryData> {
@@ -60,7 +57,6 @@ export function buildListInvitesQuery(
 
       return unwrapAsync(organizationsListInvites(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -68,8 +64,6 @@ export function buildListInvitesQuery(
   };
 }
 
-export function queryKeyListInvites(
-  parameters: { gramSession?: string | undefined },
-): QueryKey {
-  return ["@gram/client", "organizations", "listInvites", parameters];
+export function queryKeyListInvites(): QueryKey {
+  return ["@gram/client", "organizations", "listInvites"];
 }

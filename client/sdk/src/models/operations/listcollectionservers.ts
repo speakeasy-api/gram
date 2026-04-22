@@ -15,14 +15,6 @@ export type ListCollectionServersRequest = {
    * Slug of the collection to serve
    */
   collectionSlug: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
 };
 
 /** @internal */
@@ -61,8 +53,6 @@ export function listCollectionServersSecurityToJSON(
 /** @internal */
 export type ListCollectionServersRequest$Outbound = {
   collection_slug: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
 };
 
 /** @internal */
@@ -72,14 +62,10 @@ export const ListCollectionServersRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     collectionSlug: z.string(),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       collectionSlug: "collection_slug",
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
     });
   }),
 );

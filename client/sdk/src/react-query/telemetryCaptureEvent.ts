@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type TelemetryCaptureEventMutationVariables = {
-  request: operations.CaptureEventRequest;
+  request: components.CaptureEventPayload;
   security?: operations.CaptureEventSecurity | undefined;
   options?: RequestOptions;
 };

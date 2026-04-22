@@ -38,13 +38,11 @@ export class Organizations extends ClientSDK {
    * List pending WorkOS invitations for the active organization.
    */
   async listInvites(
-    request?: operations.ListInvitesRequest | undefined,
     security?: operations.ListInvitesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListInvitesResult> {
     return unwrapAsync(organizationsListInvites(
       this,
-      request,
       security,
       options,
     ));
@@ -57,13 +55,11 @@ export class Organizations extends ClientSDK {
    * List users in the active organization from Gram organization_user_relationships.
    */
   async listUsers(
-    request?: operations.ListOrganizationUsersRequest | undefined,
     security?: operations.ListOrganizationUsersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListUsersResult> {
     return unwrapAsync(organizationsListUsers(
       this,
-      request,
       security,
       options,
     ));
@@ -114,7 +110,7 @@ export class Organizations extends ClientSDK {
    * Send a WorkOS invitation for the active organization.
    */
   async sendInvite(
-    request: operations.SendInviteRequest,
+    request: components.SendInviteRequestBody,
     security?: operations.SendInviteSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.OrganizationInvitation> {

@@ -18,7 +18,7 @@ export class McpMetadata extends ClientSDK {
    * Export MCP server details as JSON for documentation and integration purposes.
    */
   async export(
-    request: operations.ExportMcpMetadataRequest,
+    request: components.ExportMcpMetadataRequestBody,
     security?: operations.ExportMcpMetadataSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.McpExport> {
@@ -56,7 +56,7 @@ export class McpMetadata extends ClientSDK {
    * Create or update the metadata that powers the MCP install page.
    */
   async set(
-    request: operations.SetMcpMetadataRequest,
+    request: components.SetMcpMetadataRequestBody,
     security?: operations.SetMcpMetadataSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.McpMetadata> {

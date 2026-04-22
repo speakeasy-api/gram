@@ -22,7 +22,7 @@ export class Policies extends ClientSDK {
    * Create a new risk analysis policy for the current project.
    */
   async create(
-    request: operations.CreateRiskPolicyRequest,
+    request: components.CreateRiskPolicyRequestBody,
     security?: operations.CreateRiskPolicySecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.RiskPolicy> {
@@ -79,13 +79,11 @@ export class Policies extends ClientSDK {
    * List all risk analysis policies for the current project.
    */
   async list(
-    request?: operations.ListRiskPoliciesRequest | undefined,
     security?: operations.ListRiskPoliciesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListRiskPoliciesResult> {
     return unwrapAsync(riskPoliciesList(
       this,
-      request,
       security,
       options,
     ));
@@ -117,7 +115,7 @@ export class Policies extends ClientSDK {
    * Manually trigger risk analysis for a policy, starting or signaling the drain workflow.
    */
   async trigger(
-    request: operations.TriggerRiskAnalysisRequest,
+    request: components.TriggerRiskAnalysisRequestBody,
     security?: operations.TriggerRiskAnalysisSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
@@ -136,7 +134,7 @@ export class Policies extends ClientSDK {
    * Update a risk analysis policy.
    */
   async update(
-    request: operations.UpdateRiskPolicyRequest,
+    request: components.UpdateRiskPolicyRequestBody,
     security?: operations.UpdateRiskPolicySecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.RiskPolicy> {

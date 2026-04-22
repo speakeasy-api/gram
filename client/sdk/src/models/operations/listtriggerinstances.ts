@@ -10,17 +10,6 @@ export type ListTriggerInstancesSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type ListTriggerInstancesRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-};
-
 /** @internal */
 export type ListTriggerInstancesSecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
@@ -50,39 +39,6 @@ export function listTriggerInstancesSecurityToJSON(
   return JSON.stringify(
     ListTriggerInstancesSecurity$outboundSchema.parse(
       listTriggerInstancesSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type ListTriggerInstancesRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const ListTriggerInstancesRequest$outboundSchema: z.ZodMiniType<
-  ListTriggerInstancesRequest$Outbound,
-  ListTriggerInstancesRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
-
-export function listTriggerInstancesRequestToJSON(
-  listTriggerInstancesRequest: ListTriggerInstancesRequest,
-): string {
-  return JSON.stringify(
-    ListTriggerInstancesRequest$outboundSchema.parse(
-      listTriggerInstancesRequest,
     ),
   );
 }

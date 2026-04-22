@@ -20,21 +20,6 @@ export type ListAssetsSecurity = {
   option2?: ListAssetsSecurityOption2 | undefined;
 };
 
-export type ListAssetsRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-};
-
 /** @internal */
 export type ListAssetsSecurityOption1$Outbound = {
   "apikey_header_Gram-Key": string;
@@ -125,39 +110,5 @@ export function listAssetsSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListAssetsSecurity$outboundSchema.parse(listAssetsSecurity),
-  );
-}
-
-/** @internal */
-export type ListAssetsRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-};
-
-/** @internal */
-export const ListAssetsRequest$outboundSchema: z.ZodMiniType<
-  ListAssetsRequest$Outbound,
-  ListAssetsRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      gramKey: "Gram-Key",
-    });
-  }),
-);
-
-export function listAssetsRequestToJSON(
-  listAssetsRequest: ListAssetsRequest,
-): string {
-  return JSON.stringify(
-    ListAssetsRequest$outboundSchema.parse(listAssetsRequest),
   );
 }

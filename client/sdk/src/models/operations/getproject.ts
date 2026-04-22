@@ -15,14 +15,6 @@ export type GetProjectRequest = {
    * The slug of the project to get
    */
   slug: string;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
 };
 
 /** @internal */
@@ -59,27 +51,15 @@ export function getProjectSecurityToJSON(
 /** @internal */
 export type GetProjectRequest$Outbound = {
   slug: string;
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
 export const GetProjectRequest$outboundSchema: z.ZodMiniType<
   GetProjectRequest$Outbound,
   GetProjectRequest
-> = z.pipe(
-  z.object({
-    slug: z.string(),
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-    });
-  }),
-);
+> = z.object({
+  slug: z.string(),
+});
 
 export function getProjectRequestToJSON(
   getProjectRequest: GetProjectRequest,

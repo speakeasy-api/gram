@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildRemoteMcpServersQuery,
   prefetchRemoteMcpServers,
@@ -59,7 +55,6 @@ export type RemoteMcpServersQueryError =
  * List all remote MCP servers for a project
  */
 export function useRemoteMcpServers(
-  request?: operations.ListRemoteMcpServersRequest | undefined,
   security?: operations.ListRemoteMcpServersSecurity | undefined,
   options?: QueryHookOptions<
     RemoteMcpServersQueryData,
@@ -70,7 +65,6 @@ export function useRemoteMcpServers(
   return useQuery({
     ...buildRemoteMcpServersQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -85,7 +79,6 @@ export function useRemoteMcpServers(
  * List all remote MCP servers for a project
  */
 export function useRemoteMcpServersSuspense(
-  request?: operations.ListRemoteMcpServersRequest | undefined,
   security?: operations.ListRemoteMcpServersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RemoteMcpServersQueryData,
@@ -99,7 +92,6 @@ export function useRemoteMcpServersSuspense(
   return useSuspenseQuery({
     ...buildRemoteMcpServersQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -109,35 +101,11 @@ export function useRemoteMcpServersSuspense(
 
 export function setRemoteMcpServersData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: RemoteMcpServersQueryData,
 ): RemoteMcpServersQueryData | undefined {
-  const key = queryKeyRemoteMcpServers(...queryKeyBase);
+  const key = queryKeyRemoteMcpServers();
 
   return client.setQueryData<RemoteMcpServersQueryData>(key, data);
-}
-
-export function invalidateRemoteMcpServers(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "remoteMcp", "listServers", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllRemoteMcpServers(

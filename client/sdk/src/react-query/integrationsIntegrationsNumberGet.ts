@@ -113,12 +113,7 @@ export function useIntegrationsIntegrationsNumberGetSuspense(
 export function setIntegrationsIntegrationsNumberGetData(
   client: QueryClient,
   queryKeyBase: [
-    parameters: {
-      id?: string | undefined;
-      name?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
+    parameters: { id?: string | undefined; name?: string | undefined },
   ],
   data: IntegrationsIntegrationsNumberGetQueryData,
 ): IntegrationsIntegrationsNumberGetQueryData | undefined {
@@ -133,12 +128,7 @@ export function setIntegrationsIntegrationsNumberGetData(
 export function invalidateIntegrationsIntegrationsNumberGet(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id?: string | undefined;
-      name?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
+    [parameters: { id?: string | undefined; name?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

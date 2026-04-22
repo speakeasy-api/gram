@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type ChatSessionsCreateMutationVariables = {
-  request: operations.CreateChatSessionRequest;
+  request: components.CreateRequestBody;
   security?: operations.CreateChatSessionSecurity | undefined;
   options?: RequestOptions;
 };

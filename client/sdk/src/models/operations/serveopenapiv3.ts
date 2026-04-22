@@ -22,14 +22,6 @@ export type ServeOpenAPIv3Request = {
    * The procect ID that the asset belongs to
    */
   projectId: string;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
 };
 
 export type ServeOpenAPIv3Response = {
@@ -72,8 +64,6 @@ export function serveOpenAPIv3SecurityToJSON(
 export type ServeOpenAPIv3Request$Outbound = {
   id: string;
   project_id: string;
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -84,14 +74,10 @@ export const ServeOpenAPIv3Request$outboundSchema: z.ZodMiniType<
   z.object({
     id: z.string(),
     projectId: z.string(),
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       projectId: "project_id",
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
     });
   }),
 );

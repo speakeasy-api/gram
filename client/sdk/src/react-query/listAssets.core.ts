@@ -19,14 +19,12 @@ export type ListAssetsQueryData = components.ListAssetsResult;
 export function prefetchListAssets(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListAssetsRequest | undefined,
   security?: operations.ListAssetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListAssetsQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchListAssets(
 
 export function buildListAssetsQuery(
   client$: GramCore,
-  request?: operations.ListAssetsRequest | undefined,
   security?: operations.ListAssetsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,11 +40,7 @@ export function buildListAssetsQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ListAssetsQueryData>;
 } {
   return {
-    queryKey: queryKeyListAssets({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-      gramKey: request?.gramKey,
-    }),
+    queryKey: queryKeyListAssets(),
     queryFn: async function listAssetsQueryFn(
       ctx,
     ): Promise<ListAssetsQueryData> {
@@ -64,7 +57,6 @@ export function buildListAssetsQuery(
 
       return unwrapAsync(assetsListAssets(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -72,12 +64,6 @@ export function buildListAssetsQuery(
   };
 }
 
-export function queryKeyListAssets(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-    gramKey?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "assets", "listAssets", parameters];
+export function queryKeyListAssets(): QueryKey {
+  return ["@gram/client", "assets", "listAssets"];
 }

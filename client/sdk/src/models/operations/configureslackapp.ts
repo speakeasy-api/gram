@@ -4,23 +4,10 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type ConfigureSlackAppSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
-};
-
-export type ConfigureSlackAppRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  configureSlackAppRequestBody: components.ConfigureSlackAppRequestBody;
 };
 
 /** @internal */
@@ -51,41 +38,5 @@ export function configureSlackAppSecurityToJSON(
 ): string {
   return JSON.stringify(
     ConfigureSlackAppSecurity$outboundSchema.parse(configureSlackAppSecurity),
-  );
-}
-
-/** @internal */
-export type ConfigureSlackAppRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  ConfigureSlackAppRequestBody:
-    components.ConfigureSlackAppRequestBody$Outbound;
-};
-
-/** @internal */
-export const ConfigureSlackAppRequest$outboundSchema: z.ZodMiniType<
-  ConfigureSlackAppRequest$Outbound,
-  ConfigureSlackAppRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    configureSlackAppRequestBody:
-      components.ConfigureSlackAppRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      configureSlackAppRequestBody: "ConfigureSlackAppRequestBody",
-    });
-  }),
-);
-
-export function configureSlackAppRequestToJSON(
-  configureSlackAppRequest: ConfigureSlackAppRequest,
-): string {
-  return JSON.stringify(
-    ConfigureSlackAppRequest$outboundSchema.parse(configureSlackAppRequest),
   );
 }

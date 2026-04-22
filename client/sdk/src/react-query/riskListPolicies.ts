@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildRiskListPoliciesQuery,
   prefetchRiskListPolicies,
@@ -59,7 +55,6 @@ export type RiskListPoliciesQueryError =
  * List all risk analysis policies for the current project.
  */
 export function useRiskListPolicies(
-  request?: operations.ListRiskPoliciesRequest | undefined,
   security?: operations.ListRiskPoliciesSecurity | undefined,
   options?: QueryHookOptions<
     RiskListPoliciesQueryData,
@@ -70,7 +65,6 @@ export function useRiskListPolicies(
   return useQuery({
     ...buildRiskListPoliciesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -85,7 +79,6 @@ export function useRiskListPolicies(
  * List all risk analysis policies for the current project.
  */
 export function useRiskListPoliciesSuspense(
-  request?: operations.ListRiskPoliciesRequest | undefined,
   security?: operations.ListRiskPoliciesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskListPoliciesQueryData,
@@ -99,7 +92,6 @@ export function useRiskListPoliciesSuspense(
   return useSuspenseQuery({
     ...buildRiskListPoliciesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -109,35 +101,11 @@ export function useRiskListPoliciesSuspense(
 
 export function setRiskListPoliciesData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: RiskListPoliciesQueryData,
 ): RiskListPoliciesQueryData | undefined {
-  const key = queryKeyRiskListPolicies(...queryKeyBase);
+  const key = queryKeyRiskListPolicies();
 
   return client.setQueryData<RiskListPoliciesQueryData>(key, data);
-}
-
-export function invalidateRiskListPolicies(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "policies", "list", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllRiskListPolicies(

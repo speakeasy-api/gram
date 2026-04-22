@@ -43,12 +43,7 @@ export function buildListDeploymentsQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ListDeploymentsQueryData>;
 } {
   return {
-    queryKey: queryKeyListDeployments({
-      cursor: request?.cursor,
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyListDeployments({ cursor: request?.cursor }),
     queryFn: async function listDeploymentsQueryFn(
       ctx,
     ): Promise<ListDeploymentsQueryData> {
@@ -74,12 +69,7 @@ export function buildListDeploymentsQuery(
 }
 
 export function queryKeyListDeployments(
-  parameters: {
-    cursor?: string | undefined;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { cursor?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "deployments", "list", parameters];
 }

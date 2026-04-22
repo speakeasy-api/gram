@@ -11,6 +11,7 @@ import { GramCore } from "../core.js";
 import { collectionsDetachServer } from "../funcs/collectionsDetachServer.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CollectionsDetachServerMutationVariables = {
-  request: operations.DetachServerFromCollectionRequest;
+  request: components.AttachServerRequestBody;
   security?: operations.DetachServerFromCollectionSecurity | undefined;
   options?: RequestOptions;
 };

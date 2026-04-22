@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListChatsQuery,
   ListChatsQueryData,
@@ -59,7 +55,6 @@ export type ListChatsQueryError =
  * List all chats for a project
  */
 export function useListChats(
-  request?: operations.ListChatsRequest | undefined,
   security?: operations.ListChatsSecurity | undefined,
   options?: QueryHookOptions<ListChatsQueryData, ListChatsQueryError>,
 ): UseQueryResult<ListChatsQueryData, ListChatsQueryError> {
@@ -67,7 +62,6 @@ export function useListChats(
   return useQuery({
     ...buildListChatsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useListChats(
  * List all chats for a project
  */
 export function useListChatsSuspense(
-  request?: operations.ListChatsRequest | undefined,
   security?: operations.ListChatsSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListChatsQueryData, ListChatsQueryError>,
 ): UseSuspenseQueryResult<ListChatsQueryData, ListChatsQueryError> {
@@ -90,7 +83,6 @@ export function useListChatsSuspense(
   return useSuspenseQuery({
     ...buildListChatsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -100,35 +92,11 @@ export function useListChatsSuspense(
 
 export function setListChatsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-      gramChatSession?: string | undefined;
-    },
-  ],
   data: ListChatsQueryData,
 ): ListChatsQueryData | undefined {
-  const key = queryKeyListChats(...queryKeyBase);
+  const key = queryKeyListChats();
 
   return client.setQueryData<ListChatsQueryData>(key, data);
-}
-
-export function invalidateListChats(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-      gramChatSession?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "chat", "list", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllListChats(

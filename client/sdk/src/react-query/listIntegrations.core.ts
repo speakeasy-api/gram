@@ -45,11 +45,7 @@ export function buildListIntegrationsQuery(
   ) => Promise<ListIntegrationsQueryData>;
 } {
   return {
-    queryKey: queryKeyListIntegrations({
-      keywords: request?.keywords,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyListIntegrations({ keywords: request?.keywords }),
     queryFn: async function listIntegrationsQueryFn(
       ctx,
     ): Promise<ListIntegrationsQueryData> {
@@ -75,11 +71,7 @@ export function buildListIntegrationsQuery(
 }
 
 export function queryKeyListIntegrations(
-  parameters: {
-    keywords?: Array<string> | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { keywords?: Array<string> | undefined },
 ): QueryKey {
   return ["@gram/client", "integrations", "list", parameters];
 }

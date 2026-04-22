@@ -20,21 +20,6 @@ export type ListRemoteMcpServersSecurity = {
   option2?: ListRemoteMcpServersSecurityOption2 | undefined;
 };
 
-export type ListRemoteMcpServersRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-};
-
 /** @internal */
 export type ListRemoteMcpServersSecurityOption1$Outbound = {
   "project_slug_header_Gram-Project": string;
@@ -134,42 +119,6 @@ export function listRemoteMcpServersSecurityToJSON(
   return JSON.stringify(
     ListRemoteMcpServersSecurity$outboundSchema.parse(
       listRemoteMcpServersSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type ListRemoteMcpServersRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const ListRemoteMcpServersRequest$outboundSchema: z.ZodMiniType<
-  ListRemoteMcpServersRequest$Outbound,
-  ListRemoteMcpServersRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
-
-export function listRemoteMcpServersRequestToJSON(
-  listRemoteMcpServersRequest: ListRemoteMcpServersRequest,
-): string {
-  return JSON.stringify(
-    ListRemoteMcpServersRequest$outboundSchema.parse(
-      listRemoteMcpServersRequest,
     ),
   );
 }

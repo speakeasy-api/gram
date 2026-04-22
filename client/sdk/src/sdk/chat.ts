@@ -22,13 +22,11 @@ export class Chat extends ClientSDK {
    * Get the total number of chat credits and usage for the current billing period
    */
   async creditUsage(
-    request?: operations.CreditUsageRequest | undefined,
     security?: operations.CreditUsageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.CreditUsageResponseBody> {
     return unwrapAsync(chatCreditUsage(
       this,
-      request,
       security,
       options,
     ));
@@ -60,7 +58,7 @@ export class Chat extends ClientSDK {
    * Generate a title for a chat based on its messages
    */
   async generateTitle(
-    request: operations.GenerateTitleRequest,
+    request: components.ServeImageForm,
     security?: operations.GenerateTitleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GenerateTitleResponseBody> {
@@ -79,13 +77,11 @@ export class Chat extends ClientSDK {
    * List all chats for a project
    */
   async list(
-    request?: operations.ListChatsRequest | undefined,
     security?: operations.ListChatsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListChatsResult> {
     return unwrapAsync(chatList(
       this,
-      request,
       security,
       options,
     ));
@@ -136,7 +132,7 @@ export class Chat extends ClientSDK {
    * Submit user feedback for a chat (success/failure)
    */
   async submitFeedback(
-    request: operations.SubmitFeedbackRequest,
+    request: components.SubmitFeedbackRequestBody,
     security?: operations.SubmitFeedbackSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.CaptureEventResult> {

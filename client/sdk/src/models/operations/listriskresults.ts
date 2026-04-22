@@ -33,18 +33,6 @@ export type ListRiskResultsRequest = {
    * Cursor to fetch the next page of results.
    */
   cursor?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -153,9 +141,6 @@ export type ListRiskResultsRequest$Outbound = {
   policy_id?: string | undefined;
   chat_id?: string | undefined;
   cursor?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -167,17 +152,11 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
     policyId: z.optional(z.string()),
     chatId: z.optional(z.string()),
     cursor: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       policyId: "policy_id",
       chatId: "chat_id",
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
     });
   }),
 );

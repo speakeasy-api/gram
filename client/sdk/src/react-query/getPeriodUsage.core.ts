@@ -19,14 +19,12 @@ export type GetPeriodUsageQueryData = components.PeriodUsage;
 export function prefetchGetPeriodUsage(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetPeriodUsageRequest | undefined,
   security?: operations.GetPeriodUsageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildGetPeriodUsageQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchGetPeriodUsage(
 
 export function buildGetPeriodUsageQuery(
   client$: GramCore,
-  request?: operations.GetPeriodUsageRequest | undefined,
   security?: operations.GetPeriodUsageSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,7 +40,7 @@ export function buildGetPeriodUsageQuery(
   queryFn: (context: QueryFunctionContext) => Promise<GetPeriodUsageQueryData>;
 } {
   return {
-    queryKey: queryKeyGetPeriodUsage({ gramSession: request?.gramSession }),
+    queryKey: queryKeyGetPeriodUsage(),
     queryFn: async function getPeriodUsageQueryFn(
       ctx,
     ): Promise<GetPeriodUsageQueryData> {
@@ -60,7 +57,6 @@ export function buildGetPeriodUsageQuery(
 
       return unwrapAsync(usageGetPeriodUsage(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -68,8 +64,6 @@ export function buildGetPeriodUsageQuery(
   };
 }
 
-export function queryKeyGetPeriodUsage(
-  parameters: { gramSession?: string | undefined },
-): QueryKey {
-  return ["@gram/client", "usage", "getPeriodUsage", parameters];
+export function queryKeyGetPeriodUsage(): QueryKey {
+  return ["@gram/client", "usage", "getPeriodUsage"];
 }

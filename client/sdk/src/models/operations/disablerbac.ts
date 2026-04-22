@@ -9,13 +9,6 @@ export type DisableRBACSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type DisableRBACRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-};
-
 /** @internal */
 export type DisableRBACSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
@@ -41,33 +34,5 @@ export function disableRBACSecurityToJSON(
 ): string {
   return JSON.stringify(
     DisableRBACSecurity$outboundSchema.parse(disableRBACSecurity),
-  );
-}
-
-/** @internal */
-export type DisableRBACRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const DisableRBACRequest$outboundSchema: z.ZodMiniType<
-  DisableRBACRequest$Outbound,
-  DisableRBACRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-    });
-  }),
-);
-
-export function disableRBACRequestToJSON(
-  disableRBACRequest: DisableRBACRequest,
-): string {
-  return JSON.stringify(
-    DisableRBACRequest$outboundSchema.parse(disableRBACRequest),
   );
 }

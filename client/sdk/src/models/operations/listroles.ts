@@ -10,17 +10,6 @@ export type ListRolesSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type ListRolesRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-};
-
 /** @internal */
 export type ListRolesSecurity$Outbound = {
   "apikey_header_Gram-Key"?: string | undefined;
@@ -49,36 +38,5 @@ export function listRolesSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListRolesSecurity$outboundSchema.parse(listRolesSecurity),
-  );
-}
-
-/** @internal */
-export type ListRolesRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const ListRolesRequest$outboundSchema: z.ZodMiniType<
-  ListRolesRequest$Outbound,
-  ListRolesRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-    });
-  }),
-);
-
-export function listRolesRequestToJSON(
-  listRolesRequest: ListRolesRequest,
-): string {
-  return JSON.stringify(
-    ListRolesRequest$outboundSchema.parse(listRolesRequest),
   );
 }

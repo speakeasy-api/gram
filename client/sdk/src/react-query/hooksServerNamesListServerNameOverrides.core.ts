@@ -21,14 +21,12 @@ export type HooksServerNamesListServerNameOverridesQueryData = Array<
 export function prefetchHooksServerNamesListServerNameOverrides(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListServerNameOverridesRequest | undefined,
   security?: operations.ListServerNameOverridesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildHooksServerNamesListServerNameOverridesQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -37,7 +35,6 @@ export function prefetchHooksServerNamesListServerNameOverrides(
 
 export function buildHooksServerNamesListServerNameOverridesQuery(
   client$: GramCore,
-  request?: operations.ListServerNameOverridesRequest | undefined,
   security?: operations.ListServerNameOverridesSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -47,11 +44,7 @@ export function buildHooksServerNamesListServerNameOverridesQuery(
   ) => Promise<HooksServerNamesListServerNameOverridesQueryData>;
 } {
   return {
-    queryKey: queryKeyHooksServerNamesListServerNameOverrides({
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyHooksServerNamesListServerNameOverrides(),
     queryFn: async function hooksServerNamesListServerNameOverridesQueryFn(
       ctx,
     ): Promise<HooksServerNamesListServerNameOverridesQueryData> {
@@ -68,7 +61,6 @@ export function buildHooksServerNamesListServerNameOverridesQuery(
 
       return unwrapAsync(hooksServerNamesListServerNameOverrides(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -76,17 +68,6 @@ export function buildHooksServerNamesListServerNameOverridesQuery(
   };
 }
 
-export function queryKeyHooksServerNamesListServerNameOverrides(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return [
-    "@gram/client",
-    "hooksServerNames",
-    "listServerNameOverrides",
-    parameters,
-  ];
+export function queryKeyHooksServerNamesListServerNameOverrides(): QueryKey {
+  return ["@gram/client", "hooksServerNames", "listServerNameOverrides"];
 }

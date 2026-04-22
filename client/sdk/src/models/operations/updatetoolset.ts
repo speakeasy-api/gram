@@ -26,18 +26,6 @@ export type UpdateToolsetRequest = {
    * The slug of the toolset to update
    */
   slug: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
   updateToolsetRequestBody: components.UpdateToolsetRequestBody;
 };
 
@@ -145,9 +133,6 @@ export function updateToolsetSecurityToJSON(
 /** @internal */
 export type UpdateToolsetRequest$Outbound = {
   slug: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
   UpdateToolsetRequestBody: components.UpdateToolsetRequestBody$Outbound;
 };
 
@@ -158,17 +143,11 @@ export const UpdateToolsetRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     slug: z.string(),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
     updateToolsetRequestBody:
       components.UpdateToolsetRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
       updateToolsetRequestBody: "UpdateToolsetRequestBody",
     });
   }),

@@ -4,23 +4,10 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type AttachServerToCollectionSecurity = {
   sessionHeaderGramSession?: string | undefined;
   apikeyHeaderGramKey?: string | undefined;
-};
-
-export type AttachServerToCollectionRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  attachServerRequestBody: components.AttachServerRequestBody;
 };
 
 /** @internal */
@@ -52,42 +39,6 @@ export function attachServerToCollectionSecurityToJSON(
   return JSON.stringify(
     AttachServerToCollectionSecurity$outboundSchema.parse(
       attachServerToCollectionSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type AttachServerToCollectionRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  AttachServerRequestBody: components.AttachServerRequestBody$Outbound;
-};
-
-/** @internal */
-export const AttachServerToCollectionRequest$outboundSchema: z.ZodMiniType<
-  AttachServerToCollectionRequest$Outbound,
-  AttachServerToCollectionRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    attachServerRequestBody: components.AttachServerRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      attachServerRequestBody: "AttachServerRequestBody",
-    });
-  }),
-);
-
-export function attachServerToCollectionRequestToJSON(
-  attachServerToCollectionRequest: AttachServerToCollectionRequest,
-): string {
-  return JSON.stringify(
-    AttachServerToCollectionRequest$outboundSchema.parse(
-      attachServerToCollectionRequest,
     ),
   );
 }

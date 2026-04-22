@@ -103,14 +103,7 @@ export function useServeFunctionSuspense(
 
 export function setServeFunctionData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      id: string;
-      projectId: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { id: string; projectId: string }],
   data: ServeFunctionQueryData,
 ): ServeFunctionQueryData | undefined {
   const key = queryKeyServeFunction(...queryKeyBase);
@@ -121,12 +114,7 @@ export function setServeFunctionData(
 export function invalidateServeFunction(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id: string;
-      projectId: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    }]
+    [parameters: { id: string; projectId: string }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

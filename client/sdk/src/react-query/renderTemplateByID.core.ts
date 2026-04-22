@@ -45,12 +45,7 @@ export function buildRenderTemplateByIDQuery(
   ) => Promise<RenderTemplateByIDQueryData>;
 } {
   return {
-    queryKey: queryKeyRenderTemplateByID({
-      id: request.id,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyRenderTemplateByID({ id: request.id }),
     queryFn: async function renderTemplateByIDQueryFn(
       ctx,
     ): Promise<RenderTemplateByIDQueryData> {
@@ -76,12 +71,7 @@ export function buildRenderTemplateByIDQuery(
 }
 
 export function queryKeyRenderTemplateByID(
-  parameters: {
-    id: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { id: string },
 ): QueryKey {
   return ["@gram/client", "templates", "renderByID", parameters];
 }

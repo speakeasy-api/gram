@@ -25,7 +25,7 @@ export class Plugins extends ClientSDK {
    * Add an MCP server to a plugin.
    */
   async addPluginServer(
-    request: operations.AddPluginServerRequest,
+    request: components.AddPluginServerForm,
     security?: operations.AddPluginServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.PluginServer> {
@@ -44,7 +44,7 @@ export class Plugins extends ClientSDK {
    * Create a new plugin.
    */
   async createPlugin(
-    request: operations.CreatePluginRequest,
+    request: components.CreatePluginForm,
     security?: operations.CreatePluginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.Plugin> {
@@ -120,13 +120,11 @@ export class Plugins extends ClientSDK {
    * List all plugins for the current project.
    */
   async listPlugins(
-    request?: operations.ListPluginsRequest | undefined,
     security?: operations.ListPluginsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListPluginsResult> {
     return unwrapAsync(pluginsListPlugins(
       this,
-      request,
       security,
       options,
     ));
@@ -158,7 +156,7 @@ export class Plugins extends ClientSDK {
    * Replace all assignments for a plugin with the given list of principal URNs.
    */
   async setPluginAssignments(
-    request: operations.SetPluginAssignmentsRequest,
+    request: components.SetPluginAssignmentsForm,
     security?: operations.SetPluginAssignmentsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.SetPluginAssignmentsResponseBody> {
@@ -177,7 +175,7 @@ export class Plugins extends ClientSDK {
    * Update plugin metadata.
    */
   async updatePlugin(
-    request: operations.UpdatePluginRequest,
+    request: components.UpdatePluginForm,
     security?: operations.UpdatePluginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.Plugin> {
@@ -196,7 +194,7 @@ export class Plugins extends ClientSDK {
    * Update a server's configuration within a plugin.
    */
   async updatePluginServer(
-    request: operations.UpdatePluginServerRequest,
+    request: components.UpdatePluginServerForm,
     security?: operations.UpdatePluginServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.PluginServer> {

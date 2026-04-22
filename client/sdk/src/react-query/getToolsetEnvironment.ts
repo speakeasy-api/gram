@@ -112,13 +112,7 @@ export function useGetToolsetEnvironmentSuspense(
 
 export function setGetToolsetEnvironmentData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      toolsetId: string;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { toolsetId: string }],
   data: GetToolsetEnvironmentQueryData,
 ): GetToolsetEnvironmentQueryData | undefined {
   const key = queryKeyGetToolsetEnvironment(...queryKeyBase);
@@ -128,13 +122,7 @@ export function setGetToolsetEnvironmentData(
 
 export function invalidateGetToolsetEnvironment(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      toolsetId: string;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { toolsetId: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

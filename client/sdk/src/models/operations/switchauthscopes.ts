@@ -21,10 +21,6 @@ export type SwitchAuthScopesRequest = {
    * The project id to switch scopes too
    */
   projectId?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
 };
 
 export type SwitchAuthScopesResponse = {
@@ -63,7 +59,6 @@ export function switchAuthScopesSecurityToJSON(
 export type SwitchAuthScopesRequest$Outbound = {
   organization_id?: string | undefined;
   project_id?: string | undefined;
-  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -74,13 +69,11 @@ export const SwitchAuthScopesRequest$outboundSchema: z.ZodMiniType<
   z.object({
     organizationId: z.optional(z.string()),
     projectId: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       organizationId: "organization_id",
       projectId: "project_id",
-      gramSession: "Gram-Session",
     });
   }),
 );

@@ -76,13 +76,11 @@ export class McpRegistries extends ClientSDK {
    * List all MCP registries (admin only)
    */
   async listRegistries(
-    request?: operations.ListMCPRegistriesRequest | undefined,
     security?: operations.ListMCPRegistriesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListRegistriesResponseBody> {
     return unwrapAsync(mcpRegistriesListRegistries(
       this,
-      request,
       security,
       options,
     ));

@@ -14,10 +14,6 @@ export type RevokeAPIKeyRequest = {
    * The ID of the key to revoke
    */
   id: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
 };
 
 /** @internal */
@@ -51,24 +47,15 @@ export function revokeAPIKeySecurityToJSON(
 /** @internal */
 export type RevokeAPIKeyRequest$Outbound = {
   id: string;
-  "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
 export const RevokeAPIKeyRequest$outboundSchema: z.ZodMiniType<
   RevokeAPIKeyRequest$Outbound,
   RevokeAPIKeyRequest
-> = z.pipe(
-  z.object({
-    id: z.string(),
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-    });
-  }),
-);
+> = z.object({
+  id: z.string(),
+});
 
 export function revokeAPIKeyRequestToJSON(
   revokeAPIKeyRequest: RevokeAPIKeyRequest,

@@ -9,13 +9,6 @@ export type GetProductFeaturesSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type GetProductFeaturesRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-};
-
 /** @internal */
 export type GetProductFeaturesSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
@@ -41,33 +34,5 @@ export function getProductFeaturesSecurityToJSON(
 ): string {
   return JSON.stringify(
     GetProductFeaturesSecurity$outboundSchema.parse(getProductFeaturesSecurity),
-  );
-}
-
-/** @internal */
-export type GetProductFeaturesRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const GetProductFeaturesRequest$outboundSchema: z.ZodMiniType<
-  GetProductFeaturesRequest$Outbound,
-  GetProductFeaturesRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-    });
-  }),
-);
-
-export function getProductFeaturesRequestToJSON(
-  getProductFeaturesRequest: GetProductFeaturesRequest,
-): string {
-  return JSON.stringify(
-    GetProductFeaturesRequest$outboundSchema.parse(getProductFeaturesRequest),
   );
 }

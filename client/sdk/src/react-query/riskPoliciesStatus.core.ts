@@ -45,12 +45,7 @@ export function buildRiskPoliciesStatusQuery(
   ) => Promise<RiskPoliciesStatusQueryData>;
 } {
   return {
-    queryKey: queryKeyRiskPoliciesStatus({
-      id: request.id,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyRiskPoliciesStatus({ id: request.id }),
     queryFn: async function riskPoliciesStatusQueryFn(
       ctx,
     ): Promise<RiskPoliciesStatusQueryData> {
@@ -76,12 +71,7 @@ export function buildRiskPoliciesStatusQuery(
 }
 
 export function queryKeyRiskPoliciesStatus(
-  parameters: {
-    id: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { id: string },
 ): QueryKey {
   return ["@gram/client", "policies", "status", parameters];
 }

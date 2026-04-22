@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RedeployDeploymentMutationVariables = {
-  request: operations.RedeployDeploymentRequest;
+  request: components.RedeployRequestBody;
   security?: operations.RedeployDeploymentSecurity | undefined;
   options?: RequestOptions;
 };

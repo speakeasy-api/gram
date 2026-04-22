@@ -112,14 +112,7 @@ export function useRiskListResultsByChatSuspense(
 
 export function setRiskListResultsByChatData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      cursor?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { cursor?: string | undefined }],
   data: RiskListResultsByChatQueryData,
 ): RiskListResultsByChatQueryData | undefined {
   const key = queryKeyRiskListResultsByChat(...queryKeyBase);
@@ -129,14 +122,7 @@ export function setRiskListResultsByChatData(
 
 export function invalidateRiskListResultsByChat(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      cursor?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { cursor?: string | undefined }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

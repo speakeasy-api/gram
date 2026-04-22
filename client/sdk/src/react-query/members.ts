@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildMembersQuery,
   MembersQueryData,
@@ -59,7 +55,6 @@ export type MembersQueryError =
  * List all team members with their role assignments.
  */
 export function useMembers(
-  request?: operations.ListMembersRequest | undefined,
   security?: operations.ListMembersSecurity | undefined,
   options?: QueryHookOptions<MembersQueryData, MembersQueryError>,
 ): UseQueryResult<MembersQueryData, MembersQueryError> {
@@ -67,7 +62,6 @@ export function useMembers(
   return useQuery({
     ...buildMembersQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useMembers(
  * List all team members with their role assignments.
  */
 export function useMembersSuspense(
-  request?: operations.ListMembersRequest | undefined,
   security?: operations.ListMembersSecurity | undefined,
   options?: SuspenseQueryHookOptions<MembersQueryData, MembersQueryError>,
 ): UseSuspenseQueryResult<MembersQueryData, MembersQueryError> {
@@ -90,7 +83,6 @@ export function useMembersSuspense(
   return useSuspenseQuery({
     ...buildMembersQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -100,33 +92,11 @@ export function useMembersSuspense(
 
 export function setMembersData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    },
-  ],
   data: MembersQueryData,
 ): MembersQueryData | undefined {
-  const key = queryKeyMembers(...queryKeyBase);
+  const key = queryKeyMembers();
 
   return client.setQueryData<MembersQueryData>(key, data);
-}
-
-export function invalidateMembers(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "access", "listMembers", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllMembers(

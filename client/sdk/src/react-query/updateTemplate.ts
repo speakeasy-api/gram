@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UpdateTemplateMutationVariables = {
-  request: operations.UpdateTemplateRequest;
+  request: components.UpdatePromptTemplateForm;
   security?: operations.UpdateTemplateSecurity | undefined;
   options?: RequestOptions;
 };

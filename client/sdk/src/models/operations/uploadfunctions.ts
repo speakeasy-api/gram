@@ -22,18 +22,6 @@ export type UploadFunctionsSecurity = {
 
 export type UploadFunctionsRequest = {
   contentLength: number;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
   requestBody: ReadableStream<Uint8Array> | Blob | ArrayBuffer | Uint8Array;
 };
 
@@ -141,9 +129,6 @@ export function uploadFunctionsSecurityToJSON(
 /** @internal */
 export type UploadFunctionsRequest$Outbound = {
   "Content-Length": number;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  "Gram-Session"?: string | undefined;
   RequestBody: ReadableStream<Uint8Array> | Blob | ArrayBuffer | Uint8Array;
 };
 
@@ -154,9 +139,6 @@ export const UploadFunctionsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     contentLength: z.int(),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
     requestBody: z.union([
       z.custom<ReadableStream<Uint8Array>>(x => x instanceof ReadableStream),
       z.custom<Blob>(x => x instanceof Blob),
@@ -167,9 +149,6 @@ export const UploadFunctionsRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       contentLength: "Content-Length",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-      gramSession: "Gram-Session",
       requestBody: "RequestBody",
     });
   }),

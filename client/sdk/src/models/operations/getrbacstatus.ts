@@ -9,13 +9,6 @@ export type GetRBACStatusSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type GetRBACStatusRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-};
-
 /** @internal */
 export type GetRBACStatusSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
@@ -41,33 +34,5 @@ export function getRBACStatusSecurityToJSON(
 ): string {
   return JSON.stringify(
     GetRBACStatusSecurity$outboundSchema.parse(getRBACStatusSecurity),
-  );
-}
-
-/** @internal */
-export type GetRBACStatusRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const GetRBACStatusRequest$outboundSchema: z.ZodMiniType<
-  GetRBACStatusRequest$Outbound,
-  GetRBACStatusRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-    });
-  }),
-);
-
-export function getRBACStatusRequestToJSON(
-  getRBACStatusRequest: GetRBACStatusRequest,
-): string {
-  return JSON.stringify(
-    GetRBACStatusRequest$outboundSchema.parse(getRBACStatusRequest),
   );
 }

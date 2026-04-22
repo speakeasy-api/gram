@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type CreateChatSessionSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -19,22 +18,6 @@ export type CreateChatSessionSecurityOption2 = {
 export type CreateChatSessionSecurity = {
   option1?: CreateChatSessionSecurityOption1 | undefined;
   option2?: CreateChatSessionSecurityOption2 | undefined;
-};
-
-export type CreateChatSessionRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  createRequestBody: components.CreateRequestBody;
 };
 
 /** @internal */
@@ -135,42 +118,5 @@ export function createChatSessionSecurityToJSON(
 ): string {
   return JSON.stringify(
     CreateChatSessionSecurity$outboundSchema.parse(createChatSessionSecurity),
-  );
-}
-
-/** @internal */
-export type CreateChatSessionRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  CreateRequestBody: components.CreateRequestBody$Outbound;
-};
-
-/** @internal */
-export const CreateChatSessionRequest$outboundSchema: z.ZodMiniType<
-  CreateChatSessionRequest$Outbound,
-  CreateChatSessionRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    createRequestBody: components.CreateRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-      createRequestBody: "CreateRequestBody",
-    });
-  }),
-);
-
-export function createChatSessionRequestToJSON(
-  createChatSessionRequest: CreateChatSessionRequest,
-): string {
-  return JSON.stringify(
-    CreateChatSessionRequest$outboundSchema.parse(createChatSessionRequest),
   );
 }

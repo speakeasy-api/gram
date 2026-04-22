@@ -17,7 +17,7 @@ export class ChatSessions extends ClientSDK {
    * Creates a new chat session token
    */
   async create(
-    request: operations.CreateChatSessionRequest,
+    request: components.CreateRequestBody,
     security?: operations.CreateChatSessionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.CreateResponseBody> {

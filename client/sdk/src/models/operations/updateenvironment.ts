@@ -16,14 +16,6 @@ export type UpdateEnvironmentRequest = {
    * The slug of the environment to update
    */
   slug: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
   updateEnvironmentRequestBody: components.UpdateEnvironmentRequestBody;
 };
 
@@ -61,8 +53,6 @@ export function updateEnvironmentSecurityToJSON(
 /** @internal */
 export type UpdateEnvironmentRequest$Outbound = {
   slug: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
   UpdateEnvironmentRequestBody:
     components.UpdateEnvironmentRequestBody$Outbound;
 };
@@ -74,15 +64,11 @@ export const UpdateEnvironmentRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     slug: z.string(),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
     updateEnvironmentRequestBody:
       components.UpdateEnvironmentRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
       updateEnvironmentRequestBody: "UpdateEnvironmentRequestBody",
     });
   }),

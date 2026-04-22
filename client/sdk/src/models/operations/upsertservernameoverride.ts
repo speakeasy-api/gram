@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type UpsertServerNameOverrideSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -19,22 +18,6 @@ export type UpsertServerNameOverrideSecurityOption2 = {
 export type UpsertServerNameOverrideSecurity = {
   option1?: UpsertServerNameOverrideSecurityOption1 | undefined;
   option2?: UpsertServerNameOverrideSecurityOption2 | undefined;
-};
-
-export type UpsertServerNameOverrideRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  upsertRequestBody: components.UpsertRequestBody;
 };
 
 /** @internal */
@@ -140,45 +123,6 @@ export function upsertServerNameOverrideSecurityToJSON(
   return JSON.stringify(
     UpsertServerNameOverrideSecurity$outboundSchema.parse(
       upsertServerNameOverrideSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type UpsertServerNameOverrideRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  UpsertRequestBody: components.UpsertRequestBody$Outbound;
-};
-
-/** @internal */
-export const UpsertServerNameOverrideRequest$outboundSchema: z.ZodMiniType<
-  UpsertServerNameOverrideRequest$Outbound,
-  UpsertServerNameOverrideRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    upsertRequestBody: components.UpsertRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      upsertRequestBody: "UpsertRequestBody",
-    });
-  }),
-);
-
-export function upsertServerNameOverrideRequestToJSON(
-  upsertServerNameOverrideRequest: UpsertServerNameOverrideRequest,
-): string {
-  return JSON.stringify(
-    UpsertServerNameOverrideRequest$outboundSchema.parse(
-      upsertServerNameOverrideRequest,
     ),
   );
 }

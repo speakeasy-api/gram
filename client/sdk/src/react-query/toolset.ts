@@ -100,14 +100,7 @@ export function useToolsetSuspense(
 
 export function setToolsetData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      slug: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { slug: string }],
   data: ToolsetQueryData,
 ): ToolsetQueryData | undefined {
   const key = queryKeyToolset(...queryKeyBase);
@@ -117,14 +110,7 @@ export function setToolsetData(
 
 export function invalidateToolset(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      slug: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { slug: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

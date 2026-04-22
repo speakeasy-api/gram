@@ -4,23 +4,10 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type UpdateTriggerInstanceSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
-};
-
-export type UpdateTriggerInstanceRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  updateTriggerInstanceForm: components.UpdateTriggerInstanceForm;
 };
 
 /** @internal */
@@ -52,43 +39,6 @@ export function updateTriggerInstanceSecurityToJSON(
   return JSON.stringify(
     UpdateTriggerInstanceSecurity$outboundSchema.parse(
       updateTriggerInstanceSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type UpdateTriggerInstanceRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  UpdateTriggerInstanceForm: components.UpdateTriggerInstanceForm$Outbound;
-};
-
-/** @internal */
-export const UpdateTriggerInstanceRequest$outboundSchema: z.ZodMiniType<
-  UpdateTriggerInstanceRequest$Outbound,
-  UpdateTriggerInstanceRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    updateTriggerInstanceForm:
-      components.UpdateTriggerInstanceForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      updateTriggerInstanceForm: "UpdateTriggerInstanceForm",
-    });
-  }),
-);
-
-export function updateTriggerInstanceRequestToJSON(
-  updateTriggerInstanceRequest: UpdateTriggerInstanceRequest,
-): string {
-  return JSON.stringify(
-    UpdateTriggerInstanceRequest$outboundSchema.parse(
-      updateTriggerInstanceRequest,
     ),
   );
 }

@@ -4,23 +4,10 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type CreateCollectionSecurity = {
   sessionHeaderGramSession?: string | undefined;
   apikeyHeaderGramKey?: string | undefined;
-};
-
-export type CreateCollectionRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  createRequestBody2: components.CreateRequestBody2;
 };
 
 /** @internal */
@@ -51,39 +38,5 @@ export function createCollectionSecurityToJSON(
 ): string {
   return JSON.stringify(
     CreateCollectionSecurity$outboundSchema.parse(createCollectionSecurity),
-  );
-}
-
-/** @internal */
-export type CreateCollectionRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  CreateRequestBody2: components.CreateRequestBody2$Outbound;
-};
-
-/** @internal */
-export const CreateCollectionRequest$outboundSchema: z.ZodMiniType<
-  CreateCollectionRequest$Outbound,
-  CreateCollectionRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    createRequestBody2: components.CreateRequestBody2$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      createRequestBody2: "CreateRequestBody2",
-    });
-  }),
-);
-
-export function createCollectionRequestToJSON(
-  createCollectionRequest: CreateCollectionRequest,
-): string {
-  return JSON.stringify(
-    CreateCollectionRequest$outboundSchema.parse(createCollectionRequest),
   );
 }

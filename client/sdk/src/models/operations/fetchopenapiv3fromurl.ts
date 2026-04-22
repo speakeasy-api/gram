@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type FetchOpenAPIv3FromURLSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type FetchOpenAPIv3FromURLSecurityOption2 = {
 export type FetchOpenAPIv3FromURLSecurity = {
   option1?: FetchOpenAPIv3FromURLSecurityOption1 | undefined;
   option2?: FetchOpenAPIv3FromURLSecurityOption2 | undefined;
-};
-
-export type FetchOpenAPIv3FromURLRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  fetchOpenAPIv3FromURLForm2: components.FetchOpenAPIv3FromURLForm2;
 };
 
 /** @internal */
@@ -136,46 +119,6 @@ export function fetchOpenAPIv3FromURLSecurityToJSON(
   return JSON.stringify(
     FetchOpenAPIv3FromURLSecurity$outboundSchema.parse(
       fetchOpenAPIv3FromURLSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type FetchOpenAPIv3FromURLRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  FetchOpenAPIv3FromURLForm2: components.FetchOpenAPIv3FromURLForm2$Outbound;
-};
-
-/** @internal */
-export const FetchOpenAPIv3FromURLRequest$outboundSchema: z.ZodMiniType<
-  FetchOpenAPIv3FromURLRequest$Outbound,
-  FetchOpenAPIv3FromURLRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    fetchOpenAPIv3FromURLForm2:
-      components.FetchOpenAPIv3FromURLForm2$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-      gramSession: "Gram-Session",
-      fetchOpenAPIv3FromURLForm2: "FetchOpenAPIv3FromURLForm2",
-    });
-  }),
-);
-
-export function fetchOpenAPIv3FromURLRequestToJSON(
-  fetchOpenAPIv3FromURLRequest: FetchOpenAPIv3FromURLRequest,
-): string {
-  return JSON.stringify(
-    FetchOpenAPIv3FromURLRequest$outboundSchema.parse(
-      fetchOpenAPIv3FromURLRequest,
     ),
   );
 }

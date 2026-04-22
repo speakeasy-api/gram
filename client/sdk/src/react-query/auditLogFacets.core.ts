@@ -43,11 +43,7 @@ export function buildAuditLogFacetsQuery(
   queryFn: (context: QueryFunctionContext) => Promise<AuditLogFacetsQueryData>;
 } {
   return {
-    queryKey: queryKeyAuditLogFacets({
-      projectSlug: request?.projectSlug,
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-    }),
+    queryKey: queryKeyAuditLogFacets({ projectSlug: request?.projectSlug }),
     queryFn: async function auditLogFacetsQueryFn(
       ctx,
     ): Promise<AuditLogFacetsQueryData> {
@@ -73,11 +69,7 @@ export function buildAuditLogFacetsQuery(
 }
 
 export function queryKeyAuditLogFacets(
-  parameters: {
-    projectSlug?: string | undefined;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
+  parameters: { projectSlug?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "auditlogs", "listFacets", parameters];
 }

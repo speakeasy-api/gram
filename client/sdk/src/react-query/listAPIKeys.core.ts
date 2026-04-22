@@ -19,14 +19,12 @@ export type ListAPIKeysQueryData = components.ListKeysResult;
 export function prefetchListAPIKeys(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListAPIKeysRequest | undefined,
   security?: operations.ListAPIKeysSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListAPIKeysQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchListAPIKeys(
 
 export function buildListAPIKeysQuery(
   client$: GramCore,
-  request?: operations.ListAPIKeysRequest | undefined,
   security?: operations.ListAPIKeysSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,7 +40,7 @@ export function buildListAPIKeysQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ListAPIKeysQueryData>;
 } {
   return {
-    queryKey: queryKeyListAPIKeys({ gramSession: request?.gramSession }),
+    queryKey: queryKeyListAPIKeys(),
     queryFn: async function listAPIKeysQueryFn(
       ctx,
     ): Promise<ListAPIKeysQueryData> {
@@ -60,7 +57,6 @@ export function buildListAPIKeysQuery(
 
       return unwrapAsync(keysList(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -68,8 +64,6 @@ export function buildListAPIKeysQuery(
   };
 }
 
-export function queryKeyListAPIKeys(
-  parameters: { gramSession?: string | undefined },
-): QueryKey {
-  return ["@gram/client", "keys", "list", parameters];
+export function queryKeyListAPIKeys(): QueryKey {
+  return ["@gram/client", "keys", "list"];
 }

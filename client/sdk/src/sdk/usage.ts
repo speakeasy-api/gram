@@ -19,13 +19,11 @@ export class Usage extends ClientSDK {
    * Create a checkout link for upgrading to the business plan
    */
   async createCheckout(
-    request?: operations.CreateCheckoutRequest | undefined,
     security?: operations.CreateCheckoutSecurity | undefined,
     options?: RequestOptions,
   ): Promise<string> {
     return unwrapAsync(usageCreateCheckout(
       this,
-      request,
       security,
       options,
     ));
@@ -38,13 +36,11 @@ export class Usage extends ClientSDK {
    * Create a customer session for the user
    */
   async createCustomerSession(
-    request?: operations.CreateCustomerSessionRequest | undefined,
     security?: operations.CreateCustomerSessionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<string> {
     return unwrapAsync(usageCreateCustomerSession(
       this,
-      request,
       security,
       options,
     ));
@@ -57,13 +53,11 @@ export class Usage extends ClientSDK {
    * Get the usage for an organization for a given period
    */
   async getPeriodUsage(
-    request?: operations.GetPeriodUsageRequest | undefined,
     security?: operations.GetPeriodUsageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.PeriodUsage> {
     return unwrapAsync(usageGetPeriodUsage(
       this,
-      request,
       security,
       options,
     ));

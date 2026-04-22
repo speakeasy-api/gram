@@ -100,14 +100,7 @@ export function useLoadChatSuspense(
 
 export function setLoadChatData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-      gramChatSession?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { id: string }],
   data: LoadChatQueryData,
 ): LoadChatQueryData | undefined {
   const key = queryKeyLoadChat(...queryKeyBase);
@@ -117,14 +110,7 @@ export function setLoadChatData(
 
 export function invalidateLoadChat(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-      gramChatSession?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { id: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

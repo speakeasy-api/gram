@@ -47,9 +47,6 @@ export function buildRiskListResultsQuery(
       policyId: request?.policyId,
       chatId: request?.chatId,
       cursor: request?.cursor,
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
     }),
     queryFn: async function riskListResultsQueryFn(
       ctx,
@@ -80,9 +77,6 @@ export function queryKeyRiskListResults(
     policyId?: string | undefined;
     chatId?: string | undefined;
     cursor?: string | undefined;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "results", "list", parameters];

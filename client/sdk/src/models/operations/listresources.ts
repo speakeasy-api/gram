@@ -23,14 +23,6 @@ export type ListResourcesRequest = {
    * The deployment ID. If unset, latest deployment will be used.
    */
   deploymentId?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -69,8 +61,6 @@ export type ListResourcesRequest$Outbound = {
   cursor?: string | undefined;
   limit?: number | undefined;
   deployment_id?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -82,14 +72,10 @@ export const ListResourcesRequest$outboundSchema: z.ZodMiniType<
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     deploymentId: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       deploymentId: "deployment_id",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
     });
   }),
 );

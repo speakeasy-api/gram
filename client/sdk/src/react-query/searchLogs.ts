@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type SearchLogsMutationVariables = {
-  request: operations.SearchLogsRequest;
+  request: components.SearchLogsPayload;
   security?: operations.SearchLogsSecurity | undefined;
   options?: RequestOptions;
 };

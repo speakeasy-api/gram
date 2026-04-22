@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CollectionsCreateMutationVariables = {
-  request: operations.CreateCollectionRequest;
+  request: components.CreateRequestBody2;
   security?: operations.CreateCollectionSecurity | undefined;
   options?: RequestOptions;
 };

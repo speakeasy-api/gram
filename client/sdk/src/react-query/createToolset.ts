@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateToolsetMutationVariables = {
-  request: operations.CreateToolsetRequest;
+  request: components.CreateToolsetRequestBody;
   security?: operations.CreateToolsetSecurity | undefined;
   options?: RequestOptions;
 };

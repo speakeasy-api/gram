@@ -25,18 +25,6 @@ export type DeleteGlobalVariationRequest = {
    * The ID of the variation to delete
    */
   variationId: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -145,9 +133,6 @@ export function deleteGlobalVariationSecurityToJSON(
 /** @internal */
 export type DeleteGlobalVariationRequest$Outbound = {
   variation_id: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -157,16 +142,10 @@ export const DeleteGlobalVariationRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     variationId: z.string(),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       variationId: "variation_id",
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
     });
   }),
 );

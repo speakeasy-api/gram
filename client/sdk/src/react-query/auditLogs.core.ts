@@ -79,8 +79,6 @@ export function buildAuditLogsQuery(
       projectSlug: request?.projectSlug,
       actorId: request?.actorId,
       action: request?.action,
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
     }),
     queryFn: async function auditLogsQueryFn(ctx): Promise<AuditLogsQueryData> {
       const sig = combineSignals(
@@ -121,8 +119,6 @@ export function buildAuditLogsInfiniteQuery(
       projectSlug: request?.projectSlug,
       actorId: request?.actorId,
       action: request?.action,
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
     }),
     queryFn: async function auditLogsQuery(
       ctx,
@@ -162,8 +158,6 @@ export function queryKeyAuditLogs(
     projectSlug?: string | undefined;
     actorId?: string | undefined;
     action?: string | undefined;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "auditlogs", "list", parameters];
@@ -175,8 +169,6 @@ export function queryKeyAuditLogsInfinite(
     projectSlug?: string | undefined;
     actorId?: string | undefined;
     action?: string | undefined;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "auditlogs", "list", "infinite", parameters];

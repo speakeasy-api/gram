@@ -9,13 +9,6 @@ export type GetPeriodUsageSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type GetPeriodUsageRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-};
-
 /** @internal */
 export type GetPeriodUsageSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
@@ -41,33 +34,5 @@ export function getPeriodUsageSecurityToJSON(
 ): string {
   return JSON.stringify(
     GetPeriodUsageSecurity$outboundSchema.parse(getPeriodUsageSecurity),
-  );
-}
-
-/** @internal */
-export type GetPeriodUsageRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const GetPeriodUsageRequest$outboundSchema: z.ZodMiniType<
-  GetPeriodUsageRequest$Outbound,
-  GetPeriodUsageRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-    });
-  }),
-);
-
-export function getPeriodUsageRequestToJSON(
-  getPeriodUsageRequest: GetPeriodUsageRequest,
-): string {
-  return JSON.stringify(
-    GetPeriodUsageRequest$outboundSchema.parse(getPeriodUsageRequest),
   );
 }

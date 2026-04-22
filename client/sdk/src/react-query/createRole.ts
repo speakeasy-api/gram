@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateRoleMutationVariables = {
-  request: operations.CreateRoleRequest;
+  request: components.CreateRoleForm;
   security?: operations.CreateRoleSecurity | undefined;
   options?: RequestOptions;
 };

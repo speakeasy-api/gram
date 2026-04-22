@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListMCPRegistriesQuery,
   ListMCPRegistriesQueryData,
@@ -59,7 +55,6 @@ export type ListMCPRegistriesQueryError =
  * List all MCP registries (admin only)
  */
 export function useListMCPRegistries(
-  request?: operations.ListMCPRegistriesRequest | undefined,
   security?: operations.ListMCPRegistriesSecurity | undefined,
   options?: QueryHookOptions<
     ListMCPRegistriesQueryData,
@@ -70,7 +65,6 @@ export function useListMCPRegistries(
   return useQuery({
     ...buildListMCPRegistriesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -85,7 +79,6 @@ export function useListMCPRegistries(
  * List all MCP registries (admin only)
  */
 export function useListMCPRegistriesSuspense(
-  request?: operations.ListMCPRegistriesRequest | undefined,
   security?: operations.ListMCPRegistriesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListMCPRegistriesQueryData,
@@ -99,7 +92,6 @@ export function useListMCPRegistriesSuspense(
   return useSuspenseQuery({
     ...buildListMCPRegistriesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -109,40 +101,11 @@ export function useListMCPRegistriesSuspense(
 
 export function setListMCPRegistriesData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: ListMCPRegistriesQueryData,
 ): ListMCPRegistriesQueryData | undefined {
-  const key = queryKeyListMCPRegistries(...queryKeyBase);
+  const key = queryKeyListMCPRegistries();
 
   return client.setQueryData<ListMCPRegistriesQueryData>(key, data);
-}
-
-export function invalidateListMCPRegistries(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: [
-      "@gram/client",
-      "mcpRegistries",
-      "listRegistries",
-      ...queryKeyBase,
-    ],
-  });
 }
 
 export function invalidateAllListMCPRegistries(

@@ -4,24 +4,10 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type SetSourceEnvironmentLinkSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
-};
-
-export type SetSourceEnvironmentLinkRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  setSourceEnvironmentLinkRequestBody:
-    components.SetSourceEnvironmentLinkRequestBody;
 };
 
 /** @internal */
@@ -53,45 +39,6 @@ export function setSourceEnvironmentLinkSecurityToJSON(
   return JSON.stringify(
     SetSourceEnvironmentLinkSecurity$outboundSchema.parse(
       setSourceEnvironmentLinkSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type SetSourceEnvironmentLinkRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  SetSourceEnvironmentLinkRequestBody:
-    components.SetSourceEnvironmentLinkRequestBody$Outbound;
-};
-
-/** @internal */
-export const SetSourceEnvironmentLinkRequest$outboundSchema: z.ZodMiniType<
-  SetSourceEnvironmentLinkRequest$Outbound,
-  SetSourceEnvironmentLinkRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    setSourceEnvironmentLinkRequestBody:
-      components.SetSourceEnvironmentLinkRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      setSourceEnvironmentLinkRequestBody:
-        "SetSourceEnvironmentLinkRequestBody",
-    });
-  }),
-);
-
-export function setSourceEnvironmentLinkRequestToJSON(
-  setSourceEnvironmentLinkRequest: SetSourceEnvironmentLinkRequest,
-): string {
-  return JSON.stringify(
-    SetSourceEnvironmentLinkRequest$outboundSchema.parse(
-      setSourceEnvironmentLinkRequest,
     ),
   );
 }

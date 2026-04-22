@@ -18,13 +18,11 @@ export class Domains extends ClientSDK {
    * Delete a custom domain
    */
   async deleteDomain(
-    request?: operations.DeleteDomainRequest | undefined,
     security?: operations.DeleteDomainSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(domainsDeleteDomain(
       this,
-      request,
       security,
       options,
     ));
@@ -37,13 +35,11 @@ export class Domains extends ClientSDK {
    * Get the custom domain for an organization
    */
   async getDomain(
-    request?: operations.GetDomainRequest | undefined,
     security?: operations.GetDomainSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.CustomDomain> {
     return unwrapAsync(domainsGetDomain(
       this,
-      request,
       security,
       options,
     ));
@@ -56,7 +52,7 @@ export class Domains extends ClientSDK {
    * Create a custom domain for an organization
    */
   async registerDomain(
-    request: operations.RegisterDomainRequest,
+    request: components.CreateDomainRequestBody,
     security?: operations.RegisterDomainSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {

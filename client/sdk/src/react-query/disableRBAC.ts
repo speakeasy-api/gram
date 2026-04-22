@@ -28,7 +28,6 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type DisableRBACMutationVariables = {
-  request?: operations.DisableRBACRequest | undefined;
   security?: operations.DisableRBACSecurity | undefined;
   options?: RequestOptions;
 };
@@ -86,7 +85,6 @@ export function buildDisableRBACMutation(
   return {
     mutationKey: mutationKeyDisableRBAC(),
     mutationFn: function disableRBACMutationFn({
-      request,
       security,
       options,
     }): Promise<DisableRBACMutationData> {
@@ -104,7 +102,6 @@ export function buildDisableRBACMutation(
       };
       return unwrapAsync(accessDisableRBAC(
         client$,
-        request,
         security,
         mergedOptions,
       ));

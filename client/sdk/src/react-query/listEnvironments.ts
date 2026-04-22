@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListEnvironmentsQuery,
   ListEnvironmentsQueryData,
@@ -59,7 +55,6 @@ export type ListEnvironmentsQueryError =
  * List all environments for an organization
  */
 export function useListEnvironments(
-  request?: operations.ListEnvironmentsRequest | undefined,
   security?: operations.ListEnvironmentsSecurity | undefined,
   options?: QueryHookOptions<
     ListEnvironmentsQueryData,
@@ -70,7 +65,6 @@ export function useListEnvironments(
   return useQuery({
     ...buildListEnvironmentsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -85,7 +79,6 @@ export function useListEnvironments(
  * List all environments for an organization
  */
 export function useListEnvironmentsSuspense(
-  request?: operations.ListEnvironmentsRequest | undefined,
   security?: operations.ListEnvironmentsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListEnvironmentsQueryData,
@@ -99,7 +92,6 @@ export function useListEnvironmentsSuspense(
   return useSuspenseQuery({
     ...buildListEnvironmentsQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -109,33 +101,11 @@ export function useListEnvironmentsSuspense(
 
 export function setListEnvironmentsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: ListEnvironmentsQueryData,
 ): ListEnvironmentsQueryData | undefined {
-  const key = queryKeyListEnvironments(...queryKeyBase);
+  const key = queryKeyListEnvironments();
 
   return client.setQueryData<ListEnvironmentsQueryData>(key, data);
-}
-
-export function invalidateListEnvironments(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "environments", "list", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllListEnvironments(

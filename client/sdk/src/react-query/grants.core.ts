@@ -19,14 +19,12 @@ export type GrantsQueryData = components.ListUserGrantsResult;
 export function prefetchGrants(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListGrantsRequest | undefined,
   security?: operations.ListGrantsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildGrantsQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchGrants(
 
 export function buildGrantsQuery(
   client$: GramCore,
-  request?: operations.ListGrantsRequest | undefined,
   security?: operations.ListGrantsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,10 +40,7 @@ export function buildGrantsQuery(
   queryFn: (context: QueryFunctionContext) => Promise<GrantsQueryData>;
 } {
   return {
-    queryKey: queryKeyGrants({
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-    }),
+    queryKey: queryKeyGrants(),
     queryFn: async function grantsQueryFn(ctx): Promise<GrantsQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -61,7 +55,6 @@ export function buildGrantsQuery(
 
       return unwrapAsync(accessListGrants(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -69,11 +62,6 @@ export function buildGrantsQuery(
   };
 }
 
-export function queryKeyGrants(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "access", "listGrants", parameters];
+export function queryKeyGrants(): QueryKey {
+  return ["@gram/client", "access", "listGrants"];
 }

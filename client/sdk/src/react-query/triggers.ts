@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildTriggersQuery,
   prefetchTriggers,
@@ -59,7 +55,6 @@ export type TriggersQueryError =
  * List trigger instances for the current project.
  */
 export function useTriggers(
-  request?: operations.ListTriggerInstancesRequest | undefined,
   security?: operations.ListTriggerInstancesSecurity | undefined,
   options?: QueryHookOptions<TriggersQueryData, TriggersQueryError>,
 ): UseQueryResult<TriggersQueryData, TriggersQueryError> {
@@ -67,7 +62,6 @@ export function useTriggers(
   return useQuery({
     ...buildTriggersQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useTriggers(
  * List trigger instances for the current project.
  */
 export function useTriggersSuspense(
-  request?: operations.ListTriggerInstancesRequest | undefined,
   security?: operations.ListTriggerInstancesSecurity | undefined,
   options?: SuspenseQueryHookOptions<TriggersQueryData, TriggersQueryError>,
 ): UseSuspenseQueryResult<TriggersQueryData, TriggersQueryError> {
@@ -90,7 +83,6 @@ export function useTriggersSuspense(
   return useSuspenseQuery({
     ...buildTriggersQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -100,33 +92,11 @@ export function useTriggersSuspense(
 
 export function setTriggersData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: TriggersQueryData,
 ): TriggersQueryData | undefined {
-  const key = queryKeyTriggers(...queryKeyBase);
+  const key = queryKeyTriggers();
 
   return client.setQueryData<TriggersQueryData>(key, data);
-}
-
-export function invalidateTriggers(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "triggers", "list", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllTriggers(

@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type TriggerRiskAnalysisSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type TriggerRiskAnalysisSecurityOption2 = {
 export type TriggerRiskAnalysisSecurity = {
   option1?: TriggerRiskAnalysisSecurityOption1 | undefined;
   option2?: TriggerRiskAnalysisSecurityOption2 | undefined;
-};
-
-export type TriggerRiskAnalysisRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  triggerRiskAnalysisRequestBody: components.TriggerRiskAnalysisRequestBody;
 };
 
 /** @internal */
@@ -137,44 +120,5 @@ export function triggerRiskAnalysisSecurityToJSON(
     TriggerRiskAnalysisSecurity$outboundSchema.parse(
       triggerRiskAnalysisSecurity,
     ),
-  );
-}
-
-/** @internal */
-export type TriggerRiskAnalysisRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  TriggerRiskAnalysisRequestBody:
-    components.TriggerRiskAnalysisRequestBody$Outbound;
-};
-
-/** @internal */
-export const TriggerRiskAnalysisRequest$outboundSchema: z.ZodMiniType<
-  TriggerRiskAnalysisRequest$Outbound,
-  TriggerRiskAnalysisRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    triggerRiskAnalysisRequestBody:
-      components.TriggerRiskAnalysisRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      triggerRiskAnalysisRequestBody: "TriggerRiskAnalysisRequestBody",
-    });
-  }),
-);
-
-export function triggerRiskAnalysisRequestToJSON(
-  triggerRiskAnalysisRequest: TriggerRiskAnalysisRequest,
-): string {
-  return JSON.stringify(
-    TriggerRiskAnalysisRequest$outboundSchema.parse(triggerRiskAnalysisRequest),
   );
 }

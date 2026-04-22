@@ -37,13 +37,11 @@ export class Variations extends ClientSDK {
    * List globally defined tool variations.
    */
   async listGlobal(
-    request?: operations.ListGlobalVariationsRequest | undefined,
     security?: operations.ListGlobalVariationsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListVariationsResult> {
     return unwrapAsync(variationsListGlobal(
       this,
-      request,
       security,
       options,
     ));
@@ -56,7 +54,7 @@ export class Variations extends ClientSDK {
    * Create or update a globally defined tool variation.
    */
   async upsertGlobal(
-    request: operations.UpsertGlobalVariationRequest,
+    request: components.UpsertGlobalToolVariationForm,
     security?: operations.UpsertGlobalVariationSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.UpsertGlobalToolVariationResult> {

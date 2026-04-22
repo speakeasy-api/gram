@@ -28,7 +28,6 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type DeleteDomainMutationVariables = {
-  request?: operations.DeleteDomainRequest | undefined;
   security?: operations.DeleteDomainSecurity | undefined;
   options?: RequestOptions;
 };
@@ -86,7 +85,6 @@ export function buildDeleteDomainMutation(
   return {
     mutationKey: mutationKeyDeleteDomain(),
     mutationFn: function deleteDomainMutationFn({
-      request,
       security,
       options,
     }): Promise<DeleteDomainMutationData> {
@@ -104,7 +102,6 @@ export function buildDeleteDomainMutation(
       };
       return unwrapAsync(domainsDeleteDomain(
         client$,
-        request,
         security,
         mergedOptions,
       ));

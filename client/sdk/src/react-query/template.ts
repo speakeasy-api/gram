@@ -101,13 +101,7 @@ export function useTemplateSuspense(
 export function setTemplateData(
   client: QueryClient,
   queryKeyBase: [
-    parameters: {
-      id?: string | undefined;
-      name?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
+    parameters: { id?: string | undefined; name?: string | undefined },
   ],
   data: TemplateQueryData,
 ): TemplateQueryData | undefined {
@@ -119,13 +113,7 @@ export function setTemplateData(
 export function invalidateTemplate(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id?: string | undefined;
-      name?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
+    [parameters: { id?: string | undefined; name?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

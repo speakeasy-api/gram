@@ -9,13 +9,6 @@ export type ListInvitesSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type ListInvitesRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-};
-
 /** @internal */
 export type ListInvitesSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
@@ -41,33 +34,5 @@ export function listInvitesSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListInvitesSecurity$outboundSchema.parse(listInvitesSecurity),
-  );
-}
-
-/** @internal */
-export type ListInvitesRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const ListInvitesRequest$outboundSchema: z.ZodMiniType<
-  ListInvitesRequest$Outbound,
-  ListInvitesRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-    });
-  }),
-);
-
-export function listInvitesRequestToJSON(
-  listInvitesRequest: ListInvitesRequest,
-): string {
-  return JSON.stringify(
-    ListInvitesRequest$outboundSchema.parse(listInvitesRequest),
   );
 }

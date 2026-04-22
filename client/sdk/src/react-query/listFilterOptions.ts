@@ -10,6 +10,7 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -23,11 +24,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListFilterOptionsQuery,
   ListFilterOptionsQueryData,
@@ -59,7 +56,7 @@ export type ListFilterOptionsQueryError =
  * List available filter options (API keys or users) for the observability overview
  */
 export function useListFilterOptions(
-  request: operations.ListFilterOptionsRequest,
+  request: components.ListFilterOptionsPayload,
   security?: operations.ListFilterOptionsSecurity | undefined,
   options?: QueryHookOptions<
     ListFilterOptionsQueryData,
@@ -85,7 +82,7 @@ export function useListFilterOptions(
  * List available filter options (API keys or users) for the observability overview
  */
 export function useListFilterOptionsSuspense(
-  request: operations.ListFilterOptionsRequest,
+  request: components.ListFilterOptionsPayload,
   security?: operations.ListFilterOptionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListFilterOptionsQueryData,
@@ -109,40 +106,11 @@ export function useListFilterOptionsSuspense(
 
 export function setListFilterOptionsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: ListFilterOptionsQueryData,
 ): ListFilterOptionsQueryData | undefined {
-  const key = queryKeyListFilterOptions(...queryKeyBase);
+  const key = queryKeyListFilterOptions();
 
   return client.setQueryData<ListFilterOptionsQueryData>(key, data);
-}
-
-export function invalidateListFilterOptions(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: [
-      "@gram/client",
-      "telemetry",
-      "listFilterOptions",
-      ...queryKeyBase,
-    ],
-  });
 }
 
 export function invalidateAllListFilterOptions(

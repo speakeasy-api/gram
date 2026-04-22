@@ -19,14 +19,12 @@ export type ListChatsQueryData = components.ListChatsResult;
 export function prefetchListChats(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListChatsRequest | undefined,
   security?: operations.ListChatsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildListChatsQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchListChats(
 
 export function buildListChatsQuery(
   client$: GramCore,
-  request?: operations.ListChatsRequest | undefined,
   security?: operations.ListChatsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,11 +40,7 @@ export function buildListChatsQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ListChatsQueryData>;
 } {
   return {
-    queryKey: queryKeyListChats({
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-      gramChatSession: request?.gramChatSession,
-    }),
+    queryKey: queryKeyListChats(),
     queryFn: async function listChatsQueryFn(ctx): Promise<ListChatsQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -62,7 +55,6 @@ export function buildListChatsQuery(
 
       return unwrapAsync(chatList(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -70,12 +62,6 @@ export function buildListChatsQuery(
   };
 }
 
-export function queryKeyListChats(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-    gramChatSession?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "chat", "list", parameters];
+export function queryKeyListChats(): QueryKey {
+  return ["@gram/client", "chat", "list"];
 }

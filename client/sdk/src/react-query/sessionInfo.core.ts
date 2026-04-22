@@ -18,14 +18,12 @@ export type SessionInfoQueryData = operations.SessionInfoResponse;
 export function prefetchSessionInfo(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.SessionInfoRequest | undefined,
   security?: operations.SessionInfoSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildSessionInfoQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -34,7 +32,6 @@ export function prefetchSessionInfo(
 
 export function buildSessionInfoQuery(
   client$: GramCore,
-  request?: operations.SessionInfoRequest | undefined,
   security?: operations.SessionInfoSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -42,7 +39,7 @@ export function buildSessionInfoQuery(
   queryFn: (context: QueryFunctionContext) => Promise<SessionInfoQueryData>;
 } {
   return {
-    queryKey: queryKeySessionInfo({ gramSession: request?.gramSession }),
+    queryKey: queryKeySessionInfo(),
     queryFn: async function sessionInfoQueryFn(
       ctx,
     ): Promise<SessionInfoQueryData> {
@@ -59,7 +56,6 @@ export function buildSessionInfoQuery(
 
       return unwrapAsync(authInfo(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -67,8 +63,6 @@ export function buildSessionInfoQuery(
   };
 }
 
-export function queryKeySessionInfo(
-  parameters: { gramSession?: string | undefined },
-): QueryKey {
-  return ["@gram/client", "auth", "info", parameters];
+export function queryKeySessionInfo(): QueryKey {
+  return ["@gram/client", "auth", "info"];
 }

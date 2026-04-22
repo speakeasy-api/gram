@@ -10,6 +10,7 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -23,11 +24,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildRenderTemplateQuery,
   prefetchRenderTemplate,
@@ -59,7 +56,7 @@ export type RenderTemplateQueryError =
  * Render a prompt template directly with all template fields provided.
  */
 export function useRenderTemplate(
-  request: operations.RenderTemplateRequest,
+  request: components.RenderTemplateRequestBody,
   security?: operations.RenderTemplateSecurity | undefined,
   options?: QueryHookOptions<RenderTemplateQueryData, RenderTemplateQueryError>,
 ): UseQueryResult<RenderTemplateQueryData, RenderTemplateQueryError> {
@@ -82,7 +79,7 @@ export function useRenderTemplate(
  * Render a prompt template directly with all template fields provided.
  */
 export function useRenderTemplateSuspense(
-  request: operations.RenderTemplateRequest,
+  request: components.RenderTemplateRequestBody,
   security?: operations.RenderTemplateSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RenderTemplateQueryData,
@@ -103,35 +100,11 @@ export function useRenderTemplateSuspense(
 
 export function setRenderTemplateData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: RenderTemplateQueryData,
 ): RenderTemplateQueryData | undefined {
-  const key = queryKeyRenderTemplate(...queryKeyBase);
+  const key = queryKeyRenderTemplate();
 
   return client.setQueryData<RenderTemplateQueryData>(key, data);
-}
-
-export function invalidateRenderTemplate(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "templates", "render", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllRenderTemplate(

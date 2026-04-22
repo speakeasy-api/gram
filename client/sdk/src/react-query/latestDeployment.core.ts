@@ -19,14 +19,12 @@ export type LatestDeploymentQueryData = components.GetLatestDeploymentResult;
 export function prefetchLatestDeployment(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetLatestDeploymentRequest | undefined,
   security?: operations.GetLatestDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildLatestDeploymentQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchLatestDeployment(
 
 export function buildLatestDeploymentQuery(
   client$: GramCore,
-  request?: operations.GetLatestDeploymentRequest | undefined,
   security?: operations.GetLatestDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -45,11 +42,7 @@ export function buildLatestDeploymentQuery(
   ) => Promise<LatestDeploymentQueryData>;
 } {
   return {
-    queryKey: queryKeyLatestDeployment({
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyLatestDeployment(),
     queryFn: async function latestDeploymentQueryFn(
       ctx,
     ): Promise<LatestDeploymentQueryData> {
@@ -66,7 +59,6 @@ export function buildLatestDeploymentQuery(
 
       return unwrapAsync(deploymentsLatest(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -74,12 +66,6 @@ export function buildLatestDeploymentQuery(
   };
 }
 
-export function queryKeyLatestDeployment(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "deployments", "latest", parameters];
+export function queryKeyLatestDeployment(): QueryKey {
+  return ["@gram/client", "deployments", "latest"];
 }

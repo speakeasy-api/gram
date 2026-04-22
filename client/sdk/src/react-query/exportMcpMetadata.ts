@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type ExportMcpMetadataMutationVariables = {
-  request: operations.ExportMcpMetadataRequest;
+  request: components.ExportMcpMetadataRequestBody;
   security?: operations.ExportMcpMetadataSecurity | undefined;
   options?: RequestOptions;
 };

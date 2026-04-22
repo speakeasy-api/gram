@@ -27,14 +27,6 @@ export type ListToolsRequest = {
    * Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)
    */
   urnPrefix?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -74,8 +66,6 @@ export type ListToolsRequest$Outbound = {
   limit?: number | undefined;
   deployment_id?: string | undefined;
   urn_prefix?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -88,15 +78,11 @@ export const ListToolsRequest$outboundSchema: z.ZodMiniType<
     limit: z.optional(z.int()),
     deploymentId: z.optional(z.string()),
     urnPrefix: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       deploymentId: "deployment_id",
       urnPrefix: "urn_prefix",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
     });
   }),
 );

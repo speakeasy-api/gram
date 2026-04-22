@@ -103,13 +103,7 @@ export function useListProjectsSuspense(
 
 export function setListProjectsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      organizationId: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { organizationId: string }],
   data: ListProjectsQueryData,
 ): ListProjectsQueryData | undefined {
   const key = queryKeyListProjects(...queryKeyBase);
@@ -119,13 +113,7 @@ export function setListProjectsData(
 
 export function invalidateListProjects(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      organizationId: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { organizationId: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

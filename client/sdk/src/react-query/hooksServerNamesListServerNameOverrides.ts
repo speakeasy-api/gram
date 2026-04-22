@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildHooksServerNamesListServerNameOverridesQuery,
   HooksServerNamesListServerNameOverridesQueryData,
@@ -59,7 +55,6 @@ export type HooksServerNamesListServerNameOverridesQueryError =
  * List all server name display overrides for a project
  */
 export function useHooksServerNamesListServerNameOverrides(
-  request?: operations.ListServerNameOverridesRequest | undefined,
   security?: operations.ListServerNameOverridesSecurity | undefined,
   options?: QueryHookOptions<
     HooksServerNamesListServerNameOverridesQueryData,
@@ -73,7 +68,6 @@ export function useHooksServerNamesListServerNameOverrides(
   return useQuery({
     ...buildHooksServerNamesListServerNameOverridesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -88,7 +82,6 @@ export function useHooksServerNamesListServerNameOverrides(
  * List all server name display overrides for a project
  */
 export function useHooksServerNamesListServerNameOverridesSuspense(
-  request?: operations.ListServerNameOverridesRequest | undefined,
   security?: operations.ListServerNameOverridesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     HooksServerNamesListServerNameOverridesQueryData,
@@ -102,7 +95,6 @@ export function useHooksServerNamesListServerNameOverridesSuspense(
   return useSuspenseQuery({
     ...buildHooksServerNamesListServerNameOverridesQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -112,43 +104,14 @@ export function useHooksServerNamesListServerNameOverridesSuspense(
 
 export function setHooksServerNamesListServerNameOverridesData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: HooksServerNamesListServerNameOverridesQueryData,
 ): HooksServerNamesListServerNameOverridesQueryData | undefined {
-  const key = queryKeyHooksServerNamesListServerNameOverrides(...queryKeyBase);
+  const key = queryKeyHooksServerNamesListServerNameOverrides();
 
   return client.setQueryData<HooksServerNamesListServerNameOverridesQueryData>(
     key,
     data,
   );
-}
-
-export function invalidateHooksServerNamesListServerNameOverrides(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: [
-      "@gram/client",
-      "hooksServerNames",
-      "listServerNameOverrides",
-      ...queryKeyBase,
-    ],
-  });
 }
 
 export function invalidateAllHooksServerNamesListServerNameOverrides(

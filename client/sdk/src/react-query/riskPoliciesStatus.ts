@@ -109,14 +109,7 @@ export function useRiskPoliciesStatusSuspense(
 
 export function setRiskPoliciesStatusData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      id: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { id: string }],
   data: RiskPoliciesStatusQueryData,
 ): RiskPoliciesStatusQueryData | undefined {
   const key = queryKeyRiskPoliciesStatus(...queryKeyBase);
@@ -126,14 +119,7 @@ export function setRiskPoliciesStatusData(
 
 export function invalidateRiskPoliciesStatus(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { id: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

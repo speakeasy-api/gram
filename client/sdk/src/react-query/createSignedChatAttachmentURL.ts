@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateSignedChatAttachmentURLMutationVariables = {
-  request: operations.CreateSignedChatAttachmentURLRequest;
+  request: components.CreateSignedChatAttachmentURLForm2;
   security?: operations.CreateSignedChatAttachmentURLSecurity | undefined;
   options?: RequestOptions;
 };

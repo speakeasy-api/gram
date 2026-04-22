@@ -19,14 +19,12 @@ export type MembersQueryData = components.ListMembersResult;
 export function prefetchMembers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListMembersRequest | undefined,
   security?: operations.ListMembersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildMembersQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchMembers(
 
 export function buildMembersQuery(
   client$: GramCore,
-  request?: operations.ListMembersRequest | undefined,
   security?: operations.ListMembersSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,10 +40,7 @@ export function buildMembersQuery(
   queryFn: (context: QueryFunctionContext) => Promise<MembersQueryData>;
 } {
   return {
-    queryKey: queryKeyMembers({
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-    }),
+    queryKey: queryKeyMembers(),
     queryFn: async function membersQueryFn(ctx): Promise<MembersQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -61,7 +55,6 @@ export function buildMembersQuery(
 
       return unwrapAsync(accessListMembers(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -69,11 +62,6 @@ export function buildMembersQuery(
   };
 }
 
-export function queryKeyMembers(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "access", "listMembers", parameters];
+export function queryKeyMembers(): QueryKey {
+  return ["@gram/client", "access", "listMembers"];
 }

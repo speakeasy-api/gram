@@ -27,7 +27,7 @@ export class Access extends ClientSDK {
    * Create a new custom role.
    */
   async createRole(
-    request: operations.CreateRoleRequest,
+    request: components.CreateRoleForm,
     security?: operations.CreateRoleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.Role> {
@@ -65,13 +65,11 @@ export class Access extends ClientSDK {
    * Disable RBAC enforcement for the current organization.
    */
   async disableRBAC(
-    request?: operations.DisableRBACRequest | undefined,
     security?: operations.DisableRBACSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessDisableRBAC(
       this,
-      request,
       security,
       options,
     ));
@@ -84,13 +82,11 @@ export class Access extends ClientSDK {
    * Enable RBAC for the current organization. Seeds default grants for system roles.
    */
   async enableRBAC(
-    request?: operations.EnableRBACRequest | undefined,
     security?: operations.EnableRBACSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessEnableRBAC(
       this,
-      request,
       security,
       options,
     ));
@@ -103,13 +99,11 @@ export class Access extends ClientSDK {
    * Returns whether RBAC is currently enabled for the current organization.
    */
   async getRBACStatus(
-    request?: operations.GetRBACStatusRequest | undefined,
     security?: operations.GetRBACStatusSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.RBACStatus> {
     return unwrapAsync(accessGetRBACStatus(
       this,
-      request,
       security,
       options,
     ));
@@ -141,13 +135,11 @@ export class Access extends ClientSDK {
    * List the current user's effective grants, including inherited role grants.
    */
   async listGrants(
-    request?: operations.ListGrantsRequest | undefined,
     security?: operations.ListGrantsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListUserGrantsResult> {
     return unwrapAsync(accessListGrants(
       this,
-      request,
       security,
       options,
     ));
@@ -160,13 +152,11 @@ export class Access extends ClientSDK {
    * List all team members with their role assignments.
    */
   async listMembers(
-    request?: operations.ListMembersRequest | undefined,
     security?: operations.ListMembersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListMembersResult> {
     return unwrapAsync(accessListMembers(
       this,
-      request,
       security,
       options,
     ));
@@ -179,13 +169,11 @@ export class Access extends ClientSDK {
    * List all roles for the current organization.
    */
   async listRoles(
-    request?: operations.ListRolesRequest | undefined,
     security?: operations.ListRolesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListRolesResult> {
     return unwrapAsync(accessListRoles(
       this,
-      request,
       security,
       options,
     ));
@@ -198,13 +186,11 @@ export class Access extends ClientSDK {
    * List all available scopes and their resource types.
    */
   async listScopes(
-    request?: operations.ListScopesRequest | undefined,
     security?: operations.ListScopesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListScopesResult> {
     return unwrapAsync(accessListScopes(
       this,
-      request,
       security,
       options,
     ));
@@ -217,7 +203,7 @@ export class Access extends ClientSDK {
    * Change a team member's role assignment.
    */
   async updateMemberRole(
-    request: operations.UpdateMemberRoleRequest,
+    request: components.UpdateMemberRoleForm,
     security?: operations.UpdateMemberRoleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.AccessMember> {
@@ -236,7 +222,7 @@ export class Access extends ClientSDK {
    * Update an existing custom role.
    */
   async updateRole(
-    request: operations.UpdateRoleRequest,
+    request: components.UpdateRoleForm,
     security?: operations.UpdateRoleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.Role> {

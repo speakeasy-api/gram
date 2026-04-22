@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListAPIKeysQuery,
   ListAPIKeysQueryData,
@@ -59,7 +55,6 @@ export type ListAPIKeysQueryError =
  * List all api keys for an organization
  */
 export function useListAPIKeys(
-  request?: operations.ListAPIKeysRequest | undefined,
   security?: operations.ListAPIKeysSecurity | undefined,
   options?: QueryHookOptions<ListAPIKeysQueryData, ListAPIKeysQueryError>,
 ): UseQueryResult<ListAPIKeysQueryData, ListAPIKeysQueryError> {
@@ -67,7 +62,6 @@ export function useListAPIKeys(
   return useQuery({
     ...buildListAPIKeysQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useListAPIKeys(
  * List all api keys for an organization
  */
 export function useListAPIKeysSuspense(
-  request?: operations.ListAPIKeysRequest | undefined,
   security?: operations.ListAPIKeysSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListAPIKeysQueryData,
@@ -93,7 +86,6 @@ export function useListAPIKeysSuspense(
   return useSuspenseQuery({
     ...buildListAPIKeysQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -103,25 +95,11 @@ export function useListAPIKeysSuspense(
 
 export function setListAPIKeysData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: ListAPIKeysQueryData,
 ): ListAPIKeysQueryData | undefined {
-  const key = queryKeyListAPIKeys(...queryKeyBase);
+  const key = queryKeyListAPIKeys();
 
   return client.setQueryData<ListAPIKeysQueryData>(key, data);
-}
-
-export function invalidateListAPIKeys(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "keys", "list", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllListAPIKeys(

@@ -44,12 +44,7 @@ export function buildCheckMCPSlugAvailabilityQuery(
   ) => Promise<CheckMCPSlugAvailabilityQueryData>;
 } {
   return {
-    queryKey: queryKeyCheckMCPSlugAvailability({
-      slug: request.slug,
-      gramSession: request.gramSession,
-      gramKey: request.gramKey,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyCheckMCPSlugAvailability({ slug: request.slug }),
     queryFn: async function checkMCPSlugAvailabilityQueryFn(
       ctx,
     ): Promise<CheckMCPSlugAvailabilityQueryData> {
@@ -75,12 +70,7 @@ export function buildCheckMCPSlugAvailabilityQuery(
 }
 
 export function queryKeyCheckMCPSlugAvailability(
-  parameters: {
-    slug: string;
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { slug: string },
 ): QueryKey {
   return ["@gram/client", "toolsets", "checkMCPSlugAvailability", parameters];
 }

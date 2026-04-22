@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildGetPeriodUsageQuery,
   GetPeriodUsageQueryData,
@@ -59,7 +55,6 @@ export type GetPeriodUsageQueryError =
  * Get the usage for an organization for a given period
  */
 export function useGetPeriodUsage(
-  request?: operations.GetPeriodUsageRequest | undefined,
   security?: operations.GetPeriodUsageSecurity | undefined,
   options?: QueryHookOptions<GetPeriodUsageQueryData, GetPeriodUsageQueryError>,
 ): UseQueryResult<GetPeriodUsageQueryData, GetPeriodUsageQueryError> {
@@ -67,7 +62,6 @@ export function useGetPeriodUsage(
   return useQuery({
     ...buildGetPeriodUsageQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -82,7 +76,6 @@ export function useGetPeriodUsage(
  * Get the usage for an organization for a given period
  */
 export function useGetPeriodUsageSuspense(
-  request?: operations.GetPeriodUsageRequest | undefined,
   security?: operations.GetPeriodUsageSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetPeriodUsageQueryData,
@@ -93,7 +86,6 @@ export function useGetPeriodUsageSuspense(
   return useSuspenseQuery({
     ...buildGetPeriodUsageQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -103,25 +95,11 @@ export function useGetPeriodUsageSuspense(
 
 export function setGetPeriodUsageData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: GetPeriodUsageQueryData,
 ): GetPeriodUsageQueryData | undefined {
-  const key = queryKeyGetPeriodUsage(...queryKeyBase);
+  const key = queryKeyGetPeriodUsage();
 
   return client.setQueryData<GetPeriodUsageQueryData>(key, data);
-}
-
-export function invalidateGetPeriodUsage(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "usage", "getPeriodUsage", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllGetPeriodUsage(

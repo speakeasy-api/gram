@@ -20,21 +20,6 @@ export type GetActiveDeploymentSecurity = {
   option2?: GetActiveDeploymentSecurityOption2 | undefined;
 };
 
-export type GetActiveDeploymentRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-};
-
 /** @internal */
 export type GetActiveDeploymentSecurityOption1$Outbound = {
   "apikey_header_Gram-Key": string;
@@ -135,39 +120,5 @@ export function getActiveDeploymentSecurityToJSON(
     GetActiveDeploymentSecurity$outboundSchema.parse(
       getActiveDeploymentSecurity,
     ),
-  );
-}
-
-/** @internal */
-export type GetActiveDeploymentRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const GetActiveDeploymentRequest$outboundSchema: z.ZodMiniType<
-  GetActiveDeploymentRequest$Outbound,
-  GetActiveDeploymentRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
-
-export function getActiveDeploymentRequestToJSON(
-  getActiveDeploymentRequest: GetActiveDeploymentRequest,
-): string {
-  return JSON.stringify(
-    GetActiveDeploymentRequest$outboundSchema.parse(getActiveDeploymentRequest),
   );
 }

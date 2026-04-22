@@ -24,18 +24,6 @@ export type LoadChatRequest = {
    * The ID of the chat
    */
   id: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  /**
-   * Chat Sessions token header
-   */
-  gramChatSession?: string | undefined;
 };
 
 /** @internal */
@@ -132,30 +120,15 @@ export function loadChatSecurityToJSON(
 /** @internal */
 export type LoadChatRequest$Outbound = {
   id: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  "Gram-Chat-Session"?: string | undefined;
 };
 
 /** @internal */
 export const LoadChatRequest$outboundSchema: z.ZodMiniType<
   LoadChatRequest$Outbound,
   LoadChatRequest
-> = z.pipe(
-  z.object({
-    id: z.string(),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    gramChatSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      gramChatSession: "Gram-Chat-Session",
-    });
-  }),
-);
+> = z.object({
+  id: z.string(),
+});
 
 export function loadChatRequestToJSON(
   loadChatRequest: LoadChatRequest,

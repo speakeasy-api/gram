@@ -25,14 +25,6 @@ export type CloneToolsetRequest = {
    * The slug of the toolset to clone
    */
   slug: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -139,27 +131,15 @@ export function cloneToolsetSecurityToJSON(
 /** @internal */
 export type CloneToolsetRequest$Outbound = {
   slug: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
 export const CloneToolsetRequest$outboundSchema: z.ZodMiniType<
   CloneToolsetRequest$Outbound,
   CloneToolsetRequest
-> = z.pipe(
-  z.object({
-    slug: z.string(),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
+> = z.object({
+  slug: z.string(),
+});
 
 export function cloneToolsetRequestToJSON(
   cloneToolsetRequest: CloneToolsetRequest,

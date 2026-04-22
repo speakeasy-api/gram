@@ -109,15 +109,7 @@ export function useServeChatAttachmentSuspense(
 
 export function setServeChatAttachmentData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      id: string;
-      projectId: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramChatSession?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { id: string; projectId: string }],
   data: ServeChatAttachmentQueryData,
 ): ServeChatAttachmentQueryData | undefined {
   const key = queryKeyServeChatAttachment(...queryKeyBase);
@@ -128,13 +120,7 @@ export function setServeChatAttachmentData(
 export function invalidateServeChatAttachment(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id: string;
-      projectId: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramChatSession?: string | undefined;
-    }]
+    [parameters: { id: string; projectId: string }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

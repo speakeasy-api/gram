@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type RenderTemplateSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -25,22 +24,6 @@ export type RenderTemplateSecurity = {
   option1?: RenderTemplateSecurityOption1 | undefined;
   option2?: RenderTemplateSecurityOption2 | undefined;
   option3?: RenderTemplateSecurityOption3 | undefined;
-};
-
-export type RenderTemplateRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  renderTemplateRequestBody: components.RenderTemplateRequestBody;
 };
 
 /** @internal */
@@ -179,43 +162,5 @@ export function renderTemplateSecurityToJSON(
 ): string {
   return JSON.stringify(
     RenderTemplateSecurity$outboundSchema.parse(renderTemplateSecurity),
-  );
-}
-
-/** @internal */
-export type RenderTemplateRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  RenderTemplateRequestBody: components.RenderTemplateRequestBody$Outbound;
-};
-
-/** @internal */
-export const RenderTemplateRequest$outboundSchema: z.ZodMiniType<
-  RenderTemplateRequest$Outbound,
-  RenderTemplateRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    renderTemplateRequestBody:
-      components.RenderTemplateRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      renderTemplateRequestBody: "RenderTemplateRequestBody",
-    });
-  }),
-);
-
-export function renderTemplateRequestToJSON(
-  renderTemplateRequest: RenderTemplateRequest,
-): string {
-  return JSON.stringify(
-    RenderTemplateRequest$outboundSchema.parse(renderTemplateRequest),
   );
 }

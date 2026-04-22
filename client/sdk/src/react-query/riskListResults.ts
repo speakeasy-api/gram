@@ -111,9 +111,6 @@ export function setRiskListResultsData(
       policyId?: string | undefined;
       chatId?: string | undefined;
       cursor?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
     },
   ],
   data: RiskListResultsQueryData,
@@ -130,9 +127,6 @@ export function invalidateRiskListResults(
       policyId?: string | undefined;
       chatId?: string | undefined;
       cursor?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

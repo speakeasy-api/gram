@@ -106,8 +106,6 @@ export function setListToolsData(
       limit?: number | undefined;
       deploymentId?: string | undefined;
       urnPrefix?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
     },
   ],
   data: ListToolsQueryData,
@@ -125,8 +123,6 @@ export function invalidateListTools(
       limit?: number | undefined;
       deploymentId?: string | undefined;
       urnPrefix?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

@@ -106,14 +106,7 @@ export function useListDeploymentsSuspense(
 
 export function setListDeploymentsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      cursor?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { cursor?: string | undefined }],
   data: ListDeploymentsQueryData,
 ): ListDeploymentsQueryData | undefined {
   const key = queryKeyListDeployments(...queryKeyBase);
@@ -123,14 +116,7 @@ export function setListDeploymentsData(
 
 export function invalidateListDeployments(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      cursor?: string | undefined;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { cursor?: string | undefined }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

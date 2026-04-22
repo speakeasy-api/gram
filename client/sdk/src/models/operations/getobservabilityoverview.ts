@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type GetObservabilityOverviewSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type GetObservabilityOverviewSecurityOption2 = {
 export type GetObservabilityOverviewSecurity = {
   option1?: GetObservabilityOverviewSecurityOption1 | undefined;
   option2?: GetObservabilityOverviewSecurityOption2 | undefined;
-};
-
-export type GetObservabilityOverviewRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  getObservabilityOverviewPayload: components.GetObservabilityOverviewPayload;
 };
 
 /** @internal */
@@ -140,47 +123,6 @@ export function getObservabilityOverviewSecurityToJSON(
   return JSON.stringify(
     GetObservabilityOverviewSecurity$outboundSchema.parse(
       getObservabilityOverviewSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type GetObservabilityOverviewRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  GetObservabilityOverviewPayload:
-    components.GetObservabilityOverviewPayload$Outbound;
-};
-
-/** @internal */
-export const GetObservabilityOverviewRequest$outboundSchema: z.ZodMiniType<
-  GetObservabilityOverviewRequest$Outbound,
-  GetObservabilityOverviewRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    getObservabilityOverviewPayload:
-      components.GetObservabilityOverviewPayload$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      getObservabilityOverviewPayload: "GetObservabilityOverviewPayload",
-    });
-  }),
-);
-
-export function getObservabilityOverviewRequestToJSON(
-  getObservabilityOverviewRequest: GetObservabilityOverviewRequest,
-): string {
-  return JSON.stringify(
-    GetObservabilityOverviewRequest$outboundSchema.parse(
-      getObservabilityOverviewRequest,
     ),
   );
 }

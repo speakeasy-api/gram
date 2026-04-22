@@ -29,18 +29,6 @@ export type GetMCPServerDetailsRequest = {
    * Server specifier (e.g., 'io.github.user/server')
    */
   serverSpecifier: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -150,9 +138,6 @@ export function getMCPServerDetailsSecurityToJSON(
 export type GetMCPServerDetailsRequest$Outbound = {
   registry_id: string;
   server_specifier: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -163,17 +148,11 @@ export const GetMCPServerDetailsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     registryId: z.string(),
     serverSpecifier: z.string(),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       registryId: "registry_id",
       serverSpecifier: "server_specifier",
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
     });
   }),
 );

@@ -103,13 +103,7 @@ export function useGetSlackAppSuspense(
 
 export function setGetSlackAppData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { id: string }],
   data: GetSlackAppQueryData,
 ): GetSlackAppQueryData | undefined {
   const key = queryKeyGetSlackApp(...queryKeyBase);
@@ -119,13 +113,7 @@ export function setGetSlackAppData(
 
 export function invalidateGetSlackApp(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { id: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

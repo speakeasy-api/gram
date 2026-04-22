@@ -29,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateAPIKeyMutationVariables = {
-  request: operations.CreateAPIKeyRequest;
+  request: components.CreateKeyForm;
   security?: operations.CreateAPIKeySecurity | undefined;
   options?: RequestOptions;
 };

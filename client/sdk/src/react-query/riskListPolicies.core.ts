@@ -19,14 +19,12 @@ export type RiskListPoliciesQueryData = components.ListRiskPoliciesResult;
 export function prefetchRiskListPolicies(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListRiskPoliciesRequest | undefined,
   security?: operations.ListRiskPoliciesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildRiskListPoliciesQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchRiskListPolicies(
 
 export function buildRiskListPoliciesQuery(
   client$: GramCore,
-  request?: operations.ListRiskPoliciesRequest | undefined,
   security?: operations.ListRiskPoliciesSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -45,11 +42,7 @@ export function buildRiskListPoliciesQuery(
   ) => Promise<RiskListPoliciesQueryData>;
 } {
   return {
-    queryKey: queryKeyRiskListPolicies({
-      gramKey: request?.gramKey,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyRiskListPolicies(),
     queryFn: async function riskListPoliciesQueryFn(
       ctx,
     ): Promise<RiskListPoliciesQueryData> {
@@ -66,7 +59,6 @@ export function buildRiskListPoliciesQuery(
 
       return unwrapAsync(riskPoliciesList(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -74,12 +66,6 @@ export function buildRiskListPoliciesQuery(
   };
 }
 
-export function queryKeyRiskListPolicies(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "policies", "list", parameters];
+export function queryKeyRiskListPolicies(): QueryKey {
+  return ["@gram/client", "policies", "list"];
 }

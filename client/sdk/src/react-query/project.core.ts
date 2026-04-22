@@ -43,11 +43,7 @@ export function buildProjectQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ProjectQueryData>;
 } {
   return {
-    queryKey: queryKeyProject({
-      slug: request.slug,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-    }),
+    queryKey: queryKeyProject({ slug: request.slug }),
     queryFn: async function projectQueryFn(ctx): Promise<ProjectQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -70,12 +66,6 @@ export function buildProjectQuery(
   };
 }
 
-export function queryKeyProject(
-  parameters: {
-    slug: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
-): QueryKey {
+export function queryKeyProject(parameters: { slug: string }): QueryKey {
   return ["@gram/client", "projects", "read", parameters];
 }

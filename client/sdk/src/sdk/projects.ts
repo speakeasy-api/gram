@@ -23,7 +23,7 @@ export class Projects extends ClientSDK {
    * Create a new project.
    */
   async create(
-    request: operations.CreateProjectRequest,
+    request: components.CreateProjectRequestBody,
     security?: operations.CreateProjectSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.CreateProjectResult> {
@@ -99,13 +99,11 @@ export class Projects extends ClientSDK {
    * List allowed origins for a project.
    */
   async listAllowedOrigins(
-    request?: operations.ListAllowedOriginsRequest | undefined,
     security?: operations.ListAllowedOriginsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.ListAllowedOriginsResult> {
     return unwrapAsync(projectsListAllowedOrigins(
       this,
-      request,
       security,
       options,
     ));
@@ -118,7 +116,7 @@ export class Projects extends ClientSDK {
    * Uploads a logo for a project.
    */
   async setLogo(
-    request: operations.SetProjectLogoRequest,
+    request: components.GetSignedAssetURLForm,
     security?: operations.SetProjectLogoSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.SetProjectLogoResult> {
@@ -137,7 +135,7 @@ export class Projects extends ClientSDK {
    * Set organization whitelist status (admin only - requires speakeasy-team API key)
    */
   async setOrganizationWhitelist(
-    request: operations.SetOrganizationWhitelistRequest,
+    request: components.SetOrganizationWhitelistRequestBody,
     security?: operations.SetOrganizationWhitelistSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
@@ -156,7 +154,7 @@ export class Projects extends ClientSDK {
    * Upsert an allowed origin for a project.
    */
   async upsertAllowedOrigin(
-    request: operations.UpsertAllowedOriginRequest,
+    request: components.UpsertAllowedOriginForm,
     security?: operations.UpsertAllowedOriginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.UpsertAllowedOriginResult> {

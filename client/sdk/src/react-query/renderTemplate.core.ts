@@ -19,7 +19,7 @@ export type RenderTemplateQueryData = components.RenderTemplateResult;
 export function prefetchRenderTemplate(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.RenderTemplateRequest,
+  request: components.RenderTemplateRequestBody,
   security?: operations.RenderTemplateSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -35,7 +35,7 @@ export function prefetchRenderTemplate(
 
 export function buildRenderTemplateQuery(
   client$: GramCore,
-  request: operations.RenderTemplateRequest,
+  request: components.RenderTemplateRequestBody,
   security?: operations.RenderTemplateSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,11 +43,7 @@ export function buildRenderTemplateQuery(
   queryFn: (context: QueryFunctionContext) => Promise<RenderTemplateQueryData>;
 } {
   return {
-    queryKey: queryKeyRenderTemplate({
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyRenderTemplate(),
     queryFn: async function renderTemplateQueryFn(
       ctx,
     ): Promise<RenderTemplateQueryData> {
@@ -72,12 +68,6 @@ export function buildRenderTemplateQuery(
   };
 }
 
-export function queryKeyRenderTemplate(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "templates", "render", parameters];
+export function queryKeyRenderTemplate(): QueryKey {
+  return ["@gram/client", "templates", "render"];
 }

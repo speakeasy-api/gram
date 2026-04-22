@@ -20,21 +20,6 @@ export type ListMCPRegistriesSecurity = {
   option2?: ListMCPRegistriesSecurityOption2 | undefined;
 };
 
-export type ListMCPRegistriesRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-};
-
 /** @internal */
 export type ListMCPRegistriesSecurityOption1$Outbound = {
   "project_slug_header_Gram-Project": string;
@@ -133,39 +118,5 @@ export function listMCPRegistriesSecurityToJSON(
 ): string {
   return JSON.stringify(
     ListMCPRegistriesSecurity$outboundSchema.parse(listMCPRegistriesSecurity),
-  );
-}
-
-/** @internal */
-export type ListMCPRegistriesRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const ListMCPRegistriesRequest$outboundSchema: z.ZodMiniType<
-  ListMCPRegistriesRequest$Outbound,
-  ListMCPRegistriesRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
-
-export function listMCPRegistriesRequestToJSON(
-  listMCPRegistriesRequest: ListMCPRegistriesRequest,
-): string {
-  return JSON.stringify(
-    ListMCPRegistriesRequest$outboundSchema.parse(listMCPRegistriesRequest),
   );
 }

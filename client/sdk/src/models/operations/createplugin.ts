@@ -4,23 +4,10 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type CreatePluginSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
-};
-
-export type CreatePluginRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  createPluginForm: components.CreatePluginForm;
 };
 
 /** @internal */
@@ -51,39 +38,5 @@ export function createPluginSecurityToJSON(
 ): string {
   return JSON.stringify(
     CreatePluginSecurity$outboundSchema.parse(createPluginSecurity),
-  );
-}
-
-/** @internal */
-export type CreatePluginRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  CreatePluginForm: components.CreatePluginForm$Outbound;
-};
-
-/** @internal */
-export const CreatePluginRequest$outboundSchema: z.ZodMiniType<
-  CreatePluginRequest$Outbound,
-  CreatePluginRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    createPluginForm: components.CreatePluginForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      createPluginForm: "CreatePluginForm",
-    });
-  }),
-);
-
-export function createPluginRequestToJSON(
-  createPluginRequest: CreatePluginRequest,
-): string {
-  return JSON.stringify(
-    CreatePluginRequest$outboundSchema.parse(createPluginRequest),
   );
 }

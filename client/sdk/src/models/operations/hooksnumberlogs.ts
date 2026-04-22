@@ -4,23 +4,10 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type HooksNumberLogsSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   projectSlugHeaderGramProject?: string | undefined;
-};
-
-export type HooksNumberLogsRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  otelLogsPayload: components.OTELLogsPayload;
 };
 
 /** @internal */
@@ -51,39 +38,5 @@ export function hooksNumberLogsSecurityToJSON(
 ): string {
   return JSON.stringify(
     HooksNumberLogsSecurity$outboundSchema.parse(hooksNumberLogsSecurity),
-  );
-}
-
-/** @internal */
-export type HooksNumberLogsRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  OTELLogsPayload: components.OTELLogsPayload$Outbound;
-};
-
-/** @internal */
-export const HooksNumberLogsRequest$outboundSchema: z.ZodMiniType<
-  HooksNumberLogsRequest$Outbound,
-  HooksNumberLogsRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    otelLogsPayload: components.OTELLogsPayload$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-      otelLogsPayload: "OTELLogsPayload",
-    });
-  }),
-);
-
-export function hooksNumberLogsRequestToJSON(
-  hooksNumberLogsRequest: HooksNumberLogsRequest,
-): string {
-  return JSON.stringify(
-    HooksNumberLogsRequest$outboundSchema.parse(hooksNumberLogsRequest),
   );
 }

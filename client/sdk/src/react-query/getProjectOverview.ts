@@ -10,6 +10,7 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -23,11 +24,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildGetProjectOverviewQuery,
   GetProjectOverviewQueryData,
@@ -59,7 +56,7 @@ export type GetProjectOverviewQueryError =
  * Get project-level overview including total chats, tool calls, active servers/users, and top lists
  */
 export function useGetProjectOverview(
-  request: operations.GetProjectOverviewRequest,
+  request: components.GetProjectMetricsSummaryPayload,
   security?: operations.GetProjectOverviewSecurity | undefined,
   options?: QueryHookOptions<
     GetProjectOverviewQueryData,
@@ -85,7 +82,7 @@ export function useGetProjectOverview(
  * Get project-level overview including total chats, tool calls, active servers/users, and top lists
  */
 export function useGetProjectOverviewSuspense(
-  request: operations.GetProjectOverviewRequest,
+  request: components.GetProjectMetricsSummaryPayload,
   security?: operations.GetProjectOverviewSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetProjectOverviewQueryData,
@@ -109,40 +106,11 @@ export function useGetProjectOverviewSuspense(
 
 export function setGetProjectOverviewData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: GetProjectOverviewQueryData,
 ): GetProjectOverviewQueryData | undefined {
-  const key = queryKeyGetProjectOverview(...queryKeyBase);
+  const key = queryKeyGetProjectOverview();
 
   return client.setQueryData<GetProjectOverviewQueryData>(key, data);
-}
-
-export function invalidateGetProjectOverview(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: [
-      "@gram/client",
-      "telemetry",
-      "getProjectOverview",
-      ...queryKeyBase,
-    ],
-  });
 }
 
 export function invalidateAllGetProjectOverview(

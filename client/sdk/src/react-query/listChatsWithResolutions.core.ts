@@ -56,9 +56,6 @@ export function buildListChatsWithResolutionsQuery(
       offset: request?.offset,
       sortBy: request?.sortBy,
       sortOrder: request?.sortOrder,
-      gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
-      gramChatSession: request?.gramChatSession,
     }),
     queryFn: async function listChatsWithResolutionsQueryFn(
       ctx,
@@ -95,9 +92,6 @@ export function queryKeyListChatsWithResolutions(
     offset?: number | undefined;
     sortBy?: operations.SortBy | undefined;
     sortOrder?: operations.SortOrder | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-    gramChatSession?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "chat", "listChatsWithResolutions", parameters];

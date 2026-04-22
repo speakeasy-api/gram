@@ -10,6 +10,7 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -23,11 +24,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListHooksTracesQuery,
   ListHooksTracesQueryData,
@@ -59,7 +56,7 @@ export type ListHooksTracesQueryError =
  * List hook traces aggregated by trace_id with user information
  */
 export function useListHooksTraces(
-  request: operations.ListHooksTracesRequest,
+  request: components.ListHooksTracesPayload,
   security?: operations.ListHooksTracesSecurity | undefined,
   options?: QueryHookOptions<
     ListHooksTracesQueryData,
@@ -85,7 +82,7 @@ export function useListHooksTraces(
  * List hook traces aggregated by trace_id with user information
  */
 export function useListHooksTracesSuspense(
-  request: operations.ListHooksTracesRequest,
+  request: components.ListHooksTracesPayload,
   security?: operations.ListHooksTracesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListHooksTracesQueryData,
@@ -106,35 +103,11 @@ export function useListHooksTracesSuspense(
 
 export function setListHooksTracesData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: ListHooksTracesQueryData,
 ): ListHooksTracesQueryData | undefined {
-  const key = queryKeyListHooksTraces(...queryKeyBase);
+  const key = queryKeyListHooksTraces();
 
   return client.setQueryData<ListHooksTracesQueryData>(key, data);
-}
-
-export function invalidateListHooksTraces(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "telemetry", "listHooksTraces", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllListHooksTraces(

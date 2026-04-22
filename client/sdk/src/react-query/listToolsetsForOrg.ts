@@ -23,11 +23,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildListToolsetsForOrgQuery,
   ListToolsetsForOrgQueryData,
@@ -59,7 +55,6 @@ export type ListToolsetsForOrgQueryError =
  * List all toolsets across the organization
  */
 export function useListToolsetsForOrg(
-  request?: operations.ListToolsetsForOrgRequest | undefined,
   security?: operations.ListToolsetsForOrgSecurity | undefined,
   options?: QueryHookOptions<
     ListToolsetsForOrgQueryData,
@@ -70,7 +65,6 @@ export function useListToolsetsForOrg(
   return useQuery({
     ...buildListToolsetsForOrgQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -85,7 +79,6 @@ export function useListToolsetsForOrg(
  * List all toolsets across the organization
  */
 export function useListToolsetsForOrgSuspense(
-  request?: operations.ListToolsetsForOrgRequest | undefined,
   security?: operations.ListToolsetsForOrgSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListToolsetsForOrgQueryData,
@@ -99,7 +92,6 @@ export function useListToolsetsForOrgSuspense(
   return useSuspenseQuery({
     ...buildListToolsetsForOrgQuery(
       client,
-      request,
       security,
       options,
     ),
@@ -109,33 +101,11 @@ export function useListToolsetsForOrgSuspense(
 
 export function setListToolsetsForOrgData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-    },
-  ],
   data: ListToolsetsForOrgQueryData,
 ): ListToolsetsForOrgQueryData | undefined {
-  const key = queryKeyListToolsetsForOrg(...queryKeyBase);
+  const key = queryKeyListToolsetsForOrg();
 
   return client.setQueryData<ListToolsetsForOrgQueryData>(key, data);
-}
-
-export function invalidateListToolsetsForOrg(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "toolsets", "listForOrg", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllListToolsetsForOrg(

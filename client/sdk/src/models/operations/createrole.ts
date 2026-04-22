@@ -4,23 +4,10 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type CreateRoleSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
-};
-
-export type CreateRoleRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  createRoleForm: components.CreateRoleForm;
 };
 
 /** @internal */
@@ -51,39 +38,5 @@ export function createRoleSecurityToJSON(
 ): string {
   return JSON.stringify(
     CreateRoleSecurity$outboundSchema.parse(createRoleSecurity),
-  );
-}
-
-/** @internal */
-export type CreateRoleRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  CreateRoleForm: components.CreateRoleForm$Outbound;
-};
-
-/** @internal */
-export const CreateRoleRequest$outboundSchema: z.ZodMiniType<
-  CreateRoleRequest$Outbound,
-  CreateRoleRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    createRoleForm: components.CreateRoleForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      createRoleForm: "CreateRoleForm",
-    });
-  }),
-);
-
-export function createRoleRequestToJSON(
-  createRoleRequest: CreateRoleRequest,
-): string {
-  return JSON.stringify(
-    CreateRoleRequest$outboundSchema.parse(createRoleRequest),
   );
 }

@@ -103,14 +103,7 @@ export function useServeOpenAPIv3Suspense(
 
 export function setServeOpenAPIv3Data(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      id: string;
-      projectId: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { id: string; projectId: string }],
   data: ServeOpenAPIv3QueryData,
 ): ServeOpenAPIv3QueryData | undefined {
   const key = queryKeyServeOpenAPIv3(...queryKeyBase);
@@ -121,12 +114,7 @@ export function setServeOpenAPIv3Data(
 export function invalidateServeOpenAPIv3(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id: string;
-      projectId: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-    }]
+    [parameters: { id: string; projectId: string }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

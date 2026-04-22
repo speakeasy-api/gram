@@ -32,14 +32,6 @@ export type DeleteSourceEnvironmentLinkRequest = {
    * The slug of the source
    */
   sourceSlug: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -83,8 +75,6 @@ export const SourceKind$outboundSchema: z.ZodMiniEnum<typeof SourceKind> = z
 export type DeleteSourceEnvironmentLinkRequest$Outbound = {
   source_kind: string;
   source_slug: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -95,15 +85,11 @@ export const DeleteSourceEnvironmentLinkRequest$outboundSchema: z.ZodMiniType<
   z.object({
     sourceKind: SourceKind$outboundSchema,
     sourceSlug: z.string(),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       sourceKind: "source_kind",
       sourceSlug: "source_slug",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
     });
   }),
 );

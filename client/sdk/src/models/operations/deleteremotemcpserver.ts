@@ -25,18 +25,6 @@ export type DeleteRemoteMcpServerRequest = {
    * The ID of the remote MCP server to delete
    */
   id: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -145,30 +133,15 @@ export function deleteRemoteMcpServerSecurityToJSON(
 /** @internal */
 export type DeleteRemoteMcpServerRequest$Outbound = {
   id: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
 export const DeleteRemoteMcpServerRequest$outboundSchema: z.ZodMiniType<
   DeleteRemoteMcpServerRequest$Outbound,
   DeleteRemoteMcpServerRequest
-> = z.pipe(
-  z.object({
-    id: z.string(),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-    });
-  }),
-);
+> = z.object({
+  id: z.string(),
+});
 
 export function deleteRemoteMcpServerRequestToJSON(
   deleteRemoteMcpServerRequest: DeleteRemoteMcpServerRequest,

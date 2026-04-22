@@ -9,13 +9,6 @@ export type ValidateAPIKeySecurity = {
   apikeyHeaderGramKey?: string | undefined;
 };
 
-export type ValidateAPIKeyRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-};
-
 /** @internal */
 export type ValidateAPIKeySecurity$Outbound = {
   "apikey_header_Gram-Key"?: string | undefined;
@@ -41,33 +34,5 @@ export function validateAPIKeySecurityToJSON(
 ): string {
   return JSON.stringify(
     ValidateAPIKeySecurity$outboundSchema.parse(validateAPIKeySecurity),
-  );
-}
-
-/** @internal */
-export type ValidateAPIKeyRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-};
-
-/** @internal */
-export const ValidateAPIKeyRequest$outboundSchema: z.ZodMiniType<
-  ValidateAPIKeyRequest$Outbound,
-  ValidateAPIKeyRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-    });
-  }),
-);
-
-export function validateAPIKeyRequestToJSON(
-  validateAPIKeyRequest: ValidateAPIKeyRequest,
-): string {
-  return JSON.stringify(
-    ValidateAPIKeyRequest$outboundSchema.parse(validateAPIKeyRequest),
   );
 }

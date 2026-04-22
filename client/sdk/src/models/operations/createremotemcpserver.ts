@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type CreateRemoteMcpServerSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -19,22 +18,6 @@ export type CreateRemoteMcpServerSecurityOption2 = {
 export type CreateRemoteMcpServerSecurity = {
   option1?: CreateRemoteMcpServerSecurityOption1 | undefined;
   option2?: CreateRemoteMcpServerSecurityOption2 | undefined;
-};
-
-export type CreateRemoteMcpServerRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  createServerForm: components.CreateServerForm;
 };
 
 /** @internal */
@@ -136,45 +119,6 @@ export function createRemoteMcpServerSecurityToJSON(
   return JSON.stringify(
     CreateRemoteMcpServerSecurity$outboundSchema.parse(
       createRemoteMcpServerSecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type CreateRemoteMcpServerRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  CreateServerForm: components.CreateServerForm$Outbound;
-};
-
-/** @internal */
-export const CreateRemoteMcpServerRequest$outboundSchema: z.ZodMiniType<
-  CreateRemoteMcpServerRequest$Outbound,
-  CreateRemoteMcpServerRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    createServerForm: components.CreateServerForm$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
-      createServerForm: "CreateServerForm",
-    });
-  }),
-);
-
-export function createRemoteMcpServerRequestToJSON(
-  createRemoteMcpServerRequest: CreateRemoteMcpServerRequest,
-): string {
-  return JSON.stringify(
-    CreateRemoteMcpServerRequest$outboundSchema.parse(
-      createRemoteMcpServerRequest,
     ),
   );
 }

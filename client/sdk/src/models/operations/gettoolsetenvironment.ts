@@ -15,14 +15,6 @@ export type GetToolsetEnvironmentRequest = {
    * The ID of the toolset
    */
   toolsetId: string;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -61,8 +53,6 @@ export function getToolsetEnvironmentSecurityToJSON(
 /** @internal */
 export type GetToolsetEnvironmentRequest$Outbound = {
   toolset_id: string;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -72,14 +62,10 @@ export const GetToolsetEnvironmentRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     toolsetId: z.string(),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       toolsetId: "toolset_id",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
     });
   }),
 );

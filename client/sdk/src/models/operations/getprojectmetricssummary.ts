@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type GetProjectMetricsSummarySecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -19,22 +18,6 @@ export type GetProjectMetricsSummarySecurityOption2 = {
 export type GetProjectMetricsSummarySecurity = {
   option1?: GetProjectMetricsSummarySecurityOption1 | undefined;
   option2?: GetProjectMetricsSummarySecurityOption2 | undefined;
-};
-
-export type GetProjectMetricsSummaryRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  getProjectMetricsSummaryPayload: components.GetProjectMetricsSummaryPayload;
 };
 
 /** @internal */
@@ -140,47 +123,6 @@ export function getProjectMetricsSummarySecurityToJSON(
   return JSON.stringify(
     GetProjectMetricsSummarySecurity$outboundSchema.parse(
       getProjectMetricsSummarySecurity,
-    ),
-  );
-}
-
-/** @internal */
-export type GetProjectMetricsSummaryRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  GetProjectMetricsSummaryPayload:
-    components.GetProjectMetricsSummaryPayload$Outbound;
-};
-
-/** @internal */
-export const GetProjectMetricsSummaryRequest$outboundSchema: z.ZodMiniType<
-  GetProjectMetricsSummaryRequest$Outbound,
-  GetProjectMetricsSummaryRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    getProjectMetricsSummaryPayload:
-      components.GetProjectMetricsSummaryPayload$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      getProjectMetricsSummaryPayload: "GetProjectMetricsSummaryPayload",
-    });
-  }),
-);
-
-export function getProjectMetricsSummaryRequestToJSON(
-  getProjectMetricsSummaryRequest: GetProjectMetricsSummaryRequest,
-): string {
-  return JSON.stringify(
-    GetProjectMetricsSummaryRequest$outboundSchema.parse(
-      getProjectMetricsSummaryRequest,
     ),
   );
 }

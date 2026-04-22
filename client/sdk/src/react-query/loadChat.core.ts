@@ -43,12 +43,7 @@ export function buildLoadChatQuery(
   queryFn: (context: QueryFunctionContext) => Promise<LoadChatQueryData>;
 } {
   return {
-    queryKey: queryKeyLoadChat({
-      id: request.id,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-      gramChatSession: request.gramChatSession,
-    }),
+    queryKey: queryKeyLoadChat({ id: request.id }),
     queryFn: async function loadChatQueryFn(ctx): Promise<LoadChatQueryData> {
       const sig = combineSignals(
         ctx.signal,
@@ -71,13 +66,6 @@ export function buildLoadChatQuery(
   };
 }
 
-export function queryKeyLoadChat(
-  parameters: {
-    id: string;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-    gramChatSession?: string | undefined;
-  },
-): QueryKey {
+export function queryKeyLoadChat(parameters: { id: string }): QueryKey {
   return ["@gram/client", "chat", "load", parameters];
 }

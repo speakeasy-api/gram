@@ -43,11 +43,7 @@ export function buildListProjectsQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ListProjectsQueryData>;
 } {
   return {
-    queryKey: queryKeyListProjects({
-      organizationId: request.organizationId,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-    }),
+    queryKey: queryKeyListProjects({ organizationId: request.organizationId }),
     queryFn: async function listProjectsQueryFn(
       ctx,
     ): Promise<ListProjectsQueryData> {
@@ -73,11 +69,7 @@ export function buildListProjectsQuery(
 }
 
 export function queryKeyListProjects(
-  parameters: {
-    organizationId: string;
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-  },
+  parameters: { organizationId: string },
 ): QueryKey {
   return ["@gram/client", "projects", "list", parameters];
 }

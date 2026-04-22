@@ -19,7 +19,7 @@ export type ListAttributeKeysQueryData = components.ListAttributeKeysResult;
 export function prefetchListAttributeKeys(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListAttributeKeysRequest,
+  request: components.GetProjectMetricsSummaryPayload,
   security?: operations.ListAttributeKeysSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -35,7 +35,7 @@ export function prefetchListAttributeKeys(
 
 export function buildListAttributeKeysQuery(
   client$: GramCore,
-  request: operations.ListAttributeKeysRequest,
+  request: components.GetProjectMetricsSummaryPayload,
   security?: operations.ListAttributeKeysSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -45,11 +45,7 @@ export function buildListAttributeKeysQuery(
   ) => Promise<ListAttributeKeysQueryData>;
 } {
   return {
-    queryKey: queryKeyListAttributeKeys({
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyListAttributeKeys(),
     queryFn: async function listAttributeKeysQueryFn(
       ctx,
     ): Promise<ListAttributeKeysQueryData> {
@@ -74,12 +70,6 @@ export function buildListAttributeKeysQuery(
   };
 }
 
-export function queryKeyListAttributeKeys(
-  parameters: {
-    gramKey?: string | undefined;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "telemetry", "listAttributeKeys", parameters];
+export function queryKeyListAttributeKeys(): QueryKey {
+  return ["@gram/client", "telemetry", "listAttributeKeys"];
 }

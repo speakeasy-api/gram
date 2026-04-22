@@ -19,14 +19,12 @@ export type RemoteMcpServersQueryData = components.ListServersResult;
 export function prefetchRemoteMcpServers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListRemoteMcpServersRequest | undefined,
   security?: operations.ListRemoteMcpServersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildRemoteMcpServersQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchRemoteMcpServers(
 
 export function buildRemoteMcpServersQuery(
   client$: GramCore,
-  request?: operations.ListRemoteMcpServersRequest | undefined,
   security?: operations.ListRemoteMcpServersSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -45,11 +42,7 @@ export function buildRemoteMcpServersQuery(
   ) => Promise<RemoteMcpServersQueryData>;
 } {
   return {
-    queryKey: queryKeyRemoteMcpServers({
-      gramSession: request?.gramSession,
-      gramKey: request?.gramKey,
-      gramProject: request?.gramProject,
-    }),
+    queryKey: queryKeyRemoteMcpServers(),
     queryFn: async function remoteMcpServersQueryFn(
       ctx,
     ): Promise<RemoteMcpServersQueryData> {
@@ -66,7 +59,6 @@ export function buildRemoteMcpServersQuery(
 
       return unwrapAsync(remoteMcpListServers(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -74,12 +66,6 @@ export function buildRemoteMcpServersQuery(
   };
 }
 
-export function queryKeyRemoteMcpServers(
-  parameters: {
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-    gramProject?: string | undefined;
-  },
-): QueryKey {
-  return ["@gram/client", "remoteMcp", "listServers", parameters];
+export function queryKeyRemoteMcpServers(): QueryKey {
+  return ["@gram/client", "remoteMcp", "listServers"];
 }

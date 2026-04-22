@@ -11,6 +11,7 @@ import { GramCore } from "../core.js";
 import { authRegister } from "../funcs/authRegister.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,7 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RegisterMutationVariables = {
-  request: operations.RegisterRequest;
+  request: components.RegisterRequestBody;
   security?: operations.RegisterSecurity | undefined;
   options?: RequestOptions;
 };

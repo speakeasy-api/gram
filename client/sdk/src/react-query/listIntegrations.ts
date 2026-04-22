@@ -109,13 +109,7 @@ export function useListIntegrationsSuspense(
 
 export function setListIntegrationsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      keywords?: Array<string> | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { keywords?: Array<string> | undefined }],
   data: ListIntegrationsQueryData,
 ): ListIntegrationsQueryData | undefined {
   const key = queryKeyListIntegrations(...queryKeyBase);
@@ -126,11 +120,7 @@ export function setListIntegrationsData(
 export function invalidateListIntegrations(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      keywords?: Array<string> | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
+    [parameters: { keywords?: Array<string> | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

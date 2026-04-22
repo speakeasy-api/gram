@@ -45,11 +45,7 @@ export function buildGetToolsetEnvironmentQuery(
   ) => Promise<GetToolsetEnvironmentQueryData>;
 } {
   return {
-    queryKey: queryKeyGetToolsetEnvironment({
-      toolsetId: request.toolsetId,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
-    }),
+    queryKey: queryKeyGetToolsetEnvironment({ toolsetId: request.toolsetId }),
     queryFn: async function getToolsetEnvironmentQueryFn(
       ctx,
     ): Promise<GetToolsetEnvironmentQueryData> {
@@ -75,11 +71,7 @@ export function buildGetToolsetEnvironmentQuery(
 }
 
 export function queryKeyGetToolsetEnvironment(
-  parameters: {
-    toolsetId: string;
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { toolsetId: string },
 ): QueryKey {
   return ["@gram/client", "environments", "getByToolset", parameters];
 }

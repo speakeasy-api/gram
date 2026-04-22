@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type CaptureEventSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -24,26 +23,6 @@ export type CaptureEventSecurity = {
   option1?: CaptureEventSecurityOption1 | undefined;
   option2?: CaptureEventSecurityOption2 | undefined;
   option3?: CaptureEventSecurityOption3 | undefined;
-};
-
-export type CaptureEventRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  /**
-   * Chat Sessions token header
-   */
-  gramChatSession?: string | undefined;
-  captureEventPayload: components.CaptureEventPayload;
 };
 
 /** @internal */
@@ -180,45 +159,5 @@ export function captureEventSecurityToJSON(
 ): string {
   return JSON.stringify(
     CaptureEventSecurity$outboundSchema.parse(captureEventSecurity),
-  );
-}
-
-/** @internal */
-export type CaptureEventRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  "Gram-Chat-Session"?: string | undefined;
-  CaptureEventPayload: components.CaptureEventPayload$Outbound;
-};
-
-/** @internal */
-export const CaptureEventRequest$outboundSchema: z.ZodMiniType<
-  CaptureEventRequest$Outbound,
-  CaptureEventRequest
-> = z.pipe(
-  z.object({
-    gramKey: z.optional(z.string()),
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    gramChatSession: z.optional(z.string()),
-    captureEventPayload: components.CaptureEventPayload$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramKey: "Gram-Key",
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      gramChatSession: "Gram-Chat-Session",
-      captureEventPayload: "CaptureEventPayload",
-    });
-  }),
-);
-
-export function captureEventRequestToJSON(
-  captureEventRequest: CaptureEventRequest,
-): string {
-  return JSON.stringify(
-    CaptureEventRequest$outboundSchema.parse(captureEventRequest),
   );
 }

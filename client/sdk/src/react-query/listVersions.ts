@@ -103,14 +103,7 @@ export function useListVersionsSuspense(
 
 export function setListVersionsData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      name: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { name: string }],
   data: ListVersionsQueryData,
 ): ListVersionsQueryData | undefined {
   const key = queryKeyListVersions(...queryKeyBase);
@@ -120,14 +113,7 @@ export function setListVersionsData(
 
 export function invalidateListVersions(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      name: string;
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { name: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

@@ -10,6 +10,7 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -23,11 +24,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildSearchUsersQuery,
   prefetchSearchUsers,
@@ -59,7 +56,7 @@ export type SearchUsersQueryError =
  * Search and list user usage summaries grouped by user_id or external_user_id
  */
 export function useSearchUsers(
-  request: operations.SearchUsersRequest,
+  request: components.SearchUsersPayload,
   security?: operations.SearchUsersSecurity | undefined,
   options?: QueryHookOptions<SearchUsersQueryData, SearchUsersQueryError>,
 ): UseQueryResult<SearchUsersQueryData, SearchUsersQueryError> {
@@ -82,7 +79,7 @@ export function useSearchUsers(
  * Search and list user usage summaries grouped by user_id or external_user_id
  */
 export function useSearchUsersSuspense(
-  request: operations.SearchUsersRequest,
+  request: components.SearchUsersPayload,
   security?: operations.SearchUsersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     SearchUsersQueryData,
@@ -103,35 +100,11 @@ export function useSearchUsersSuspense(
 
 export function setSearchUsersData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: SearchUsersQueryData,
 ): SearchUsersQueryData | undefined {
-  const key = queryKeySearchUsers(...queryKeyBase);
+  const key = queryKeySearchUsers();
 
   return client.setQueryData<SearchUsersQueryData>(key, data);
-}
-
-export function invalidateSearchUsers(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "telemetry", "searchUsers", ...queryKeyBase],
-  });
 }
 
 export function invalidateAllSearchUsers(

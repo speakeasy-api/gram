@@ -19,14 +19,12 @@ export type RbacStatusQueryData = components.RBACStatus;
 export function prefetchRbacStatus(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetRBACStatusRequest | undefined,
   security?: operations.GetRBACStatusSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildRbacStatusQuery(
       client$,
-      request,
       security,
       options,
     ),
@@ -35,7 +33,6 @@ export function prefetchRbacStatus(
 
 export function buildRbacStatusQuery(
   client$: GramCore,
-  request?: operations.GetRBACStatusRequest | undefined,
   security?: operations.GetRBACStatusSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -43,7 +40,7 @@ export function buildRbacStatusQuery(
   queryFn: (context: QueryFunctionContext) => Promise<RbacStatusQueryData>;
 } {
   return {
-    queryKey: queryKeyRbacStatus({ gramSession: request?.gramSession }),
+    queryKey: queryKeyRbacStatus(),
     queryFn: async function rbacStatusQueryFn(
       ctx,
     ): Promise<RbacStatusQueryData> {
@@ -60,7 +57,6 @@ export function buildRbacStatusQuery(
 
       return unwrapAsync(accessGetRBACStatus(
         client$,
-        request,
         security,
         mergedOptions,
       ));
@@ -68,8 +64,6 @@ export function buildRbacStatusQuery(
   };
 }
 
-export function queryKeyRbacStatus(
-  parameters: { gramSession?: string | undefined },
-): QueryKey {
-  return ["@gram/client", "access", "getRBACStatus", parameters];
+export function queryKeyRbacStatus(): QueryKey {
+  return ["@gram/client", "access", "getRBACStatus"];
 }

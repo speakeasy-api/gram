@@ -28,7 +28,6 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateCustomerSessionMutationVariables = {
-  request?: operations.CreateCustomerSessionRequest | undefined;
   security?: operations.CreateCustomerSessionSecurity | undefined;
   options?: RequestOptions;
 };
@@ -86,7 +85,6 @@ export function buildCreateCustomerSessionMutation(
   return {
     mutationKey: mutationKeyCreateCustomerSession(),
     mutationFn: function createCustomerSessionMutationFn({
-      request,
       security,
       options,
     }): Promise<CreateCustomerSessionMutationData> {
@@ -104,7 +102,6 @@ export function buildCreateCustomerSessionMutation(
       };
       return unwrapAsync(usageCreateCustomerSession(
         client$,
-        request,
         security,
         mergedOptions,
       ));

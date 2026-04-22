@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type SubmitFeedbackSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -18,22 +17,6 @@ export type SubmitFeedbackSecurityOption2 = {
 export type SubmitFeedbackSecurity = {
   option1?: SubmitFeedbackSecurityOption1 | undefined;
   option2?: SubmitFeedbackSecurityOption2 | undefined;
-};
-
-export type SubmitFeedbackRequest = {
-  /**
-   * Session header
-   */
-  gramSession?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
-  /**
-   * Chat Sessions token header
-   */
-  gramChatSession?: string | undefined;
-  submitFeedbackRequestBody: components.SubmitFeedbackRequestBody;
 };
 
 /** @internal */
@@ -132,43 +115,5 @@ export function submitFeedbackSecurityToJSON(
 ): string {
   return JSON.stringify(
     SubmitFeedbackSecurity$outboundSchema.parse(submitFeedbackSecurity),
-  );
-}
-
-/** @internal */
-export type SubmitFeedbackRequest$Outbound = {
-  "Gram-Session"?: string | undefined;
-  "Gram-Project"?: string | undefined;
-  "Gram-Chat-Session"?: string | undefined;
-  SubmitFeedbackRequestBody: components.SubmitFeedbackRequestBody$Outbound;
-};
-
-/** @internal */
-export const SubmitFeedbackRequest$outboundSchema: z.ZodMiniType<
-  SubmitFeedbackRequest$Outbound,
-  SubmitFeedbackRequest
-> = z.pipe(
-  z.object({
-    gramSession: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    gramChatSession: z.optional(z.string()),
-    submitFeedbackRequestBody:
-      components.SubmitFeedbackRequestBody$outboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      gramSession: "Gram-Session",
-      gramProject: "Gram-Project",
-      gramChatSession: "Gram-Chat-Session",
-      submitFeedbackRequestBody: "SubmitFeedbackRequestBody",
-    });
-  }),
-);
-
-export function submitFeedbackRequestToJSON(
-  submitFeedbackRequest: SubmitFeedbackRequest,
-): string {
-  return JSON.stringify(
-    SubmitFeedbackRequest$outboundSchema.parse(submitFeedbackRequest),
   );
 }

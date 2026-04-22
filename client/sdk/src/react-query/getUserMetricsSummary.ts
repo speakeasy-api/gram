@@ -10,6 +10,7 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -23,11 +24,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
+import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
   buildGetUserMetricsSummaryQuery,
   GetUserMetricsSummaryQueryData,
@@ -59,7 +56,7 @@ export type GetUserMetricsSummaryQueryError =
  * Get aggregated metrics summary grouped by user
  */
 export function useGetUserMetricsSummary(
-  request: operations.GetUserMetricsSummaryRequest,
+  request: components.GetUserMetricsSummaryPayload,
   security?: operations.GetUserMetricsSummarySecurity | undefined,
   options?: QueryHookOptions<
     GetUserMetricsSummaryQueryData,
@@ -88,7 +85,7 @@ export function useGetUserMetricsSummary(
  * Get aggregated metrics summary grouped by user
  */
 export function useGetUserMetricsSummarySuspense(
-  request: operations.GetUserMetricsSummaryRequest,
+  request: components.GetUserMetricsSummaryPayload,
   security?: operations.GetUserMetricsSummarySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetUserMetricsSummaryQueryData,
@@ -112,40 +109,11 @@ export function useGetUserMetricsSummarySuspense(
 
 export function setGetUserMetricsSummaryData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
   data: GetUserMetricsSummaryQueryData,
 ): GetUserMetricsSummaryQueryData | undefined {
-  const key = queryKeyGetUserMetricsSummary(...queryKeyBase);
+  const key = queryKeyGetUserMetricsSummary();
 
   return client.setQueryData<GetUserMetricsSummaryQueryData>(key, data);
-}
-
-export function invalidateGetUserMetricsSummary(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: [
-      "@gram/client",
-      "telemetry",
-      "getUserMetricsSummary",
-      ...queryKeyBase,
-    ],
-  });
 }
 
 export function invalidateAllGetUserMetricsSummary(
