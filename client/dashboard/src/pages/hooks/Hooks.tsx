@@ -708,7 +708,6 @@ function HooksContent() {
                   handleScroll={handleScroll}
                   hasNextPage={hasNextPage}
                   isFetchingNextPage={isFetchingNextPage}
-                  refetch={refetch}
                   dateRange={dateRange}
                   customRange={customRange}
                   customRangeLabel={urlLabel}
@@ -788,7 +787,6 @@ function HooksInnerContent({
   handleScroll: (e: React.UIEvent<HTMLDivElement>) => void;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
-  refetch: () => void;
   dateRange: DateRangePreset;
   customRange: { from: Date; to: Date } | null;
   customRangeLabel: string | null;
