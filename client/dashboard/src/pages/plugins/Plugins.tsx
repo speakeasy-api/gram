@@ -102,6 +102,9 @@ export default function Plugins() {
     });
   };
 
+  // Depend on .mutate (referentially stable per TanStack Query) rather than
+  // the wrapper object (fresh on every render), so memo() on PublishDialog
+  // can actually skip renders.
   const handlePublish = useCallback(
     (githubUsername?: string) => {
       publishMutation.mutate({
@@ -111,7 +114,7 @@ export default function Plugins() {
         },
       });
     },
-    [publishMutation],
+    [publishMutation.mutate],
   );
 
   const columns: Column<Plugin>[] = [
