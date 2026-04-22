@@ -33,6 +33,7 @@ import type {
   GetHooksSummaryResult,
   HooksBreakdownRow,
   HooksTimeSeriesPoint,
+  SkillSummary,
   SkillTimeSeriesPoint,
   HookTraceSummary as HookTrace,
   LogFilter,
@@ -2116,6 +2117,54 @@ function SkillUsageTimeSeries({
         height={
           expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
         }
+      />
+    </ChartCard>
+  );
+}
+
+function UsersPerSkillChart({
+  title,
+  skills,
+  expandedChart,
+  onExpand,
+}: {
+  title: string;
+  skills: SkillSummary[];
+  expandedChart: string | null;
+  onExpand: (id: string | null) => void;
+}) {
+  const chartId = "users-per-skill";
+  const expanded = expandedChart === chartId;
+  const { labels, datasets } = useMemo(() => {
+    const sorted = [...skills].sort((a, b) => b.useCount - a.useCount);
+    const color = USER_SOURCE_COLORS[0]!;
+    return {
+      labels: sorted.map((s) => s.skillName),
+      datasets: [
+        {
+          label: "Uses",
+          barThickness: BAR_THICKNESS.collapsed,
+          data: sorted.map((s) => s.useCount),
+          backgroundColor: color,
+          hoverBackgroundColor: color + "cc",
+        },
+      ] satisfies StackedBarDataset[],
+    };
+  }, [skills]);
+  return (
+    <ChartCard
+      title={title}
+      chartId={chartId}
+      expandedChart={expandedChart}
+      onExpand={onExpand}
+      hasData={labels.length > 0}
+    >
+      <StackedBarChart
+        labels={labels}
+        datasets={datasets}
+        expanded={expanded}
+        maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
+        onShowAll={() => onExpand(chartId)}
       />
     </ChartCard>
   );
