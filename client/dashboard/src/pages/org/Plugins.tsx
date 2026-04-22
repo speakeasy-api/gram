@@ -66,10 +66,8 @@ export default function Plugins() {
     createMutation.mutate({
       security: { sessionHeaderGramSession: "" },
       request: {
-        createPluginForm: {
-          name,
-          description: description || undefined,
-        },
+        name,
+        description: description || undefined,
       },
     });
   };

@@ -292,10 +292,8 @@ function ChatElementsInner() {
             },
           },
           request: {
-            createRequestBody: {
-              embedOrigin: window.location.origin,
-              userIdentifier: session.user.id,
-            },
+            embedOrigin: window.location.origin,
+            userIdentifier: session.user.id,
           },
         });
         setSessionToken(result.clientToken);
@@ -959,10 +957,8 @@ function InstallationGuide({
         {
           security: { sessionHeaderGramSession: "" },
           request: {
-            createKeyForm: {
-              name: keyName,
-              scopes: ["chat"],
-            },
+            name: keyName,
+            scopes: ["chat"],
           },
         },
         {

@@ -32,12 +32,10 @@ export default function PromptPage() {
         handleSubmit={(form) => {
           m.mutate({
             request: {
-              updatePromptTemplateForm: {
-                id: form.id,
-                prompt: form.prompt,
-                description: form.description ?? void 0,
-                arguments: form.arguments,
-              },
+              id: form.id,
+              prompt: form.prompt,
+              description: form.description ?? void 0,
+              arguments: form.arguments,
             },
           });
         }}

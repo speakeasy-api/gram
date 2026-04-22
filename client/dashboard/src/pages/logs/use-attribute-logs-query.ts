@@ -177,15 +177,13 @@ export function useAttributeLogsQuery({
     queryFn: async ({ pageParam }) => {
       const result = await unwrapAsync(
         telemetrySearchLogs(client, {
-          searchLogsPayload: {
-            from,
-            to,
-            filters: [...toSdkFilters(logFilters), ...extraFilters],
-            ...(gramUrn ? { filter: { gramUrn } } : {}),
-            cursor: pageParam,
-            limit: PER_PAGE,
-            sort: "desc",
-          },
+          from,
+          to,
+          filters: [...toSdkFilters(logFilters), ...extraFilters],
+          ...(gramUrn ? { filter: { gramUrn } } : {}),
+          cursor: pageParam,
+          limit: PER_PAGE,
+          sort: "desc",
         }),
       );
 

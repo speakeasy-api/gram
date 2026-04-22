@@ -130,9 +130,7 @@ const HeadingSection = () => {
   const handleRedeploy = () => {
     redeployMutation.mutate({
       request: {
-        redeployRequestBody: {
-          deploymentId: deploymentId!,
-        },
+        deploymentId: deploymentId!,
       },
     });
   };

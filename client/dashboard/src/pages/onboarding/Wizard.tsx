@@ -844,11 +844,9 @@ const ToolsetStep = ({
       }
 
       const toolset = await client.toolsets.create({
-        createToolsetRequestBody: {
-          name: toolsetName,
-          description: `A toolset created from your OpenAPI document`,
-          toolUrns: tools?.tools.map((tool) => tool.toolUrn) ?? [],
-        },
+        name: toolsetName,
+        description: `A toolset created from your OpenAPI document`,
+        toolUrns: tools?.tools.map((tool) => tool.toolUrn) ?? [],
       });
 
       setCreatedToolset(toolset);

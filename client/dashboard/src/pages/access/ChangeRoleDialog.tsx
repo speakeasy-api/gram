@@ -58,10 +58,8 @@ export function ChangeRoleDialog({
     if (!member || !currentRole) return;
     updateMemberRole.mutate({
       request: {
-        updateMemberRoleForm: {
-          userId: member.id,
-          roleId: currentRole,
-        },
+        userId: member.id,
+        roleId: currentRole,
       },
     });
   };

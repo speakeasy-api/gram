@@ -111,11 +111,9 @@ export function PlaygroundLogsPanel({
     queryFn: () =>
       unwrapAsync(
         telemetrySearchLogs(client, {
-          searchLogsPayload: {
-            filter: gramUrns ? { gramUrns } : undefined,
-            limit: 50,
-            sort: "desc",
-          },
+          filter: gramUrns ? { gramUrns } : undefined,
+          limit: 50,
+          sort: "desc",
         }),
       ),
     refetchInterval: 5000,

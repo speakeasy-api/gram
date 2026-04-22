@@ -62,13 +62,11 @@ export function TraceLogsList({
     queryFn: () =>
       unwrapAsync(
         telemetrySearchLogs(client, {
-          searchLogsPayload: {
-            filter: {
-              traceId,
-            },
-            limit: 100,
-            sort: "asc",
+          filter: {
+            traceId,
           },
+          limit: 100,
+          sort: "asc",
         }),
       ),
     enabled: isExpanded,

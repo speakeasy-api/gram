@@ -228,14 +228,12 @@ export function useStepActions(deps: StepActionDeps): StepActions {
     createEnvironmentMutation.mutate(
       {
         request: {
-          createEnvironmentForm: {
-            name: envName,
-            organizationId: activeOrganizationId,
-            entries: [
-              { name: "CLIENT_ID", value: state.clientId },
-              { name: "CLIENT_SECRET", value: state.clientSecret },
-            ],
-          },
+          name: envName,
+          organizationId: activeOrganizationId,
+          entries: [
+            { name: "CLIENT_ID", value: state.clientId },
+            { name: "CLIENT_SECRET", value: state.clientSecret },
+          ],
         },
       },
       {

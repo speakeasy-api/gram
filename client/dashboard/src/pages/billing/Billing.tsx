@@ -58,7 +58,7 @@ const UsageSection = () => {
   const isAdmin = useIsAdmin();
 
   const { data: creditUsage } = useGetCreditUsage();
-  const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
+  const { data: periodUsage } = useGetPeriodUsage(undefined, {
     throwOnError: !getServerURL().includes("localhost"),
   });
 

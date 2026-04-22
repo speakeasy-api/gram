@@ -347,21 +347,17 @@ export function ToolsetView({
     if (tool.type === "prompt") {
       // Prompt templates are only sometimes updated via variation under the hood. We use this endpoint instead to ensure it mirrors editing from the ToolBuilder page itself.
       await client.templates.update({
-        updatePromptTemplateForm: {
-          ...tool,
-          ...updates,
-        },
+        ...tool,
+        ...updates,
       });
       invalidateTemplate(queryClient, [{ name: tool.name }]);
     } else {
       await client.variations.upsertGlobal({
-        upsertGlobalToolVariationForm: {
-          ...tool.variation,
-          confirm: tool.variation?.confirm as Confirm,
-          ...updates,
-          srcToolName: tool.canonicalName,
-          srcToolUrn: tool.toolUrn,
-        },
+        ...tool.variation,
+        confirm: tool.variation?.confirm as Confirm,
+        ...updates,
+        srcToolName: tool.canonicalName,
+        srcToolUrn: tool.toolUrn,
       });
     }
 
@@ -457,10 +453,8 @@ export function ToolsetView({
   const handleCreateToolsetSubmit = () => {
     createToolsetMutation.mutate({
       request: {
-        createToolsetRequestBody: {
-          name: newToolsetName,
-          description: "New Toolset",
-        },
+        name: newToolsetName,
+        description: "New Toolset",
       },
     });
   };

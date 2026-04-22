@@ -45,8 +45,7 @@ export function OrgLogsInner() {
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
       onSuccess: (_, variables) => {
-        const { featureName, enabled } =
-          variables.request.setProductFeatureRequestBody;
+        const { featureName, enabled } = variables.request;
         if (featureName === FeatureName.Logs) {
           setLogsEnabled(enabled);
         } else if (featureName === FeatureName.ToolIoLogs) {
@@ -62,20 +61,16 @@ export function OrgLogsInner() {
   const handleSetLogs = (enabled: boolean) => {
     setLogsFeature({
       request: {
-        setProductFeatureRequestBody: {
-          featureName: FeatureName.Logs,
-          enabled,
-        },
+        featureName: FeatureName.Logs,
+        enabled,
       },
     });
 
     if (!enabled && effectiveToolIoLogsEnabled) {
       setLogsFeature({
         request: {
-          setProductFeatureRequestBody: {
-            featureName: FeatureName.ToolIoLogs,
-            enabled: false,
-          },
+          featureName: FeatureName.ToolIoLogs,
+          enabled: false,
         },
       });
     }
@@ -84,10 +79,8 @@ export function OrgLogsInner() {
   const handleSetToolIoLogs = (enabled: boolean) => {
     setLogsFeature({
       request: {
-        setProductFeatureRequestBody: {
-          featureName: FeatureName.ToolIoLogs,
-          enabled,
-        },
+        featureName: FeatureName.ToolIoLogs,
+        enabled,
       },
     });
   };
@@ -95,10 +88,8 @@ export function OrgLogsInner() {
   const handleSetSessionCapture = (enabled: boolean) => {
     setLogsFeature({
       request: {
-        setProductFeatureRequestBody: {
-          featureName: FeatureName.SessionCapture,
-          enabled,
-        },
+        featureName: FeatureName.SessionCapture,
+        enabled,
       },
     });
   };

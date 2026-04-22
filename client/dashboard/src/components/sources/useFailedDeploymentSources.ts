@@ -39,7 +39,6 @@ export function useFailedDeploymentSources(
 ): UseFailedDeploymentSourcesResult {
   const { data: latestResult, isLoading: latestLoading } = useLatestDeployment(
     undefined,
-    undefined,
     {
       enabled: !deploymentId,
     },

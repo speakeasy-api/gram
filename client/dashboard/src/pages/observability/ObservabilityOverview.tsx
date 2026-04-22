@@ -729,14 +729,10 @@ function ObservabilityOverviewInner() {
     queryFn: () =>
       unwrapAsync(
         telemetryListFilterOptions(client, {
-          listFilterOptionsPayload: {
-            from,
-            to,
-            filterType:
-              filterDimension === "api_key"
-                ? FilterType.ApiKey
-                : FilterType.User,
-          },
+          from,
+          to,
+          filterType:
+            filterDimension === "api_key" ? FilterType.ApiKey : FilterType.User,
         }),
       ),
     placeholderData: keepPreviousData,
@@ -782,12 +778,10 @@ function ObservabilityOverviewInner() {
         queryFn: () =>
           unwrapAsync(
             telemetryGetObservabilityOverview(client, {
-              getObservabilityOverviewPayload: {
-                from,
-                to,
-                includeTimeSeries: true,
-                ...filterParams,
-              },
+              from,
+              to,
+              includeTimeSeries: true,
+              ...filterParams,
             }),
           ),
         placeholderData: keepPreviousData,

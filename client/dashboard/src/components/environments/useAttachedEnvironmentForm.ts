@@ -125,10 +125,8 @@ export function useAttachedEnvironmentForm({
     mutationFn: async (): Promise<ToolsetEnvironmentLink | null> => {
       if (formState.environment?.id) {
         return await sdkClient.environments.setToolsetLink({
-          setToolsetEnvironmentLinkRequestBody: {
-            toolsetId,
-            environmentId: formState.environment.id,
-          },
+          toolsetId,
+          environmentId: formState.environment.id,
         });
       } else {
         await sdkClient.environments.deleteToolsetLink({

@@ -353,14 +353,12 @@ export function useExternalMcpReleaseWorkflow({
         try {
           const toolset = await client.toolsets.create(
             {
-              createToolsetRequestBody: {
-                name: config.name,
-                description:
-                  config.server.description ||
-                  `MCP server: ${config.server.registrySpecifier}`,
-                origin: buildToolsetOrigin(config.server),
-                toolUrns: buildToolUrns(config),
-              },
+              name: config.name,
+              description:
+                config.server.description ||
+                `MCP server: ${config.server.registrySpecifier}`,
+              origin: buildToolsetOrigin(config.server),
+              toolUrns: buildToolUrns(config),
             },
             undefined,
             reqOpts,
@@ -553,21 +551,19 @@ export function useExternalMcpReleaseWorkflow({
     try {
       const result = await client.deployments.evolveDeployment(
         {
-          evolveForm: {
-            deploymentId: latestDeployment?.id,
-            nonBlocking: true,
-            upsertExternalMcps: serverConfigs.map((config) => ({
-              registryId: config.server.registryId,
-              organizationMcpCollectionRegistryId:
-                config.server.organizationMcpCollectionRegistryId,
-              name: config.name,
-              slug: generateSlug(config.name),
-              registryServerSpecifier: config.server.registrySpecifier,
-              selectedRemotes:
-                config.selectedRemotes?.map((r) => r.url) ??
-                config.server.remotes?.map((r) => r.url),
-            })),
-          },
+          deploymentId: latestDeployment?.id,
+          nonBlocking: true,
+          upsertExternalMcps: serverConfigs.map((config) => ({
+            registryId: config.server.registryId,
+            organizationMcpCollectionRegistryId:
+              config.server.organizationMcpCollectionRegistryId,
+            name: config.name,
+            slug: generateSlug(config.name),
+            registryServerSpecifier: config.server.registrySpecifier,
+            selectedRemotes:
+              config.selectedRemotes?.map((r) => r.url) ??
+              config.server.remotes?.map((r) => r.url),
+          })),
         },
         undefined,
         reqOpts,

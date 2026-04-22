@@ -177,16 +177,14 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
         deployment = createResult.deployment;
       } else {
         const createResult = await client.deployments.evolveDeployment({
-          evolveForm: {
-            nonBlocking: true,
-            upsertOpenapiv3Assets: [
-              {
-                assetId: asset.asset.id,
-                name: documentSlug ?? apiName,
-                slug: documentSlug ?? slugify(apiName),
-              },
-            ],
-          },
+          nonBlocking: true,
+          upsertOpenapiv3Assets: [
+            {
+              assetId: asset.asset.id,
+              name: documentSlug ?? apiName,
+              slug: documentSlug ?? slugify(apiName),
+            },
+          ],
         });
 
         deployment = createResult.deployment;

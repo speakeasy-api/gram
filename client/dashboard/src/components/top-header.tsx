@@ -91,10 +91,8 @@ export function TopHeader() {
 
   const createProject = async (name: string) => {
     const result = await client.projects.create({
-      createProjectRequestBody: {
-        name,
-        organizationId: organization.id,
-      },
+      name,
+      organizationId: organization.id,
     });
     setCreateDialogOpen(false);
     setNewProjectName("");

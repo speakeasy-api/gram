@@ -67,9 +67,7 @@ export function MCPOverview() {
 
   const handleCreateMcpServerSubmit = async () => {
     const result = await client.toolsets.create({
-      createToolsetRequestBody: {
-        name: newMcpServerName,
-      },
+      name: newMcpServerName,
     });
 
     toast.success(`MCP server "${result.name}" created`);

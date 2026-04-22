@@ -132,15 +132,13 @@ export function FailedSourcesSection({
       }
 
       await client.deployments.evolveDeployment({
-        evolveForm: {
-          deploymentId: deployment.id,
-          nonBlocking: true,
-          ...(excludeOpenapiv3Assets.length > 0 && {
-            excludeOpenapiv3Assets,
-          }),
-          ...(excludeFunctions.length > 0 && { excludeFunctions }),
-          ...(excludeExternalMcps.length > 0 && { excludeExternalMcps }),
-        },
+        deploymentId: deployment.id,
+        nonBlocking: true,
+        ...(excludeOpenapiv3Assets.length > 0 && {
+          excludeOpenapiv3Assets,
+        }),
+        ...(excludeFunctions.length > 0 && { excludeFunctions }),
+        ...(excludeExternalMcps.length > 0 && { excludeExternalMcps }),
       });
 
       toast.success(

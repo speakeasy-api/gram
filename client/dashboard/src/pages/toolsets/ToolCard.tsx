@@ -36,20 +36,16 @@ export function ToolCard({
   ) => {
     if (tool.type === "http") {
       await client.variations.upsertGlobal({
-        upsertGlobalToolVariationForm: {
-          ...tool.variation,
-          confirm: tool.variation?.confirm as Confirm, // TODO: Should the server return the same type?
-          ...vals,
-          srcToolUrn: tool.toolUrn,
-          srcToolName: tool.canonicalName,
-        },
+        ...tool.variation,
+        confirm: tool.variation?.confirm as Confirm, // TODO: Should the server return the same type?
+        ...vals,
+        srcToolUrn: tool.toolUrn,
+        srcToolName: tool.canonicalName,
       });
     } else {
       await client.templates.update({
-        updatePromptTemplateForm: {
-          ...tool,
-          ...vals,
-        },
+        ...tool,
+        ...vals,
       });
       invalidateTemplate(queryClient, [{ name: tool.name }]);
     }

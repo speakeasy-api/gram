@@ -81,9 +81,7 @@ function DeploymentActionsDropdown({
   const handleRedeploy = () => {
     redeployMutation.mutate({
       request: {
-        redeployRequestBody: {
-          deploymentId: deployment.id,
-        },
+        deploymentId: deployment.id,
       },
     });
   };

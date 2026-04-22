@@ -65,13 +65,11 @@ export function SourceSettingsTab({
   ) => {
     try {
       await client.deployments.evolveDeployment({
-        evolveForm: {
-          deploymentId: deployment?.deployment?.id,
-          nonBlocking: true,
-          ...(type === "openapi"
-            ? { excludeOpenapiv3Assets: [assetId] }
-            : { excludeFunctions: [assetId] }),
-        },
+        deploymentId: deployment?.deployment?.id,
+        nonBlocking: true,
+        ...(type === "openapi"
+          ? { excludeOpenapiv3Assets: [assetId] }
+          : { excludeFunctions: [assetId] }),
       });
       await Promise.all([refetch(), refetchAssets()]);
       const typeLabel = type === "openapi" ? "API" : "Function";

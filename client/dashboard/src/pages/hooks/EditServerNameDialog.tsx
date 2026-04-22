@@ -96,10 +96,8 @@ export function EditServerNameDialog({
     async (rawServerName: string, displayName: string) => {
       await upsert.mutateAsync({
         request: {
-          upsertRequestBody: {
-            rawServerName: rawServerName,
-            displayName: displayName,
-          },
+          rawServerName: rawServerName,
+          displayName: displayName,
         },
       });
     },
@@ -109,7 +107,7 @@ export function EditServerNameDialog({
   const onDelete = useCallback(
     async (overrideId: string) => {
       await remove.mutateAsync({
-        request: { deleteRequestBody: { overrideId: overrideId } },
+        request: { overrideId: overrideId },
       });
     },
     [remove],

@@ -371,11 +371,7 @@ function LogsContent() {
 
   // Fetch attribute keys for filter bar
   const { data: attributeKeysData, isLoading: isLoadingAttributeKeys } =
-    useListAttributeKeys(
-      { getProjectMetricsSummaryPayload: { from, to } },
-      undefined,
-      { throwOnError: false },
-    );
+    useListAttributeKeys({ from, to }, undefined, { throwOnError: false });
   const attributeKeys = attributeKeysData?.keys ?? [];
 
   // Standard tool calls query (used when no structured filters are active)
@@ -390,16 +386,14 @@ function LogsContent() {
       queryFn: ({ pageParam }) =>
         unwrapAsync(
           telemetrySearchToolCalls(client, {
-            searchToolCallsPayload: {
-              filter: {
-                ...(effectiveGramUrn ? { gramUrn: effectiveGramUrn } : {}),
-                from,
-                to,
-              },
-              cursor: pageParam,
-              limit: perPage,
-              sort: "desc",
+            filter: {
+              ...(effectiveGramUrn ? { gramUrn: effectiveGramUrn } : {}),
+              from,
+              to,
             },
+            cursor: pageParam,
+            limit: perPage,
+            sort: "desc",
           }),
         ),
       initialPageParam: undefined as string | undefined,

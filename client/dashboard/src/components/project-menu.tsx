@@ -202,10 +202,8 @@ export function ProjectSelector() {
 
   const createProject = async (name: string) => {
     const result = await client.projects.create({
-      createProjectRequestBody: {
-        name,
-        organizationId: organization.id,
-      },
+      name,
+      organizationId: organization.id,
     });
     setCreateDialogOpen(false);
     project.switchProject(result.project.slug);

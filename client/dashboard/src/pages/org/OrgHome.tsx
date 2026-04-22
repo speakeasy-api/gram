@@ -144,10 +144,8 @@ export function OrgHomeInner() {
           submitButtonText="Create Project"
           onSubmit={async () => {
             const result = await client.projects.create({
-              createProjectRequestBody: {
-                name: newProjectName,
-                organizationId: organization.id,
-              },
+              name: newProjectName,
+              organizationId: organization.id,
             });
             setNewProjectName("");
             navigate(`/${orgSlug}/projects/${result.project.slug}`);

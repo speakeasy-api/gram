@@ -112,9 +112,7 @@ export function TeamInner() {
     inviteMutation.mutate(
       {
         request: {
-          sendInviteRequestBody: {
-            email: submittedEmail,
-          },
+          email: submittedEmail,
         },
       },
       {

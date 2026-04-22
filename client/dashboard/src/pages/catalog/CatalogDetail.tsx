@@ -78,11 +78,9 @@ export default function CatalogDetail() {
 
       // Remove the external MCP from the deployment
       await client.deployments.evolveDeployment({
-        evolveForm: {
-          deploymentId: deployment?.id,
-          nonBlocking: true,
-          excludeExternalMcps: [slug],
-        },
+        deploymentId: deployment?.id,
+        nonBlocking: true,
+        excludeExternalMcps: [slug],
       });
     },
     onSuccess: async () => {

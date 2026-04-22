@@ -39,11 +39,7 @@ export function ProjectDashboard() {
   const logsEnabled = featuresData?.logsEnabled === true;
 
   const { data: overview, isPending: isOverviewPending } =
-    useGetProjectOverview(
-      { getProjectMetricsSummaryPayload: { from, to } },
-      undefined,
-      { enabled: logsEnabled },
-    );
+    useGetProjectOverview({ from, to }, undefined, { enabled: logsEnabled });
 
   const featuresSettled = !isFeaturesPending || isFeaturesError;
   const isOverviewLoading =

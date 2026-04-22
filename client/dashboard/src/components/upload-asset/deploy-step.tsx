@@ -82,10 +82,8 @@ export default function DeployStep() {
       try {
         // First create the toolset without tools
         const toolset = await client.toolsets.create({
-          createToolsetRequestBody: {
-            name: assetName,
-            description: `Tools generated from ${assetName}`,
-          },
+          name: assetName,
+          description: `Tools generated from ${assetName}`,
         });
 
         // Then add the tools via update
@@ -306,16 +304,14 @@ const useCreateDeployment = (): (() => Promise<Deployment>) => {
     }
 
     const result = await client.deployments.evolveDeployment({
-      evolveForm: {
-        nonBlocking: true,
-        upsertOpenapiv3Assets: [
-          {
-            assetId: uploadResult.asset.id,
-            name: assetName,
-            slug: slugify(assetName),
-          },
-        ],
-      },
+      nonBlocking: true,
+      upsertOpenapiv3Assets: [
+        {
+          assetId: uploadResult.asset.id,
+          name: assetName,
+          slug: slugify(assetName),
+        },
+      ],
     });
 
     let deployment = result.deployment;

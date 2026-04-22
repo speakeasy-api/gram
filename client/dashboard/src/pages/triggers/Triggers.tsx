@@ -397,14 +397,10 @@ function TriggerDialog({
 }) {
   const routes = useRoutes();
   const queryClient = useQueryClient();
-  const { data: definitionsData } = useTriggerDefinitions(
-    undefined,
-    undefined,
-    {
-      retry: false,
-      throwOnError: false,
-    },
-  );
+  const { data: definitionsData } = useTriggerDefinitions(undefined, {
+    retry: false,
+    throwOnError: false,
+  });
   const createMutation = useCreateTriggerMutation();
   const updateMutation = useUpdateTriggerMutation();
   const deleteMutation = useDeleteTriggerMutation();
@@ -497,15 +493,13 @@ function TriggerDialog({
 
     await createMutation.mutateAsync({
       request: {
-        createTriggerInstanceForm: {
-          name,
-          definitionSlug,
-          config,
-          targetKind,
-          targetRef,
-          targetDisplay,
-          ...(environmentId ? { environmentId } : {}),
-        },
+        name,
+        definitionSlug,
+        config,
+        targetKind,
+        targetRef,
+        targetDisplay,
+        ...(environmentId ? { environmentId } : {}),
       },
     });
     invalidateAll();
@@ -516,15 +510,13 @@ function TriggerDialog({
     if (!editingTrigger || !targetKind) return;
     await updateMutation.mutateAsync({
       request: {
-        updateTriggerInstanceForm: {
-          id: editingTrigger.id,
-          name,
-          config,
-          targetKind,
-          targetRef,
-          targetDisplay,
-          ...(environmentId ? { environmentId } : {}),
-        },
+        id: editingTrigger.id,
+        name,
+        config,
+        targetKind,
+        targetRef,
+        targetDisplay,
+        ...(environmentId ? { environmentId } : {}),
       },
     });
     invalidateAll();
@@ -781,11 +773,10 @@ export default function TriggersIndex() {
 
   const { data: triggersData, isLoading: triggersLoading } = useTriggers(
     undefined,
-    undefined,
     { retry: false, throwOnError: false },
   );
   const { data: definitionsData, isLoading: definitionsLoading } =
-    useTriggerDefinitions(undefined, undefined, {
+    useTriggerDefinitions(undefined, {
       retry: false,
       throwOnError: false,
     });

@@ -135,9 +135,7 @@ export function OrgDomainsInner() {
     registerDomainMutation.mutate({
       security: { sessionHeaderGramSession: "" },
       request: {
-        createDomainRequestBody: {
-          domain: domainInput.trim(),
-        },
+        domain: domainInput.trim(),
       },
     });
   };

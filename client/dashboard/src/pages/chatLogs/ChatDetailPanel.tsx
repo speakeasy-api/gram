@@ -651,12 +651,10 @@ export function ChatDetailPanel({
   useEffect(() => {
     searchLogs({
       request: {
-        searchLogsPayload: {
-          filter: {
-            gramChatId: chatId,
-          },
-          limit: 100,
+        filter: {
+          gramChatId: chatId,
         },
+        limit: 100,
       },
     });
   }, [chatId, searchLogs]);

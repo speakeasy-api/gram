@@ -12,7 +12,7 @@ import { assert } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import {
-  invalidateListAPIKeys,
+  invalidateAllListAPIKeys,
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
@@ -59,7 +59,7 @@ export function OrgApiKeysInner() {
   const createKeyMutation = useCreateAPIKeyMutation({
     onSuccess: async (data) => {
       setNewlyCreatedKey(data);
-      await invalidateListAPIKeys(queryClient, [{ gramSession: "" }]);
+      await invalidateAllListAPIKeys(queryClient);
       await queryClient.refetchQueries({
         queryKey: ["@gram/client", "keys", "list"],
       });
@@ -69,7 +69,7 @@ export function OrgApiKeysInner() {
   const revokeKeyMutation = useRevokeAPIKeyMutation({
     onSuccess: async () => {
       setKeyToRevoke(null);
-      await invalidateListAPIKeys(queryClient, [{ gramSession: "" }]);
+      await invalidateAllListAPIKeys(queryClient);
       await queryClient.refetchQueries({
         queryKey: ["@gram/client", "keys", "list"],
       });
@@ -89,10 +89,8 @@ export function OrgApiKeysInner() {
       {
         security: { sessionHeaderGramSession: "" },
         request: {
-          createKeyForm: {
-            name: newKeyName,
-            scopes: [scope],
-          },
+          name: newKeyName,
+          scopes: [scope],
         },
       },
       {

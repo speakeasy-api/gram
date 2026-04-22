@@ -99,7 +99,7 @@ export const useSessionData = () => {
     error,
     refetch,
     status,
-  } = useSessionInfo(undefined, undefined, {
+  } = useSessionInfo(undefined, {
     refetchOnWindowFocus: false,
     retry: false,
     throwOnError: false,

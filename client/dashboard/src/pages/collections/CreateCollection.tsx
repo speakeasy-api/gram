@@ -130,14 +130,12 @@ export default function CreateCollection() {
 
     await createCollection.mutateAsync({
       request: {
-        createRequestBody2: {
-          name,
-          slug,
-          mcpRegistryNamespace: namespace,
-          description: description || undefined,
-          visibility,
-          toolsetIds: toolsetIds.length > 0 ? toolsetIds : undefined,
-        },
+        name,
+        slug,
+        mcpRegistryNamespace: namespace,
+        description: description || undefined,
+        visibility,
+        toolsetIds: toolsetIds.length > 0 ? toolsetIds : undefined,
       },
     });
     orgRoutes.collections.goTo();
