@@ -853,26 +853,32 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 				EnvConfigs:  nil,
 			}
 
-			// For public servers, load user-facing environment configs.
+			// For public servers, load user-facing environment configs. A public
+			// toolset without an mcp_metadata row simply has no user-provided
+			// env vars — UpsertMetadata is explicit, not auto-created on publish.
 			if r.ToolsetIsPublic {
 				metadata, metaErr := mcpMeta.GetMetadataForToolset(ctx, r.ToolsetID)
-				if metaErr != nil {
+				switch {
+				case errors.Is(metaErr, pgx.ErrNoRows):
+					// No metadata configured → no env configs to surface.
+				case metaErr != nil:
 					return nil, oops.E(oops.CodeUnexpected, metaErr, "load mcp metadata for toolset").Log(ctx, s.logger)
-				}
-				envConfigs, envErr := mcpMeta.ListEnvironmentConfigs(ctx, metadata.ID)
-				if envErr != nil {
-					return nil, oops.E(oops.CodeUnexpected, envErr, "load environment configs for toolset").Log(ctx, s.logger)
-				}
-				for _, ec := range envConfigs {
-					if ec.ProvidedBy == "user" {
-						displayName := ec.VariableName
-						if dn := conv.FromPGText[string](ec.HeaderDisplayName); dn != nil {
-							displayName = *dn
+				default:
+					envConfigs, envErr := mcpMeta.ListEnvironmentConfigs(ctx, metadata.ID)
+					if envErr != nil {
+						return nil, oops.E(oops.CodeUnexpected, envErr, "load environment configs for toolset").Log(ctx, s.logger)
+					}
+					for _, ec := range envConfigs {
+						if ec.ProvidedBy == "user" {
+							displayName := ec.VariableName
+							if dn := conv.FromPGText[string](ec.HeaderDisplayName); dn != nil {
+								displayName = *dn
+							}
+							serverInfo.EnvConfigs = append(serverInfo.EnvConfigs, ServerEnvConfig{
+								VariableName: ec.VariableName,
+								DisplayName:  displayName,
+							})
 						}
-						serverInfo.EnvConfigs = append(serverInfo.EnvConfigs, ServerEnvConfig{
-							VariableName: ec.VariableName,
-							DisplayName:  displayName,
-						})
 					}
 				}
 			}

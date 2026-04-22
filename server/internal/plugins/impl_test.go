@@ -20,10 +20,10 @@ import (
 
 // mockGitHubPublisher records calls for testing.
 type mockGitHubPublisher struct {
-	createRepoCalled     bool
-	pushFilesCalled      bool
+	createRepoCalled      bool
+	pushFilesCalled       bool
 	addCollaboratorCalled bool
-	lastPushedFiles      map[string][]byte
+	lastPushedFiles       map[string][]byte
 }
 
 func (m *mockGitHubPublisher) CreateRepo(_ context.Context, _ int64, _, _ string, _ bool) error {
@@ -41,7 +41,6 @@ func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, _, 
 	m.addCollaboratorCalled = true
 	return nil
 }
-
 
 func TestPluginsService_CreatePlugin(t *testing.T) {
 	t.Parallel()
@@ -649,4 +648,33 @@ func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
 
 	// Verify NO Gram API key is injected for public servers.
 	require.NotContains(t, string(cursorMCP), "gram_local_")
+}
+
+// A public toolset with no mcp_metadata row should publish cleanly. The
+// metadata row is created by an explicit UpsertMetadata call, not auto-
+// created when a toolset is made public, so this is a real production state.
+func TestPluginsService_PublishPlugins_PublicToolsetWithoutMetadata(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "No Meta"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "public-no-meta")
+	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "No Meta Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
 }
