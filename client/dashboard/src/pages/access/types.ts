@@ -1,4 +1,6 @@
-export { Scope } from "@gram/client/models/components/rolegrant.js";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
+
+export { Scope };
 
 /** What kind of resource a scope protects. */
 export type ResourceType = "org" | "project" | "mcp";
