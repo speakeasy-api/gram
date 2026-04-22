@@ -51,7 +51,7 @@ export type SkillsCaptureMutationError =
  * capture skills
  *
  * @remarks
- * Capture a skill artifact and associated metadata.
+ * Capture a skill artifact and associated metadata via producer authentication.
  */
 export function useSkillsCaptureMutation(
   options?: MutationHookOptions<

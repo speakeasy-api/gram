@@ -11,6 +11,8 @@ import (
 	"math"
 	"net/http"
 	"slices"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -68,6 +70,35 @@ var allowList = map[string]bool{
 // IsModelAllowed checks if a model is in the allowlist
 func IsModelAllowed(model string) bool {
 	return allowList[model]
+}
+
+// ResolveModel returns the model as-is if it's in the allowlist.
+// Otherwise, it returns the first allowed model (sorted alphabetically)
+// from the same provider. Returns empty string if no fallback is found.
+func ResolveModel(model string) string {
+	if allowList[model] {
+		return model
+	}
+
+	provider, _, ok := strings.Cut(model, "/")
+	if !ok || provider == "" {
+		return ""
+	}
+
+	prefix := provider + "/"
+	var candidates []string
+	for m := range allowList {
+		if strings.HasPrefix(m, prefix) {
+			candidates = append(candidates, m)
+		}
+	}
+
+	if len(candidates) == 0 {
+		return ""
+	}
+
+	sort.Strings(candidates)
+	return candidates[0]
 }
 
 // default credit limits per acccount type

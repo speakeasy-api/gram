@@ -9,6 +9,7 @@ export * from "./approveskillversion.js";
 export * from "./attachservertocollection.js";
 export * from "./authcallback.js";
 export * from "./authlogin.js";
+export * from "./captureclaudeskill.js";
 export * from "./captureevent.js";
 export * from "./captureskill.js";
 export * from "./checkmcpslugavailability.js";

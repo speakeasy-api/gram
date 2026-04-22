@@ -1,3 +1,4 @@
+import { RequireScope } from "@/components/require-scope";
 import { Card, Cards } from "@/components/ui/card";
 import {
   Command,
@@ -14,6 +15,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useLatestDeployment, useListResources } from "@/hooks/toolTypes";
 import { Resource, Toolset } from "@/lib/toolTypes";
 import { useUpdateToolsetMutation } from "@gram/client/react-query";
@@ -114,11 +116,13 @@ export function ResourcesTabContent({
           );
         })}
       {allResources && allResources.length > 0 && (
-        <ResourceSelectPopover
-          allResources={allResources}
-          currentResourceUrns={currentResourceUrns}
-          onSelect={(resourceUrn) => addResourceToToolset(resourceUrn)}
-        />
+        <RequireScope scope="mcp:write" level="section">
+          <ResourceSelectPopover
+            allResources={allResources}
+            currentResourceUrns={currentResourceUrns}
+            onSelect={(resourceUrn) => addResourceToToolset(resourceUrn)}
+          />
+        </RequireScope>
       )}
     </Cards>
   );
@@ -133,12 +137,15 @@ function ResourceCard({
   functionName?: string;
   onDelete: () => void;
 }) {
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("mcp:write");
   const actions = [
     {
       label: "Remove from toolset",
       onClick: onDelete,
       icon: "trash" as const,
       destructive: true,
+      disabled: !canWrite,
     },
   ];
 

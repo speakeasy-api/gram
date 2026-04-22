@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * capture skills
  *
  * @remarks
- * Capture a skill artifact and associated metadata.
+ * Capture a skill artifact and associated metadata via producer authentication.
  */
 export function skillsCapture(
   client: GramCore,

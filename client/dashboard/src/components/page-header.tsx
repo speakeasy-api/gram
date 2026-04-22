@@ -1,11 +1,14 @@
+import { Link, useLocation, useParams } from "react-router";
+import { capitalize, cn } from "@/lib/utils.ts";
+import { useOrganization, useProject } from "@/contexts/Auth.tsx";
+
+import { Heading } from "./ui/heading.tsx";
 import { InsightsTrigger } from "@/components/insights-sidebar";
+import React from "react";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useSlugs } from "@/contexts/Sdk.tsx";
-import { capitalize, cn } from "@/lib/utils.ts";
-import React from "react";
-import { Link, useLocation, useParams } from "react-router";
-import { Heading } from "./ui/heading.tsx";
 
 function PageHeaderComponent({
   className,
@@ -65,6 +68,9 @@ const breadcrumbSubstitutions = {
   "add-function": "Add Function",
   "add-from-catalog": "Add from Catalog",
   "agent-sessions": "Agent Sessions",
+  "api-keys": "API Keys",
+  "audit-logs": "Audit Logs",
+  "admin-settings": "Admin Settings",
   // The URL segment `slack` is preserved for backwards compatibility,
   // but the sidebar/route title was rebranded — map it here so
   // breadcrumbs stay in sync with the rest of the UI.
@@ -84,6 +90,9 @@ function PageHeaderBreadcrumbs({
 }) {
   const params = useParams();
   const { orgSlug, projectSlug } = useSlugs();
+  const organization = useOrganization();
+  const project = useProject();
+  const { hasAnyScope } = useRBAC();
   const location = useLocation();
 
   const toPreserve = Object.values(params).filter(Boolean);
@@ -92,18 +101,24 @@ function PageHeaderBreadcrumbs({
     ...substitutions,
   };
 
-  // Build breadcrumb elements from URL segments
+  // Build page-level breadcrumb elements from URL segments
   // For project-level pages (/:orgSlug/projects/:projectSlug/...), strip 3 leading segments
   // For org-level pages (/:orgSlug/...), strip 1 leading segment (just the orgSlug)
   const segmentsToStrip = projectSlug ? 3 : 1;
-  const visibleElements = location.pathname
+  const baseUrl = projectSlug
+    ? `/${orgSlug}/projects/${projectSlug}`
+    : `/${orgSlug}`;
+
+  // Build URLs from ALL segments (so skipped segments are still in the path),
+  // then filter out the ones we don't want to display.
+  const allSegments = location.pathname
     .split("/")
     .filter(Boolean) // Remove empty strings
-    .slice(segmentsToStrip)
-    .filter((segment) => !skipSegments.includes(segment)) // Skip specified segments
-    .map((segment, index, segments) => {
-      const url = "/" + segments.slice(0, index + 1).join("/");
-      const isCurrentPage = location.pathname.endsWith(url);
+    .slice(segmentsToStrip);
+
+  const pageElements = allSegments
+    .map((segment, index) => {
+      const relativeUrl = "/" + allSegments.slice(0, index + 1).join("/");
 
       let display = segment;
       if (allSubstitutions[segment]) {
@@ -113,32 +128,66 @@ function PageHeaderBreadcrumbs({
       }
 
       return {
-        url,
+        url: baseUrl + relativeUrl,
         display,
-        isCurrentPage,
+        isCurrentPage: location.pathname.endsWith(relativeUrl),
+        skip: skipSegments.includes(segment),
       };
-    });
+    })
+    .filter((elem) => !elem.skip);
 
-  visibleElements.unshift({
-    url: "/",
-    display: "Home",
-    isCurrentPage: visibleElements.length === 0,
+  // Build full breadcrumb list: {org} > [project >] page segments
+  const canAccessOrg = hasAnyScope(["org:read", "org:admin"]);
+  const visibleElements: {
+    url: string;
+    display: string;
+    isCurrentPage: boolean;
+    disableLink?: boolean;
+  }[] = [];
+
+  // 1. Org name (always first; only clickable if user has org access)
+  visibleElements.push({
+    url: `/${orgSlug}`,
+    display: organization.name || orgSlug || "Home",
+    isCurrentPage: false,
+    disableLink: !canAccessOrg,
   });
+
+  // 2. Project name (only for project-level pages)
+  if (projectSlug) {
+    visibleElements.push({
+      url: `/${orgSlug}/projects/${projectSlug}`,
+      display: project.name || projectSlug || "Project",
+      isCurrentPage: pageElements.length === 0,
+    });
+  } else if (pageElements.length === 0) {
+    // Org root page — show "Home" as the current page
+    visibleElements.push({
+      url: `/${orgSlug}`,
+      display: "Home",
+      isCurrentPage: true,
+    });
+  }
+
+  // 3. Page segments
+  visibleElements.push(...pageElements);
 
   return (
     <PageHeader.Title className={cn(fullWidth ? "max-w-full" : "", className)}>
       <div className="ml-auto flex items-center gap-2 normal-case">
         {visibleElements.map((elem, index) => (
-          <React.Fragment key={elem.url}>
-            {elem.isCurrentPage ? (
-              <span>{elem.display}</span>
+          <React.Fragment key={`${elem.url}-${index}`}>
+            {elem.isCurrentPage || elem.disableLink ? (
+              <span
+                className={
+                  elem.isCurrentPage ? undefined : "text-muted-foreground"
+                }
+              >
+                {elem.display}
+              </span>
             ) : (
               <Link
-                to={
-                  projectSlug
-                    ? `/${orgSlug}/projects/${projectSlug}${elem.url}`
-                    : `/${orgSlug}${elem.url}`
-                }
+                to={elem.url}
                 className="text-muted-foreground hover:text-foreground trans"
               >
                 {elem.display}

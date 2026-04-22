@@ -1,8 +1,7 @@
-import {
-  APP_NAV_GROUPS,
-  type AppNavRouteKey,
-} from "@/components/app-navigation";
-import { NavButton, NavMenu } from "@/components/nav-menu";
+import * as React from "react";
+
+import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
+import { MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -10,35 +9,42 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useSlugs } from "@/contexts/Sdk";
-import { useProductTier } from "@/hooks/useProductTier";
-import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
+import { Stack, cn } from "@speakeasy-api/moonshine";
 import { useFeaturesGet, useGetPeriodUsage } from "@gram/client/react-query";
-import { cn, Stack } from "@speakeasy-api/moonshine";
-import { Building2Icon, MinusIcon, TestTube2Icon } from "lucide-react";
-import * as React from "react";
-import { useState } from "react";
-import { RequireScope } from "./require-scope";
-import { FeatureRequestModal } from "./FeatureRequestModal";
-import { Button } from "./ui/button";
-import { Type } from "./ui/type";
 
-function resolveNavGroupItems(
-  routes: ReturnType<typeof useRoutes>,
-  skillsCaptureEnabled: boolean,
-): Record<string, AppRoute[]> {
-  return Object.fromEntries(
-    Object.entries(APP_NAV_GROUPS)
-      .map(([group, routeKeys]) => [
-        group,
-        routeKeys
-          .filter((routeKey) => routeKey !== "skills" || skillsCaptureEnabled)
-          .map((routeKey) => routes[routeKey as AppNavRouteKey]),
-      ])
-      .filter(([, items]) => items.length > 0),
-  ) as Record<string, AppRoute[]>;
+import { Button } from "./ui/button";
+import { FeatureRequestModal } from "./FeatureRequestModal";
+import { Link } from "react-router";
+import { NavButton } from "@/components/nav-menu";
+import { RequireScope } from "./require-scope";
+import { Scope } from "@/hooks/useRBAC";
+import { Type } from "./ui/type";
+import { useProductTier } from "@/hooks/useProductTier";
+import { useSlugs } from "@/contexts/Sdk";
+import { useState } from "react";
+
+function ScopeGatedNavItem({
+  item,
+  scope,
+}: {
+  item: AppRoute;
+  scope: Scope | Scope[];
+}) {
+  return (
+    <RequireScope scope={scope} level="section">
+      <SidebarMenuItem>
+        <NavButton
+          title={item.title}
+          href={item.href()}
+          active={item.active}
+          Icon={item.Icon}
+        />
+      </SidebarMenuItem>
+    </RequireScope>
+  );
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -49,36 +55,115 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     throwOnError: false,
   });
 
-  const { settings: settingsItems = [routes.settings], ...navGroups } =
-    resolveNavGroupItems(routes, featuresData?.skillsCaptureEnabled ?? false);
-
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarContent className="pt-2">
-        {Object.entries(navGroups).map(([label, items]) => (
-          <SidebarGroup key={label}>
-            <SidebarGroupLabel>{label}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <NavMenu items={items} />
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
+        <SidebarGroup>
+          <SidebarGroupLabel>project</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <ScopeGatedNavItem item={routes.home} scope="build:read" />
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>connect</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <ScopeGatedNavItem
+                item={routes.sources}
+                scope={["build:read", "build:write"]}
+              />
+              <ScopeGatedNavItem
+                item={routes.catalog}
+                scope={["build:read", "mcp:write"]}
+              />
+              <ScopeGatedNavItem
+                item={routes.playground}
+                scope={["mcp:read", "mcp:write", "mcp:connect"]}
+              />
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>build</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {featuresData?.skillsCaptureEnabled && (
+                <ScopeGatedNavItem item={routes.skills} scope="build:read" />
+              )}
+              <ScopeGatedNavItem item={routes.elements} scope="build:read" />
+              <ScopeGatedNavItem
+                item={routes.mcp}
+                scope={["mcp:read", "mcp:write"]}
+              />
+              <ScopeGatedNavItem
+                item={routes.slackApps}
+                scope={["mcp:read", "mcp:write"]}
+              />
+              <ScopeGatedNavItem
+                item={routes.plugins}
+                scope={["build:read", "build:write"]}
+              />
+              <ScopeGatedNavItem
+                item={routes.environments}
+                scope={["build:read", "build:write"]}
+              />
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>observe</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <ScopeGatedNavItem
+                item={routes.observability}
+                scope="build:read"
+              />
+              <ScopeGatedNavItem item={routes.logs} scope="build:read" />
+              <ScopeGatedNavItem
+                item={routes.chatSessions}
+                scope="build:read"
+              />
+              <ScopeGatedNavItem
+                item={routes.hooks}
+                scope={["build:read", "build:write"]}
+              />
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <ScopeGatedNavItem
+                item={routes.riskOverview}
+                scope="build:read"
+              />
+              <ScopeGatedNavItem
+                item={routes.policyCenter}
+                scope={["build:read", "build:write"]}
+              />
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
         <SidebarGroup>
           <SidebarGroupLabel>settings</SidebarGroupLabel>
           <SidebarGroupContent>
-            <NavMenu items={settingsItems}>
-              <RequireScope scope={["org:read", "org:admin"]} level="section">
-                <SidebarMenuItem>
-                  <NavButton
-                    title="Organization settings"
-                    href={`/${orgSlug}`}
-                    Icon={Building2Icon}
-                  />
-                </SidebarMenuItem>
-              </RequireScope>
-            </NavMenu>
+            <SidebarMenu>
+              <ScopeGatedNavItem item={routes.settings} scope="build:write" />
+            </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        <div className="mt-auto px-2 py-3">
+          <Link
+            to={`/${orgSlug}`}
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 px-2 py-1 text-sm transition-colors hover:no-underline"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            <span>Back to org</span>
+          </Link>
+        </div>
       </SidebarContent>
       <SidebarFooter>
         <FreeTierExceededNotification />

@@ -263,6 +263,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		RegistrySpecifier:                   details.Name,
 		Version:                             details.Version,
 		Description:                         details.Description,
+		ToolsetID:                           nil,
 		RegistryID:                          &registryIDStr,
 		OrganizationMcpCollectionRegistryID: nil,
 		Title:                               nil,

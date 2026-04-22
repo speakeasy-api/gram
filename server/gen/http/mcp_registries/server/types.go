@@ -39,6 +39,8 @@ type GetServerDetailsResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
+	// ID of the attached toolset when this server is listed from a Collection
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
 	// ID of the internal collection registry this server came from
@@ -822,6 +824,8 @@ type ExternalMCPServerResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
+	// ID of the attached toolset when this server is listed from a Collection
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
 	// ID of the internal collection registry this server came from
@@ -906,6 +910,7 @@ func NewGetServerDetailsResponseBody(res *types.ExternalMCPServer) *GetServerDet
 		RegistrySpecifier:                   res.RegistrySpecifier,
 		Version:                             res.Version,
 		Description:                         res.Description,
+		ToolsetID:                           res.ToolsetID,
 		RegistryID:                          res.RegistryID,
 		OrganizationMcpCollectionRegistryID: res.OrganizationMcpCollectionRegistryID,
 		Title:                               res.Title,

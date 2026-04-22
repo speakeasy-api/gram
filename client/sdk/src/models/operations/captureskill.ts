@@ -50,6 +50,14 @@ export type XGramSkillResolutionStatus = ClosedEnum<
 >;
 
 export type CaptureSkillRequest = {
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
+  /**
+   * project header
+   */
+  gramProject?: string | undefined;
   xGramSkillName: string;
   xGramSkillScope: XGramSkillScope;
   xGramSkillDiscoveryRoot: XGramSkillDiscoveryRoot;
@@ -60,14 +68,6 @@ export type CaptureSkillRequest = {
   xGramSkillId?: string | undefined;
   xGramSkillVersionId?: string | undefined;
   contentLength: number;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
 
 /** @internal */
@@ -128,6 +128,8 @@ export const XGramSkillResolutionStatus$outboundSchema: z.ZodMiniEnum<
 
 /** @internal */
 export type CaptureSkillRequest$Outbound = {
+  "Gram-Key"?: string | undefined;
+  "Gram-Project"?: string | undefined;
   "X-Gram-Skill-Name": string;
   "X-Gram-Skill-Scope": string;
   "X-Gram-Skill-Discovery-Root": string;
@@ -138,8 +140,6 @@ export type CaptureSkillRequest$Outbound = {
   "X-Gram-Skill-Id"?: string | undefined;
   "X-Gram-Skill-Version-Id"?: string | undefined;
   "Content-Length": number;
-  "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -148,6 +148,8 @@ export const CaptureSkillRequest$outboundSchema: z.ZodMiniType<
   CaptureSkillRequest
 > = z.pipe(
   z.object({
+    gramKey: z.optional(z.string()),
+    gramProject: z.optional(z.string()),
     xGramSkillName: z.string(),
     xGramSkillScope: XGramSkillScope$outboundSchema,
     xGramSkillDiscoveryRoot: XGramSkillDiscoveryRoot$outboundSchema,
@@ -158,11 +160,11 @@ export const CaptureSkillRequest$outboundSchema: z.ZodMiniType<
     xGramSkillId: z.optional(z.string()),
     xGramSkillVersionId: z.optional(z.string()),
     contentLength: z.int(),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
       xGramSkillName: "X-Gram-Skill-Name",
       xGramSkillScope: "X-Gram-Skill-Scope",
       xGramSkillDiscoveryRoot: "X-Gram-Skill-Discovery-Root",
@@ -173,8 +175,6 @@ export const CaptureSkillRequest$outboundSchema: z.ZodMiniType<
       xGramSkillId: "X-Gram-Skill-Id",
       xGramSkillVersionId: "X-Gram-Skill-Version-Id",
       contentLength: "Content-Length",
-      gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
     });
   }),
 );

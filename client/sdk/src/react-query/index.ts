@@ -162,6 +162,7 @@ export * from "./setToolsetEnvironmentLink.js";
 export * from "./skill.js";
 export * from "./skillsApproveVersion.js";
 export * from "./skillsCapture.js";
+export * from "./skillsCaptureClaude.js";
 export * from "./skillsListPending.js";
 export * from "./skillsListVersions.js";
 export * from "./skillsSettings.js";

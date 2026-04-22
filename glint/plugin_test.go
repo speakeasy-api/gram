@@ -13,6 +13,7 @@ func disabledAllRulesPlugin() *plugin {
 		settings: settings{
 			Rules: ruleSettings{
 				NoAnonymousDefer:           noAnonymousDeferSettings{Disabled: true},
+				EnforceO11yConventions:     enforceO11yConventionsSettings{Disabled: true},
 				ServiceHasServiceAssertion: serviceHasServiceAssertionSettings{Disabled: true},
 				ServiceHasAutherAssertion:  serviceHasAutherAssertionSettings{Disabled: true},
 				ServiceHasAttachFunc:       serviceHasAttachFuncSettings{Disabled: true},
@@ -37,5 +38,5 @@ func TestBuildAnalyzersAllEnabled(t *testing.T) {
 	p := &plugin{}
 	analyzers, err := p.BuildAnalyzers()
 	require.NoError(t, err)
-	require.Len(t, analyzers, 5)
+	require.Len(t, analyzers, 6)
 }

@@ -1,4 +1,5 @@
 import { CodeBlock } from "@/components/code";
+import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/dialog";
 import { Label as Heading } from "@/components/ui/label";
 import { Link } from "@/components/ui/link";
@@ -47,14 +48,16 @@ export function InstallPageConfigForm({
           setOpen(nextOpen);
         }}
       >
-        <Dialog.Trigger asChild>
-          <Button variant="secondary">
-            <Button.LeftIcon>
-              <Icon name="palette" />
-            </Button.LeftIcon>
-            <Button.Text>Edit Branding</Button.Text>
-          </Button>
-        </Dialog.Trigger>
+        <RequireScope scope="mcp:write" level="component">
+          <Dialog.Trigger asChild>
+            <Button variant="secondary">
+              <Button.LeftIcon>
+                <Icon name="palette" />
+              </Button.LeftIcon>
+              <Button.Text>Edit Branding</Button.Text>
+            </Button>
+          </Dialog.Trigger>
+        </RequireScope>
         <Dialog.Content>
           <Dialog.Header>
             <Dialog.Title>Install Page Configuration</Dialog.Title>

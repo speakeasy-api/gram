@@ -56,7 +56,7 @@ export function TriggerLogRow({ trace, onLogClick }: TriggerLogRowProps) {
 
         {trace.logCount > 1 && (
           <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-            {trace.logCount} attempts
+            {trace.logCount} events
           </span>
         )}
 

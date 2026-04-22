@@ -89,8 +89,21 @@ func newTestCollectionsService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-func createMCPEnabledToolset(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.Toolset {
+func createMCPEnabledToolset(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	name string,
+	registrySpecifier string,
+) *types.Toolset {
 	t.Helper()
+
+	var origin *types.ToolsetOrigin
+	if registrySpecifier != "" {
+		origin = &types.ToolsetOrigin{
+			RegistrySpecifier: registrySpecifier,
+		}
+	}
 
 	created, err := ti.toolsets.CreateToolset(ctx, &tgen.CreateToolsetPayload{
 		SessionToken:           nil,
@@ -100,6 +113,7 @@ func createMCPEnabledToolset(t *testing.T, ctx context.Context, ti *testInstance
 		ToolUrns:               []string{},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
+		Origin:                 origin,
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)

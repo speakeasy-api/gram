@@ -163,6 +163,51 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 	return i, err
 }
 
+const createToolsetOrigin = `-- name: CreateToolsetOrigin :one
+INSERT INTO toolset_origins (
+    organization_id
+  , toolset_id
+  , origin_registry_specifier
+) VALUES (
+    $1
+  , $2
+  , $3
+)
+RETURNING
+    id
+  , toolset_id
+  , origin_registry_specifier AS registry_specifier
+  , created_at
+  , updated_at
+`
+
+type CreateToolsetOriginParams struct {
+	OrganizationID    string
+	ToolsetID         uuid.UUID
+	RegistrySpecifier string
+}
+
+type CreateToolsetOriginRow struct {
+	ID                uuid.UUID
+	ToolsetID         uuid.UUID
+	RegistrySpecifier string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) CreateToolsetOrigin(ctx context.Context, arg CreateToolsetOriginParams) (CreateToolsetOriginRow, error) {
+	row := q.db.QueryRow(ctx, createToolsetOrigin, arg.OrganizationID, arg.ToolsetID, arg.RegistrySpecifier)
+	var i CreateToolsetOriginRow
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.RegistrySpecifier,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createToolsetVersion = `-- name: CreateToolsetVersion :one
 INSERT INTO toolset_versions (
     toolset_id
@@ -687,6 +732,45 @@ func (q *Queries) GetToolsetByPlatformMcpSlug(ctx context.Context, mcpSlug pgtyp
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getToolsetOriginByToolsetID = `-- name: GetToolsetOriginByToolsetID :one
+SELECT
+    id
+  , toolset_id
+  , origin_registry_specifier AS registry_specifier
+  , created_at
+  , updated_at
+FROM toolset_origins
+WHERE toolset_id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type GetToolsetOriginByToolsetIDParams struct {
+	ToolsetID      uuid.UUID
+	OrganizationID string
+}
+
+type GetToolsetOriginByToolsetIDRow struct {
+	ID                uuid.UUID
+	ToolsetID         uuid.UUID
+	RegistrySpecifier string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) GetToolsetOriginByToolsetID(ctx context.Context, arg GetToolsetOriginByToolsetIDParams) (GetToolsetOriginByToolsetIDRow, error) {
+	row := q.db.QueryRow(ctx, getToolsetOriginByToolsetID, arg.ToolsetID, arg.OrganizationID)
+	var i GetToolsetOriginByToolsetIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.RegistrySpecifier,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

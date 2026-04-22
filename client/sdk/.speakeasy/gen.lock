@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 49cbe6b7a59605d13d79826367f3ff42
+  docChecksum: 3953d68add9ae32a72738508ea9e0565
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
-  releaseVersion: 0.32.69
-  configChecksum: 4e2d9341101d344e26de615c5275f2a6
+  releaseVersion: 0.32.71
+  configChecksum: 4ea3860fab36d709176c499bac53999b
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -867,6 +867,8 @@ trackedFiles:
     last_write_checksum: sha1:9988c3bc66399800141c9df1609b9ac260ba65c6
   docs/models/operations/authloginresponse.md:
     last_write_checksum: sha1:39bb7679163c52500155446ee13a94dfc86c6614
+  docs/models/operations/captureclaudeskillrequest.md:
+    last_write_checksum: sha1:2edbefe8afb3a3286ab9451ca57e6fb6fcf1176a
   docs/models/operations/captureeventrequest.md:
     last_write_checksum: sha1:ff99fba60ec713a7dd837d44aff24cc28239b3e7
   docs/models/operations/captureeventsecurity.md:
@@ -878,7 +880,7 @@ trackedFiles:
   docs/models/operations/captureeventsecurityoption3.md:
     last_write_checksum: sha1:a29302af1a32eaeec080545801b0238d5652af82
   docs/models/operations/captureskillrequest.md:
-    last_write_checksum: sha1:0764ee58fc9aad0f8cb977bf62e34a89fc7361eb
+    last_write_checksum: sha1:3286a3599aaa2e74fc9d96c398a95ca1a1b15d53
   docs/models/operations/captureskillsecurity.md:
     last_write_checksum: sha1:23ed491d2a2127e6839bd4bc9efe5d279ec0ec9a
   docs/models/operations/checkmcpslugavailabilityrequest.md:
@@ -1337,6 +1339,16 @@ trackedFiles:
     last_write_checksum: sha1:d4dc1f5cd35b48ee47957f682f1ad657f0cdcad1
   docs/models/operations/getusermetricssummarysecurityoption2.md:
     last_write_checksum: sha1:b15a0cb73ae463e5e0a6d861957fc2874cd1c855
+  docs/models/operations/headerxgramskillassetformat.md:
+    last_write_checksum: sha1:2c97a01e46752cf0ad5d3b38979a18a151b9af9b
+  docs/models/operations/headerxgramskilldiscoveryroot.md:
+    last_write_checksum: sha1:9726fde67568c8b7e656acba3c5d98a4d201d300
+  docs/models/operations/headerxgramskillresolutionstatus.md:
+    last_write_checksum: sha1:a03e4561adcfd52a919498dc36bbfe86c2c2d26d
+  docs/models/operations/headerxgramskillscope.md:
+    last_write_checksum: sha1:c4824462870ffe67911be4c3445c4e70624325a9
+  docs/models/operations/headerxgramskillsourcetype.md:
+    last_write_checksum: sha1:dd8ac833f88d83270571b10845edd6af5a90c4b8
   docs/models/operations/hooksnumbercursorrequest.md:
     last_write_checksum: sha1:2566d56a8fe47f8c625cbbec942123d26181b866
   docs/models/operations/hooksnumbercursorsecurity.md:
@@ -2028,7 +2040,7 @@ trackedFiles:
   docs/sdks/resources/README.md:
     last_write_checksum: sha1:a69ba6f2f7a90c991953a89759a60ae8ae42a932
   docs/sdks/skills/README.md:
-    last_write_checksum: sha1:b11e0adaa820f40035613263aa1b87c5c83d9307
+    last_write_checksum: sha1:f0713f9a91d36e64b01c798cd1cc31601b3dea7a
   docs/sdks/slack/README.md:
     last_write_checksum: sha1:6b45aed94ea43bd45ec8d54f844bb070d1b8829f
   docs/sdks/telemetry/README.md:
@@ -2065,11 +2077,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:fe5ae39e34614a23e0762549e6691930de9327ed
+    last_write_checksum: sha1:76e2b8480d63e1381d825072b39b2c78d6ee4484
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:9ec668ca16c232dbd30a5247af509bc1077cca1b
+    last_write_checksum: sha1:2e6362fb286e9e3d2cabf63694a606abfc588adc
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2470,7 +2482,9 @@ trackedFiles:
   src/funcs/skillsApproveVersion.ts:
     last_write_checksum: sha1:755a0a1c283f66dc897c2cea63bb5b2dbc25f35c
   src/funcs/skillsCapture.ts:
-    last_write_checksum: sha1:a43542afb562901c2b8a94743bee14805072d058
+    last_write_checksum: sha1:be553cd016c3562ba49d7489b8975107a89dd78b
+  src/funcs/skillsCaptureClaude.ts:
+    last_write_checksum: sha1:467464485ecf6374c048f19c0544ad6aafbd9071
   src/funcs/skillsGetBySlug.ts:
     last_write_checksum: sha1:c6683604db8d32ea19d9c7f35a2cd8935f399010
   src/funcs/skillsGetSettings.ts:
@@ -2671,7 +2685,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:585e1b3c396be97b8c26b7c6fdcfa4233f3938ac
+    last_write_checksum: sha1:deda690181f44ab7b3e8e44dde59240cf3d6c7c2
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -3719,12 +3733,14 @@ trackedFiles:
     id: aaf3db167be9
     last_write_checksum: sha1:04c62cf739ad73d2b20c5441ccf9d2c02e3d1566
     pristine_git_object: 8011199b8ad1aa5458c4d6361e95cfabd47f8731
+  src/models/operations/captureclaudeskill.ts:
+    last_write_checksum: sha1:87d4fe47129639e088390283418d3022d3eaac57
   src/models/operations/captureevent.ts:
     id: 21bdb2f609f2
     last_write_checksum: sha1:096fb272d1c3a2f3ff0b0be74610ac6244fb264e
     pristine_git_object: a53edf252e11d0f2c33531a15db3cd9cc2d1de87
   src/models/operations/captureskill.ts:
-    last_write_checksum: sha1:c66cb25273f7e8f91d3709b820cfd66eb33748ca
+    last_write_checksum: sha1:a76f474361c0d6cd561ff766c696f05b983be0eb
   src/models/operations/checkmcpslugavailability.ts:
     id: 124a6f64724f
     last_write_checksum: sha1:f2539f30b283b82b5b9fed7a1c11859d7277957a
@@ -3959,7 +3975,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:e754a8dbd1200c0d2c92e821870c61e526eb8fee
+    last_write_checksum: sha1:78e9b61bb631fc067eaf9544dabb943649f40b88
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -4595,7 +4611,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:653a4802f3afc9f82892decc7224b896fdd6e7a4
+    last_write_checksum: sha1:700580865faee7e250617857297569cbf30aaced
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -4984,7 +5000,9 @@ trackedFiles:
   src/react-query/skillsApproveVersion.ts:
     last_write_checksum: sha1:62ac7f7142615889347dc103cb30eceea6811190
   src/react-query/skillsCapture.ts:
-    last_write_checksum: sha1:a109c6ac3a13e001f989342ee8f4fd3a0b1800f8
+    last_write_checksum: sha1:1913c6882619df78261517dc3b09b103469650e1
+  src/react-query/skillsCaptureClaude.ts:
+    last_write_checksum: sha1:992e27ed55b7e6c632f62b435194cc9131497faa
   src/react-query/skillsListPending.core.ts:
     last_write_checksum: sha1:af311e0ee6da11ad4198b11e003efac6a9a8fea4
   src/react-query/skillsListPending.ts:
@@ -5196,7 +5214,7 @@ trackedFiles:
     last_write_checksum: sha1:bfd292ce7dfd15bda56a5b2be89bf9f6374a6dbd
     pristine_git_object: 02357477f876788c1d5316789aca538a95c1070a
   src/sdk/skills.ts:
-    last_write_checksum: sha1:0148bd30b75cfd40ba32bb1c0ed41c3dbd568da4
+    last_write_checksum: sha1:4e3399485ef7a3f7d629e698799c405ad79c0354
   src/sdk/slack.ts:
     id: bbd98c55f3c0
     last_write_checksum: sha1:80bbc3aa171b78204c4950abe6178a082a0d9fb3
@@ -7472,6 +7490,92 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  createRiskPolicy:
+    speakeasy-default-create-risk-policy:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-04-25T00:09:19.554Z", "enabled": false, "id": "38fa1564-d044-4ec6-a19b-87bbe97a778c", "name": "<value>", "pending_messages": 170691, "project_id": "4e48ffff-04e0-4169-805b-9223e3363e5a", "sources": ["<value 1>", "<value 2>"], "total_messages": 386175, "updated_at": "2025-03-31T13:20:52.423Z", "version": 697295}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  deleteRiskPolicy:
+    speakeasy-default-delete-risk-policy:
+      parameters:
+        query:
+          id: "17a08e64-8236-497c-888e-5913d00c3da0"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getRiskPolicy:
+    speakeasy-default-get-risk-policy:
+      parameters:
+        query:
+          id: "8fbf5ca1-aa4d-403a-a226-2071123a9a6b"
+      responses:
+        "200":
+          application/json: {"created_at": "2024-01-08T16:12:24.822Z", "enabled": true, "id": "10f8bca1-d18d-4771-af40-85b7191c93c9", "name": "<value>", "pending_messages": 166600, "project_id": "47b79acf-3929-4f81-84cd-aff0d4f950b7", "sources": ["<value 1>"], "total_messages": 601333, "updated_at": "2026-04-04T09:47:31.850Z", "version": 930692}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listRiskPolicies:
+    speakeasy-default-list-risk-policies:
+      responses:
+        "200":
+          application/json: {"policies": [{"created_at": "2025-10-30T21:18:12.306Z", "enabled": false, "id": "a7b0becd-e53b-4f68-9574-f3cb84422ca2", "name": "<value>", "pending_messages": 597186, "project_id": "3198766c-c028-4de7-a0fc-4d9ef15fb1a6", "sources": [], "total_messages": 528613, "updated_at": "2024-10-30T02:43:56.706Z", "version": 546275}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getRiskPolicyStatus:
+    speakeasy-default-get-risk-policy-status:
+      parameters:
+        query:
+          id: "d22fb3bd-6811-4d78-aeb7-1e5fae347c9c"
+      responses:
+        "200":
+          application/json: {"analyzed_messages": 631804, "findings_count": 181204, "pending_messages": 949708, "policy_id": "81cc3c88-71c8-4e51-9357-a45f39fc2fc8", "policy_version": 843661, "total_messages": 598061, "workflow_status": "running"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  triggerRiskAnalysis:
+    speakeasy-default-trigger-risk-analysis:
+      requestBody:
+        application/json: {"id": "627f5b17-9f75-4837-81cc-2f7a2510ed27"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  updateRiskPolicy:
+    speakeasy-default-update-risk-policy:
+      requestBody:
+        application/json: {"id": "843674e6-50ce-48e3-8373-0f97e164413d", "name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-01-21T00:43:44.408Z", "enabled": true, "id": "b8cfa981-a1dc-4ea6-b03a-5be6272d6685", "name": "<value>", "pending_messages": 931327, "project_id": "a7cc9a5e-04ef-4ae6-817a-d977f4945e43", "sources": [], "total_messages": 829281, "updated_at": "2024-10-25T20:39:57.898Z", "version": 611121}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listRiskResults:
+    speakeasy-default-list-risk-results:
+      parameters:
+        query:
+          limit: 100
+      responses:
+        "200":
+          application/json: {"results": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   approveSkillVersion:
     speakeasy-default-approve-skill-version:
       requestBody:
@@ -7502,6 +7606,26 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  captureClaudeSkill:
+    speakeasy-default-capture-claude-skill:
+      parameters:
+        header:
+          X-Gram-Claude-Session-ID: "<id>"
+          X-Gram-Skill-Name: "<value>"
+          X-Gram-Skill-Scope: "project"
+          X-Gram-Skill-Discovery-Root: "project_agents"
+          X-Gram-Skill-Source-Type: "local_filesystem"
+          X-Gram-Skill-Content-Sha256: "<value>"
+          X-Gram-Skill-Asset-Format: "zip"
+          X-Gram-Skill-Resolution-Status: "invalid_skill_root"
+          Content-Length: 894444
+      responses:
+        "200":
+          application/json: {"asset": {"content_length": 350535, "content_type": "<value>", "created_at": "2026-10-22T18:56:46.744Z", "id": "<id>", "kind": "skill", "sha256": "<value>", "updated_at": "2026-01-10T21:34:54.433Z"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getSkill:
     speakeasy-default-get-skill:
       parameters:

@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Stepper, StepProps } from "@/components/stepper";
 import {
   Accordion,
@@ -38,77 +39,79 @@ export default function UploadOpenAPI() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <div className="max-w-2xl">
-          {/* Header */}
-          <Stack gap={3} className="mb-8">
-            <Stack direction="horizontal" gap={3} align="center">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
-                <FileTextIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <Heading variant="h3">Import OpenAPI Specification</Heading>
-            </Stack>
-            <Type muted>
-              Upload your OpenAPI spec to automatically generate tools for every
-              endpoint. Supports JSON and YAML formats.
-            </Type>
-          </Stack>
-
-          {/* Stepper */}
-          <UploadAssetStepper.Provider step={1}>
-            <UploadAssetStepper.Frame>
-              <UploadAssetStep step={1}>
-                <UploadAssetStep.Indicator />
-                <UploadAssetStep.Header
-                  title="Upload OpenAPI Specification"
-                  description="Upload your OpenAPI specification to get started."
-                />
-                <UploadAssetStep.Content>
-                  <UploadFileStep />
-                </UploadAssetStep.Content>
-              </UploadAssetStep>
-
-              <UploadAssetStep step={2}>
-                <UploadAssetStep.Indicator />
-                <UploadAssetStep.Header
-                  title="Name Your API"
-                  description="The tools generated will be scoped under this name."
-                />
-                <UploadAssetStep.Content>
-                  <NameDeploymentStep />
-                </UploadAssetStep.Content>
-              </UploadAssetStep>
-
-              <UploadAssetStep step={3}>
-                <UploadAssetStep.Indicator />
-                <UploadAssetStep.Header
-                  title="Generate Tools"
-                  description="Gram will generate tools for your API."
-                />
-                <UploadAssetStep.Content>
-                  <DeployStep />
-                </UploadAssetStep.Content>
-              </UploadAssetStep>
-
-              <Stack direction="horizontal" justify="start">
-                <FooterActions />
+        <RequireScope scope="build:write" level="page">
+          <div className="max-w-2xl">
+            {/* Header */}
+            <Stack gap={3} className="mb-8">
+              <Stack direction="horizontal" gap={3} align="center">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
+                  <FileTextIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <Heading variant="h3">Import OpenAPI Specification</Heading>
               </Stack>
-            </UploadAssetStepper.Frame>
-          </UploadAssetStepper.Provider>
+              <Type muted>
+                Upload your OpenAPI spec to automatically generate tools for
+                every endpoint. Supports JSON and YAML formats.
+              </Type>
+            </Stack>
 
-          {/* Help text */}
-          <Type small muted className="mt-6">
-            Don't have an OpenAPI spec?{" "}
-            <a
-              href="https://www.speakeasy.com/docs/gram"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              Learn how to create one
-            </a>{" "}
-            or try our sample specs.
-          </Type>
-        </div>
+            {/* Stepper */}
+            <UploadAssetStepper.Provider step={1}>
+              <UploadAssetStepper.Frame>
+                <UploadAssetStep step={1}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title="Upload OpenAPI Specification"
+                    description="Upload your OpenAPI specification to get started."
+                  />
+                  <UploadAssetStep.Content>
+                    <UploadFileStep />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
+
+                <UploadAssetStep step={2}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title="Name Your API"
+                    description="The tools generated will be scoped under this name."
+                  />
+                  <UploadAssetStep.Content>
+                    <NameDeploymentStep />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
+
+                <UploadAssetStep step={3}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title="Generate Tools"
+                    description="Gram will generate tools for your API."
+                  />
+                  <UploadAssetStep.Content>
+                    <DeployStep />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
+
+                <Stack direction="horizontal" justify="start">
+                  <FooterActions />
+                </Stack>
+              </UploadAssetStepper.Frame>
+            </UploadAssetStepper.Provider>
+
+            {/* Help text */}
+            <Type small muted className="mt-6">
+              Don't have an OpenAPI spec?{" "}
+              <a
+                href="https://www.speakeasy.com/docs/gram"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Learn how to create one
+              </a>{" "}
+              or try our sample specs.
+            </Type>
+          </div>
+        </RequireScope>
       </Page.Body>
     </Page>
   );

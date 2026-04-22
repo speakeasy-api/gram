@@ -10,13 +10,20 @@ import {
   TooltipTrigger,
 } from "./ui/tooltip";
 
+type RenderFn = (props: { disabled: boolean }) => React.ReactNode;
+
 type RequireScopeProps = {
   scope: Scope | Scope[];
   /** When true, ALL scopes must be present. Default: false (any scope suffices). */
   all?: boolean;
   /** Optional resource ID to check scope against. */
   resourceId?: string;
-  children: React.ReactNode;
+  /**
+   * Either a React node or a render function receiving `{ disabled }`.
+   * Use the render function form when children contain portals (e.g. dropdowns,
+   * dialogs) that escape CSS containment and need to receive disabled state directly.
+   */
+  children: React.ReactNode | RenderFn;
 } & (
   | {
       /**
@@ -49,6 +56,9 @@ export function RequireScope(props: RequireScopeProps) {
     ? hasAllScopes(scopes, resourceId)
     : hasAnyScope(scopes, resourceId);
 
+  const resolveChildren = (disabled: boolean): React.ReactNode =>
+    typeof children === "function" ? children({ disabled }) : children;
+
   // While grants are loading, render nothing to avoid flash of unauthorized
   if (isLoading) {
     if (level === "page") return null;
@@ -56,13 +66,13 @@ export function RequireScope(props: RequireScopeProps) {
     // For component-level, show disabled state while loading
     return (
       <div className="pointer-events-none opacity-50 select-none">
-        {children}
+        {resolveChildren(true)}
       </div>
     );
   }
 
   if (allowed) {
-    return <>{children}</>;
+    return <>{resolveChildren(false)}</>;
   }
 
   switch (level) {
@@ -75,7 +85,7 @@ export function RequireScope(props: RequireScopeProps) {
     case "component":
       return (
         <ScopeDisabled reason={props.reason} className={props.className}>
-          {children}
+          {resolveChildren(true)}
         </ScopeDisabled>
       );
   }

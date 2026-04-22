@@ -335,6 +335,7 @@ run();
 
 * [approveVersion](docs/sdks/skills/README.md#approveversion) - approveVersion skills
 * [capture](docs/sdks/skills/README.md#capture) - capture skills
+* [captureClaude](docs/sdks/skills/README.md#captureclaude) - captureClaude skills
 * [getBySlug](docs/sdks/skills/README.md#getbyslug) - get skills
 * [getSettings](docs/sdks/skills/README.md#getsettings) - getSettings skills
 * [list](docs/sdks/skills/README.md#list) - list skills
@@ -568,6 +569,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
 - [`skillsApproveVersion`](docs/sdks/skills/README.md#approveversion) - approveVersion skills
 - [`skillsCapture`](docs/sdks/skills/README.md#capture) - capture skills
+- [`skillsCaptureClaude`](docs/sdks/skills/README.md#captureclaude) - captureClaude skills
 - [`skillsGetBySlug`](docs/sdks/skills/README.md#getbyslug) - get skills
 - [`skillsGetSettings`](docs/sdks/skills/README.md#getsettings) - getSettings skills
 - [`skillsList`](docs/sdks/skills/README.md#list) - list skills
@@ -811,6 +813,7 @@ To learn about this feature and how to get started, check
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`useSkill`](docs/sdks/skills/README.md#getbyslug) - get skills
 - [`useSkillsApproveVersionMutation`](docs/sdks/skills/README.md#approveversion) - approveVersion skills
+- [`useSkillsCaptureClaudeMutation`](docs/sdks/skills/README.md#captureclaude) - captureClaude skills
 - [`useSkillsCaptureMutation`](docs/sdks/skills/README.md#capture) - capture skills
 - [`useSkillsListPending`](docs/sdks/skills/README.md#listpending) - listPending skills
 - [`useSkillsListVersions`](docs/sdks/skills/README.md#listversions) - listVersions skills

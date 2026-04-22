@@ -1,3 +1,4 @@
+import { RequireScope } from "@/components/require-scope";
 import { useState } from "react";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { FeatureName } from "@gram/client/models/components";
@@ -68,14 +69,16 @@ export function EnableLoggingOverlay({ onEnabled }: EnableLoggingOverlayProps) {
             </p>
           </div>
         </div>
-        <Button onClick={handleEnable} disabled={isMutating}>
-          <Button.LeftIcon>
-            <Icon name="activity" className="size-4" />
-          </Button.LeftIcon>
-          <Button.Text>
-            {isMutating ? "Enabling..." : "Enable Logging"}
-          </Button.Text>
-        </Button>
+        <RequireScope scope="org:admin" level="component">
+          <Button onClick={handleEnable} disabled={isMutating}>
+            <Button.LeftIcon>
+              <Icon name="activity" className="size-4" />
+            </Button.LeftIcon>
+            <Button.Text>
+              {isMutating ? "Enabling..." : "Enable Logging"}
+            </Button.Text>
+          </Button>
+        </RequireScope>
         {mutationError && (
           <span className="text-destructive text-sm">{mutationError}</span>
         )}

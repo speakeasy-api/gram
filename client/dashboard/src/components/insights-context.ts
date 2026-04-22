@@ -27,6 +27,10 @@ export interface InsightsContextValue {
   /** Pages call this to register a per-page config override. Pass null to
    *  clear (typically on unmount of <InsightsConfig />). */
   setOverride: (override: InsightsConfigOptions | null) => void;
+  /** Queue a prompt to be auto-appended to the Insights chat thread.
+   *  Fires once per call — intended for "Explore with AI" CTAs that should
+   *  drop the user straight into a running conversation. */
+  sendPrompt: (prompt: string) => void;
 }
 
 export const InsightsContext = createContext<InsightsContextValue>({
@@ -34,6 +38,7 @@ export const InsightsContext = createContext<InsightsContextValue>({
   isExpanded: false,
   setIsExpanded: () => {},
   setOverride: () => {},
+  sendPrompt: () => {},
 });
 
 /**

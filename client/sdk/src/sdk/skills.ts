@@ -4,6 +4,7 @@
 
 import { skillsApproveVersion } from "../funcs/skillsApproveVersion.js";
 import { skillsCapture } from "../funcs/skillsCapture.js";
+import { skillsCaptureClaude } from "../funcs/skillsCaptureClaude.js";
 import { skillsGetBySlug } from "../funcs/skillsGetBySlug.js";
 import { skillsGetSettings } from "../funcs/skillsGetSettings.js";
 import { skillsList } from "../funcs/skillsList.js";
@@ -40,7 +41,7 @@ export class Skills extends ClientSDK {
    * capture skills
    *
    * @remarks
-   * Capture a skill artifact and associated metadata.
+   * Capture a skill artifact and associated metadata via producer authentication.
    */
   async capture(
     request: operations.CaptureSkillRequest,
@@ -51,6 +52,23 @@ export class Skills extends ClientSDK {
       this,
       request,
       security,
+      options,
+    ));
+  }
+
+  /**
+   * captureClaude skills
+   *
+   * @remarks
+   * Capture a skill artifact and associated metadata via validated Claude session metadata.
+   */
+  async captureClaude(
+    request: operations.CaptureClaudeSkillRequest,
+    options?: RequestOptions,
+  ): Promise<components.CaptureSkillResult> {
+    return unwrapAsync(skillsCaptureClaude(
+      this,
+      request,
       options,
     ));
   }

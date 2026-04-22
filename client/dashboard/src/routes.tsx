@@ -41,6 +41,7 @@ import PluginDetail from "./pages/org/PluginDetail";
 import OrgAuditLogs from "./pages/org/OrgAuditLogs";
 import OrgDomains from "./pages/org/OrgDomains";
 import OrgHome from "./pages/org/OrgHome";
+import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgLogs from "./pages/org/OrgLogs";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
@@ -52,6 +53,8 @@ import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
+import SecurityOverview from "./pages/security/SecurityOverview";
+import PolicyCenter from "./pages/security/PolicyCenter";
 import Team from "./pages/team/Team";
 import AcceptInvite from "./pages/invite/AcceptInvite";
 import SkillsRegistry from "./pages/skills/SkillsRegistry";
@@ -67,7 +70,11 @@ import SkillsReview from "./pages/skills/SkillsReview";
 import SkillsSettings from "./pages/skills/SkillsSettings";
 import { SkillsIndexRedirect, SkillsRoot } from "./pages/skills/Skills";
 import SourceDetails from "./pages/sources/SourceDetails";
-import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
+import {
+  AddFromCatalogGate,
+  SourcesPage,
+  SourcesRoot,
+} from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
@@ -245,7 +252,7 @@ const ROUTE_STRUCTURE = {
       addFromCatalog: {
         title: "Add from Catalog",
         url: "add-from-catalog",
-        component: CatalogRoot,
+        component: AddFromCatalogGate,
         indexComponent: Catalog,
       },
     },
@@ -358,6 +365,7 @@ const ROUTE_STRUCTURE = {
   environments: {
     title: "Environments",
     url: "environments",
+    icon: "blocks",
     component: EnvironmentsRoot,
     indexComponent: Environments,
     subPages: {
@@ -398,6 +406,18 @@ const ROUTE_STRUCTURE = {
     url: "observability",
     icon: "layout-dashboard",
     component: ObservabilityOverview,
+  },
+  riskOverview: {
+    title: "Risk Overview",
+    url: "risk-overview",
+    icon: "shield",
+    component: SecurityOverview,
+  },
+  policyCenter: {
+    title: "Policy Center",
+    url: "risk-policies",
+    icon: "shield-check",
+    component: PolicyCenter,
   },
   sdks: {
     title: "SDKs",
@@ -663,6 +683,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "audit-logs",
     icon: "history",
     component: OrgAuditLogs,
+  },
+  identity: {
+    title: "Identity",
+    url: "identity",
+    icon: "fingerprint",
+    component: OrgIdentity,
   },
   access: {
     title: "Roles & Permissions",
