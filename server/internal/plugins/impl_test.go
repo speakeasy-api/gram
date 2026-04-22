@@ -3,6 +3,7 @@ package plugins_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -19,22 +20,28 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// mockGitHubPublisher records calls for testing.
+// mockGitHubPublisher records calls for testing. Set the *Err fields to
+// simulate GitHub-side failures.
 type mockGitHubPublisher struct {
 	createRepoCalled      bool
 	pushFilesCalled       bool
 	addCollaboratorCalled bool
 	lastPushedFiles       map[string][]byte
+	createRepoErr         error
+	pushFilesErr          error
 }
 
 func (m *mockGitHubPublisher) CreateRepo(_ context.Context, _ int64, _, _ string, _ bool) error {
 	m.createRepoCalled = true
-	return nil
+	return m.createRepoErr
 }
 
 func (m *mockGitHubPublisher) PushFiles(_ context.Context, _ int64, _, _, _, _ string, files map[string][]byte) (string, error) {
 	m.pushFilesCalled = true
 	m.lastPushedFiles = files
+	if m.pushFilesErr != nil {
+		return "", m.pushFilesErr
+	}
 	return "abc123", nil
 }
 
@@ -597,6 +604,44 @@ func TestPluginsService_PublishPlugins_RePublishCreatesAdditionalKey(t *testing.
 	// Documents the current behavior: each publish creates a new key.
 	// A future improvement should revoke the previous key first.
 	require.Equal(t, 2, count, "expected 2 plugin keys after 2 publishes")
+}
+
+// PublishPlugins must not persist the API key (or audit log entry, or
+// github connection) when GitHub publishing fails. Otherwise every failed
+// publish leaks a valid consumer credential.
+func TestPluginsService_PublishPlugins_NoOrphanedKeyOnGitHubFailure(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{
+		createRepoErr: errors.New("simulated github outage"),
+	}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Will Fail"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "fail-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.Error(t, err, "publish must fail when GitHub does")
+
+	// No plugins-* API key should have been persisted.
+	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	for _, k := range keys {
+		require.False(t, strings.HasPrefix(k.Name, "plugins-"),
+			"orphaned plugin api key %q persisted despite github failure", k.Name)
+	}
 }
 
 func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {

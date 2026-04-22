@@ -705,13 +705,13 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeUnauthorized, nil, "publish requires a session-authenticated context")
 	}
 
-	apiKey, err := s.createPluginAPIKey(ctx, ac)
+	candidate, err := s.buildPluginAPIKeyCandidate()
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create plugin api key").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build plugin api key").Log(ctx, s.logger)
 	}
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
-	cfg.APIKey = apiKey
+	cfg.APIKey = candidate.fullKey
 
 	files, err := GeneratePluginPackages(pluginInfos, cfg)
 	if err != nil {
@@ -746,78 +746,111 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		}
 	}
 
-	// Note: if this upsert fails after a successful push, the repo will be
-	// published but GetPublishStatus will report connected: false. A subsequent
-	// re-publish will converge since both CreateRepo and PushFiles are idempotent.
-	if _, err := s.repo.UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
-		ProjectID:      *ac.ProjectID,
-		InstallationID: s.github.InstallationID,
-		RepoOwner:      s.github.Org,
-		RepoName:       repoName,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "upsert github connection").Log(ctx, s.logger)
+	// Persist the API key, audit log, and github connection atomically only
+	// after the GitHub publish has succeeded. This prevents leaking valid
+	// consumer credentials when GitHub fails. If this transaction itself
+	// fails, the published repo contains a key string with no DB record —
+	// re-publish overwrites it with a fresh valid key.
+	if err := s.persistPluginAPIKey(ctx, ac, candidate, repoName); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api key").Log(ctx, s.logger)
 	}
 
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", s.github.Org, repoName)
 	return &gen.PublishPluginsResult{RepoURL: repoURL}, nil
 }
 
-// createPluginAPIKey creates a consumer-scoped API key for plugin distribution
-// and logs the creation in the audit trail.
-func (s *Service) createPluginAPIKey(ctx context.Context, ac *contextvalues.AuthContext) (string, error) {
+// pluginAPIKeyCandidate is the in-memory shape of a generated plugin API key
+// that has not yet been persisted to the database. It is built before GitHub
+// publishing so the key can be embedded in the published files, and only
+// persisted if the GitHub side succeeds.
+type pluginAPIKeyCandidate struct {
+	fullKey   string
+	keyHash   string
+	keyPrefix string
+	keyName   string
+}
+
+// buildPluginAPIKeyCandidate generates an API key in memory without writing
+// to the database. The caller must subsequently call persistPluginAPIKey to
+// commit the key.
+func (s *Service) buildPluginAPIKeyCandidate() (pluginAPIKeyCandidate, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
-		return "", fmt.Errorf("generate token: %w", err)
+		return pluginAPIKeyCandidate{}, fmt.Errorf("generate token: %w", err)
 	}
 	token := hex.EncodeToString(tokenBytes)
 	fullKey := s.keyPrefix + token
 
 	keyHash, err := auth.GetAPIKeyHash(fullKey)
 	if err != nil {
-		return "", fmt.Errorf("hash key: %w", err)
+		return pluginAPIKeyCandidate{}, fmt.Errorf("hash key: %w", err)
 	}
 
-	keyName := fmt.Sprintf("plugins-%s-%s", time.Now().UTC().Format("20060102-150405"), token[:6])
+	return pluginAPIKeyCandidate{
+		fullKey:   fullKey,
+		keyHash:   keyHash,
+		keyPrefix: s.keyPrefix + token[:5],
+		keyName:   fmt.Sprintf("plugins-%s-%s", time.Now().UTC().Format("20060102-150405"), token[:6]),
+	}, nil
+}
+
+// persistPluginAPIKey atomically writes the API key, its audit log entry, and
+// the GitHub connection record in one transaction.
+func (s *Service) persistPluginAPIKey(
+	ctx context.Context,
+	ac *contextvalues.AuthContext,
+	candidate pluginAPIKeyCandidate,
+	repoName string,
+) error {
 	scopes := []string{auth.APIKeyScopeConsumer.String()}
 	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
 
-	dbtx, err := s.db.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return "", fmt.Errorf("begin transaction: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	createdKey, err := keysrepo.New(dbtx).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+	createdKey, err := keysrepo.New(tx).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
 		OrganizationID:  ac.ActiveOrganizationID,
-		Name:            keyName,
-		KeyHash:         keyHash,
-		KeyPrefix:       s.keyPrefix + token[:5],
+		Name:            candidate.keyName,
+		KeyHash:         candidate.keyHash,
+		KeyPrefix:       candidate.keyPrefix,
 		Scopes:          scopes,
 		CreatedByUserID: ac.UserID,
 		ProjectID:       projectID,
 	})
 	if err != nil {
-		return "", fmt.Errorf("create api key: %w", err)
+		return fmt.Errorf("create api key: %w", err)
 	}
 
-	if err := audit.LogKeyCreate(ctx, dbtx, audit.LogKeyCreateEvent{
+	if err := audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        projectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
 		ActorSlug:        nil,
 		KeyURN:           urn.NewAPIKey(createdKey.ID),
-		KeyName:          keyName,
+		KeyName:          candidate.keyName,
 		Scopes:           scopes,
 	}); err != nil {
-		return "", fmt.Errorf("audit log key creation: %w", err)
+		return fmt.Errorf("audit log key creation: %w", err)
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return "", fmt.Errorf("commit transaction: %w", err)
+	if _, err := s.repo.WithTx(tx).UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
+		ProjectID:      *ac.ProjectID,
+		InstallationID: s.github.InstallationID,
+		RepoOwner:      s.github.Org,
+		RepoName:       repoName,
+	}); err != nil {
+		return fmt.Errorf("upsert github connection: %w", err)
 	}
 
-	return fullKey, nil
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
 }
 
 // --- Internal helpers ---
