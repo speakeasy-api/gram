@@ -260,15 +260,34 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  slackApps: {
+  assistants: {
     title: "Assistants",
+    url: "assistants",
+    icon: "bot",
+    component: AssistantsRoot,
+    indexComponent: AssistantsIndex,
+    subPages: {
+      newAssistant: {
+        title: "New Assistant",
+        url: "new",
+        component: NewAssistantPage,
+      },
+      detail: {
+        title: "Assistant",
+        url: ":assistantId",
+        component: AssistantPage,
+      },
+    },
+  },
+  slackApps: {
+    title: "Slack Apps",
     url: "slack",
     icon: "bot",
     component: SlackAppsRoot,
     indexComponent: SlackAppsIndex,
     subPages: {
       detail: {
-        title: "Assistant",
+        title: "Slack App",
         url: ":slackAppId",
         component: SlackAppDetailPage,
       },
