@@ -115,6 +115,12 @@ const BRAND_RED_COLORS = [
   "#7f1d1d", // red-900
 ];
 
+const COLLAPSED_BAR_CHART_MAX_ROWS = 6;
+const BAR_THICKNESS = { collapsed: 18, expanded: 24 };
+const BAR_ROW_HEIGHT = { collapsed: 18, expanded: 24 };
+const BAR_ROW_SPACER = { collapsed: 8, expanded: 12 };
+const LINE_CHART_HEIGHT = { collapsed: 250, expanded: 600 };
+
 // ---------------------------------------------------------------------------
 // Shared Chart.js config building blocks
 // ---------------------------------------------------------------------------
@@ -1430,17 +1436,33 @@ function StackedBarChart({
   datasets,
   handleFilter,
   expanded = false,
+  maxRows,
+  onShowAll,
 }: {
   labels: string[];
   datasets: StackedBarDataset[];
   handleFilter?: (datasetLabel: string, rowLabel: string) => void;
   expanded?: boolean;
+  maxRows?: number;
+  onShowAll?: () => void;
 }) {
-  const barHeight = expanded ? 36 : 24;
-  const spacerHeight = expanded ? 12 : 8;
+  const thickness = expanded ? BAR_THICKNESS.expanded : BAR_THICKNESS.collapsed;
+  const hiddenCount =
+    !expanded && maxRows && labels.length > maxRows
+      ? labels.length - maxRows
+      : 0;
+  const visibleLabels = hiddenCount > 0 ? labels.slice(0, maxRows) : labels;
+  const visibleDatasets = (
+    hiddenCount > 0
+      ? datasets.map((ds) => ({ ...ds, data: ds.data.slice(0, maxRows) }))
+      : datasets
+  ).map((ds) => ({ ...ds, barThickness: thickness }));
+
+  const rowH = expanded ? BAR_ROW_HEIGHT.expanded : BAR_ROW_HEIGHT.collapsed;
+  const rowS = expanded ? BAR_ROW_SPACER.expanded : BAR_ROW_SPACER.collapsed;
   const containerHeight = Math.max(
     120,
-    labels.length * (barHeight + spacerHeight) + 60,
+    visibleLabels.length * (rowH + rowS) + 60,
   );
 
   const options = useMemo<ChartOptions<"bar">>(
@@ -1452,7 +1474,7 @@ function StackedBarChart({
         if (!elements.length || !handleFilter) return;
         const { datasetIndex, index } = elements[0];
         const datasetLabel = datasets[datasetIndex]?.label;
-        const rowLabel = labels[index];
+        const rowLabel = visibleLabels[index];
         if (datasetLabel && rowLabel) handleFilter(datasetLabel, rowLabel);
       },
       onHover(event, elements) {
@@ -1472,22 +1494,37 @@ function StackedBarChart({
         },
       },
     }),
-    [datasets, labels, handleFilter],
+    [datasets, visibleLabels, handleFilter],
   );
 
-  if (labels.length === 0) return null;
+  if (visibleLabels.length === 0) return null;
 
   return (
-    <div
-      className="transition-all duration-200 ease-in-out"
-      style={{ height: containerHeight }}
-    >
-      <Bar
-        plugins={STACKED_BAR_PLUGINS}
-        data={{ labels, datasets }}
-        options={options}
-      />
-    </div>
+    <>
+      <div
+        className="transition-all duration-200 ease-in-out"
+        style={{ height: containerHeight }}
+      >
+        <Bar
+          plugins={STACKED_BAR_PLUGINS}
+          data={{ labels: visibleLabels, datasets: visibleDatasets }}
+          options={options}
+        />
+      </div>
+      {hiddenCount > 0 && onShowAll && (
+        <div className="mt-2 flex w-full">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon="chevron-down"
+            iconAfter={true}
+            onClick={onShowAll}
+          >
+            Show {hiddenCount} more
+          </Button>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1570,6 +1607,8 @@ function UsersPerServerChart({
         datasets={datasets}
         handleFilter={handleFilter}
         expanded={expanded}
+        maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
+        onShowAll={() => onExpand(chartId)}
       />
     </ChartCard>
   );
@@ -1629,6 +1668,8 @@ function UserEventCountsChart({
         datasets={datasets}
         handleFilter={handleFilter}
         expanded={expanded}
+        maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
+        onShowAll={() => onExpand(chartId)}
       />
     </ChartCard>
   );
@@ -1692,7 +1733,7 @@ function ServerErrorRateChart({
     const chartLabels = sortedServers.map((s) => s.displayName);
     const chartDatasets = sortedTools.map((tool, i) => ({
       label: tool,
-      barThickness: 16,
+      barThickness: BAR_THICKNESS.collapsed,
       data: sortedServers.map((s) => s.toolCounts.get(tool) ?? 0),
       backgroundColor: BRAND_RED_COLORS[i % BRAND_RED_COLORS.length],
       hoverBackgroundColor:
@@ -1702,9 +1743,25 @@ function ServerErrorRateChart({
     return { labels: chartLabels, datasets: chartDatasets };
   }, [breakdown, serverNameMappings.rawToDisplay]);
 
-  const barHeight = expanded ? 36 : 24;
-  const spacerHeight = expanded ? 12 : 8;
-  const height = Math.max(120, labels.length * (barHeight + spacerHeight) + 60);
+  const hiddenCount =
+    !expanded && labels.length > COLLAPSED_BAR_CHART_MAX_ROWS
+      ? labels.length - COLLAPSED_BAR_CHART_MAX_ROWS
+      : 0;
+  const visibleLabels =
+    hiddenCount > 0 ? labels.slice(0, COLLAPSED_BAR_CHART_MAX_ROWS) : labels;
+  const thickness = expanded ? BAR_THICKNESS.expanded : BAR_THICKNESS.collapsed;
+  const visibleDatasets = (
+    hiddenCount > 0
+      ? datasets.map((ds) => ({
+          ...ds,
+          data: ds.data.slice(0, COLLAPSED_BAR_CHART_MAX_ROWS),
+        }))
+      : datasets
+  ).map((ds) => ({ ...ds, barThickness: thickness }));
+
+  const rowH = expanded ? BAR_ROW_HEIGHT.expanded : BAR_ROW_HEIGHT.collapsed;
+  const rowS = expanded ? BAR_ROW_SPACER.expanded : BAR_ROW_SPACER.collapsed;
+  const height = Math.max(120, visibleLabels.length * (rowH + rowS) + 60);
 
   const options: ChartOptions<"bar"> = {
     indexAxis: "y",
@@ -1738,12 +1795,26 @@ function ServerErrorRateChart({
           No errors in this period
         </div>
       ) : (
-        <div
-          className="relative transition-all duration-200 ease-in-out"
-          style={{ height }}
-        >
-          <Bar data={{ labels, datasets }} options={options} />
-        </div>
+        <>
+          <div
+            className="relative transition-all duration-200 ease-in-out"
+            style={{ height }}
+          >
+            <Bar
+              data={{ labels: visibleLabels, datasets: visibleDatasets }}
+              options={options}
+            />
+          </div>
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              onClick={() => onExpand(chartId)}
+              className="text-muted-foreground hover:text-foreground mt-1 w-full text-center text-xs underline-offset-2 hover:underline"
+            >
+              Show {hiddenCount} more
+            </button>
+          )}
+        </>
       )}
     </ChartCard>
   );
@@ -1921,7 +1992,9 @@ function ServerUsageTimeSeries({
         labels={labels}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
-        height={expanded ? 500 : 200}
+        height={
+          expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
+        }
       />
     </ChartCard>
   );
@@ -1960,7 +2033,9 @@ function UserUsageTimeSeries({
         labels={labels}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
-        height={expanded ? 500 : 200}
+        height={
+          expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
+        }
       />
     </ChartCard>
   );
@@ -2069,7 +2144,9 @@ function ErrorsOverTimeChart({
           labels={labels}
           tooltipLabels={tooltipLabels}
           datasets={datasets}
-          height={expanded ? 500 : 200}
+          height={
+            expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
+          }
           tooltipAfterBody={(idx) => {
             const servers = perServerByIndex[idx];
             if (!servers || servers.length === 0) return [];

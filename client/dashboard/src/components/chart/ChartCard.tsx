@@ -22,11 +22,11 @@ export function ChartCard({
   return (
     <div
       className={cn(
-        "border-border bg-card space-y-4 rounded-lg border p-4 transition-all duration-200 ease-in-out",
+        "border-border bg-card rounded-lg border p-4 transition-all duration-200 ease-in-out",
         expandedChart && !isExpanded && "hidden",
       )}
     >
-      <div className="flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
         <h3 className="text font-semibold">{title}</h3>
         {showExpandButton && (
           <button
