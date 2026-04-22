@@ -8,7 +8,7 @@ import (
 
 var _ = Service("risk", func() {
 	Description("Manage risk analysis policies and view scan results.")
-	Meta("openapi:extension:x-speakeasy-group", "risks")
+	Meta("openapi:extension:x-speakeasy-group", "risk")
 
 	Security(security.ByKey, security.ProjectSlug, func() { Scope("producer") })
 	Security(security.Session, security.ProjectSlug)
@@ -38,7 +38,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "createRiskPolicy")
-		Meta("openapi:extension:x-speakeasy-name-override", "createPolicy")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreatePolicy", "type": "mutation"}`)
 	})
 
@@ -62,7 +63,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "listRiskPolicies")
-		Meta("openapi:extension:x-speakeasy-name-override", "listPolicies")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicies"}`)
 	})
 
@@ -91,7 +93,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "getRiskPolicy")
-		Meta("openapi:extension:x-speakeasy-name-override", "getPolicy")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
 	})
 
 	Method("updateRiskPolicy", func() {
@@ -121,7 +124,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "updateRiskPolicy")
-		Meta("openapi:extension:x-speakeasy-name-override", "updatePolicy")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "update")
 	})
 
 	Method("deleteRiskPolicy", func() {
@@ -147,7 +151,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "deleteRiskPolicy")
-		Meta("openapi:extension:x-speakeasy-name-override", "deletePolicy")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "delete")
 	})
 
 	Method("listRiskResults", func() {
@@ -182,7 +187,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "listRiskResults")
-		Meta("openapi:extension:x-speakeasy-name-override", "listResults")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResults"}`)
 	})
 
@@ -210,7 +216,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "listRiskResultsByChat")
-		Meta("openapi:extension:x-speakeasy-name-override", "listResultsByChat")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "byChat")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResultsByChat"}`)
 	})
 
@@ -238,7 +245,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "listRiskResultsByUser")
-		Meta("openapi:extension:x-speakeasy-name-override", "listResultsByUser")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "byUser")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResultsByUser"}`)
 	})
 
@@ -267,7 +275,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "getRiskPolicyStatus")
-		Meta("openapi:extension:x-speakeasy-name-override", "getPolicyStatus")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "status")
 	})
 
 	Method("triggerRiskAnalysis", func() {
@@ -292,7 +301,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "triggerRiskAnalysis")
-		Meta("openapi:extension:x-speakeasy-name-override", "triggerAnalysis")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "trigger")
 	})
 })
 

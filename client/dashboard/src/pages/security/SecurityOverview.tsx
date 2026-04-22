@@ -309,6 +309,7 @@ function SecurityOverviewContent() {
               resolutions={[]}
               onClose={() => setSelectedChatId(null)}
               onDelete={() => setSelectedChatId(null)}
+              collapseNonRisk
             />
           )}
         </DrawerContent>

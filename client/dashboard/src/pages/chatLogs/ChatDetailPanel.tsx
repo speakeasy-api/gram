@@ -33,6 +33,8 @@ interface ChatDetailPanelProps {
   resolutions: ChatResolution[];
   onClose: () => void;
   onDelete: (chatId: string) => void;
+  /** When true, messages without risk findings are collapsed to a single line. */
+  collapseNonRisk?: boolean;
 }
 
 function getTraceId(chatId: string): string {
@@ -95,10 +97,12 @@ function ChatMessagesList({
   messages,
   messageResolutionMap,
   riskResultsByMessage,
+  collapseNonRisk,
 }: {
   messages: ChatMessage[];
   messageResolutionMap: Map<string, ChatResolution>;
   riskResultsByMessage: Map<string, RiskResult[]>;
+  collapseNonRisk?: boolean;
 }) {
   const groups = useMemo(() => {
     const byGeneration = new Map<number, ChatMessage[]>();
@@ -125,6 +129,7 @@ function ChatMessagesList({
             message={message}
             resolution={messageResolutionMap.get(message.id)}
             riskResults={riskResultsByMessage.get(message.id)}
+            collapseNonRisk={collapseNonRisk}
           />
         ))}
       </Stack>
@@ -152,6 +157,7 @@ function ChatMessagesList({
                   message={message}
                   resolution={messageResolutionMap.get(message.id)}
                   riskResults={riskResultsByMessage.get(message.id)}
+                  collapseNonRisk={collapseNonRisk}
                 />
               ))}
             </Stack>
@@ -166,11 +172,16 @@ function MessageItem({
   message,
   resolution,
   riskResults,
+  collapseNonRisk,
 }: {
   message: ChatMessage;
   resolution: ChatResolution | undefined;
   riskResults: RiskResult[] | undefined;
+  collapseNonRisk?: boolean;
 }) {
+  const hasRisk = riskResults && riskResults.length > 0;
+  const isCollapsed = collapseNonRisk && !hasRisk;
+
   const parsedToolCalls: ToolCall[] | null = useMemo(() => {
     if (!message.toolCalls) return null;
     try {
@@ -180,6 +191,31 @@ function MessageItem({
       return null;
     }
   }, [message.toolCalls]);
+
+  if (isCollapsed) {
+    const label =
+      message.role === "tool"
+        ? "Tool Result"
+        : message.role === "system"
+          ? "System Prompt"
+          : parsedToolCalls
+            ? `Tool Call: ${parsedToolCalls[0]?.function?.name ?? "unknown"}`
+            : message.role;
+    const preview =
+      !parsedToolCalls && typeof message.content === "string"
+        ? message.content.trim().slice(0, 80)
+        : "";
+
+    return (
+      <div className="text-muted-foreground flex items-center gap-2 py-1 text-xs">
+        <span className="capitalize">{label}</span>
+        {message.createdAt && (
+          <span>{format(new Date(message.createdAt), "HH:mm:ss")}</span>
+        )}
+        {preview && <span className="truncate opacity-60">{preview}...</span>}
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -578,6 +614,7 @@ export function ChatDetailPanel({
   resolutions,
   onClose,
   onDelete,
+  collapseNonRisk,
 }: ChatDetailPanelProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { data: chat, isLoading: chatLoading } = useLoadChat(
@@ -892,6 +929,7 @@ export function ChatDetailPanel({
               messages={chat.messages}
               messageResolutionMap={messageResolutionMap}
               riskResultsByMessage={riskResultsByMessage}
+              collapseNonRisk={collapseNonRisk}
             />
           </div>
         </TabsContent>
