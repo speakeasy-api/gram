@@ -166,6 +166,8 @@ export function MCPDetailPage() {
 function MCPDetailPageInner() {
   const { toolsetSlug } = useParams();
   const routes = useRoutes();
+  const telemetry = useTelemetry();
+  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const { data: toolset, isLoading } = useToolset(toolsetSlug);
 
@@ -192,7 +194,7 @@ function MCPDetailPageInner() {
       "prompts",
       "authentication",
       "performance",
-      "team-access",
+      ...(isRbacEnabled ? ["team-access"] : []),
       "settings",
     ];
     return hash && validTabs.includes(hash) ? hash : "overview";
@@ -341,9 +343,11 @@ function MCPDetailPageInner() {
                 <PageTabsTrigger value="performance">
                   Performance
                 </PageTabsTrigger>
-                <PageTabsTrigger value="team-access">
-                  Team Access
-                </PageTabsTrigger>
+                {isRbacEnabled && (
+                  <PageTabsTrigger value="team-access">
+                    Team Access
+                  </PageTabsTrigger>
+                )}
                 <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
               </TabsList>
             </div>
@@ -379,9 +383,13 @@ function MCPDetailPageInner() {
               </RequireScope>
             </TabsContent>
 
-            <TabsContent value="team-access" className="mt-0 w-full">
-              <MCPTeamAccessTab toolset={toolset} />
-            </TabsContent>
+            {isRbacEnabled && (
+              <TabsContent value="team-access" className="mt-0 w-full">
+                <RequireScope scope="mcp:read" level="page">
+                  <MCPTeamAccessTab toolset={toolset} />
+                </RequireScope>
+              </TabsContent>
+            )}
 
             <TabsContent value="settings" className="mt-0 w-full">
               <RequireScope scope="mcp:write" level="page">

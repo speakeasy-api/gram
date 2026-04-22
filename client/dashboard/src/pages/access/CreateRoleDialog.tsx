@@ -416,9 +416,16 @@ export function CreateRoleDialog({
                       className="border-border rounded-md border"
                     >
                       {/* Group header */}
-                      <button
-                        type="button"
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={() => toggleGroup(group.label)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleGroup(group.label);
+                          }
+                        }}
                         className="hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between rounded-t-md px-3 py-2"
                       >
                         <div className="flex items-center gap-2">
@@ -453,7 +460,7 @@ export function CreateRoleDialog({
                             isExpanded && "rotate-90",
                           )}
                         />
-                      </button>
+                      </div>
 
                       {/* Expanded scope rows */}
                       {isExpanded && (

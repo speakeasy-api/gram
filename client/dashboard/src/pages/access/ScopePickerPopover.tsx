@@ -7,8 +7,10 @@ import {
 } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOrganization } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { useListCollections } from "@gram/client/react-query/listCollections.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import {
   AlertTriangle,
@@ -21,12 +23,14 @@ import {
   Globe,
   Repeat,
   Shield,
+  Loader2,
   SquareLibrary,
   Tag,
   Wrench,
   X,
 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useQueries } from "@tanstack/react-query";
 import type { AnnotationHint, CustomTab, ResourceType } from "./types";
 
 interface ScopePickerPopoverProps {
@@ -63,6 +67,7 @@ interface Server {
   id: string;
   name: string;
   slug: string;
+  mcpSlug?: string;
   tools: ServerTool[];
 }
 
@@ -98,6 +103,7 @@ function useMCPServers(enabled: boolean) {
         id: t.slug,
         name: t.name,
         slug: mcpUrl,
+        mcpSlug: t.mcpSlug ?? undefined,
         tools: t.tools.map((tool) => ({
           id: tool.id,
           name: tool.name,
@@ -578,12 +584,6 @@ function AnnotationGroupPanel({
   mcpServers: ServerGroup[];
 }) {
   const [expanded, setExpanded] = useState<Set<AnnotationHint>>(new Set());
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop += e.deltaY;
-    }
-  }, []);
   const allTools = useMemo(
     () =>
       mcpServers.flatMap((g) =>
@@ -685,11 +685,7 @@ function AnnotationGroupPanel({
                       {matchedTools.length !== 1 ? "s" : ""} matched
                     </button>
                     {isExpanded && (
-                      <div
-                        ref={scrollRef}
-                        onWheel={handleWheel}
-                        className="border-border bg-popover max-h-[120px] overflow-y-auto border-t"
-                      >
+                      <div className="border-border bg-popover max-h-[120px] overflow-y-auto border-t">
                         {matchedTools.map((tool) => (
                           <div
                             key={`${tool.serverName}:${tool.id}`}
@@ -735,13 +731,6 @@ function HttpMethodGroupPanel({
   onToggle: (id: string) => void;
   onChangeResources: (resources: string[]) => void;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop += e.deltaY;
-    }
-  }, []);
-
   const allTools = useMemo(
     () =>
       mcpServers.flatMap((g) =>
@@ -871,11 +860,7 @@ function HttpMethodGroupPanel({
               </button>
             </div>
             {isExpanded && (
-              <div
-                ref={scrollRef}
-                onWheel={handleWheel}
-                className="border-border bg-background max-h-[180px] overflow-y-auto border-t"
-              >
+              <div className="border-border bg-background max-h-[180px] overflow-y-auto border-t">
                 {tools.map((tool) => {
                   const compoundId = `${tool.serverSlug}:${tool.name}`;
                   const isChecked = resources.includes(compoundId);
@@ -923,24 +908,86 @@ function CollectionGroupPanel({
   onToggle: (id: string) => void;
   onChangeResources: (resources: string[]) => void;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop += e.deltaY;
+  const organization = useOrganization();
+  const client = useSdkClient();
+  const defaultProjectSlug = organization.projects?.[0]?.slug;
+
+  // Fetch org-level collections
+  const { data: collectionsData, isLoading: collectionsLoading } =
+    useListCollections({ gramProject: defaultProjectSlug }, undefined, {
+      enabled: !!defaultProjectSlug,
+    });
+  const collections = collectionsData?.collections ?? [];
+
+  // Fetch servers for each collection in parallel
+  const serverQueries = useQueries({
+    queries: collections.map((c) => ({
+      queryKey: ["collections", "listServers", c.slug, defaultProjectSlug],
+      queryFn: () =>
+        client.collections.listServers({
+          collectionSlug: c.slug!,
+          gramProject: defaultProjectSlug,
+        }),
+      enabled: !!c.slug && !!defaultProjectSlug,
+    })),
+  });
+
+  // Build mcpSlug → Server lookup from the already-loaded toolset data
+  const mcpSlugToServer = useMemo(() => {
+    const map = new Map<string, Server>();
+    for (const group of mcpServers) {
+      for (const server of group.servers) {
+        if (server.mcpSlug) {
+          map.set(server.mcpSlug, server);
+        }
+      }
     }
-  }, []);
+    return map;
+  }, [mcpServers]);
+
+  // Resolve each collection's servers to internal toolset servers with tools
+  const collectionGroups = useMemo(() => {
+    return collections.map((c, i) => {
+      const serversResponse = serverQueries[i]?.data;
+      const externalServers = serversResponse?.servers ?? [];
+
+      // Map collection servers → internal toolset servers via mcpSlug
+      const matchedServers: Server[] = [];
+      for (const es of externalServers) {
+        const parts = es.registrySpecifier.split("/");
+        const mcpSlug = parts[parts.length - 1];
+        const server = mcpSlugToServer.get(mcpSlug);
+        if (server) matchedServers.push(server);
+      }
+
+      return {
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        servers: matchedServers,
+      };
+    });
+  }, [collections, serverQueries, mcpSlugToServer]);
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const toggleExpanded = (projectId: string) => {
+  const toggleExpanded = (id: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(projectId)) next.delete(projectId);
-      else next.add(projectId);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
-  if (mcpServers.length === 0) {
+  if (collectionsLoading) {
+    return (
+      <div className="flex items-center justify-center py-6">
+        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+      </div>
+    );
+  }
+
+  if (collections.length === 0) {
     return (
       <div className="text-muted-foreground py-6 text-center text-sm">
         No collections found
@@ -953,8 +1000,8 @@ function CollectionGroupPanel({
       <div className="text-muted-foreground px-2 py-2 text-sm">
         Select tools by collection:
       </div>
-      {mcpServers.map((group) => {
-        const isExpanded = expanded.has(group.projectId);
+      {collectionGroups.map((group) => {
+        const isExpanded = expanded.has(group.id);
         const allToolIds = group.servers.flatMap((s) =>
           s.tools.map((t) => `${s.id}:${t.name}`),
         );
@@ -976,7 +1023,7 @@ function CollectionGroupPanel({
         };
 
         return (
-          <div key={group.projectId} className="hover:bg-accent rounded-sm">
+          <div key={group.id} className="hover:bg-accent rounded-sm">
             <div className="flex w-full items-center gap-3 px-3 py-2.5 text-sm">
               <Checkbox
                 checked={
@@ -994,12 +1041,10 @@ function CollectionGroupPanel({
               />
               <button
                 type="button"
-                onClick={() => toggleExpanded(group.projectId)}
+                onClick={() => toggleExpanded(group.id)}
                 className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
               >
-                <span className="truncate font-medium">
-                  {group.projectName}
-                </span>
+                <span className="truncate font-medium">{group.name}</span>
                 <span className="text-muted-foreground font-normal">
                   {selectedCount} of {allToolIds.length} selected
                 </span>
@@ -1012,11 +1057,7 @@ function CollectionGroupPanel({
               </button>
             </div>
             {isExpanded && (
-              <div
-                ref={scrollRef}
-                onWheel={handleWheel}
-                className="border-border bg-background max-h-[180px] overflow-y-auto border-t"
-              >
+              <div className="border-border bg-background max-h-[180px] overflow-y-auto border-t">
                 {group.servers.map((server) => (
                   <div key={server.id}>
                     <div className="text-muted-foreground bg-muted/30 px-3 py-1.5 text-[10px] font-medium tracking-wider uppercase">
@@ -1048,6 +1089,11 @@ function CollectionGroupPanel({
                     })}
                   </div>
                 ))}
+                {group.servers.length === 0 && (
+                  <div className="text-muted-foreground px-3 py-3 text-xs">
+                    No matching servers in this collection
+                  </div>
+                )}
               </div>
             )}
           </div>
