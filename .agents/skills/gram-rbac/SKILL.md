@@ -1,0 +1,249 @@
+---
+name: gram-rbac
+description: Concepts, external interfaces, and conventions for Gram's role-based access control (RBAC) subsystem — scopes, grants, principals, system roles, and the `access.Manager.Require` enforcement path used inside handlers. Activate whenever the task involves authorization (adding or modifying a scope or resource type, declaring a new role or grant, gating a handler, changing scope inheritance, exposing RBAC state through the dashboard).
+metadata:
+  relevant_files:
+    - "server/internal/access/**/*.go"
+    - "server/internal/access/**/*.sql"
+    - "server/design/access/**"
+    - "client/dashboard/src/pages/access/**"
+---
+
+Gram's RBAC is a scope-and-grant model. The server ships with a fixed set of **scopes** grouped into **system roles** (admin, member). A **grant** binds a scope to an optional resource id for a given **principal** (user or custom role). Handlers enforce scopes by calling `access.Manager.Require(ctx, access.Check{Scope, ResourceID})`; the dashboard renders the same scope vocabulary through a matching TypeScript union that is hand-maintained in lockstep with the server.
+
+## Concepts and terminology
+
+**Scope.** A named permission that authorizes an operation on a particular kind of resource.
+
+**Resource type.** The kind of resource a scope protects — currently `org`, `project`, `mcp`, or `remote-mcp`. Every scope has exactly one resource type.
+
+**Scope expansion.** Higher-privilege scopes satisfy lower-privilege ones, so a handler that needs `mcp:read` is also reachable by callers who hold `mcp:write` or `mcp:connect`. For a typical read/write/connect triple the wiring is: write satisfies read; connect satisfies both read and write.
+
+**Grant.** A tuple of `{Scope, Resource}` held by a principal. `Resource` is either a specific id or the wildcard `"*"` (unrestricted). The API-visible forms are `RoleGrant` and `ListRoleGrant` (which also carries the transitively-implied `sub_scopes`).
+
+**Principal.** Who holds a grant — a `urn.Principal` with a type (user, role, service account) and an id.
+
+**System role.** A built-in role shipped with the server. Gram defines two: **admin** (every scope) and **member** (the read-and-connect subset).
+
+**Enforcement.** Inside a handler, authorization is an explicit one-line check: the handler names the scope (and resource, if project-scoped) it needs, and the RBAC manager either allows the call or returns a forbidden error.
+
+**Auth context invariant.** By the time a handler runs, the auth context's `ActiveOrganizationID` is always populated — RBAC does not defensively check for an empty org id.
+
+## Server
+
+The server-side RBAC implementation lives in `server/internal/access/` and the `access` Goa service design lives in `server/design/access/`.
+
+### Conventions
+
+**Scope declarations.** `Scope` type and every `Scope*` constant live in `server/internal/access/scopes.go`. Constants follow the `Scope<Name>` pattern; string values follow `<resource>:<verb>` (e.g. `mcp:read`, `org:admin`). `root` is reserved for service-internal superadmin overrides. The file also holds the `scopeExpansions` map and computes the inverse `scopeSubScopes` in `init()`.
+
+**System role grants.** `SystemRoleGrants` in `server/internal/access/grants.go` — admin and member defaults. Adding a scope usually means adding it to admin, and optionally to member if end users should get it by default.
+
+**Scope metadata.** `ListScopes` in `server/internal/access/impl.go` returns one `{Slug, Description, ResourceType}` entry per scope; this is what the dashboard consumes to render the scope picker.
+
+**`fullAccessGrantPayloads` helper.** A helper at the bottom of `server/internal/access/impl.go` that returns every admin-equivalent grant payload. Consumed by `listUserGrants`, so it must grow whenever a new scope is added or an admin-equivalent user would be missing it.
+
+**`access.Manager`.** The central enforcer. Methods: `PrepareContext`, `Require(ctx, checks...)`, `RequireAny(ctx, checks...)`, `Filter(ctx, scope, ids)`, `InvalidateRoleCache`. Constructed in `server/cmd/gram/start.go` and injected into every service that gates on RBAC.
+
+**`access.Check`.** `{Scope, ResourceID}` — the thing a handler asks `Require` to enforce. `ResourceID` is typically `authCtx.ProjectID.String()` for project-scoped scopes.
+
+**`access.Filter` for list endpoints.** When a handler lists resources the caller might only partially own, `s.access.Filter(ctx, scope, candidateIDs) ([]string, error)` returns the subset of IDs the caller holds the scope for. The standard pattern is: gather candidate IDs from the repo, call `Filter`, then rebuild the response from the allowed IDs. Prefer this over a post-hoc per-item `Require` loop. Canonical call sites: `server/internal/projects/impl.go` (projects list) and `server/internal/toolsets/impl.go` (toolsets list).
+
+**Auth context accessor.** `contextvalues.GetAuthContext(ctx)` returns the current `*AuthContext`. RBAC-relevant fields: `ActiveOrganizationID`, `ProjectID`, `UserID`, `Email`, `AccountType`, `IsAdmin`.
+
+### Non-generated files
+
+| File                                 | Purpose                                                                                                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `server/design/access/design.go`     | Goa design for the `access` service. Regenerates `server/gen/access/` and `server/gen/http/access/` via `mise run gen:goa-server`.                           |
+| `server/internal/access/*_test.go`   | Black-box tests for the service (`listscopes_test.go`, `rbac_test.go`, `listusergrants_test.go`, `manager_test.go`, `expand_test.go`, and per-method tests). |
+| `server/internal/access/access.go`   | The `Check` type and its expansion logic.                                                                                                                    |
+| `server/internal/access/accesstest/` | Test helpers other packages reuse for RBAC setup.                                                                                                            |
+| `server/internal/access/context.go`  | Request-context helpers for grants.                                                                                                                          |
+| `server/internal/access/errors.go`   | The package's sentinel errors.                                                                                                                               |
+| `server/internal/access/grants.go`   | System role defaults.                                                                                                                                        |
+| `server/internal/access/impl.go`     | Implementation of the `/rpc/access.*` Goa service.                                                                                                           |
+| `server/internal/access/load.go`     | Principal grant loading from the database.                                                                                                                   |
+| `server/internal/access/manager.go`  | The central RBAC enforcer.                                                                                                                                   |
+| `server/internal/access/override.go` | Scope override plumbing.                                                                                                                                     |
+| `server/internal/access/queries.sql` | SQLc queries for principals, grants, roles, and members. Regenerates `server/internal/access/repo/` via `mise run gen:sqlc-server`.                          |
+| `server/internal/access/scopes.go`   | Scope type, constants, and expansion rules.                                                                                                                  |
+
+### Generated files
+
+| Path                                            | Generator                                                                                                                      |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `server/gen/access/`, `server/gen/http/access/` | `mise run gen:goa-server` from `server/design/access/design.go`.                                                               |
+| `server/internal/access/repo/`                  | `mise run gen:sqlc-server` from `server/internal/access/queries.sql` (via the `access` stanza in `server/database/sqlc.yaml`). |
+
+## Server-client contract
+
+Scope and resource-type changes on the server must be accompanied by a matching edit to a hand-maintained client file — adding a scope is not purely a server change.
+
+**HTTP routes** (design: `server/design/access/design.go`):
+
+- `/rpc/access.listScopes` — every scope the server knows about, with `resource_type` and description.
+- `/rpc/access.listRoles`, `getRole`, `createRole`, `updateRole`, `deleteRole` — custom role CRUD.
+- `/rpc/access.listMembers`, `updateMemberRole` — org membership and role assignment.
+- `/rpc/access.listUserGrants` — the caller's effective grants.
+- `/rpc/access.disableRBAC` — feature flag hook.
+
+**Three-place enum lockstep.** `server/design/access/design.go` repeats the scope slug enum in three places — `RoleGrantModel.scope`, `ListRoleGrantModel.scope`, and its `sub_scopes` element — plus `ScopeModel.slug` for the listing endpoint. All three must stay synchronized with `scopes.go`, and `ScopeModel.resource_type` must contain every resource type in use.
+
+**Generated SDK types.** `client/sdk/src/models/components/scopedefinition.ts`, `rolegrant.ts`, `listrolegrant.ts`, etc. Regenerated by `mise run gen:sdk` after every design change.
+
+**Hand-maintained client mirror.** `client/dashboard/src/pages/access/types.ts` exports a `Scope` string-literal union, a `ResourceType` string-literal union, and the `RoleGrant` interface. These must be updated in the same commit as a scope or resource-type change on the server.
+
+## Client
+
+The dashboard pages under `client/dashboard/src/pages/access/` render membership and role management on top of the generated SDK and the `listScopes` response. RBAC-aware UI across the rest of the dashboard gates itself through a shared hook and component.
+
+### Conventions
+
+**`useRBAC` hook.** `client/dashboard/src/hooks/useRBAC.ts` wraps the generated `useGrants` React Query hook and exposes `hasScope(scope, resourceId?)`, `hasAllScopes(scopes, resourceId?)`, `hasAnyScope(scopes, resourceId?)`, plus `isRbacEnabled`, `isLoading`, `grants`, and `error`. Returns `false` from the `has*` checks while loading and `true` when RBAC is disabled.
+
+**`RequireScope` component.** `client/dashboard/src/components/require-scope.tsx` is the primary rendering gate. Props: `scope: Scope | Scope[]`, `all?: boolean` (AND vs OR when multiple scopes), `resourceId?: string`, `level: "page" | "section" | "component"`, `children`, and level-specific extras (`fallback` for page/section, `reason`/`className` for component).
+
+- `level="page"` — renders a full Unauthorized fallback page when the scope is missing.
+- `level="section"` — hides the children entirely.
+- `level="component"` — renders disabled with a tooltip explaining why (good for buttons and inputs).
+
+**Scope vocabulary import.** `useRBAC` and `RequireScope` both consume the `Scope` union from `client/dashboard/src/pages/access/types.ts` (covered under "Server-client contract"). Keeping that file in lockstep with the server is what makes the client gates work.
+
+### Non-generated files
+
+| File                                                                                                     | Purpose                                                                                         |
+| -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `client/dashboard/src/components/require-scope.tsx`                                                      | `RequireScope` gating component — page, section, and component-level rendering gates.           |
+| `client/dashboard/src/hooks/useRBAC.ts`                                                                  | `useRBAC` hook — scope checks and raw grants for the dashboard.                                 |
+| `client/dashboard/src/pages/access/Access.tsx`                                                           | Top-level access page shell.                                                                    |
+| `client/dashboard/src/pages/access/ChangeRoleDialog.tsx`, `CreateRoleDialog.tsx`, `DeleteRoleDialog.tsx` | Role and member-role mutation dialogs.                                                          |
+| `client/dashboard/src/pages/access/MembersTab.tsx`, `RolesTab.tsx`                                       | The two tabs of the access page.                                                                |
+| `client/dashboard/src/pages/access/ScopePickerPopover.tsx`                                               | Scope selection UI.                                                                             |
+| `client/dashboard/src/pages/access/types.ts`                                                             | Hand-maintained client mirror of the server's scope vocabulary. (See "Server-client contract".) |
+
+## Jobs to be done
+
+### How to gate a handler with an existing scope
+
+1. Inject `*access.Manager` into the service struct (if it isn't already) and keep it on `s.access`.
+2. At the top of the handler — before any database work — call `s.access.Require(ctx, access.Check{Scope: access.Scope<Name>, ResourceID: authCtx.ProjectID.String()})` and return the error as-is.
+3. Choose the narrowest scope for the operation: `*:read` for GET/list, `*:write` for mutations, `*:connect` for runtime usage. Scope expansions mean write callers are still permitted to read.
+4. Use `RequireAny` instead of `Require` when a single handler legitimately satisfies multiple equivalent scopes.
+5. In the handler's test, add one case that builds the context without the scope and asserts an `oops.CodeForbidden` response, and one case that builds the context with the scope via `withExactAccessGrants`.
+
+### How to add a new scope to an existing resource type
+
+Use this when the resource type is already represented (e.g. adding a new verb on `mcp`).
+
+1. Add the `Scope<Name>` constant in `server/internal/access/scopes.go`.
+2. Add the new scope to `scopeExpansions` in the same file. Usually: the new scope is the upper or lower end of an existing read/write/connect triple.
+3. Extend `SystemRoleGrants` in `grants.go`: admin always receives the new scope. Member receives it if and only if end users should have it by default (read and connect, yes; write, no).
+4. Add a `{Slug, Description, ResourceType}` entry to `ListScopes` in `impl.go`.
+5. Extend `fullAccessGrantPayloads` at the bottom of `impl.go`.
+6. Update the three enums in `server/design/access/design.go` that have to stay in lockstep.
+7. Add the new slug to the `Scope` union in `client/dashboard/src/pages/access/types.ts`.
+8. Bump the `require.Len(t, result.Scopes, N)` assertions in both `listscopes_test.go` and `rbac_test.go`.
+9. Run `mise run gen:goa-server`, then `mise run gen:sdk`.
+10. Run `mise run lint:server` and `mise run test:server`.
+
+### How to add a new resource type
+
+Use this when introducing a resource type that doesn't exist yet (e.g. the first `foo:*` scopes).
+
+1. Follow every step under "How to add a new scope to an existing resource type" for each scope on the new type.
+2. Additionally, add the new resource type string to `ScopeModel.resource_type` in `server/design/access/design.go`.
+3. Additionally, add the new resource type to the `ResourceType` union in `client/dashboard/src/pages/access/types.ts`.
+
+### How to change system role defaults
+
+Use this when adjusting what `admin` or `member` gets out of the box. Prefer additive changes — removing a grant from a shipped role is an observable permissions change for existing users.
+
+1. Edit `SystemRoleGrants` in `grants.go`.
+2. Update `listusergrants_test.go` — its `expectedFullAccessScopes` list captures the admin set.
+3. Consider whether existing orgs' grant tables need a migration to reflect the new defaults; new orgs pick up defaults automatically via seeding.
+4. Run `mise run lint:server` and `mise run test:server`.
+
+### How to filter a list handler to the caller's accessible resources
+
+Use this whenever a `list*` handler would otherwise return resources the caller has no grant for. `projects.List` and `toolsets.List` are the canonical examples.
+
+1. Query the repo for the full candidate set the org/project contains.
+2. Collect the candidate IDs into `[]string`.
+3. Call `allowedIDs, err := s.access.Filter(ctx, access.Scope<Name>, candidateIDs)`. Return the error as-is.
+4. Build a set from `allowedIDs` and rebuild the response by walking the original rows, keeping only the ones whose ID is in the set. Preserves repo ordering without a second query.
+5. Do not fall back to a per-item `Require` loop — `Filter` exists specifically to avoid N authorization round-trips.
+
+### How to gate dashboard UI with RBAC
+
+Dashboard code should never hand-roll scope checks — use the shared primitives so a change to `useRBAC` or `<RequireScope>` flows through the whole app.
+
+1. **Rendering gates — use `<RequireScope>`.** Pick the level that matches what you want the un-entitled user to see:
+   - `level="page"` around a full route component renders an Unauthorized fallback page.
+   - `level="section"` around a block hides it entirely.
+   - `level="component"` around a button or input renders disabled with a tooltip reason.
+
+   ```tsx
+   <RequireScope scope="org:admin" level="component" reason="Admin only">
+     <Button onClick={() => setDialogOpen(true)}>New API key</Button>
+   </RequireScope>
+   ```
+
+2. **Multi-scope gates.** Pass an array and set `all` to switch between OR (default) and AND logic: `<RequireScope scope={["org:read", "org:admin"]} level="page">`.
+
+3. **Resource-specific gates.** Pass `resourceId` when the scope only applies to a specific resource: `<RequireScope scope="mcp:write" resourceId={toolsetId} level="component">`.
+
+4. **Imperative checks — use `useRBAC`.** When you need the scope result as a value (to compute a class name, skip an effect, pick a label), pull from the hook instead of wrapping markup:
+
+   ```tsx
+   const { hasScope, isLoading } = useRBAC();
+   const canEdit = hasScope("mcp:write", toolsetId);
+   ```
+
+5. **The `Scope` string you pass must match the server.** Import from `client/dashboard/src/pages/access/types.ts` (re-exported via `useRBAC` for convenience). If TypeScript complains about an unknown scope, you're missing the union update from the server scope add (see "How to add a new scope to an existing resource type").
+
+### How to inspect the caller's grants
+
+- **In the dashboard**: `const { grants } = useRBAC();` returns the raw `RoleGrant[]`. Prefer `hasScope` for gating; reach for `grants` only when you need to render them (the access page itself, diagnostics, dev overlays).
+- **In Go handlers**: `access.GrantsFromContext(ctx)` returns the grants on the request context after the access middleware has run.
+- **Over the API**: `GET /rpc/access.listUserGrants` returns the caller's effective grants.
+
+## Role hierarchy at a glance
+
+- `admin` — every scope. Write implies read via `scopeExpansions`, so admins can exercise every read operation transitively.
+- `member` — the read-and-connect subset.
+- Resource scoping — a grant's `Resource` either names a specific id or is the wildcard `"*"`. Checks against the wildcard always succeed for their scope.
+- `root` — held only by service-internal overrides; satisfies every check.
+
+## Relevant mise tasks
+
+| Task                       | Purpose                                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------------------- |
+| `mise run gen:goa-server`  | Regenerate `server/gen/access/**` after editing `server/design/access/design.go`.                   |
+| `mise run gen:sdk`         | Regenerate the SDK and OpenAPI so dashboard/CLI consumers see the new scope vocabulary.             |
+| `mise run gen:sqlc-server` | Regenerate `server/internal/access/repo/` when `queries.sql` changes.                               |
+| `mise run lint:server`     | Catches `exhaustruct` violations in the scope/grant structs.                                        |
+| `mise run test:server`     | Runs the scope-count assertions and RBAC tests. Filter with `./internal/access/...` when iterating. |
+
+## Maintaining this skill
+
+This file documents conventions that evolve over time. Adding a new scope, resource type, or tweaking system-role defaults is already covered by "Jobs to be done" — those don't require skill edits. Structural changes do. Update this skill in the same commit when you make any of the following kinds of changes:
+
+- Changing the `<resource>:<verb>` scope naming convention.
+- Adding or removing a system role beyond `admin` and `member`.
+- Replacing `access.Manager` as the central enforcer, or changing its method set (`Require`, `RequireAny`, `Filter`, etc.).
+- Changing scope-expansion semantics (e.g. how `scopeSubScopes` is computed from `scopeExpansions`, or introducing transitive expansion).
+- Changing how `fullAccessGrantPayloads` or `ListScopes` is populated (e.g. moving the scope catalogue out of `impl.go`).
+- Moving the hand-maintained client scope vocabulary out of `client/dashboard/src/pages/access/types.ts`, or changing the three-place-enum-lockstep count in the design file.
+- Changing the auth context invariant — e.g. if `ActiveOrganizationID` becomes optional, or a new invariant field is added.
+- Changing or replacing the dashboard's RBAC primitives — `useRBAC` return shape, `<RequireScope>` levels/props, or the SDK hook the dashboard reads grants from.
+- Adding a new RBAC-relevant mise task that belongs on the cheat sheet.
+
+## Cross-references
+
+- `gram-management-api` — the `access` service itself, and every service that gates handlers with `access.Require`, follows that skill's flow.
+- `gram-audit-logging` — role and member mutations emit audit events via `server/internal/audit/access.go`; subjects are `access_role` and `access_member`.
+- `golang` — error handling through `oops`, the no-defensive-checks rule for `ActiveOrganizationID`, the `setup_test.go` / black-box test conventions used by RBAC tests.
+- `frontend` — everything under `client/dashboard/src/pages/access/` (component structure, `cn()`/Moonshine styling, React Query usage).
+- `postgresql` — the `principal_grants`, `roles`, and related tables backing `accessrepo`.
+- `mise-tasks` — when modifying the `.mise-tasks/gen/*.sh` scripts referenced above.
