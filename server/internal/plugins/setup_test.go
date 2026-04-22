@@ -131,7 +131,8 @@ func withauthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, gran
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PrincipalUrn:   userPrincipal,
 			Scope:          string(grant.Scope),
-			Selector:       selectorBytes,
+			Resource:       grant.Selector.ResourceID(),
+			Selectors:      selectorBytes,
 		})
 		require.NoError(t, err)
 	}

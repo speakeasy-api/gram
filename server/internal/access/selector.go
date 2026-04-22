@@ -45,6 +45,19 @@ func (s Selector) ResourceID() string {
 	return WildcardResource
 }
 
+// selectorFromRow parses the selectors JSONB column, falling back to the
+// legacy resource string if selectors is NULL.
+func selectorFromRow(selectors []byte, resource string) (Selector, error) {
+	if len(selectors) > 0 {
+		var sel Selector
+		if err := json.Unmarshal(selectors, &sel); err != nil {
+			return nil, fmt.Errorf("unmarshal selector: %w", err)
+		}
+		return sel, nil
+	}
+	return ForResource(resource), nil
+}
+
 // MarshalJSON implements json.Marshaler. A nil selector marshals as the
 // explicit wildcard {"resource_id":"*"}.
 func (s Selector) MarshalJSON() ([]byte, error) {

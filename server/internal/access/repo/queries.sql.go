@@ -37,23 +37,23 @@ DELETE FROM principal_grants
 WHERE organization_id = $1
   AND principal_urn = $2
   AND scope = $3
-  AND selector = $4
+  AND resource = $4
 `
 
 type DeletePrincipalGrantByTupleParams struct {
 	OrganizationID string
 	PrincipalUrn   urn.Principal
 	Scope          string
-	Selector       []byte
+	Resource       string
 }
 
-// Removes a single grant row matching the exact (org, principal, scope, selector) tuple.
+// Removes a single grant row matching the exact (org, principal, scope, resource) tuple.
 func (q *Queries) DeletePrincipalGrantByTuple(ctx context.Context, arg DeletePrincipalGrantByTupleParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalGrantByTuple,
 		arg.OrganizationID,
 		arg.PrincipalUrn,
 		arg.Scope,
-		arg.Selector,
+		arg.Resource,
 	)
 	if err != nil {
 		return 0, err
@@ -83,7 +83,7 @@ func (q *Queries) DeletePrincipalGrantsByPrincipal(ctx context.Context, arg Dele
 }
 
 const getPrincipalGrants = `-- name: GetPrincipalGrants :many
-SELECT scope, selector
+SELECT scope, selectors
 FROM principal_grants
 WHERE organization_id = $1
   AND principal_urn = ANY($2::text[])
@@ -95,8 +95,8 @@ type GetPrincipalGrantsParams struct {
 }
 
 type GetPrincipalGrantsRow struct {
-	Scope    string
-	Selector []byte
+	Scope     string
+	Selectors []byte
 }
 
 // Returns all grant rows matching a set of principal URNs within an org.
@@ -110,7 +110,7 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	var items []GetPrincipalGrantsRow
 	for rows.Next() {
 		var i GetPrincipalGrantsRow
-		if err := rows.Scan(&i.Scope, &i.Selector); err != nil {
+		if err := rows.Scan(&i.Scope, &i.Selectors); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -123,11 +123,11 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 
 const listPrincipalGrantsByOrg = `-- name: ListPrincipalGrantsByOrg :many
 
-SELECT id, organization_id, principal_urn, principal_type, scope, selector, created_at, updated_at
+SELECT id, organization_id, principal_urn, principal_type, scope, resource, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = $1
   AND ($2::text = '' OR principal_urn = $2)
-ORDER BY principal_urn, scope, selector
+ORDER BY principal_urn, scope, resource
 `
 
 type ListPrincipalGrantsByOrgParams struct {
@@ -153,7 +153,8 @@ func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipa
 			&i.PrincipalUrn,
 			&i.PrincipalType,
 			&i.Scope,
-			&i.Selector,
+			&i.Resource,
+			&i.Selectors,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -167,21 +168,21 @@ func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipa
 	return items, nil
 }
 
-const removeMatchingGrants = `-- name: RemoveMatchingGrants :execrows
+const removeResourceFromGrants = `-- name: RemoveResourceFromGrants :execrows
 DELETE FROM principal_grants
 WHERE organization_id = $1
-  AND selector @> $2::jsonb
+  AND resource = $2
 `
 
-type RemoveMatchingGrantsParams struct {
+type RemoveResourceFromGrantsParams struct {
 	OrganizationID string
-	Selector       []byte
+	Resource       string
 }
 
-// Deletes all grant rows whose selector contains the given selector within an org.
+// Deletes all grant rows referencing a specific resource within an org.
 // Called when a resource (project, MCP server) is deleted.
-func (q *Queries) RemoveMatchingGrants(ctx context.Context, arg RemoveMatchingGrantsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, removeMatchingGrants, arg.OrganizationID, arg.Selector)
+func (q *Queries) RemoveResourceFromGrants(ctx context.Context, arg RemoveResourceFromGrantsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeResourceFromGrants, arg.OrganizationID, arg.Resource)
 	if err != nil {
 		return 0, err
 	}
@@ -189,28 +190,30 @@ func (q *Queries) RemoveMatchingGrants(ctx context.Context, arg RemoveMatchingGr
 }
 
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one
-INSERT INTO principal_grants (organization_id, principal_urn, scope, selector)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (organization_id, principal_urn, scope, selector)
-DO UPDATE SET updated_at = clock_timestamp()
-RETURNING id, organization_id, principal_urn, principal_type, scope, selector, created_at, updated_at
+INSERT INTO principal_grants (organization_id, principal_urn, scope, resource, selectors)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, resource)
+DO UPDATE SET selectors = $5, updated_at = clock_timestamp()
+RETURNING id, organization_id, principal_urn, principal_type, scope, resource, selectors, created_at, updated_at
 `
 
 type UpsertPrincipalGrantParams struct {
 	OrganizationID string
 	PrincipalUrn   urn.Principal
 	Scope          string
-	Selector       []byte
+	Resource       string
+	Selectors      []byte
 }
 
-// Creates or updates a single grant row. On conflict (same org/principal/scope/selector),
-// the updated_at timestamp is refreshed. Returns the full row.
+// Creates or updates a single grant row. On conflict (same org/principal/scope/resource),
+// the selectors and updated_at are refreshed. Returns the full row.
 func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (PrincipalGrant, error) {
 	row := q.db.QueryRow(ctx, upsertPrincipalGrant,
 		arg.OrganizationID,
 		arg.PrincipalUrn,
 		arg.Scope,
-		arg.Selector,
+		arg.Resource,
+		arg.Selectors,
 	)
 	var i PrincipalGrant
 	err := row.Scan(
@@ -219,7 +222,8 @@ func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalG
 		&i.PrincipalUrn,
 		&i.PrincipalType,
 		&i.Scope,
-		&i.Selector,
+		&i.Resource,
+		&i.Selectors,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

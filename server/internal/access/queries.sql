@@ -3,28 +3,28 @@
 
 -- name: ListPrincipalGrantsByOrg :many
 -- Returns all grant rows for an organization, optionally filtered by principal URN.
-SELECT id, organization_id, principal_urn, principal_type, scope, selector, created_at, updated_at
+SELECT id, organization_id, principal_urn, principal_type, scope, resource, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND (@principal_urn::text = '' OR principal_urn = @principal_urn)
-ORDER BY principal_urn, scope, selector;
+ORDER BY principal_urn, scope, resource;
 
 -- name: GetPrincipalGrants :many
 -- Returns all grant rows matching a set of principal URNs within an org.
 -- Used by the access resolver to load grants for a user+role in a single query.
-SELECT scope, selector
+SELECT scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = ANY(@principal_urns::text[]);
 
 -- name: UpsertPrincipalGrant :one
--- Creates or updates a single grant row. On conflict (same org/principal/scope/selector),
--- the updated_at timestamp is refreshed. Returns the full row.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, selector)
-VALUES (@organization_id, @principal_urn, @scope, @selector)
-ON CONFLICT (organization_id, principal_urn, scope, selector)
-DO UPDATE SET updated_at = clock_timestamp()
-RETURNING id, organization_id, principal_urn, principal_type, scope, selector, created_at, updated_at;
+-- Creates or updates a single grant row. On conflict (same org/principal/scope/resource),
+-- the selectors and updated_at are refreshed. Returns the full row.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, resource, selectors)
+VALUES (@organization_id, @principal_urn, @scope, @resource, @selectors)
+ON CONFLICT (organization_id, principal_urn, scope, resource)
+DO UPDATE SET selectors = @selectors, updated_at = clock_timestamp()
+RETURNING id, organization_id, principal_urn, principal_type, scope, resource, selectors, created_at, updated_at;
 
 -- name: DeletePrincipalGrant :execrows
 -- Removes a specific grant row by ID, scoped to the organization for safety.
@@ -33,12 +33,12 @@ WHERE id = @id
   AND organization_id = @organization_id;
 
 -- name: DeletePrincipalGrantByTuple :execrows
--- Removes a single grant row matching the exact (org, principal, scope, selector) tuple.
+-- Removes a single grant row matching the exact (org, principal, scope, resource) tuple.
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = @principal_urn
   AND scope = @scope
-  AND selector = @selector;
+  AND resource = @resource;
 
 -- name: DeletePrincipalGrantsByPrincipal :execrows
 -- Removes all grants for a specific principal within an org.
@@ -47,9 +47,9 @@ DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = @principal_urn;
 
--- name: RemoveMatchingGrants :execrows
--- Deletes all grant rows whose selector contains the given selector within an org.
+-- name: RemoveResourceFromGrants :execrows
+-- Deletes all grant rows referencing a specific resource within an org.
 -- Called when a resource (project, MCP server) is deleted.
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
-  AND selector @> @selector::jsonb;
+  AND resource = @resource;

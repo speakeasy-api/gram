@@ -2,7 +2,6 @@ package authz
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -116,7 +115,8 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 				OrganizationID: orgID,
 				PrincipalUrn:   principalURN,
 				Scope:          grant.Scope,
-				Selector:       selectorBytes,
+				Resource:       WildcardResource,
+				Selectors:      selectorBytes,
 			}); err != nil {
 				return fmt.Errorf("upsert unrestricted grant %q for role %q: %w", grant.Scope, roleSlug, err)
 			}
@@ -133,7 +133,8 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 				OrganizationID: orgID,
 				PrincipalUrn:   principalURN,
 				Scope:          grant.Scope,
-				Selector:       selectorBytes,
+				Resource:       resource,
+				Selectors:      selectorBytes,
 			}); err != nil {
 				return fmt.Errorf("upsert grant %q on resource %q for role %q: %w", grant.Scope, resource, roleSlug, err)
 			}
@@ -158,8 +159,8 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
-		var sel Selector
-		if err := json.Unmarshal(row.Selector, &sel); err != nil {
+		sel, err := selectorFromRow(row.Selectors, row.Resource)
+		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").Log(ctx, logger)
 		}
 		grantRows = append(grantRows, Grant{

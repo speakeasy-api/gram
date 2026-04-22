@@ -145,7 +145,8 @@ func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizati
 		OrganizationID: organizationID,
 		PrincipalUrn:   principal,
 		Scope:          string(scope),
-		Selector:       selectorBytes,
+		Resource:       resource,
+		Selectors:      selectorBytes,
 	})
 	require.NoError(t, err)
 }
