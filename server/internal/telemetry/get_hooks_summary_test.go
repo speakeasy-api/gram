@@ -318,6 +318,12 @@ func insertHookEvent(t *testing.T, ctx context.Context, p hookEventParams) {
 	}
 	if p.errorMsg != "" {
 		attrs["gram.hook.error"] = p.errorMsg
+	if p.skillName != "" {
+		// gen_ai.tool.call.arguments is stored as a JSON-encoded string in OTel attributes,
+		// matching what JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill') expects.
+		skillArgs, marshalErr := json.Marshal(map[string]any{"skill": p.skillName})
+		require.NoError(t, marshalErr)
+		attrs["gen_ai.tool.call.arguments"] = string(skillArgs)
 	}
 	if p.skillName != "" {
 		// gen_ai.tool.call.arguments is stored as a JSON-encoded string in OTel attributes,
