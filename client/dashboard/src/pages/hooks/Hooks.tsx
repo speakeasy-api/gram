@@ -1308,6 +1308,7 @@ function HookTraceRow({
             {serverNameBadge}
             {serverName && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setEditDialogOpen(true);
