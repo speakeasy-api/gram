@@ -9,9 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-	"go.temporal.io/sdk/client"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -62,6 +63,12 @@ type Activities struct {
 	getUserFeedbackForChat        *resolution_activities.GetUserFeedbackForChat
 	fetchUnanalyzedMessages       *risk_analysis.FetchUnanalyzed
 	analyzeBatch                  *risk_analysis.AnalyzeBatch
+	admitAssistantThreads         *activities.AdmitAssistantThreads
+	processAssistantThread        *activities.ProcessAssistantThread
+	expireAssistantThreadRuntime  *activities.ExpireAssistantThreadRuntime
+	reapStuckAssistantRuntimes    *activities.ReapStuckAssistantRuntimes
+	signalAssistantCoordinator    *activities.SignalAssistantCoordinator
+	signalAssistantThread         *activities.SignalAssistantThread
 }
 
 func NewActivities(
@@ -85,10 +92,11 @@ func NewActivities(
 	functionsVersion functions.RunnerVersion,
 	ragService *rag.ToolsetVectorStore,
 	mcpRegistryClient *externalmcp.RegistryClient,
-	temporalClient client.Client,
+	temporalEnv *tenv.Environment,
 	telemetryLogger *telemetry.Logger,
 	triggerApp *bgtriggers.App,
 	cacheAdapter cache.Cache,
+	assistantsCore *assistants.ServiceCore,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
@@ -121,6 +129,12 @@ func NewActivities(
 		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
 		fetchUnanalyzedMessages:       risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                  risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db),
+		admitAssistantThreads:         activities.NewAdmitAssistantThreads(assistantsCore),
+		processAssistantThread:        activities.NewProcessAssistantThread(assistantsCore),
+		expireAssistantThreadRuntime:  activities.NewExpireAssistantThreadRuntime(assistantsCore),
+		reapStuckAssistantRuntimes:    activities.NewReapStuckAssistantRuntimes(assistantsCore),
+		signalAssistantCoordinator:    activities.NewSignalAssistantCoordinator(temporalEnv),
+		signalAssistantThread:         activities.NewSignalAssistantThread(temporalEnv),
 	}
 }
 
@@ -259,4 +273,28 @@ func (a *Activities) AnalyzeBatch(ctx context.Context, input risk_analysis.Analy
 		return nil, fmt.Errorf("analyze batch: %w", err)
 	}
 	return result, nil
+}
+
+func (a *Activities) AdmitAssistantThreads(ctx context.Context, input activities.AdmitAssistantThreadsInput) (*activities.AdmitAssistantThreadsResult, error) {
+	return a.admitAssistantThreads.Do(ctx, input)
+}
+
+func (a *Activities) ProcessAssistantThread(ctx context.Context, input activities.ProcessAssistantThreadInput) (*activities.ProcessAssistantThreadResult, error) {
+	return a.processAssistantThread.Do(ctx, input)
+}
+
+func (a *Activities) ExpireAssistantThreadRuntime(ctx context.Context, input activities.ExpireAssistantThreadRuntimeInput) error {
+	return a.expireAssistantThreadRuntime.Do(ctx, input)
+}
+
+func (a *Activities) ReapStuckAssistantRuntimes(ctx context.Context) (*activities.ReapStuckAssistantRuntimesResult, error) {
+	return a.reapStuckAssistantRuntimes.Do(ctx)
+}
+
+func (a *Activities) SignalAssistantCoordinator(ctx context.Context, input activities.SignalAssistantCoordinatorInput) error {
+	return a.signalAssistantCoordinator.Do(ctx, input)
+}
+
+func (a *Activities) SignalAssistantThread(ctx context.Context, input activities.SignalAssistantThreadInput) error {
+	return a.signalAssistantThread.Do(ctx, input)
 }

@@ -842,6 +842,8 @@ func newStartCommand() *cli.Command {
 						TelemetryLogger:     telemLogger,
 						TriggersApp:         triggerApp,
 						CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
+						AssistantsCore:      assistantsSvc.Core(),
+						TemporalEnv:         temporalEnv,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
