@@ -1,6 +1,7 @@
 package access
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -48,7 +49,9 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 
 	got := make([]string, 0, len(rows))
 	for _, row := range rows {
-		got = append(got, row.Scope+"|"+row.Resource)
+		var sel Selector
+		require.NoError(t, json.Unmarshal(row.Selector, &sel))
+		got = append(got, row.Scope+"|"+sel.ResourceID())
 	}
 	require.ElementsMatch(t, []string{
 		string(authz.ScopeProjectRead) + "|" + authz.WildcardResource,
@@ -62,7 +65,9 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, otherRows, 1)
-	require.Equal(t, "project-other", otherRows[0].Resource)
+	var otherSel Selector
+	require.NoError(t, json.Unmarshal(otherRows[0].Selector, &otherSel))
+	require.Equal(t, "project-other", otherSel.ResourceID())
 }
 
 func TestService_syncGrants_clearsRoleGrantsWhenEmpty(t *testing.T) {

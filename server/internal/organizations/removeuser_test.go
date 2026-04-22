@@ -163,7 +163,7 @@ func TestService_RemoveUser_AllowsOrgAdminGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource(authCtx.ActiveOrganizationID)})
 
 	ti.orgs.On("DeleteOrganizationMembership", mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -187,7 +187,7 @@ func TestService_RemoveUser_ForbiddenWithGrantForDifferentOrganization(t *testin
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: "org_other"})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource("org_other")})
 
 	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{UserID: "any-user-id"})
 	var oopsErr *oops.ShareableError

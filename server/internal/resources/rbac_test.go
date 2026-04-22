@@ -39,7 +39,7 @@ func TestResources_RBAC_List_DeniedWithUnrelatedGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: "other-project-id"})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildWrite, Selector: access.ForResource("other-project-id")})
 
 	_, err := ti.service.ListResources(ctx, &gen.ListResourcesPayload{
 		SessionToken:     nil,
@@ -62,7 +62,7 @@ func TestResources_RBAC_List_AllowedWithBuildReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildRead, Selector: access.ForResource(authCtx.ProjectID.String())})
 
 	result, err := ti.service.ListResources(ctx, &gen.ListResourcesPayload{
 		SessionToken:     nil,
@@ -84,7 +84,7 @@ func TestResources_RBAC_List_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildWrite, Selector: access.ForResource(authCtx.ProjectID.String())})
 
 	result, err := ti.service.ListResources(ctx, &gen.ListResourcesPayload{
 		SessionToken:     nil,

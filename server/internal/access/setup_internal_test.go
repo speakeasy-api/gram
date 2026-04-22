@@ -29,7 +29,7 @@ func newInternalTestService(t *testing.T) (context.Context, *Service, *pgxpool.P
 	conn, err := res.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
-	return ctx, &Service{tracer: nil, logger: logger, db: conn, auth: nil, authz: nil, roles: nil, featureCache: nil}, conn
+	return ctx, &Service{tracer: nil, logger: logger, db: conn, auth: nil, access: nil, roles: nil, featureCache: nil}, conn
 }
 
 func seedInternalOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) {
@@ -47,11 +47,14 @@ func seedInternalOrganization(t *testing.T, ctx context.Context, conn *pgxpool.P
 func seedInternalGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope string, resource string) {
 	t.Helper()
 
-	_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+	selectorBytes, err := ForResource(resource).MarshalJSON()
+	require.NoError(t, err)
+
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 		OrganizationID: organizationID,
 		PrincipalUrn:   principal,
 		Scope:          scope,
-		Resource:       resource,
+		Selector:       selectorBytes,
 	})
 	require.NoError(t, err)
 }

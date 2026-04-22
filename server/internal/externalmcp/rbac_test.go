@@ -41,7 +41,7 @@ func TestExternalMCP_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildRead, Selector: access.ForResource(authCtx.ProjectID.String())})
 
 	_, err := ti.service.ListCatalog(ctx, &gen.ListCatalogPayload{
 		SessionToken:     nil,
@@ -63,7 +63,7 @@ func TestExternalMCP_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildWrite, Selector: access.ForResource(authCtx.ProjectID.String())})
 
 	_, err := ti.service.ListCatalog(ctx, &gen.ListCatalogPayload{
 		SessionToken:     nil,
@@ -80,7 +80,7 @@ func TestExternalMCP_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestExternalMCPService(t)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: uuid.NewString()})
+	ctx = rbactest.WithExactAccessGrants(t, ctx, access.Grant{Scope: access.ScopeBuildRead, Selector: access.ForResource(uuid.NewString())})
 
 	_, err := ti.service.ListCatalog(ctx, &gen.ListCatalogPayload{
 		SessionToken:     nil,

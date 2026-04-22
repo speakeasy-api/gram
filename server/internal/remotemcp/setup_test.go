@@ -95,11 +95,12 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 
 	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "remotemcp-rbac-grants-"+uuid.NewString())
 	for _, grant := range grants {
+		selectorBytes, _ := grant.Selector.MarshalJSON()
 		_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PrincipalUrn:   principal,
 			Scope:          string(grant.Scope),
-			Resource:       grant.Resource,
+			Selector:       selectorBytes,
 		})
 		require.NoError(t, err)
 	}

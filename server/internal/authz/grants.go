@@ -2,6 +2,7 @@ package authz
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -59,7 +60,7 @@ func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.
 
 type Grant struct {
 	Scope    Scope
-	Resource string
+	Selector Selector
 }
 
 type ScopedGrant struct {
@@ -69,9 +70,9 @@ type ScopedGrant struct {
 }
 
 func grantsSatisfy(grants []Grant, checks []Check) bool {
-	for _, row := range grants {
+	for _, grant := range grants {
 		for _, check := range checks {
-			if row.Scope == check.Scope && row.Resource == check.ResourceID {
+			if grant.Scope == check.Scope && grant.Selector.Matches(check.selector()) {
 				return true
 			}
 		}
@@ -107,11 +108,15 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 		}
 
 		if grant.Resources == nil {
+			selectorBytes, err := ForResource(WildcardResource).MarshalJSON()
+			if err != nil {
+				return fmt.Errorf("marshal wildcard selector for %q: %w", grant.Scope, err)
+			}
 			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 				OrganizationID: orgID,
 				PrincipalUrn:   principalURN,
 				Scope:          grant.Scope,
-				Resource:       WildcardResource,
+				Selector:       selectorBytes,
 			}); err != nil {
 				return fmt.Errorf("upsert unrestricted grant %q for role %q: %w", grant.Scope, roleSlug, err)
 			}
@@ -120,11 +125,15 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 		}
 
 		for _, resource := range grant.Resources {
+			selectorBytes, err := ForResource(resource).MarshalJSON()
+			if err != nil {
+				return fmt.Errorf("marshal selector for resource %q: %w", resource, err)
+			}
 			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 				OrganizationID: orgID,
 				PrincipalUrn:   principalURN,
 				Scope:          grant.Scope,
-				Resource:       resource,
+				Selector:       selectorBytes,
 			}); err != nil {
 				return fmt.Errorf("upsert grant %q on resource %q for role %q: %w", grant.Scope, resource, roleSlug, err)
 			}
@@ -149,9 +158,13 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
+		var sel Selector
+		if err := json.Unmarshal(row.Selector, &sel); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").Log(ctx, logger)
+		}
 		grantRows = append(grantRows, Grant{
 			Scope:    Scope(row.Scope),
-			Resource: row.Resource,
+			Selector: sel,
 		})
 	}
 
@@ -172,13 +185,14 @@ func GrantsFromRows(rows []Grant) []*ScopedGrant {
 			agg = &scopeAgg{unrestricted: false, resources: nil}
 			byScope[scope] = agg
 		}
-		if row.Resource == WildcardResource {
+		resourceID := row.Selector.ResourceID()
+		if resourceID == WildcardResource {
 			agg.unrestricted = true
 			agg.resources = nil
 			continue
 		}
 		if !agg.unrestricted {
-			agg.resources = append(agg.resources, row.Resource)
+			agg.resources = append(agg.resources, resourceID)
 		}
 	}
 

@@ -2,6 +2,7 @@ package authz
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -29,9 +30,13 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
+		var sel Selector
+		if err := json.Unmarshal(row.Selector, &sel); err != nil {
+			return nil, fmt.Errorf("unmarshal grant selector: %w", err)
+		}
 		grantRows = append(grantRows, Grant{
 			Scope:    Scope(row.Scope),
-			Resource: row.Resource,
+			Selector: sel,
 		})
 	}
 

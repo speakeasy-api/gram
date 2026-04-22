@@ -6,19 +6,22 @@ type Check struct {
 	ResourceID string
 }
 
-// expand returns all grants that would satisfy this check: the check itself
-// (exact resource and wildcard), any higher-privilege scopes that also satisfy it
-// (exact and wildcard), and always a ScopeRoot wildcard grant.
+// selector converts the check into a Selector for matching against grants.
+func (c Check) selector() Selector {
+	return ForResource(c.ResourceID)
+}
+
+// expand returns all scope variants that would satisfy this check: the check's
+// own scope, any higher-privilege scopes that imply it, and ScopeRoot. Selector
+// matching handles wildcard grants natively (empty selector matches any check),
+// so we only need one entry per scope level.
 func (c Check) expand() []Check {
 	checks := []Check{
-		{Scope: ScopeRoot, ResourceID: WildcardResource},
+		{Scope: ScopeRoot, ResourceID: c.ResourceID},
 	}
 	scopes := append([]Scope{c.Scope}, scopeExpansions[c.Scope]...)
 	for _, s := range scopes {
-		checks = append(checks,
-			Check{Scope: s, ResourceID: c.ResourceID},
-			Check{Scope: s, ResourceID: WildcardResource},
-		)
+		checks = append(checks, Check{Scope: s, ResourceID: c.ResourceID})
 	}
 	return checks
 }

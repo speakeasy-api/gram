@@ -16,7 +16,7 @@ func TestUpdateRiskPolicy_Success(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
+		access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource(authCtx.ActiveOrganizationID)},
 	)
 
 	enabled := true
@@ -44,7 +44,7 @@ func TestUpdateRiskPolicy_BumpsVersionOnSourcesChange(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
+		access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource(authCtx.ActiveOrganizationID)},
 	)
 
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
@@ -69,7 +69,7 @@ func TestUpdateRiskPolicy_BumpsVersionOnEnabledChange(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
+		access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource(authCtx.ActiveOrganizationID)},
 	)
 
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
@@ -94,7 +94,7 @@ func TestUpdateRiskPolicy_PreservesFieldsWhenOmitted(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
+		access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource(authCtx.ActiveOrganizationID)},
 	)
 
 	disabled := false

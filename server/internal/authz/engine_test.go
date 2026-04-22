@@ -113,8 +113,8 @@ func TestResolveRoleSlug_cachesEmptyMembershipResult(t *testing.T) {
 func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 
-	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeMCPConnect, Resource: "tool_a"}})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeMCPConnect, Selector: ForResource("tool_a")}})
 
 	err := engine.RequireAny(ctx,
 		Check{Scope: ScopeMCPConnect, ResourceID: "tool_b"},
@@ -128,8 +128,8 @@ func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {
 func TestEngineFilter_returnsAllowedSubset(t *testing.T) {
 	t.Parallel()
 
-	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeProjectRead, Resource: "proj_123"}})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Selector: ForResource("proj_123")}})
 
 	resourceIDs, err := engine.Filter(ctx, ScopeProjectRead, []string{"proj_123", "proj_456"})
 	require.NoError(t, err)
@@ -139,8 +139,8 @@ func TestEngineFilter_returnsAllowedSubset(t *testing.T) {
 func TestEngineRequire_rejectsInvalidCheck(t *testing.T) {
 	t.Parallel()
 
-	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeProjectRead, Resource: WildcardResource}})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Selector: ForResource(WildcardResource)}})
 
 	err := engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: ""})
 	var oopsErr *oops.ShareableError
@@ -152,8 +152,8 @@ func TestEngineRequire_rejectsInvalidCheck(t *testing.T) {
 func TestEngineRequire_requiresChecks(t *testing.T) {
 	t.Parallel()
 
-	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeProjectRead, Resource: WildcardResource}})
+	manager := NewManager(testLogger(t), nil, stubFeatureChecker{enabled: true}, workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Selector: ForResource(WildcardResource)}})
 
 	err := engine.Require(ctx)
 	var oopsErr *oops.ShareableError

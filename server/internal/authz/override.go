@@ -26,11 +26,11 @@ func GrantsFromOverrides(overrides []RoleGrant) []Grant {
 	var grants []Grant
 	for _, o := range overrides {
 		if len(o.Resources) == 0 {
-			grants = append(grants, Grant{Scope: Scope(o.Scope), Resource: WildcardResource})
+			grants = append(grants, Grant{Scope: Scope(o.Scope), Selector: ForResource(WildcardResource)})
 			continue
 		}
 		for _, r := range o.Resources {
-			grants = append(grants, Grant{Scope: Scope(o.Scope), Resource: r})
+			grants = append(grants, Grant{Scope: Scope(o.Scope), Selector: ForResource(r)})
 		}
 	}
 	return grants

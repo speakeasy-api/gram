@@ -21,7 +21,7 @@ func TestProjectsService_CreateProject_CreatesAuditLog(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource(authCtx.ActiveOrganizationID)})
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectCreate)
 	require.NoError(t, err)
@@ -115,7 +115,7 @@ func TestProjectsService_CreateProject_AuditLogRecord(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource(authCtx.ActiveOrganizationID)})
 
 	name := "audit-create-project-record-" + uuid.NewString()[:8]
 	result, err := ti.service.CreateProject(ctx, &gen.CreateProjectPayload{

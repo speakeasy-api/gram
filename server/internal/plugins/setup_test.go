@@ -85,9 +85,9 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	ctx = withauthzGrants(t, ctx, conn,
-		authz.Grant{Scope: authz.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID},
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
+	ctx = withAccessGrants(t, ctx, conn,
+		access.Grant{Scope: access.ScopeOrgRead, Selector: access.ForResource(authCtx.ActiveOrganizationID)},
+		access.Grant{Scope: access.ScopeOrgAdmin, Selector: access.ForResource(authCtx.ActiveOrganizationID)},
 	)
 
 	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), "https://app.getgram.ai")
@@ -126,11 +126,12 @@ func withauthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, gran
 
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	for _, grant := range grants {
+		selectorBytes, _ := grant.Selector.MarshalJSON()
 		_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PrincipalUrn:   userPrincipal,
 			Scope:          string(grant.Scope),
-			Resource:       grant.Resource,
+			Selector:       selectorBytes,
 		})
 		require.NoError(t, err)
 	}
