@@ -1,11 +1,44 @@
 import { cn } from "@/lib/utils";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import { TelemetryLogRecord } from "@gram/client/models/components";
+import { Operator as Op } from "@gram/client/models/components/logfilter";
+import type { SearchLogsPayload } from "@gram/client/models/components/searchlogspayload";
 import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { formatNanoTimestamp, formatLogBody } from "./utils";
+
+function buildTraceFilters(
+  traceId: string,
+): Pick<SearchLogsPayload, "filter" | "filters"> {
+  if (traceId.startsWith("corr:")) {
+    return {
+      filters: [
+        {
+          path: "gram.trigger.correlation_id",
+          operator: Op.Eq,
+          values: [traceId.slice("corr:".length)],
+        },
+      ],
+    };
+  }
+  if (traceId.startsWith("trigger:")) {
+    return {
+      filters: [
+        {
+          path: "gram.trigger.event_id",
+          operator: Op.Eq,
+          values: [traceId.slice("trigger:".length)],
+        },
+      ],
+    };
+  }
+  if (traceId.startsWith("trigger-log:")) {
+    return { filters: [] };
+  }
+  return { filter: { traceId } };
+}
 
 // Uses design system tokens where available (destructive, warning, muted).
 // INFO has no semantic token — hardcoded Tailwind is intentional and matches
@@ -63,9 +96,7 @@ export function TraceLogsList({
       unwrapAsync(
         telemetrySearchLogs(client, {
           searchLogsPayload: {
-            filter: {
-              traceId,
-            },
+            ...buildTraceFilters(traceId),
             limit: 100,
             sort: "asc",
           },
