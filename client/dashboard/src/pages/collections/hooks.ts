@@ -1,4 +1,3 @@
-import { useOrganization } from "@/contexts/Auth";
 import type { ExternalMCPServer } from "@gram/client/models/components";
 import {
   invalidateAllCollectionsListServers,
@@ -15,11 +14,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Collection, CollectionServer } from "./types";
 
-function useDefaultProjectSlug(): string | undefined {
-  const organization = useOrganization();
-  return organization.projects?.[0]?.slug;
-}
-
 function useInvalidateCollections() {
   const queryClient = useQueryClient();
   return () => {
@@ -32,13 +26,7 @@ export function useCollections(search?: string): {
   data: Collection[];
   isLoading: boolean;
 } {
-  const projectSlug = useDefaultProjectSlug();
-
-  const { data, isLoading } = useListCollections(
-    { gramProject: projectSlug },
-    undefined,
-    { enabled: !!projectSlug },
-  );
+  const { data, isLoading } = useListCollections({}, undefined);
 
   const registries = data?.collections ?? [];
 
@@ -71,12 +59,10 @@ export function useCollectionServers(slug: string | undefined): {
   rawServers: ExternalMCPServer[];
   isLoading: boolean;
 } {
-  const projectSlug = useDefaultProjectSlug();
-
   const { data, isLoading } = useCollectionsListServers(
-    { collectionSlug: slug!, gramProject: projectSlug },
+    { collectionSlug: slug! },
     undefined,
-    { enabled: !!slug && !!projectSlug },
+    { enabled: !!slug },
   );
 
   const rawServers: ExternalMCPServer[] = data?.servers ?? [];

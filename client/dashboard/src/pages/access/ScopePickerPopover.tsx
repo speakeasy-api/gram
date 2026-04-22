@@ -785,27 +785,22 @@ function CollectionGroupPanel({
   resources: string[];
   onChangeResources: (resources: string[]) => void;
 }) {
-  const organization = useOrganization();
   const client = useSdkClient();
-  const defaultProjectSlug = organization.projects?.[0]?.slug;
 
   // Fetch org-level collections
   const { data: collectionsData, isLoading: collectionsLoading } =
-    useListCollections({ gramProject: defaultProjectSlug }, undefined, {
-      enabled: !!defaultProjectSlug,
-    });
+    useListCollections({}, undefined);
   const collections = collectionsData?.collections ?? [];
 
   // Fetch servers for each collection in parallel
   const serverQueries = useQueries({
     queries: collections.map((c) => ({
-      queryKey: ["collections", "listServers", c.slug, defaultProjectSlug],
+      queryKey: ["collections", "listServers", c.slug],
       queryFn: () =>
         client.collections.listServers({
           collectionSlug: c.slug!,
-          gramProject: defaultProjectSlug,
         }),
-      enabled: !!c.slug && !!defaultProjectSlug,
+      enabled: !!c.slug,
     })),
   });
 

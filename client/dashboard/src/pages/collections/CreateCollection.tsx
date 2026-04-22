@@ -127,7 +127,6 @@ export default function CreateCollection() {
 
     await createCollection.mutateAsync({
       request: {
-        gramProject: projects[0]?.slug,
         createRequestBody2: {
           name,
           slug,
