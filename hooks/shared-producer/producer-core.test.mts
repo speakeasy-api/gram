@@ -77,6 +77,17 @@ test("extractSkillName reads nested tool input JSON string", () => {
   assert.equal(extractSkillName(payload), "frontend");
 });
 
+test("extractSkillName strips plugin namespace from namespaced skill input", () => {
+  const payload = {
+    tool_name: "Skill",
+    tool_input: {
+      skill: "gram-hooks-skills-cowork-local-debug:cowork-skills-capture-smoke",
+    },
+  };
+
+  assert.equal(extractSkillName(payload), "cowork-skills-capture-smoke");
+});
+
 test("resolveAgent reads argv and validates values", () => {
   const result = resolveAgent(["--agent=claude"], {});
   assert.equal(result.agent, "claude");

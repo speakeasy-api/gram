@@ -104,17 +104,19 @@ var _ = Service("skills", func() {
 	})
 
 	Method("capture", func() {
-		Description("Capture a skill artifact and associated metadata.")
+		Description("Capture a skill artifact and associated metadata via producer authentication.")
 
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("hooks")
 		})
 
-		Payload(CaptureSkillForm)
+		Payload(CaptureSkillProducerForm)
 		Result(CaptureSkillResult)
 
 		HTTP(func() {
 			POST("/rpc/skills.capture")
+			security.ByKeyHeader()
+			security.ProjectHeader()
 			Header("name:X-Gram-Skill-Name")
 			Header("scope:X-Gram-Skill-Scope")
 			Header("discovery_root:X-Gram-Skill-Discovery-Root")
@@ -126,13 +128,42 @@ var _ = Service("skills", func() {
 			Header("skill_version_id:X-Gram-Skill-Version-Id")
 			Header("content_type:Content-Type")
 			Header("content_length:Content-Length")
-			security.ByKeyHeader()
-			security.ProjectHeader()
 			SkipRequestBodyEncodeDecode()
 		})
 
 		Meta("openapi:operationId", "captureSkill")
 		Meta("openapi:extension:x-speakeasy-name-override", "capture")
+	})
+
+	Method("captureClaude", func() {
+		Description("Capture a skill artifact and associated metadata via validated Claude session metadata.")
+
+		Payload(func() {
+			Extend(CaptureSkillClaudeForm)
+			Attribute("claude_session_id", String)
+			Required("claude_session_id")
+		})
+		Result(CaptureSkillResult)
+
+		HTTP(func() {
+			POST("/rpc/skills.captureClaude")
+			Header("claude_session_id:X-Gram-Claude-Session-ID", String)
+			Header("name:X-Gram-Skill-Name")
+			Header("scope:X-Gram-Skill-Scope")
+			Header("discovery_root:X-Gram-Skill-Discovery-Root")
+			Header("source_type:X-Gram-Skill-Source-Type")
+			Header("content_sha256:X-Gram-Skill-Content-Sha256")
+			Header("asset_format:X-Gram-Skill-Asset-Format")
+			Header("resolution_status:X-Gram-Skill-Resolution-Status")
+			Header("skill_id:X-Gram-Skill-Id")
+			Header("skill_version_id:X-Gram-Skill-Version-Id")
+			Header("content_type:Content-Type")
+			Header("content_length:Content-Length")
+			SkipRequestBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "captureClaudeSkill")
+		Meta("openapi:extension:x-speakeasy-name-override", "captureClaude")
 	})
 
 	Method("listVersions", func() {
@@ -339,7 +370,7 @@ var ListPendingSkillsResult = Type("ListPendingSkillsResult", func() {
 	Attribute("skills", ArrayOf(PendingSkillEntry))
 })
 
-var CaptureSkillForm = Type("CaptureSkillForm", func() {
+var CaptureSkillCoreForm = Type("CaptureSkillCoreForm", func() {
 	Required(
 		"name",
 		"scope",
@@ -351,9 +382,6 @@ var CaptureSkillForm = Type("CaptureSkillForm", func() {
 		"content_type",
 		"content_length",
 	)
-
-	security.ByKeyPayload()
-	security.ProjectPayload()
 
 	Attribute("name", String, func() {
 		MinLength(1)
@@ -388,6 +416,16 @@ var CaptureSkillForm = Type("CaptureSkillForm", func() {
 	Attribute("skill_version_id", String)
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)
+})
+
+var CaptureSkillProducerForm = Type("CaptureSkillProducerForm", func() {
+	Extend(CaptureSkillCoreForm)
+	security.ByKeyPayload()
+	security.ProjectPayload()
+})
+
+var CaptureSkillClaudeForm = Type("CaptureSkillClaudeForm", func() {
+	Extend(CaptureSkillCoreForm)
 })
 
 var CaptureSkillAsset = Type("CaptureSkillAsset", func() {

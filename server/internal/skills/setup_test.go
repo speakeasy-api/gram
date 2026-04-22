@@ -104,7 +104,7 @@ func newTestSkillsServiceWithCaptureModeAndFeature(t *testing.T, mode *string, f
 	storage := assetstest.NewTestBlobStore(t)
 	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
 	featuresClient := productfeatures.NewClient(logger, tracerProvider, conn, featureRedisClient)
-	svc := skills.NewService(logger, tracerProvider, conn, sessionManager, storage, accessManager, featuresClient)
+	svc := skills.NewService(logger, tracerProvider, conn, sessionManager, cache.NoopCache, storage, accessManager, featuresClient)
 
 	ti := &testInstance{
 		service:        svc,
@@ -137,8 +137,8 @@ func newTestSkillsServiceWithCaptureModeAndFeature(t *testing.T, mode *string, f
 	return ctx, ti
 }
 
-func newCapturePayload(contentType string, contentLength int64, contentSHA256 string) *gen.CaptureSkillForm {
-	return &gen.CaptureSkillForm{
+func newCapturePayload(contentType string, contentLength int64, contentSHA256 string) *gen.CaptureSkillProducerForm {
+	return &gen.CaptureSkillProducerForm{
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		Name:             "golang",

@@ -26,8 +26,11 @@ type Service interface {
 	GetSettings(context.Context, *GetSettingsPayload) (res *SkillCaptureSettings, err error)
 	// Update capture settings for a project.
 	SetSettings(context.Context, *SetSettingsPayload) (res *SkillCaptureSettings, err error)
-	// Capture a skill artifact and associated metadata.
-	Capture(context.Context, *CaptureSkillForm, io.ReadCloser) (res *CaptureSkillResult, err error)
+	// Capture a skill artifact and associated metadata via producer authentication.
+	Capture(context.Context, *CaptureSkillProducerForm, io.ReadCloser) (res *CaptureSkillResult, err error)
+	// Capture a skill artifact and associated metadata via validated Claude
+	// session metadata.
+	CaptureClaude(context.Context, *CaptureClaudePayload, io.ReadCloser) (res *CaptureSkillResult, err error)
 	// List captured versions for a skill.
 	ListVersions(context.Context, *ListVersionsPayload) (res *ListSkillVersionsResult, err error)
 	// List skills and versions that are pending review.
@@ -58,7 +61,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"get", "list", "getSettings", "setSettings", "capture", "listVersions", "listPending", "approveVersion", "supersedeVersion"}
+var MethodNames = [10]string{"get", "list", "getSettings", "setSettings", "capture", "captureClaude", "listVersions", "listPending", "approveVersion", "supersedeVersion"}
 
 // ApproveVersionPayload is the payload type of the skills service
 // approveVersion method.
@@ -66,6 +69,23 @@ type ApproveVersionPayload struct {
 	VersionID        string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// CaptureClaudePayload is the payload type of the skills service captureClaude
+// method.
+type CaptureClaudePayload struct {
+	ClaudeSessionID  string
+	Name             string
+	Scope            string
+	DiscoveryRoot    string
+	SourceType       string
+	ContentSha256    string
+	AssetFormat      string
+	ResolutionStatus string
+	SkillID          *string
+	SkillVersionID   *string
+	ContentType      string
+	ContentLength    int64
 }
 
 type CaptureSkillAsset struct {
@@ -78,8 +98,9 @@ type CaptureSkillAsset struct {
 	UpdatedAt     string
 }
 
-// CaptureSkillForm is the payload type of the skills service capture method.
-type CaptureSkillForm struct {
+// CaptureSkillProducerForm is the payload type of the skills service capture
+// method.
+type CaptureSkillProducerForm struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	Name             string

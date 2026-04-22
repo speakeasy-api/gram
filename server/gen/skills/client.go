@@ -21,6 +21,7 @@ type Client struct {
 	GetSettingsEndpoint      goa.Endpoint
 	SetSettingsEndpoint      goa.Endpoint
 	CaptureEndpoint          goa.Endpoint
+	CaptureClaudeEndpoint    goa.Endpoint
 	ListVersionsEndpoint     goa.Endpoint
 	ListPendingEndpoint      goa.Endpoint
 	ApproveVersionEndpoint   goa.Endpoint
@@ -28,13 +29,14 @@ type Client struct {
 }
 
 // NewClient initializes a "skills" service client given the endpoints.
-func NewClient(get, list, getSettings, setSettings, capture, listVersions, listPending, approveVersion, supersedeVersion goa.Endpoint) *Client {
+func NewClient(get, list, getSettings, setSettings, capture, captureClaude, listVersions, listPending, approveVersion, supersedeVersion goa.Endpoint) *Client {
 	return &Client{
 		GetEndpoint:              get,
 		ListEndpoint:             list,
 		GetSettingsEndpoint:      getSettings,
 		SetSettingsEndpoint:      setSettings,
 		CaptureEndpoint:          capture,
+		CaptureClaudeEndpoint:    captureClaude,
 		ListVersionsEndpoint:     listVersions,
 		ListPendingEndpoint:      listPending,
 		ApproveVersionEndpoint:   approveVersion,
@@ -143,9 +145,31 @@ func (c *Client) SetSettings(ctx context.Context, p *SetSettingsPayload) (res *S
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) Capture(ctx context.Context, p *CaptureSkillForm, req io.ReadCloser) (res *CaptureSkillResult, err error) {
+func (c *Client) Capture(ctx context.Context, p *CaptureSkillProducerForm, req io.ReadCloser) (res *CaptureSkillResult, err error) {
 	var ires any
 	ires, err = c.CaptureEndpoint(ctx, &CaptureRequestData{Payload: p, Body: req})
+	if err != nil {
+		return
+	}
+	return ires.(*CaptureSkillResult), nil
+}
+
+// CaptureClaude calls the "captureClaude" endpoint of the "skills" service.
+// CaptureClaude may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CaptureClaude(ctx context.Context, p *CaptureClaudePayload, req io.ReadCloser) (res *CaptureSkillResult, err error) {
+	var ires any
+	ires, err = c.CaptureClaudeEndpoint(ctx, &CaptureClaudeRequestData{Payload: p, Body: req})
 	if err != nil {
 		return
 	}

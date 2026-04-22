@@ -32,6 +32,11 @@ func CaptureSkillsPath() string {
 	return "/rpc/skills.capture"
 }
 
+// CaptureClaudeSkillsPath returns the URL path to the skills service captureClaude HTTP endpoint.
+func CaptureClaudeSkillsPath() string {
+	return "/rpc/skills.captureClaude"
+}
+
 // ListVersionsSkillsPath returns the URL path to the skills service listVersions HTTP endpoint.
 func ListVersionsSkillsPath() string {
 	return "/rpc/skills.versions"

@@ -471,6 +471,8 @@ export interface CaptureUploadRequestOptions {
   serverURL?: string | null;
   gramKey?: string | null;
   gramProject?: string | null;
+  claudeSessionID?: string | null;
+  endpointPath?: string | null;
 }
 
 export function buildCaptureUploadRequest(
@@ -495,6 +497,9 @@ export function buildCaptureUploadRequest(
     toHeaderValue(options.serverURL) ?? "https://app.getgram.ai";
   const gramKey = toHeaderValue(options.gramKey);
   const gramProject = toHeaderValue(options.gramProject);
+  const claudeSessionID = toHeaderValue(options.claudeSessionID);
+  const endpointPath =
+    toHeaderValue(options.endpointPath) ?? "/rpc/skills.capture";
 
   const maybeHeaders: Record<string, string | null> = {
     "Content-Type": "application/zip",
@@ -507,7 +512,8 @@ export function buildCaptureUploadRequest(
     "X-Gram-Skill-Asset-Format": toHeaderValue(skill.asset_format),
     "X-Gram-Skill-Resolution-Status": toHeaderValue(skill.resolution_status),
     "Gram-Key": gramKey,
-    "Gram-Project": gramProject,
+    "Gram-Project": claudeSessionID ? null : gramProject,
+    "X-Gram-Claude-Session-ID": claudeSessionID,
   };
 
   const headers: Record<string, string> = {};
@@ -519,7 +525,7 @@ export function buildCaptureUploadRequest(
 
   return {
     method: "POST",
-    url: `${serverURL.replace(/\/$/, "")}/rpc/skills.capture`,
+    url: `${serverURL.replace(/\/$/, "")}${endpointPath}`,
     headers,
     body: archiveBuffer,
   };

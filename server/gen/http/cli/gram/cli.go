@@ -83,7 +83,7 @@ func UsageCommands() []string {
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|delete-server)",
 		"resources list-resources",
-		"skills (get|list|get-settings|set-settings|capture|list-versions|list-pending|approve-version|supersede-version)",
+		"skills (get|list|get-settings|set-settings|capture|capture-claude|list-versions|list-pending|approve-version|supersede-version)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -859,6 +859,8 @@ func ParseEndpoint(
 		skillsSetSettingsProjectSlugInputFlag = skillsSetSettingsFlags.String("project-slug-input", "", "")
 
 		skillsCaptureFlags                = flag.NewFlagSet("capture", flag.ExitOnError)
+		skillsCaptureApikeyTokenFlag      = skillsCaptureFlags.String("apikey-token", "", "")
+		skillsCaptureProjectSlugInputFlag = skillsCaptureFlags.String("project-slug-input", "", "")
 		skillsCaptureNameFlag             = skillsCaptureFlags.String("name", "REQUIRED", "")
 		skillsCaptureScopeFlag            = skillsCaptureFlags.String("scope", "REQUIRED", "")
 		skillsCaptureDiscoveryRootFlag    = skillsCaptureFlags.String("discovery-root", "REQUIRED", "")
@@ -870,9 +872,22 @@ func ParseEndpoint(
 		skillsCaptureSkillVersionIDFlag   = skillsCaptureFlags.String("skill-version-id", "", "")
 		skillsCaptureContentTypeFlag      = skillsCaptureFlags.String("content-type", "REQUIRED", "")
 		skillsCaptureContentLengthFlag    = skillsCaptureFlags.String("content-length", "REQUIRED", "")
-		skillsCaptureApikeyTokenFlag      = skillsCaptureFlags.String("apikey-token", "", "")
-		skillsCaptureProjectSlugInputFlag = skillsCaptureFlags.String("project-slug-input", "", "")
 		skillsCaptureStreamFlag           = skillsCaptureFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+
+		skillsCaptureClaudeFlags                = flag.NewFlagSet("capture-claude", flag.ExitOnError)
+		skillsCaptureClaudeClaudeSessionIDFlag  = skillsCaptureClaudeFlags.String("claude-session-id", "REQUIRED", "")
+		skillsCaptureClaudeNameFlag             = skillsCaptureClaudeFlags.String("name", "REQUIRED", "")
+		skillsCaptureClaudeScopeFlag            = skillsCaptureClaudeFlags.String("scope", "REQUIRED", "")
+		skillsCaptureClaudeDiscoveryRootFlag    = skillsCaptureClaudeFlags.String("discovery-root", "REQUIRED", "")
+		skillsCaptureClaudeSourceTypeFlag       = skillsCaptureClaudeFlags.String("source-type", "REQUIRED", "")
+		skillsCaptureClaudeContentSha256Flag    = skillsCaptureClaudeFlags.String("content-sha256", "REQUIRED", "")
+		skillsCaptureClaudeAssetFormatFlag      = skillsCaptureClaudeFlags.String("asset-format", "REQUIRED", "")
+		skillsCaptureClaudeResolutionStatusFlag = skillsCaptureClaudeFlags.String("resolution-status", "REQUIRED", "")
+		skillsCaptureClaudeSkillIDFlag          = skillsCaptureClaudeFlags.String("skill-id", "", "")
+		skillsCaptureClaudeSkillVersionIDFlag   = skillsCaptureClaudeFlags.String("skill-version-id", "", "")
+		skillsCaptureClaudeContentTypeFlag      = skillsCaptureClaudeFlags.String("content-type", "REQUIRED", "")
+		skillsCaptureClaudeContentLengthFlag    = skillsCaptureClaudeFlags.String("content-length", "REQUIRED", "")
+		skillsCaptureClaudeStreamFlag           = skillsCaptureClaudeFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
 		skillsListVersionsFlags                = flag.NewFlagSet("list-versions", flag.ExitOnError)
 		skillsListVersionsSkillIDFlag          = skillsListVersionsFlags.String("skill-id", "REQUIRED", "")
@@ -1395,6 +1410,7 @@ func ParseEndpoint(
 	skillsGetSettingsFlags.Usage = skillsGetSettingsUsage
 	skillsSetSettingsFlags.Usage = skillsSetSettingsUsage
 	skillsCaptureFlags.Usage = skillsCaptureUsage
+	skillsCaptureClaudeFlags.Usage = skillsCaptureClaudeUsage
 	skillsListVersionsFlags.Usage = skillsListVersionsUsage
 	skillsListPendingFlags.Usage = skillsListPendingUsage
 	skillsApproveVersionFlags.Usage = skillsApproveVersionUsage
@@ -2077,6 +2093,9 @@ func ParseEndpoint(
 
 			case "capture":
 				epf = skillsCaptureFlags
+
+			case "capture-claude":
+				epf = skillsCaptureClaudeFlags
 
 			case "list-versions":
 				epf = skillsListVersionsFlags
@@ -2825,9 +2844,15 @@ func ParseEndpoint(
 				data, err = skillsc.BuildSetSettingsPayload(*skillsSetSettingsBodyFlag, *skillsSetSettingsSessionTokenFlag, *skillsSetSettingsProjectSlugInputFlag)
 			case "capture":
 				endpoint = c.Capture()
-				data, err = skillsc.BuildCapturePayload(*skillsCaptureNameFlag, *skillsCaptureScopeFlag, *skillsCaptureDiscoveryRootFlag, *skillsCaptureSourceTypeFlag, *skillsCaptureContentSha256Flag, *skillsCaptureAssetFormatFlag, *skillsCaptureResolutionStatusFlag, *skillsCaptureSkillIDFlag, *skillsCaptureSkillVersionIDFlag, *skillsCaptureContentTypeFlag, *skillsCaptureContentLengthFlag, *skillsCaptureApikeyTokenFlag, *skillsCaptureProjectSlugInputFlag)
+				data, err = skillsc.BuildCapturePayload(*skillsCaptureApikeyTokenFlag, *skillsCaptureProjectSlugInputFlag, *skillsCaptureNameFlag, *skillsCaptureScopeFlag, *skillsCaptureDiscoveryRootFlag, *skillsCaptureSourceTypeFlag, *skillsCaptureContentSha256Flag, *skillsCaptureAssetFormatFlag, *skillsCaptureResolutionStatusFlag, *skillsCaptureSkillIDFlag, *skillsCaptureSkillVersionIDFlag, *skillsCaptureContentTypeFlag, *skillsCaptureContentLengthFlag)
 				if err == nil {
 					data, err = skillsc.BuildCaptureStreamPayload(data, *skillsCaptureStreamFlag)
+				}
+			case "capture-claude":
+				endpoint = c.CaptureClaude()
+				data, err = skillsc.BuildCaptureClaudePayload(*skillsCaptureClaudeClaudeSessionIDFlag, *skillsCaptureClaudeNameFlag, *skillsCaptureClaudeScopeFlag, *skillsCaptureClaudeDiscoveryRootFlag, *skillsCaptureClaudeSourceTypeFlag, *skillsCaptureClaudeContentSha256Flag, *skillsCaptureClaudeAssetFormatFlag, *skillsCaptureClaudeResolutionStatusFlag, *skillsCaptureClaudeSkillIDFlag, *skillsCaptureClaudeSkillVersionIDFlag, *skillsCaptureClaudeContentTypeFlag, *skillsCaptureClaudeContentLengthFlag)
+				if err == nil {
+					data, err = skillsc.BuildCaptureClaudeStreamPayload(data, *skillsCaptureClaudeStreamFlag)
 				}
 			case "list-versions":
 				endpoint = c.ListVersions()
@@ -6320,7 +6345,8 @@ func skillsUsage() {
 	fmt.Fprintln(os.Stderr, `    list: List captured skills for a project.`)
 	fmt.Fprintln(os.Stderr, `    get-settings: Get capture settings for a project.`)
 	fmt.Fprintln(os.Stderr, `    set-settings: Update capture settings for a project.`)
-	fmt.Fprintln(os.Stderr, `    capture: Capture a skill artifact and associated metadata.`)
+	fmt.Fprintln(os.Stderr, `    capture: Capture a skill artifact and associated metadata via producer authentication.`)
+	fmt.Fprintln(os.Stderr, `    capture-claude: Capture a skill artifact and associated metadata via validated Claude session metadata.`)
 	fmt.Fprintln(os.Stderr, `    list-versions: List captured versions for a skill.`)
 	fmt.Fprintln(os.Stderr, `    list-pending: List skills and versions that are pending review.`)
 	fmt.Fprintln(os.Stderr, `    approve-version: Approve a captured skill version and mark it active for the lineage.`)
@@ -6416,6 +6442,8 @@ func skillsSetSettingsUsage() {
 func skillsCaptureUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] skills capture", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprint(os.Stderr, " -name STRING")
 	fmt.Fprint(os.Stderr, " -scope STRING")
 	fmt.Fprint(os.Stderr, " -discovery-root STRING")
@@ -6427,16 +6455,16 @@ func skillsCaptureUsage() {
 	fmt.Fprint(os.Stderr, " -skill-version-id STRING")
 	fmt.Fprint(os.Stderr, " -content-type STRING")
 	fmt.Fprint(os.Stderr, " -content-length INT64")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprint(os.Stderr, " -stream STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Capture a skill artifact and associated metadata.`)
+	fmt.Fprintln(os.Stderr, `Capture a skill artifact and associated metadata via producer authentication.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 	fmt.Fprintln(os.Stderr, `    -name STRING: `)
 	fmt.Fprintln(os.Stderr, `    -scope STRING: `)
 	fmt.Fprintln(os.Stderr, `    -discovery-root STRING: `)
@@ -6448,13 +6476,53 @@ func skillsCaptureUsage() {
 	fmt.Fprintln(os.Stderr, `    -skill-version-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -content-type STRING: `)
 	fmt.Fprintln(os.Stderr, `    -content-length INT64: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills capture --name \"aa\" --scope \"user\" --discovery-root \"project_claude\" --source-type \"local_filesystem\" --content-sha256 \"1111111111111111111111111111111111111111111111111111111111111111\" --asset-format \"zip\" --resolution-status \"unresolved_name_only\" --skill-id \"abc123\" --skill-version-id \"abc123\" --content-type \"abc123\" --content-length 1 --apikey-token \"abc123\" --project-slug-input \"abc123\" --stream \"goa.png\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills capture --apikey-token \"abc123\" --project-slug-input \"abc123\" --name \"aa\" --scope \"user\" --discovery-root \"project_claude\" --source-type \"local_filesystem\" --content-sha256 \"1111111111111111111111111111111111111111111111111111111111111111\" --asset-format \"zip\" --resolution-status \"unresolved_name_only\" --skill-id \"abc123\" --skill-version-id \"abc123\" --content-type \"abc123\" --content-length 1 --stream \"goa.png\"")
+}
+
+func skillsCaptureClaudeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills capture-claude", os.Args[0])
+	fmt.Fprint(os.Stderr, " -claude-session-id STRING")
+	fmt.Fprint(os.Stderr, " -name STRING")
+	fmt.Fprint(os.Stderr, " -scope STRING")
+	fmt.Fprint(os.Stderr, " -discovery-root STRING")
+	fmt.Fprint(os.Stderr, " -source-type STRING")
+	fmt.Fprint(os.Stderr, " -content-sha256 STRING")
+	fmt.Fprint(os.Stderr, " -asset-format STRING")
+	fmt.Fprint(os.Stderr, " -resolution-status STRING")
+	fmt.Fprint(os.Stderr, " -skill-id STRING")
+	fmt.Fprint(os.Stderr, " -skill-version-id STRING")
+	fmt.Fprint(os.Stderr, " -content-type STRING")
+	fmt.Fprint(os.Stderr, " -content-length INT64")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Capture a skill artifact and associated metadata via validated Claude session metadata.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -claude-session-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -scope STRING: `)
+	fmt.Fprintln(os.Stderr, `    -discovery-root STRING: `)
+	fmt.Fprintln(os.Stderr, `    -source-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-sha256 STRING: `)
+	fmt.Fprintln(os.Stderr, `    -asset-format STRING: `)
+	fmt.Fprintln(os.Stderr, `    -resolution-status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -skill-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -skill-version-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-length INT64: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills capture-claude --claude-session-id \"abc123\" --name \"aa\" --scope \"user\" --discovery-root \"project_claude\" --source-type \"local_filesystem\" --content-sha256 \"1111111111111111111111111111111111111111111111111111111111111111\" --asset-format \"zip\" --resolution-status \"unresolved_name_only\" --skill-id \"abc123\" --skill-version-id \"abc123\" --content-type \"abc123\" --content-length 1 --stream \"goa.png\"")
 }
 
 func skillsListVersionsUsage() {

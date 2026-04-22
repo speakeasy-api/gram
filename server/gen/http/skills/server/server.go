@@ -24,6 +24,7 @@ type Server struct {
 	GetSettings      http.Handler
 	SetSettings      http.Handler
 	Capture          http.Handler
+	CaptureClaude    http.Handler
 	ListVersions     http.Handler
 	ListPending      http.Handler
 	ApproveVersion   http.Handler
@@ -62,6 +63,7 @@ func New(
 			{"GetSettings", "GET", "/rpc/skills.getSettings"},
 			{"SetSettings", "POST", "/rpc/skills.setSettings"},
 			{"Capture", "POST", "/rpc/skills.capture"},
+			{"CaptureClaude", "POST", "/rpc/skills.captureClaude"},
 			{"ListVersions", "GET", "/rpc/skills.versions"},
 			{"ListPending", "GET", "/rpc/skills.pending"},
 			{"ApproveVersion", "POST", "/rpc/skills.approveVersion"},
@@ -72,6 +74,7 @@ func New(
 		GetSettings:      NewGetSettingsHandler(e.GetSettings, mux, decoder, encoder, errhandler, formatter),
 		SetSettings:      NewSetSettingsHandler(e.SetSettings, mux, decoder, encoder, errhandler, formatter),
 		Capture:          NewCaptureHandler(e.Capture, mux, decoder, encoder, errhandler, formatter),
+		CaptureClaude:    NewCaptureClaudeHandler(e.CaptureClaude, mux, decoder, encoder, errhandler, formatter),
 		ListVersions:     NewListVersionsHandler(e.ListVersions, mux, decoder, encoder, errhandler, formatter),
 		ListPending:      NewListPendingHandler(e.ListPending, mux, decoder, encoder, errhandler, formatter),
 		ApproveVersion:   NewApproveVersionHandler(e.ApproveVersion, mux, decoder, encoder, errhandler, formatter),
@@ -89,6 +92,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetSettings = m(s.GetSettings)
 	s.SetSettings = m(s.SetSettings)
 	s.Capture = m(s.Capture)
+	s.CaptureClaude = m(s.CaptureClaude)
 	s.ListVersions = m(s.ListVersions)
 	s.ListPending = m(s.ListPending)
 	s.ApproveVersion = m(s.ApproveVersion)
@@ -105,6 +109,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetSettingsHandler(mux, h.GetSettings)
 	MountSetSettingsHandler(mux, h.SetSettings)
 	MountCaptureHandler(mux, h.Capture)
+	MountCaptureClaudeHandler(mux, h.CaptureClaude)
 	MountListVersionsHandler(mux, h.ListVersions)
 	MountListPendingHandler(mux, h.ListPending)
 	MountApproveVersionHandler(mux, h.ApproveVersion)
@@ -367,6 +372,60 @@ func NewCaptureHandler(
 			return
 		}
 		data := &skills.CaptureRequestData{Payload: payload, Body: r.Body}
+		res, err := endpoint(ctx, data)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCaptureClaudeHandler configures the mux to serve the "skills" service
+// "captureClaude" endpoint.
+func MountCaptureClaudeHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.captureClaude", f)
+}
+
+// NewCaptureClaudeHandler creates a HTTP handler which loads the HTTP request
+// and calls the "skills" service "captureClaude" endpoint.
+func NewCaptureClaudeHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCaptureClaudeRequest(mux, decoder)
+		encodeResponse = EncodeCaptureClaudeResponse(encoder)
+		encodeError    = EncodeCaptureClaudeError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "captureClaude")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		data := &skills.CaptureClaudeRequestData{Payload: payload, Body: r.Body}
 		res, err := endpoint(ctx, data)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {

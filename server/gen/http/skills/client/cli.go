@@ -133,8 +133,20 @@ func BuildSetSettingsPayload(skillsSetSettingsBody string, skillsSetSettingsSess
 
 // BuildCapturePayload builds the payload for the skills capture endpoint from
 // CLI flags.
-func BuildCapturePayload(skillsCaptureName string, skillsCaptureScope string, skillsCaptureDiscoveryRoot string, skillsCaptureSourceType string, skillsCaptureContentSha256 string, skillsCaptureAssetFormat string, skillsCaptureResolutionStatus string, skillsCaptureSkillID string, skillsCaptureSkillVersionID string, skillsCaptureContentType string, skillsCaptureContentLength string, skillsCaptureApikeyToken string, skillsCaptureProjectSlugInput string) (*skills.CaptureSkillForm, error) {
+func BuildCapturePayload(skillsCaptureApikeyToken string, skillsCaptureProjectSlugInput string, skillsCaptureName string, skillsCaptureScope string, skillsCaptureDiscoveryRoot string, skillsCaptureSourceType string, skillsCaptureContentSha256 string, skillsCaptureAssetFormat string, skillsCaptureResolutionStatus string, skillsCaptureSkillID string, skillsCaptureSkillVersionID string, skillsCaptureContentType string, skillsCaptureContentLength string) (*skills.CaptureSkillProducerForm, error) {
 	var err error
+	var apikeyToken *string
+	{
+		if skillsCaptureApikeyToken != "" {
+			apikeyToken = &skillsCaptureApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsCaptureProjectSlugInput != "" {
+			projectSlugInput = &skillsCaptureProjectSlugInput
+		}
+	}
 	var name string
 	{
 		name = skillsCaptureName
@@ -229,19 +241,9 @@ func BuildCapturePayload(skillsCaptureName string, skillsCaptureScope string, sk
 			return nil, fmt.Errorf("invalid value for contentLength, must be INT64")
 		}
 	}
-	var apikeyToken *string
-	{
-		if skillsCaptureApikeyToken != "" {
-			apikeyToken = &skillsCaptureApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if skillsCaptureProjectSlugInput != "" {
-			projectSlugInput = &skillsCaptureProjectSlugInput
-		}
-	}
-	v := &skills.CaptureSkillForm{}
+	v := &skills.CaptureSkillProducerForm{}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
 	v.Name = name
 	v.Scope = scope
 	v.DiscoveryRoot = discoveryRoot
@@ -253,8 +255,125 @@ func BuildCapturePayload(skillsCaptureName string, skillsCaptureScope string, sk
 	v.SkillVersionID = skillVersionID
 	v.ContentType = contentType
 	v.ContentLength = contentLength
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCaptureClaudePayload builds the payload for the skills captureClaude
+// endpoint from CLI flags.
+func BuildCaptureClaudePayload(skillsCaptureClaudeClaudeSessionID string, skillsCaptureClaudeName string, skillsCaptureClaudeScope string, skillsCaptureClaudeDiscoveryRoot string, skillsCaptureClaudeSourceType string, skillsCaptureClaudeContentSha256 string, skillsCaptureClaudeAssetFormat string, skillsCaptureClaudeResolutionStatus string, skillsCaptureClaudeSkillID string, skillsCaptureClaudeSkillVersionID string, skillsCaptureClaudeContentType string, skillsCaptureClaudeContentLength string) (*skills.CaptureClaudePayload, error) {
+	var err error
+	var claudeSessionID string
+	{
+		claudeSessionID = skillsCaptureClaudeClaudeSessionID
+	}
+	var name string
+	{
+		name = skillsCaptureClaudeName
+		if utf8.RuneCountInString(name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("name", name, utf8.RuneCountInString(name), 1, true))
+		}
+		if utf8.RuneCountInString(name) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("name", name, utf8.RuneCountInString(name), 100, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var scope string
+	{
+		scope = skillsCaptureClaudeScope
+		if !(scope == "project" || scope == "user") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("scope", scope, []any{"project", "user"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var discoveryRoot string
+	{
+		discoveryRoot = skillsCaptureClaudeDiscoveryRoot
+		if !(discoveryRoot == "project_agents" || discoveryRoot == "project_claude" || discoveryRoot == "project_cursor" || discoveryRoot == "user_agents" || discoveryRoot == "user_claude" || discoveryRoot == "user_cursor") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("discovery_root", discoveryRoot, []any{"project_agents", "project_claude", "project_cursor", "user_agents", "user_claude", "user_cursor"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sourceType string
+	{
+		sourceType = skillsCaptureClaudeSourceType
+		if !(sourceType == "local_filesystem") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("source_type", sourceType, []any{"local_filesystem"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var contentSha256 string
+	{
+		contentSha256 = skillsCaptureClaudeContentSha256
+		err = goa.MergeErrors(err, goa.ValidatePattern("content_sha256", contentSha256, "^[a-fA-F0-9]{64}$"))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var assetFormat string
+	{
+		assetFormat = skillsCaptureClaudeAssetFormat
+		if !(assetFormat == "zip") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("asset_format", assetFormat, []any{"zip"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var resolutionStatus string
+	{
+		resolutionStatus = skillsCaptureClaudeResolutionStatus
+		if !(resolutionStatus == "resolved" || resolutionStatus == "unresolved_name_only" || resolutionStatus == "invalid_skill_root" || resolutionStatus == "skipped_by_author") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("resolution_status", resolutionStatus, []any{"resolved", "unresolved_name_only", "invalid_skill_root", "skipped_by_author"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var skillID *string
+	{
+		if skillsCaptureClaudeSkillID != "" {
+			skillID = &skillsCaptureClaudeSkillID
+		}
+	}
+	var skillVersionID *string
+	{
+		if skillsCaptureClaudeSkillVersionID != "" {
+			skillVersionID = &skillsCaptureClaudeSkillVersionID
+		}
+	}
+	var contentType string
+	{
+		contentType = skillsCaptureClaudeContentType
+	}
+	var contentLength int64
+	{
+		contentLength, err = strconv.ParseInt(skillsCaptureClaudeContentLength, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for contentLength, must be INT64")
+		}
+	}
+	v := &skills.CaptureClaudePayload{}
+	v.ClaudeSessionID = claudeSessionID
+	v.Name = name
+	v.Scope = scope
+	v.DiscoveryRoot = discoveryRoot
+	v.SourceType = sourceType
+	v.ContentSha256 = contentSha256
+	v.AssetFormat = assetFormat
+	v.ResolutionStatus = resolutionStatus
+	v.SkillID = skillID
+	v.SkillVersionID = skillVersionID
+	v.ContentType = contentType
+	v.ContentLength = contentLength
 
 	return v, nil
 }

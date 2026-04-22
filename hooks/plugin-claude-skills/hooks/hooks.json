@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT/../shared-producer/send-hook.mts\" --agent=claude",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
             "async": true
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT/../shared-producer/send-hook.mts\" --agent=claude",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
             "async": true
           }
         ]
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT/../shared-producer/send-hook.mts\" --agent=claude",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
             "async": true
           }
         ]
@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT/../shared-producer/send-hook.mts\" --agent=claude",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
             "async": true
           }
         ]
@@ -49,7 +49,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT/../shared-producer/send-hook.mts\" --agent=claude",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
             "async": true
           }
         ]

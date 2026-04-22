@@ -231,10 +231,16 @@ export async function buildSkillMetadata(
     resolutionStatus = discovery.resolutionStatus;
   }
 
+  const claudeSessionID =
+    options.agent === "claude" && isRecord(payload)
+      ? asNonEmptyString(payload.session_id)
+      : null;
+
   if (
     resolutionStatus === "resolved" &&
     archiveBuffer &&
-    !asNonEmptyString(options.gramKey)
+    !asNonEmptyString(options.gramKey) &&
+    !claudeSessionID
   ) {
     resolutionStatus = "capture_skipped_missing_credentials";
     contentSha256 = null;
@@ -258,6 +264,10 @@ export async function buildSkillMetadata(
           serverURL: options.serverURL,
           gramKey: options.gramKey,
           gramProject: options.gramProject,
+          claudeSessionID,
+          endpointPath: claudeSessionID
+            ? "/rpc/skills.captureClaude"
+            : "/rpc/skills.capture",
         })
       : null;
 

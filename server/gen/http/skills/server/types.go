@@ -82,6 +82,12 @@ type CaptureResponseBody struct {
 	Asset *CaptureSkillAssetResponseBody `form:"asset" json:"asset" xml:"asset"`
 }
 
+// CaptureClaudeResponseBody is the type of the "skills" service
+// "captureClaude" endpoint HTTP response body.
+type CaptureClaudeResponseBody struct {
+	Asset *CaptureSkillAssetResponseBody `form:"asset" json:"asset" xml:"asset"`
+}
+
 // ListVersionsResponseBody is the type of the "skills" service "listVersions"
 // endpoint HTTP response body.
 type ListVersionsResponseBody struct {
@@ -1036,6 +1042,188 @@ type CaptureGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CaptureClaudeUnauthorizedResponseBody is the type of the "skills" service
+// "captureClaude" endpoint HTTP response body for the "unauthorized" error.
+type CaptureClaudeUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureClaudeForbiddenResponseBody is the type of the "skills" service
+// "captureClaude" endpoint HTTP response body for the "forbidden" error.
+type CaptureClaudeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureClaudeBadRequestResponseBody is the type of the "skills" service
+// "captureClaude" endpoint HTTP response body for the "bad_request" error.
+type CaptureClaudeBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureClaudeNotFoundResponseBody is the type of the "skills" service
+// "captureClaude" endpoint HTTP response body for the "not_found" error.
+type CaptureClaudeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureClaudeConflictResponseBody is the type of the "skills" service
+// "captureClaude" endpoint HTTP response body for the "conflict" error.
+type CaptureClaudeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureClaudeUnsupportedMediaResponseBody is the type of the "skills"
+// service "captureClaude" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CaptureClaudeUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureClaudeInvalidResponseBody is the type of the "skills" service
+// "captureClaude" endpoint HTTP response body for the "invalid" error.
+type CaptureClaudeInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureClaudeInvariantViolationResponseBody is the type of the "skills"
+// service "captureClaude" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CaptureClaudeInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureClaudeUnexpectedResponseBody is the type of the "skills" service
+// "captureClaude" endpoint HTTP response body for the "unexpected" error.
+type CaptureClaudeUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CaptureClaudeGatewayErrorResponseBody is the type of the "skills" service
+// "captureClaude" endpoint HTTP response body for the "gateway_error" error.
+type CaptureClaudeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListVersionsUnauthorizedResponseBody is the type of the "skills" service
 // "listVersions" endpoint HTTP response body for the "unauthorized" error.
 type ListVersionsUnauthorizedResponseBody struct {
@@ -1913,6 +2101,16 @@ func NewCaptureResponseBody(res *skills.CaptureSkillResult) *CaptureResponseBody
 	return body
 }
 
+// NewCaptureClaudeResponseBody builds the HTTP response body from the result
+// of the "captureClaude" endpoint of the "skills" service.
+func NewCaptureClaudeResponseBody(res *skills.CaptureSkillResult) *CaptureClaudeResponseBody {
+	body := &CaptureClaudeResponseBody{}
+	if res.Asset != nil {
+		body.Asset = marshalSkillsCaptureSkillAssetToCaptureSkillAssetResponseBody(res.Asset)
+	}
+	return body
+}
+
 // NewListVersionsResponseBody builds the HTTP response body from the result of
 // the "listVersions" endpoint of the "skills" service.
 func NewListVersionsResponseBody(res *skills.ListSkillVersionsResult) *ListVersionsResponseBody {
@@ -2697,6 +2895,146 @@ func NewCaptureGatewayErrorResponseBody(res *goa.ServiceError) *CaptureGatewayEr
 	return body
 }
 
+// NewCaptureClaudeUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "captureClaude" endpoint of the "skills" service.
+func NewCaptureClaudeUnauthorizedResponseBody(res *goa.ServiceError) *CaptureClaudeUnauthorizedResponseBody {
+	body := &CaptureClaudeUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureClaudeForbiddenResponseBody builds the HTTP response body from the
+// result of the "captureClaude" endpoint of the "skills" service.
+func NewCaptureClaudeForbiddenResponseBody(res *goa.ServiceError) *CaptureClaudeForbiddenResponseBody {
+	body := &CaptureClaudeForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureClaudeBadRequestResponseBody builds the HTTP response body from
+// the result of the "captureClaude" endpoint of the "skills" service.
+func NewCaptureClaudeBadRequestResponseBody(res *goa.ServiceError) *CaptureClaudeBadRequestResponseBody {
+	body := &CaptureClaudeBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureClaudeNotFoundResponseBody builds the HTTP response body from the
+// result of the "captureClaude" endpoint of the "skills" service.
+func NewCaptureClaudeNotFoundResponseBody(res *goa.ServiceError) *CaptureClaudeNotFoundResponseBody {
+	body := &CaptureClaudeNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureClaudeConflictResponseBody builds the HTTP response body from the
+// result of the "captureClaude" endpoint of the "skills" service.
+func NewCaptureClaudeConflictResponseBody(res *goa.ServiceError) *CaptureClaudeConflictResponseBody {
+	body := &CaptureClaudeConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureClaudeUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "captureClaude" endpoint of the "skills" service.
+func NewCaptureClaudeUnsupportedMediaResponseBody(res *goa.ServiceError) *CaptureClaudeUnsupportedMediaResponseBody {
+	body := &CaptureClaudeUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureClaudeInvalidResponseBody builds the HTTP response body from the
+// result of the "captureClaude" endpoint of the "skills" service.
+func NewCaptureClaudeInvalidResponseBody(res *goa.ServiceError) *CaptureClaudeInvalidResponseBody {
+	body := &CaptureClaudeInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureClaudeInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "captureClaude" endpoint of the "skills" service.
+func NewCaptureClaudeInvariantViolationResponseBody(res *goa.ServiceError) *CaptureClaudeInvariantViolationResponseBody {
+	body := &CaptureClaudeInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureClaudeUnexpectedResponseBody builds the HTTP response body from
+// the result of the "captureClaude" endpoint of the "skills" service.
+func NewCaptureClaudeUnexpectedResponseBody(res *goa.ServiceError) *CaptureClaudeUnexpectedResponseBody {
+	body := &CaptureClaudeUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCaptureClaudeGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "captureClaude" endpoint of the "skills" service.
+func NewCaptureClaudeGatewayErrorResponseBody(res *goa.ServiceError) *CaptureClaudeGatewayErrorResponseBody {
+	body := &CaptureClaudeGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListVersionsUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "listVersions" endpoint of the "skills" service.
 func NewListVersionsUnauthorizedResponseBody(res *goa.ServiceError) *ListVersionsUnauthorizedResponseBody {
@@ -3301,9 +3639,11 @@ func NewSetSettingsPayload(body *SetSettingsRequestBody, sessionToken *string, p
 	return v
 }
 
-// NewCaptureSkillForm builds a skills service capture endpoint payload.
-func NewCaptureSkillForm(name string, scope string, discoveryRoot string, sourceType string, contentSha256 string, assetFormat string, resolutionStatus string, skillID *string, skillVersionID *string, contentType string, contentLength int64, apikeyToken *string, projectSlugInput *string) *skills.CaptureSkillForm {
-	v := &skills.CaptureSkillForm{}
+// NewCaptureSkillProducerForm builds a skills service capture endpoint payload.
+func NewCaptureSkillProducerForm(apikeyToken *string, projectSlugInput *string, name string, scope string, discoveryRoot string, sourceType string, contentSha256 string, assetFormat string, resolutionStatus string, skillID *string, skillVersionID *string, contentType string, contentLength int64) *skills.CaptureSkillProducerForm {
+	v := &skills.CaptureSkillProducerForm{}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
 	v.Name = name
 	v.Scope = scope
 	v.DiscoveryRoot = discoveryRoot
@@ -3315,8 +3655,26 @@ func NewCaptureSkillForm(name string, scope string, discoveryRoot string, source
 	v.SkillVersionID = skillVersionID
 	v.ContentType = contentType
 	v.ContentLength = contentLength
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewCaptureClaudePayload builds a skills service captureClaude endpoint
+// payload.
+func NewCaptureClaudePayload(claudeSessionID string, name string, scope string, discoveryRoot string, sourceType string, contentSha256 string, assetFormat string, resolutionStatus string, skillID *string, skillVersionID *string, contentType string, contentLength int64) *skills.CaptureClaudePayload {
+	v := &skills.CaptureClaudePayload{}
+	v.ClaudeSessionID = claudeSessionID
+	v.Name = name
+	v.Scope = scope
+	v.DiscoveryRoot = discoveryRoot
+	v.SourceType = sourceType
+	v.ContentSha256 = contentSha256
+	v.AssetFormat = assetFormat
+	v.ResolutionStatus = resolutionStatus
+	v.SkillID = skillID
+	v.SkillVersionID = skillVersionID
+	v.ContentType = contentType
+	v.ContentLength = contentLength
 
 	return v
 }

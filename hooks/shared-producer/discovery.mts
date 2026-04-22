@@ -40,16 +40,18 @@ function normalizeSkillLookupName(value: any): string | null {
     return null;
   }
 
+  const candidate = name.includes(":") ? (name.split(":").pop() ?? name) : name;
+
   if (
-    name.includes("/") ||
-    name.includes("\\") ||
-    name === "." ||
-    name === ".."
+    candidate.includes("/") ||
+    candidate.includes("\\") ||
+    candidate === "." ||
+    candidate === ".."
   ) {
     return null;
   }
 
-  return name;
+  return candidate;
 }
 
 function extractSkillNameFromValue(value: any, depth = 0): string | null {
@@ -67,7 +69,7 @@ function extractSkillNameFromValue(value: any, depth = 0): string | null {
       }
     }
 
-    return depth === 0 ? direct : null;
+    return depth === 0 ? normalizeSkillLookupName(direct) : null;
   }
 
   if (Array.isArray(value)) {
@@ -85,7 +87,7 @@ function extractSkillNameFromValue(value: any, depth = 0): string | null {
   }
 
   for (const key of SKILL_NAME_KEYS) {
-    const maybeName = asNonEmptyString(value[key]);
+    const maybeName = normalizeSkillLookupName(value[key]);
     if (maybeName) {
       return maybeName;
     }

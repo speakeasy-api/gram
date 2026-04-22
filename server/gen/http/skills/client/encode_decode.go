@@ -995,6 +995,14 @@ func EncodeCaptureRequest(encoder func(*http.Request) goahttp.Encoder) func(*htt
 			return goahttp.ErrInvalidType("skills", "capture", "*skills.CaptureRequestData", v)
 		}
 		p := data.Payload
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
 		{
 			head := p.Name
 			req.Header.Set("X-Gram-Skill-Name", head)
@@ -1039,14 +1047,6 @@ func EncodeCaptureRequest(encoder func(*http.Request) goahttp.Encoder) func(*htt
 			head := p.ContentLength
 			headStr := strconv.FormatInt(head, 10)
 			req.Header.Set("Content-Length", headStr)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
 		}
 		return nil
 	}
@@ -1259,7 +1259,304 @@ func BuildCaptureStreamPayload(payload any, fpath string) (*skills.CaptureReques
 		return nil, err
 	}
 	return &skills.CaptureRequestData{
-		Payload: payload.(*skills.CaptureSkillForm),
+		Payload: payload.(*skills.CaptureSkillProducerForm),
+		Body:    f,
+	}, nil
+}
+
+// BuildCaptureClaudeRequest instantiates a HTTP request object with method and
+// path set to call the "skills" service "captureClaude" endpoint
+func (c *Client) BuildCaptureClaudeRequest(ctx context.Context, v any) (*http.Request, error) {
+	var (
+		body io.Reader
+	)
+	rd, ok := v.(*skills.CaptureClaudeRequestData)
+	if !ok {
+		return nil, goahttp.ErrInvalidType("skills", "captureClaude", "skills.CaptureClaudeRequestData", v)
+	}
+	body = rd.Body
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CaptureClaudeSkillsPath()}
+	req, err := http.NewRequest("POST", u.String(), body)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "captureClaude", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCaptureClaudeRequest returns an encoder for requests sent to the
+// skills captureClaude server.
+func EncodeCaptureClaudeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		data, ok := v.(*skills.CaptureClaudeRequestData)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "captureClaude", "*skills.CaptureClaudeRequestData", v)
+		}
+		p := data.Payload
+		{
+			head := p.ClaudeSessionID
+			req.Header.Set("X-Gram-Claude-Session-ID", head)
+		}
+		{
+			head := p.Name
+			req.Header.Set("X-Gram-Skill-Name", head)
+		}
+		{
+			head := p.Scope
+			req.Header.Set("X-Gram-Skill-Scope", head)
+		}
+		{
+			head := p.DiscoveryRoot
+			req.Header.Set("X-Gram-Skill-Discovery-Root", head)
+		}
+		{
+			head := p.SourceType
+			req.Header.Set("X-Gram-Skill-Source-Type", head)
+		}
+		{
+			head := p.ContentSha256
+			req.Header.Set("X-Gram-Skill-Content-Sha256", head)
+		}
+		{
+			head := p.AssetFormat
+			req.Header.Set("X-Gram-Skill-Asset-Format", head)
+		}
+		{
+			head := p.ResolutionStatus
+			req.Header.Set("X-Gram-Skill-Resolution-Status", head)
+		}
+		if p.SkillID != nil {
+			head := *p.SkillID
+			req.Header.Set("X-Gram-Skill-Id", head)
+		}
+		if p.SkillVersionID != nil {
+			head := *p.SkillVersionID
+			req.Header.Set("X-Gram-Skill-Version-Id", head)
+		}
+		{
+			head := p.ContentType
+			req.Header.Set("Content-Type", head)
+		}
+		{
+			head := p.ContentLength
+			headStr := strconv.FormatInt(head, 10)
+			req.Header.Set("Content-Length", headStr)
+		}
+		return nil
+	}
+}
+
+// DecodeCaptureClaudeResponse returns a decoder for responses returned by the
+// skills captureClaude endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeCaptureClaudeResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCaptureClaudeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CaptureClaudeResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "captureClaude", err)
+			}
+			err = ValidateCaptureClaudeResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "captureClaude", err)
+			}
+			res := NewCaptureClaudeCaptureSkillResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CaptureClaudeUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "captureClaude", err)
+			}
+			err = ValidateCaptureClaudeUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "captureClaude", err)
+			}
+			return nil, NewCaptureClaudeUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CaptureClaudeForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "captureClaude", err)
+			}
+			err = ValidateCaptureClaudeForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "captureClaude", err)
+			}
+			return nil, NewCaptureClaudeForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CaptureClaudeBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "captureClaude", err)
+			}
+			err = ValidateCaptureClaudeBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "captureClaude", err)
+			}
+			return nil, NewCaptureClaudeBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CaptureClaudeNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "captureClaude", err)
+			}
+			err = ValidateCaptureClaudeNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "captureClaude", err)
+			}
+			return nil, NewCaptureClaudeNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CaptureClaudeConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "captureClaude", err)
+			}
+			err = ValidateCaptureClaudeConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "captureClaude", err)
+			}
+			return nil, NewCaptureClaudeConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CaptureClaudeUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "captureClaude", err)
+			}
+			err = ValidateCaptureClaudeUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "captureClaude", err)
+			}
+			return nil, NewCaptureClaudeUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CaptureClaudeInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "captureClaude", err)
+			}
+			err = ValidateCaptureClaudeInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "captureClaude", err)
+			}
+			return nil, NewCaptureClaudeInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CaptureClaudeInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "captureClaude", err)
+				}
+				err = ValidateCaptureClaudeInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "captureClaude", err)
+				}
+				return nil, NewCaptureClaudeInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CaptureClaudeUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "captureClaude", err)
+				}
+				err = ValidateCaptureClaudeUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "captureClaude", err)
+				}
+				return nil, NewCaptureClaudeUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "captureClaude", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CaptureClaudeGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "captureClaude", err)
+			}
+			err = ValidateCaptureClaudeGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "captureClaude", err)
+			}
+			return nil, NewCaptureClaudeGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "captureClaude", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// // BuildCaptureClaudeStreamPayload creates a streaming endpoint request payload
+// from the method payload and the path to the file to be streamed
+func BuildCaptureClaudeStreamPayload(payload any, fpath string) (*skills.CaptureClaudeRequestData, error) {
+	f, err := os.Open(fpath)
+	if err != nil {
+		return nil, err
+	}
+	return &skills.CaptureClaudeRequestData{
+		Payload: payload.(*skills.CaptureClaudePayload),
 		Body:    f,
 	}, nil
 }

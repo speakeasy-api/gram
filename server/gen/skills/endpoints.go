@@ -22,6 +22,7 @@ type Endpoints struct {
 	GetSettings      goa.Endpoint
 	SetSettings      goa.Endpoint
 	Capture          goa.Endpoint
+	CaptureClaude    goa.Endpoint
 	ListVersions     goa.Endpoint
 	ListPending      goa.Endpoint
 	ApproveVersion   goa.Endpoint
@@ -32,7 +33,16 @@ type Endpoints struct {
 // of the "capture" method.
 type CaptureRequestData struct {
 	// Payload is the method payload.
-	Payload *CaptureSkillForm
+	Payload *CaptureSkillProducerForm
+	// Body streams the HTTP request body.
+	Body io.ReadCloser
+}
+
+// CaptureClaudeRequestData holds both the payload and the HTTP request body
+// reader of the "captureClaude" method.
+type CaptureClaudeRequestData struct {
+	// Payload is the method payload.
+	Payload *CaptureClaudePayload
 	// Body streams the HTTP request body.
 	Body io.ReadCloser
 }
@@ -47,6 +57,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetSettings:      NewGetSettingsEndpoint(s, a.APIKeyAuth),
 		SetSettings:      NewSetSettingsEndpoint(s, a.APIKeyAuth),
 		Capture:          NewCaptureEndpoint(s, a.APIKeyAuth),
+		CaptureClaude:    NewCaptureClaudeEndpoint(s),
 		ListVersions:     NewListVersionsEndpoint(s, a.APIKeyAuth),
 		ListPending:      NewListPendingEndpoint(s, a.APIKeyAuth),
 		ApproveVersion:   NewApproveVersionEndpoint(s, a.APIKeyAuth),
@@ -61,6 +72,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSettings = m(e.GetSettings)
 	e.SetSettings = m(e.SetSettings)
 	e.Capture = m(e.Capture)
+	e.CaptureClaude = m(e.CaptureClaude)
 	e.ListVersions = m(e.ListVersions)
 	e.ListPending = m(e.ListPending)
 	e.ApproveVersion = m(e.ApproveVersion)
@@ -239,6 +251,15 @@ func NewCaptureEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 			return nil, err
 		}
 		return s.Capture(ctx, ep.Payload, ep.Body)
+	}
+}
+
+// NewCaptureClaudeEndpoint returns an endpoint function that calls the method
+// "captureClaude" of service "skills".
+func NewCaptureClaudeEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		ep := req.(*CaptureClaudeRequestData)
+		return s.CaptureClaude(ctx, ep.Payload, ep.Body)
 	}
 }
 

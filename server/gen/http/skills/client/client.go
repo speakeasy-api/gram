@@ -35,6 +35,10 @@ type Client struct {
 	// endpoint.
 	CaptureDoer goahttp.Doer
 
+	// CaptureClaude Doer is the HTTP client used to make requests to the
+	// captureClaude endpoint.
+	CaptureClaudeDoer goahttp.Doer
+
 	// ListVersions Doer is the HTTP client used to make requests to the
 	// listVersions endpoint.
 	ListVersionsDoer goahttp.Doer
@@ -76,6 +80,7 @@ func NewClient(
 		GetSettingsDoer:      doer,
 		SetSettingsDoer:      doer,
 		CaptureDoer:          doer,
+		CaptureClaudeDoer:    doer,
 		ListVersionsDoer:     doer,
 		ListPendingDoer:      doer,
 		ApproveVersionDoer:   doer,
@@ -203,6 +208,30 @@ func (c *Client) Capture() goa.Endpoint {
 		resp, err := c.CaptureDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "capture", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CaptureClaude returns an endpoint that makes HTTP requests to the skills
+// service captureClaude server.
+func (c *Client) CaptureClaude() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCaptureClaudeRequest(c.encoder)
+		decodeResponse = DecodeCaptureClaudeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCaptureClaudeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CaptureClaudeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "captureClaude", err)
 		}
 		return decodeResponse(resp)
 	}

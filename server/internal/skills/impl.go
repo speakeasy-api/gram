@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -73,6 +74,7 @@ type Service struct {
 	logger     *slog.Logger
 	auth       *auth.Auth
 	access     *access.Manager
+	cache      cache.Cache
 	db         *pgxpool.Pool
 	storage    assets.BlobStore
 	repo       *assetsrepo.Queries
@@ -88,6 +90,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessionsMgr *sessions.Manager,
+	cacheAdapter cache.Cache,
 	storage assets.BlobStore,
 	accessManager *access.Manager,
 	features *productfeatures.Client,
@@ -97,6 +100,7 @@ func NewService(
 		logger:     logger.With(attr.SlogComponent("skills")),
 		auth:       auth.New(logger, db, sessionsMgr, accessManager),
 		access:     accessManager,
+		cache:      cacheAdapter,
 		db:         db,
 		storage:    storage,
 		repo:       assetsrepo.New(db),
@@ -131,7 +135,7 @@ func (s *Service) recordCaptureAttempt(
 	projectID uuid.UUID,
 	userID string,
 	skillSlug string,
-	payload *gen.CaptureSkillForm,
+	payload *gen.CaptureSkillProducerForm,
 	outcome string,
 	reason string,
 	skillID uuid.NullUUID,
@@ -184,6 +188,73 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func hookSessionCacheKey(sessionID string) string {
+	return fmt.Sprintf("session:metadata:%s", sessionID)
+}
+
+type claudeValidatedSessionMetadata struct {
+	SessionID   string
+	ServiceName string
+	UserEmail   string
+	ClaudeOrgID string
+	GramOrgID   string
+	ProjectID   string
+}
+
+func (s *Service) authorizeClaudeValidatedSession(ctx context.Context, claudeSessionID, projectSlug string) (context.Context, error) {
+	if s.cache == nil {
+		return ctx, oops.E(oops.CodeUnauthorized, nil, "validated Claude session capture not configured")
+	}
+	if claudeSessionID == "" {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
+	var metadata claudeValidatedSessionMetadata
+	if err := s.cache.Get(ctx, hookSessionCacheKey(claudeSessionID), &metadata); err != nil {
+		return ctx, oops.E(oops.CodeUnauthorized, err, "validated Claude session not found")
+	}
+	if metadata.GramOrgID == "" || metadata.ProjectID == "" {
+		return ctx, oops.E(oops.CodeUnauthorized, nil, "validated Claude session missing project context")
+	}
+
+	projectID, err := uuid.Parse(metadata.ProjectID)
+	if err != nil {
+		return ctx, oops.E(oops.CodeUnauthorized, err, "invalid validated Claude session project")
+	}
+
+	captureUserID := metadata.UserEmail
+	if captureUserID == "" {
+		captureUserID = metadata.SessionID
+	}
+
+	authCtx := &contextvalues.AuthContext{
+		SessionID:             &metadata.SessionID,
+		UserID:                captureUserID,
+		ActiveOrganizationID:  metadata.GramOrgID,
+		OrganizationSlug:      "",
+		ProjectID:             &projectID,
+		ProjectSlug:           conv.PtrEmpty(projectSlug),
+		Email:                 conv.PtrEmpty(metadata.UserEmail),
+		AccountType:           "",
+		HasActiveSubscription: false,
+		Whitelisted:           false,
+		ExternalUserID:        "",
+		APIKeyID:              "",
+		APIKeyScopes:          []string{"hooks"},
+		IsAdmin:               false,
+	}
+
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	if projectSlug != "" {
+		ctx, err = s.auth.Authorize(ctx, projectSlug, &security.APIKeyScheme{Name: "project_slug", Scopes: []string{}, RequiredScopes: []string{}})
+		if err != nil {
+			return ctx, err
+		}
+	}
+
+	return ctx, nil
 }
 
 func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.Skill, error) {
@@ -544,15 +615,10 @@ func (s *Service) SupersedeVersion(ctx context.Context, payload *gen.SupersedeVe
 	return buildSkillVersion(&version), nil
 }
 
-func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, reader io.ReadCloser) (*gen.CaptureSkillResult, error) {
+func (s *Service) captureWithAuthorizedContext(ctx context.Context, authCtx *contextvalues.AuthContext, payload *gen.CaptureSkillProducerForm, reader io.ReadCloser) (*gen.CaptureSkillResult, error) {
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return reader.Close()
 	})
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
 
 	skillSlug := conv.ToSlug(payload.Name)
 	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -856,6 +922,53 @@ func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillForm, re
 	}, nil
 }
 
+func (s *Service) Capture(ctx context.Context, payload *gen.CaptureSkillProducerForm, reader io.ReadCloser) (*gen.CaptureSkillResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		defer o11y.LogDefer(ctx, s.logger, func() error {
+			return reader.Close()
+		})
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	return s.captureWithAuthorizedContext(ctx, authCtx, payload, reader)
+}
+
+func (s *Service) CaptureClaude(ctx context.Context, payload *gen.CaptureClaudePayload, reader io.ReadCloser) (*gen.CaptureSkillResult, error) {
+	authorizedCtx, err := s.authorizeClaudeValidatedSession(ctx, payload.ClaudeSessionID, "")
+	if err != nil {
+		defer o11y.LogDefer(ctx, s.logger, func() error {
+			return reader.Close()
+		})
+		return nil, err
+	}
+	authCtx, ok := contextvalues.GetAuthContext(authorizedCtx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		defer o11y.LogDefer(ctx, s.logger, func() error {
+			return reader.Close()
+		})
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	capturePayload := &gen.CaptureSkillProducerForm{
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             payload.Name,
+		Scope:            payload.Scope,
+		DiscoveryRoot:    payload.DiscoveryRoot,
+		SourceType:       payload.SourceType,
+		ContentSha256:    payload.ContentSha256,
+		AssetFormat:      payload.AssetFormat,
+		ResolutionStatus: payload.ResolutionStatus,
+		SkillID:          payload.SkillID,
+		SkillVersionID:   payload.SkillVersionID,
+		ContentType:      payload.ContentType,
+		ContentLength:    payload.ContentLength,
+	}
+
+	return s.captureWithAuthorizedContext(authorizedCtx, authCtx, capturePayload, reader)
+}
+
 func (s *Service) getCaptureSettings(ctx context.Context, organizationID string, projectID uuid.UUID) (*gen.SkillCaptureSettings, error) {
 	if organizationID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "missing organization context")
@@ -916,7 +1029,7 @@ func (s *Service) ensureSkillLineageForCapture(
 	userID string,
 	skillSlug string,
 	contentSHA string,
-	payload *gen.CaptureSkillForm,
+	payload *gen.CaptureSkillProducerForm,
 	assetID uuid.UUID,
 ) (skillsrepo.Skill, skillsrepo.SkillVersion, error) {
 	skill, err := repo.GetSkillBySlug(ctx, skillsrepo.GetSkillBySlugParams{
