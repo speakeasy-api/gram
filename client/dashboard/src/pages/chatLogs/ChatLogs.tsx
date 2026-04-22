@@ -322,7 +322,7 @@ function ChatLogsInner() {
     );
 
   // Chats are sorted server-side via sortBy/sortOrder params
-  const chats = data?.chats ?? [];
+  const chats = useMemo(() => data?.chats ?? [], [data?.chats]);
   // Keep total stable across page changes to avoid flickering
   const lastTotalRef = useRef(0);
   if (data?.total !== undefined && data.total > 0) {

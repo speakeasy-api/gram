@@ -437,7 +437,10 @@ function ToolSelectionPanel({
   );
   const [search, setSearch] = useState("");
   const selectedServer = allServers.find((s) => s.id === selectedServerId);
-  const tools = selectedServer?.tools ?? [];
+  const tools = useMemo(
+    () => selectedServer?.tools ?? [],
+    [selectedServer?.tools],
+  );
   const filteredTools = useMemo(
     () =>
       (search
@@ -790,7 +793,10 @@ function CollectionGroupPanel({
   // Fetch org-level collections
   const { data: collectionsData, isLoading: collectionsLoading } =
     useListCollections({}, undefined);
-  const collections = collectionsData?.collections ?? [];
+  const collections = useMemo(
+    () => collectionsData?.collections ?? [],
+    [collectionsData?.collections],
+  );
 
   // Fetch servers for each collection in parallel
   const serverQueries = useQueries({

@@ -3,7 +3,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { capitalize } from "@/lib/utils";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { useListToolsets } from "@gram/client/react-query";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 export function ToolsetDropdown({
   selectedToolset,
@@ -22,15 +22,16 @@ export function ToolsetDropdown({
 }) {
   const { data: toolsets } = useListToolsets();
 
-  const toolsetDropdownItems =
-    toolsets?.toolsets?.map((toolset) => ({
-      ...toolset,
-      label: toolset.name,
-      value: toolset.slug,
-    })) ?? [];
-
-  toolsetDropdownItems.sort(
-    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
+  const toolsetDropdownItems = useMemo(
+    () =>
+      (
+        toolsets?.toolsets?.map((toolset) => ({
+          ...toolset,
+          label: toolset.name,
+          value: toolset.slug,
+        })) ?? []
+      ).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()),
+    [toolsets?.toolsets],
   );
 
   // Set the default selection if no selection is made
@@ -42,7 +43,12 @@ export function ToolsetDropdown({
     ) {
       setSelectedToolset(toolsetDropdownItems[0]!);
     }
-  }, [toolsetDropdownItems, defaultSelection, setSelectedToolset]);
+  }, [
+    toolsetDropdownItems,
+    defaultSelection,
+    setSelectedToolset,
+    selectedToolset,
+  ]);
 
   return (
     <Combobox

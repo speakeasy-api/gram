@@ -115,6 +115,7 @@ export function EditToolDialog({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleSave reads current state; listing all state values ensures fresh closure
   }, [
     open,
     name,

@@ -194,12 +194,12 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
   const orgRoutes = useOrgRoutes();
   const { data: membersData, isLoading: membersLoading } = useMembers();
   const { data: rolesData, isLoading: rolesLoading } = useRoles();
-  const members = membersData?.members ?? [];
-  const roles = rolesData?.roles ?? [];
 
   const [sheetData, setSheetData] = useState<ToolDetailSheet | null>(null);
 
   const memberAccess = useMemo((): MemberAccess[] => {
+    const members = membersData?.members ?? [];
+    const roles = rolesData?.roles ?? [];
     const roleMap = new Map(roles.map((r) => [r.id, r]));
     return members
       .map((member) => {
@@ -220,7 +220,7 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
           m.scopes.connect !== "none",
       )
       .sort((a, b) => a.member.name.localeCompare(b.member.name));
-  }, [members, roles, toolset.slug]);
+  }, [membersData?.members, rolesData?.roles, toolset.slug]);
 
   const openToolSheet = (
     row: MemberAccess,

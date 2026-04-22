@@ -64,11 +64,11 @@ export function usePlaygroundEnvironment(
     .replace(/-+$/, "");
 
   const { data: environmentsData } = useListEnvironments();
-  const environments = environmentsData?.environments ?? [];
 
   const existingEnvironment = useMemo(
-    () => environments.find((env) => env.slug === slug),
-    [environments, slug],
+    () =>
+      (environmentsData?.environments ?? []).find((env) => env.slug === slug),
+    [environmentsData?.environments, slug],
   );
 
   const storedEntries = useMemo(

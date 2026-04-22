@@ -953,11 +953,12 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
     grouped.map((group) => group.key),
   );
 
-  const groupKeys = grouped.map((group) => group.key);
+  const groupKeysJoined = grouped.map((group) => group.key).join(",");
   // Set initial selected groups when the tool list resolves
   useEffect(() => {
-    setSelectedGroups(groupKeys);
-  }, [groupKeys.join(",")]);
+    setSelectedGroups(grouped.map((group) => group.key));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recalculate only when the set of group keys changes
+  }, [groupKeysJoined]);
 
   const handleToolUpdate = async (
     tool: Tool,

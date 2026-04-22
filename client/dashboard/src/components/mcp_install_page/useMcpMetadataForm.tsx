@@ -120,6 +120,7 @@ export function useMcpMetadataMetadataForm(
         instructions: currentMetadata?.instructions,
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncs server→local only on server change; including metadataParams would overwrite user edits
   }, [currentMetadata]);
 
   useEffect(() => {
