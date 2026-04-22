@@ -820,7 +820,7 @@ CREATE TABLE IF NOT EXISTS assistants (
   instructions TEXT NOT NULL,
   warm_ttl_seconds BIGINT NOT NULL DEFAULT 300 CHECK (warm_ttl_seconds >= 0 AND warm_ttl_seconds <= 3600),
   max_concurrency BIGINT NOT NULL DEFAULT 1 CHECK (max_concurrency >= 1 AND max_concurrency <= 100),
-  status TEXT NOT NULL CHECK (status IN ('active', 'paused')) DEFAULT 'active',
+  status TEXT NOT NULL DEFAULT 'active',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -881,8 +881,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS assistant_threads_project_id_assistant_id_corr
 ON assistant_threads (project_id, assistant_id, correlation_id)
 WHERE deleted IS FALSE;
 
-CREATE INDEX IF NOT EXISTS assistant_threads_assistant_id_last_event_at_idx
-ON assistant_threads (assistant_id, last_event_at DESC)
+CREATE INDEX IF NOT EXISTS assistant_threads_project_id_assistant_id_last_event_at_idx
+ON assistant_threads (project_id, assistant_id, last_event_at DESC)
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS assistant_runtimes (
@@ -891,7 +891,7 @@ CREATE TABLE IF NOT EXISTS assistant_runtimes (
   assistant_id uuid NOT NULL,
   project_id uuid NOT NULL,
   backend TEXT NOT NULL CHECK (backend <> '' AND CHAR_LENGTH(backend) <= 50),
-  state TEXT NOT NULL CHECK (state IN ('starting', 'active', 'stopped', 'failed')),
+  state TEXT NOT NULL,
   warm_until timestamptz,
   lease_owner TEXT,
   last_heartbeat_at timestamptz,
@@ -912,27 +912,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS assistant_runtimes_assistant_thread_id_active_
 ON assistant_runtimes (assistant_thread_id)
 WHERE deleted IS FALSE AND state IN ('starting', 'active');
 
-CREATE INDEX IF NOT EXISTS assistant_runtimes_assistant_id_state_idx
-ON assistant_runtimes (assistant_id, state)
+CREATE INDEX IF NOT EXISTS assistant_runtimes_project_id_assistant_id_state_idx
+ON assistant_runtimes (project_id, assistant_id, state)
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS assistant_thread_events (
-  attempts BIGINT NOT NULL DEFAULT 0,
-  deleted_at timestamptz,
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  processed_at timestamptz,
-  normalized_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-  correlation_id TEXT NOT NULL CHECK (correlation_id <> '' AND CHAR_LENGTH(correlation_id) <= 300),
-  status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'completed', 'failed')) DEFAULT 'pending',
-  source_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-  event_id TEXT NOT NULL CHECK (event_id <> '' AND CHAR_LENGTH(event_id) <= 300),
-  last_error TEXT,
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  trigger_instance_id uuid,
-  project_id uuid NOT NULL,
-  assistant_id uuid NOT NULL,
   assistant_thread_id uuid NOT NULL,
+  assistant_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  trigger_instance_id uuid,
+  event_id TEXT NOT NULL CHECK (event_id <> '' AND CHAR_LENGTH(event_id) <= 300),
+  correlation_id TEXT NOT NULL CHECK (correlation_id <> '' AND CHAR_LENGTH(correlation_id) <= 300),
+  status TEXT NOT NULL DEFAULT 'pending',
+  normalized_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  source_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  attempts BIGINT NOT NULL DEFAULT 0,
+  last_error TEXT,
+  processed_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT assistant_thread_events_pkey PRIMARY KEY (id),
@@ -942,12 +943,12 @@ CREATE TABLE IF NOT EXISTS assistant_thread_events (
   CONSTRAINT assistant_thread_events_trigger_instance_id_fkey FOREIGN KEY (trigger_instance_id) REFERENCES trigger_instances(id) ON DELETE SET NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS assistant_thread_events_assistant_id_event_id_key
-ON assistant_thread_events (assistant_id, event_id)
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_thread_events_project_id_assistant_id_event_id_key
+ON assistant_thread_events (project_id, assistant_id, event_id)
 WHERE deleted IS FALSE;
 
-CREATE INDEX IF NOT EXISTS assistant_thread_events_thread_status_created_at_idx
-ON assistant_thread_events (assistant_thread_id, status, created_at)
+CREATE INDEX IF NOT EXISTS assistant_thread_events_project_id_thread_status_created_at_idx
+ON assistant_thread_events (project_id, assistant_thread_id, status, created_at)
 WHERE deleted IS FALSE;
 
 -- Create the chat_messages table to store individual messages in each chat

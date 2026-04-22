@@ -105,22 +105,22 @@ type AssistantThread struct {
 }
 
 type AssistantThreadEvent struct {
-	Attempts              int64
-	DeletedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	CreatedAt             pgtype.Timestamptz
-	ProcessedAt           pgtype.Timestamptz
-	NormalizedPayloadJson []byte
+	ID                    uuid.UUID
+	AssistantThreadID     uuid.UUID
+	AssistantID           uuid.UUID
+	ProjectID             uuid.UUID
+	TriggerInstanceID     uuid.NullUUID
+	EventID               string
 	CorrelationID         string
 	Status                string
+	NormalizedPayloadJson []byte
 	SourcePayloadJson     []byte
-	EventID               string
+	Attempts              int64
 	LastError             pgtype.Text
-	ID                    uuid.UUID
-	TriggerInstanceID     uuid.NullUUID
-	ProjectID             uuid.UUID
-	AssistantID           uuid.UUID
-	AssistantThreadID     uuid.UUID
+	ProcessedAt           pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
 	Deleted               bool
 }
 
