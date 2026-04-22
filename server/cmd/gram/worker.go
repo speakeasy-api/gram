@@ -17,7 +17,9 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -269,6 +271,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, redisFlags...)
 	flags = append(flags, clickHouseFlags...)
 	flags = append(flags, functionsFlags...)
+	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, pulseMCPFlags...)
 
 	return &cli.Command{
@@ -499,6 +502,11 @@ func newWorkerCommand() *cli.Command {
 			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, nil)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
+			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db)
+			assistantRuntimeConfig, err := assistantRuntimeConfigFromCLI(c)
+			if err != nil {
+				return err
+			}
 
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, serverURL)
@@ -537,6 +545,11 @@ func newWorkerCommand() *cli.Command {
 				completionsClient,
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
+			assistantsSvc, err := assistants.NewService(logger, tracerProvider, db, sessionManager, accessManager, assistantTokenManager, serverURL, slackClient, assistantRuntimeConfig, telemetryLogger)
+			if err != nil {
+				return fmt.Errorf("failed to create assistants service: %w", err)
+			}
+			triggerApp.RegisterDispatcher(assistants.NewDispatcher(assistantsSvc.Core(), temporalEnv))
 
 			/**
 			 * END -- Agent client
@@ -564,6 +577,8 @@ func newWorkerCommand() *cli.Command {
 				TelemetryLogger:     telemetryLogger,
 				TriggersApp:         triggerApp,
 				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
+				AssistantsCore:      assistantsSvc.Core(),
+				TemporalEnv:         temporalEnv,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

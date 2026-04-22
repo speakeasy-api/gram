@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -57,6 +58,8 @@ type WorkerOptions struct {
 	MCPRegistryClient   *externalmcp.RegistryClient
 	TelemetryLogger     *telemetry.Logger
 	TriggersApp         *bgtriggers.App
+	AssistantsCore      *assistants.ServiceCore
+	TemporalEnv         *tenv.Environment
 }
 
 func ForDeploymentProcessing(
@@ -90,6 +93,8 @@ func ForDeploymentProcessing(
 		TelemetryLogger:     nil,
 		TriggersApp:         nil,
 		CacheAdapter:        nil,
+		AssistantsCore:      nil,
+		TemporalEnv:         nil,
 	}
 }
 
@@ -122,6 +127,8 @@ func NewTemporalWorker(
 		TelemetryLogger:     nil,
 		TriggersApp:         nil,
 		CacheAdapter:        nil,
+		AssistantsCore:      nil,
+		TemporalEnv:         env,
 	}
 
 	for _, o := range options {
@@ -147,6 +154,8 @@ func NewTemporalWorker(
 			TelemetryLogger:     conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
 			TriggersApp:         conv.Default(o.TriggersApp, opts.TriggersApp),
 			CacheAdapter:        conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			AssistantsCore:      conv.Default(o.AssistantsCore, opts.AssistantsCore),
+			TemporalEnv:         conv.Default(o.TemporalEnv, opts.TemporalEnv),
 		}
 	}
 
@@ -179,10 +188,11 @@ func NewTemporalWorker(
 		opts.FunctionsVersion,
 		opts.RagService,
 		opts.MCPRegistryClient,
-		env.Client(),
+		opts.TemporalEnv,
 		opts.TelemetryLogger,
 		opts.TriggersApp,
 		opts.CacheAdapter,
+		opts.AssistantsCore,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -245,6 +255,10 @@ func NewTemporalWorker(
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add refresh billing usage schedule", attr.SlogError(err))
 		}
+	}
+
+	if err := AddAssistantReaperSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add assistant reaper schedule", attr.SlogError(err))
 	}
 
 	return temporalWorker
