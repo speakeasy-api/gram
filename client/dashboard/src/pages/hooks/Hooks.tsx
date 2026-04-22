@@ -115,7 +115,7 @@ const BRAND_RED_COLORS = [
   "#7f1d1d", // red-900
 ];
 
-const COLLAPSED_BAR_CHART_MAX_ROWS = 10;
+const COLLAPSED_BAR_CHART_MAX_ROWS = 6;
 
 // ---------------------------------------------------------------------------
 // Shared Chart.js config building blocks
@@ -1506,13 +1506,17 @@ function StackedBarChart({
         />
       </div>
       {hiddenCount > 0 && onShowAll && (
-        <button
-          type="button"
-          onClick={onShowAll}
-          className="text-muted-foreground hover:text-foreground mt-1 w-full text-center text-xs underline-offset-2 hover:underline"
-        >
-          Show {hiddenCount} more
-        </button>
+        <div className="mt-2 flex w-full">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon="chevron-down"
+            iconAfter={true}
+            onClick={onShowAll}
+          >
+            Show {hiddenCount} more
+          </Button>
+        </div>
       )}
     </>
   );
