@@ -154,15 +154,6 @@ type TemporalRiskAnalysisSignaler struct {
 }
 
 func (s *TemporalRiskAnalysisSignaler) SignalNewMessages(ctx context.Context, params DrainRiskAnalysisParams) error {
-	if s.TemporalEnv == nil {
-		if s.Logger != nil {
-			s.Logger.WarnContext(ctx, "temporal env is nil, skipping risk signal",
-				attr.SlogRiskPolicyID(params.RiskPolicyID.String()),
-			)
-		}
-		return nil
-	}
-
 	wfID := drainWorkflowID(params.RiskPolicyID)
 
 	// SignalWithStartWorkflow atomically signals an existing workflow or
@@ -185,12 +176,10 @@ func (s *TemporalRiskAnalysisSignaler) SignalNewMessages(ctx context.Context, pa
 		return fmt.Errorf("signal-with-start drain workflow: %w", err)
 	}
 
-	if s.Logger != nil {
-		s.Logger.DebugContext(ctx, "temporal signal-with-start sent",
-			attr.SlogRiskPolicyID(params.RiskPolicyID.String()),
-			attr.SlogTemporalWorkflowID(wfID),
-		)
-	}
+	s.Logger.DebugContext(ctx, "temporal signal-with-start sent",
+		attr.SlogRiskPolicyID(params.RiskPolicyID.String()),
+		attr.SlogTemporalWorkflowID(wfID),
+	)
 	return nil
 }
 
