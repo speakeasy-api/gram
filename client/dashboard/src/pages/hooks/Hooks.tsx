@@ -2168,7 +2168,7 @@ function UsersPerSkillChart({
           hoverBackgroundColor: color + "cc",
         },
       ] satisfies StackedBarDataset[],
-      uniqueUsersMap: new Map(skills.map((s) => [s.skillName, s.uniqueUsers])),
+      uniqueUsersMap: new Map(sorted.map((s) => [s.skillName, s.uniqueUsers])),
     };
   }, [skills]);
   const tooltipLabelFn = useCallback(
