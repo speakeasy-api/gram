@@ -338,6 +338,9 @@ CREATE TABLE IF NOT EXISTS deployments_functions (
   runtime TEXT NOT NULL, -- nodejs:22, python:3.12, ...
   runner_version TEXT,
 
+  memory_mib INT,
+  scale INT,
+
   CONSTRAINT deployments_functions_pkey PRIMARY KEY (id),
   CONSTRAINT deployments_functions_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
   CONSTRAINT deployments_functions_asset_id_fkey FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE CASCADE
