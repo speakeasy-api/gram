@@ -124,8 +124,8 @@ impl Tool for BunRunTool {
             result: ToolResultPart {
                 call_id: request.call_id,
                 output: ToolOutput::Structured(json!({
-                    "stdout": &stdout[..stdout.len().min(STDOUT_LIMIT)],
-                    "stderr": &stderr[..stderr.len().min(STDERR_LIMIT)],
+                    "stdout": &stdout[..stdout.floor_char_boundary(STDOUT_LIMIT)],
+                    "stderr": &stderr[..stderr.floor_char_boundary(STDERR_LIMIT)],
                     "truncated": stdout_truncated || stderr_truncated,
                     "exit_code": exit_code,
                     "success": output.status.success(),
