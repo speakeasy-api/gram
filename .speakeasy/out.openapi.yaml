@@ -1637,12 +1637,12 @@ paths:
             description: The ID of the asset to serve
             type: string
         - allowEmptyValue: true
-          description: The procect ID that the asset belongs to
+          description: The project ID that the asset belongs to
           in: query
           name: project_id
           required: true
           schema:
-            description: The procect ID that the asset belongs to
+            description: The project ID that the asset belongs to
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -1850,12 +1850,12 @@ paths:
             description: The ID of the asset to serve
             type: string
         - allowEmptyValue: true
-          description: The procect ID that the asset belongs to
+          description: The project ID that the asset belongs to
           in: query
           name: project_id
           required: true
           schema:
-            description: The procect ID that the asset belongs to
+            description: The project ID that the asset belongs to
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -1954,6 +1954,124 @@ paths:
       x-speakeasy-name-override: serveOpenAPIv3
       x-speakeasy-react-hook:
         name: serveOpenAPIv3
+  /rpc/assets.serveSkill:
+    get:
+      description: Serve a skill asset from Gram.
+      operationId: serveSkill
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the asset to serve
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the asset to serve
+            type: string
+        - allowEmptyValue: true
+          description: The project ID that the asset belongs to
+          in: query
+          name: project_id
+          required: true
+          schema:
+            description: The project ID that the asset belongs to
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                format: binary
+                type: string
+          description: OK response.
+          headers:
+            Content-Length:
+              schema:
+                format: int64
+                type: integer
+            Content-Type:
+              schema:
+                type: string
+            Last-Modified:
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: serveSkill assets
+      tags:
+        - assets
+      x-speakeasy-name-override: serveSkill
+      x-speakeasy-react-hook:
+        name: serveSkill
   /rpc/assets.uploadChatAttachment:
     post:
       description: Upload a chat attachment to Gram.
@@ -14782,13 +14900,6 @@ paths:
           schema:
             format: int64
             type: integer
-      requestBody:
-        content:
-          application/json:
-            schema:
-              format: binary
-              type: string
-        required: true
       responses:
         "200":
           content:
@@ -20755,6 +20866,7 @@ components:
             - openapiv3
             - image
             - functions
+            - skill
             - chat_attachment
             - unknown
         sha256:
@@ -26690,6 +26802,7 @@ components:
           type: string
       required:
         - version_id
+        - reason
     RemoteMcpServer:
       type: object
       properties:
@@ -27588,7 +27701,7 @@ components:
           description: The ID of the asset to serve
         project_id:
           type: string
-          description: The procect ID that the asset belongs to
+          description: The project ID that the asset belongs to
         session_token:
           type: string
       required:
@@ -27642,13 +27755,43 @@ components:
           description: The ID of the asset to serve
         project_id:
           type: string
-          description: The procect ID that the asset belongs to
+          description: The project ID that the asset belongs to
         session_token:
           type: string
       required:
         - id
         - project_id
     ServeOpenAPIv3Result:
+      type: object
+      properties:
+        content_length:
+          type: integer
+          format: int64
+        content_type:
+          type: string
+        last_modified:
+          type: string
+      required:
+        - content_type
+        - content_length
+        - last_modified
+    ServeSkillForm:
+      type: object
+      properties:
+        apikey_token:
+          type: string
+        id:
+          type: string
+          description: The ID of the asset to serve
+        project_id:
+          type: string
+          description: The project ID that the asset belongs to
+        session_token:
+          type: string
+      required:
+        - id
+        - project_id
+    ServeSkillResult:
       type: object
       properties:
         content_length:

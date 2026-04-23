@@ -35,6 +35,7 @@ func TestService_List_ReturnsSkillsWithActiveVersion(t *testing.T) {
 		contentSHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		authorName:    "Ada",
 		firstSeenAt:   pgtype.Timestamptz{Time: firstSkill.CreatedAt.Time, Valid: true},
+		state:         "active",
 	})
 	_, err := ti.skillsRepo.SetSkillActiveVersion(ctx, skillsrepo.SetSkillActiveVersionParams{
 		ProjectID: *authCtx.ProjectID,

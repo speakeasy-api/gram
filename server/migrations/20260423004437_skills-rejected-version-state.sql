@@ -1,2 +1,25 @@
 -- Modify "skill_versions" table
-ALTER TABLE "skill_versions" DROP CONSTRAINT "skill_versions_state_check", ADD CONSTRAINT "skill_versions_state_check" CHECK (state = ANY (ARRAY['pending_review'::text, 'active'::text, 'superseded'::text, 'rejected'::text])), ADD CONSTRAINT "skill_versions_rejected_by_user_id_check" CHECK ((rejected_by_user_id <> ''::text) AND (char_length(rejected_by_user_id) <= 255)), ADD CONSTRAINT "skill_versions_rejected_reason_check" CHECK ((rejected_reason <> ''::text) AND (char_length(rejected_reason) <= 2000)), ADD COLUMN "rejected_by_user_id" text NULL, ADD COLUMN "rejected_reason" text NULL, ADD COLUMN "rejected_at" timestamptz NULL;
+ALTER TABLE "skill_versions"
+  ADD COLUMN "rejected_by_user_id" text NULL,
+  ADD COLUMN "rejected_reason" text NULL,
+  ADD COLUMN "rejected_at" timestamptz NULL;
+
+ALTER TABLE "skill_versions"
+  DROP CONSTRAINT "skill_versions_state_check",
+  ADD CONSTRAINT "skill_versions_state_check" CHECK (state = ANY (ARRAY['pending_review'::text, 'active'::text, 'superseded'::text, 'rejected'::text])),
+  ADD CONSTRAINT "skill_versions_rejected_by_user_id_check" CHECK ((rejected_by_user_id <> ''::text) AND (char_length(rejected_by_user_id) <= 255)),
+  ADD CONSTRAINT "skill_versions_rejected_reason_check" CHECK ((rejected_reason <> ''::text) AND (char_length(rejected_reason) <= 2000)),
+  ADD CONSTRAINT "skill_versions_rejected_fields_check" CHECK (
+    (
+      state = 'rejected'::text
+      AND rejected_by_user_id IS NOT NULL
+      AND rejected_reason IS NOT NULL
+      AND rejected_at IS NOT NULL
+    )
+    OR (
+      state <> 'rejected'::text
+      AND rejected_by_user_id IS NULL
+      AND rejected_reason IS NULL
+      AND rejected_at IS NULL
+    )
+  );

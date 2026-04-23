@@ -35,8 +35,8 @@ type SupersedeVersionRequestBody struct {
 // RejectVersionRequestBody is the type of the "skills" service "rejectVersion"
 // endpoint HTTP request body.
 type RejectVersionRequestBody struct {
-	VersionID string  `form:"version_id" json:"version_id" xml:"version_id"`
-	Reason    *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	VersionID string `form:"version_id" json:"version_id" xml:"version_id"`
+	Reason    string `form:"reason" json:"reason" xml:"reason"`
 }
 
 // ArchiveRequestBody is the type of the "skills" service "archive" endpoint

@@ -380,12 +380,8 @@ func BuildCaptureClaudePayload(skillsCaptureClaudeClaudeSessionID string, skills
 
 // BuildUploadManualPayload builds the payload for the skills uploadManual
 // endpoint from CLI flags.
-func BuildUploadManualPayload(skillsUploadManualBody string, skillsUploadManualSessionToken string, skillsUploadManualProjectSlugInput string, skillsUploadManualName string, skillsUploadManualScope string, skillsUploadManualDiscoveryRoot string, skillsUploadManualSourceType string, skillsUploadManualContentSha256 string, skillsUploadManualAssetFormat string, skillsUploadManualResolutionStatus string, skillsUploadManualSkillID string, skillsUploadManualSkillVersionID string, skillsUploadManualContentType string, skillsUploadManualContentLength string) (*skills.UploadManualPayload, error) {
+func BuildUploadManualPayload(skillsUploadManualSessionToken string, skillsUploadManualProjectSlugInput string, skillsUploadManualName string, skillsUploadManualScope string, skillsUploadManualDiscoveryRoot string, skillsUploadManualSourceType string, skillsUploadManualContentSha256 string, skillsUploadManualAssetFormat string, skillsUploadManualResolutionStatus string, skillsUploadManualSkillID string, skillsUploadManualSkillVersionID string, skillsUploadManualContentType string, skillsUploadManualContentLength string) (*skills.UploadManualPayload, error) {
 	var err error
-	var body []byte
-	{
-		body = []byte(skillsUploadManualBody)
-	}
 	var sessionToken *string
 	{
 		if skillsUploadManualSessionToken != "" {
@@ -492,25 +488,22 @@ func BuildUploadManualPayload(skillsUploadManualBody string, skillsUploadManualS
 			return nil, fmt.Errorf("invalid value for contentLength, must be INT64")
 		}
 	}
-	v := body
-	res := &skills.UploadManualPayload{
-		RequestBody: v,
-	}
-	res.SessionToken = sessionToken
-	res.ProjectSlugInput = projectSlugInput
-	res.Name = name
-	res.Scope = scope
-	res.DiscoveryRoot = discoveryRoot
-	res.SourceType = sourceType
-	res.ContentSha256 = contentSha256
-	res.AssetFormat = assetFormat
-	res.ResolutionStatus = resolutionStatus
-	res.SkillID = skillID
-	res.SkillVersionID = skillVersionID
-	res.ContentType = contentType
-	res.ContentLength = contentLength
+	v := &skills.UploadManualPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.Name = name
+	v.Scope = scope
+	v.DiscoveryRoot = discoveryRoot
+	v.SourceType = sourceType
+	v.ContentSha256 = contentSha256
+	v.AssetFormat = assetFormat
+	v.ResolutionStatus = resolutionStatus
+	v.SkillID = skillID
+	v.SkillVersionID = skillVersionID
+	v.ContentType = contentType
+	v.ContentLength = contentLength
 
-	return res, nil
+	return v, nil
 }
 
 // BuildListVersionsPayload builds the payload for the skills listVersions
@@ -636,10 +629,8 @@ func BuildRejectVersionPayload(skillsRejectVersionBody string, skillsRejectVersi
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"reason\": \"aaa\",\n      \"version_id\": \"abc123\"\n   }'")
 		}
-		if body.Reason != nil {
-			if utf8.RuneCountInString(*body.Reason) > 2000 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 2000, false))
-			}
+		if utf8.RuneCountInString(body.Reason) > 2000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", body.Reason, utf8.RuneCountInString(body.Reason), 2000, false))
 		}
 		if err != nil {
 			return nil, err

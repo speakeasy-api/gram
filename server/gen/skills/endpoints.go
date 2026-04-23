@@ -50,6 +50,15 @@ type CaptureClaudeRequestData struct {
 	Body io.ReadCloser
 }
 
+// UploadManualRequestData holds both the payload and the HTTP request body
+// reader of the "uploadManual" method.
+type UploadManualRequestData struct {
+	// Payload is the method payload.
+	Payload *UploadManualPayload
+	// Body streams the HTTP request body.
+	Body io.ReadCloser
+}
+
 // NewEndpoints wraps the methods of the "skills" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
@@ -276,7 +285,7 @@ func NewCaptureClaudeEndpoint(s Service) goa.Endpoint {
 // "uploadManual" of service "skills".
 func NewUploadManualEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*UploadManualPayload)
+		ep := req.(*UploadManualRequestData)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -284,8 +293,8 @@ func NewUploadManualEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			RequiredScopes: []string{},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if ep.Payload.SessionToken != nil {
+			key = *ep.Payload.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err == nil {
@@ -295,15 +304,15 @@ func NewUploadManualEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 				RequiredScopes: []string{},
 			}
 			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
+			if ep.Payload.ProjectSlugInput != nil {
+				key = *ep.Payload.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
 		if err != nil {
 			return nil, err
 		}
-		return s.UploadManual(ctx, p)
+		return s.UploadManual(ctx, ep.Payload, ep.Body)
 	}
 }
 

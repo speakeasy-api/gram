@@ -6,13 +6,13 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 export type RejectVersionRequestBody = {
-  reason?: string | undefined;
+  reason: string;
   versionId: string;
 };
 
 /** @internal */
 export type RejectVersionRequestBody$Outbound = {
-  reason?: string | undefined;
+  reason: string;
   version_id: string;
 };
 
@@ -22,7 +22,7 @@ export const RejectVersionRequestBody$outboundSchema: z.ZodMiniType<
   RejectVersionRequestBody
 > = z.pipe(
   z.object({
-    reason: z.optional(z.string()),
+    reason: z.string(),
     versionId: z.string(),
   }),
   z.transform((v) => {

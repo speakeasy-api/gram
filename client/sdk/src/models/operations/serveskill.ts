@@ -8,12 +8,12 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export type ServeOpenAPIv3Security = {
+export type ServeSkillSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type ServeOpenAPIv3Request = {
+export type ServeSkillRequest = {
   /**
    * The ID of the asset to serve
    */
@@ -32,21 +32,21 @@ export type ServeOpenAPIv3Request = {
   gramSession?: string | undefined;
 };
 
-export type ServeOpenAPIv3Response = {
+export type ServeSkillResponse = {
   headers: { [k: string]: Array<string> };
   result: ReadableStream<Uint8Array>;
 };
 
 /** @internal */
-export type ServeOpenAPIv3Security$Outbound = {
+export type ServeSkillSecurity$Outbound = {
   "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const ServeOpenAPIv3Security$outboundSchema: z.ZodMiniType<
-  ServeOpenAPIv3Security$Outbound,
-  ServeOpenAPIv3Security
+export const ServeSkillSecurity$outboundSchema: z.ZodMiniType<
+  ServeSkillSecurity$Outbound,
+  ServeSkillSecurity
 > = z.pipe(
   z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
@@ -60,16 +60,16 @@ export const ServeOpenAPIv3Security$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function serveOpenAPIv3SecurityToJSON(
-  serveOpenAPIv3Security: ServeOpenAPIv3Security,
+export function serveSkillSecurityToJSON(
+  serveSkillSecurity: ServeSkillSecurity,
 ): string {
   return JSON.stringify(
-    ServeOpenAPIv3Security$outboundSchema.parse(serveOpenAPIv3Security),
+    ServeSkillSecurity$outboundSchema.parse(serveSkillSecurity),
   );
 }
 
 /** @internal */
-export type ServeOpenAPIv3Request$Outbound = {
+export type ServeSkillRequest$Outbound = {
   id: string;
   project_id: string;
   "Gram-Key"?: string | undefined;
@@ -77,9 +77,9 @@ export type ServeOpenAPIv3Request$Outbound = {
 };
 
 /** @internal */
-export const ServeOpenAPIv3Request$outboundSchema: z.ZodMiniType<
-  ServeOpenAPIv3Request$Outbound,
-  ServeOpenAPIv3Request
+export const ServeSkillRequest$outboundSchema: z.ZodMiniType<
+  ServeSkillRequest$Outbound,
+  ServeSkillRequest
 > = z.pipe(
   z.object({
     id: z.string(),
@@ -96,17 +96,17 @@ export const ServeOpenAPIv3Request$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function serveOpenAPIv3RequestToJSON(
-  serveOpenAPIv3Request: ServeOpenAPIv3Request,
+export function serveSkillRequestToJSON(
+  serveSkillRequest: ServeSkillRequest,
 ): string {
   return JSON.stringify(
-    ServeOpenAPIv3Request$outboundSchema.parse(serveOpenAPIv3Request),
+    ServeSkillRequest$outboundSchema.parse(serveSkillRequest),
   );
 }
 
 /** @internal */
-export const ServeOpenAPIv3Response$inboundSchema: z.ZodMiniType<
-  ServeOpenAPIv3Response,
+export const ServeSkillResponse$inboundSchema: z.ZodMiniType<
+  ServeSkillResponse,
   unknown
 > = z.pipe(
   z.object({
@@ -123,12 +123,12 @@ export const ServeOpenAPIv3Response$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function serveOpenAPIv3ResponseFromJSON(
+export function serveSkillResponseFromJSON(
   jsonString: string,
-): SafeParseResult<ServeOpenAPIv3Response, SDKValidationError> {
+): SafeParseResult<ServeSkillResponse, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => ServeOpenAPIv3Response$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'ServeOpenAPIv3Response' from JSON`,
+    (x) => ServeSkillResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ServeSkillResponse' from JSON`,
   );
 }

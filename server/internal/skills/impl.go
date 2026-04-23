@@ -1,7 +1,6 @@
 package skills
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -635,7 +634,7 @@ func (s *Service) RejectVersion(ctx context.Context, payload *gen.RejectVersionP
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid version id")
 	}
 
-	reason := strings.TrimSpace(conv.PtrValOr(payload.Reason, ""))
+	reason := strings.TrimSpace(payload.Reason)
 	if reason == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "reject reason is required")
 	}
@@ -1069,9 +1068,12 @@ func (s *Service) CaptureClaude(ctx context.Context, payload *gen.CaptureClaudeP
 	return s.captureWithAuthorizedContext(authorizedCtx, authCtx, capturePayload, reader)
 }
 
-func (s *Service) UploadManual(ctx context.Context, payload *gen.UploadManualPayload) (*gen.CaptureSkillResult, error) {
+func (s *Service) UploadManual(ctx context.Context, payload *gen.UploadManualPayload, reader io.ReadCloser) (*gen.CaptureSkillResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		defer o11y.LogDefer(ctx, s.logger, func() error {
+			return reader.Close()
+		})
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
@@ -1094,7 +1096,7 @@ func (s *Service) UploadManual(ctx context.Context, payload *gen.UploadManualPay
 		ContentLength:    payload.ContentLength,
 	}
 
-	return s.captureWithAuthorizedContext(ctx, authCtx, capturePayload, io.NopCloser(bytes.NewReader(payload.RequestBody)))
+	return s.captureWithAuthorizedContext(ctx, authCtx, capturePayload, reader)
 }
 
 func (s *Service) getCaptureSettings(ctx context.Context, organizationID string, projectID uuid.UUID) (*gen.SkillCaptureSettings, error) {

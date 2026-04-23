@@ -4767,26 +4767,23 @@ func NewCaptureClaudePayload(claudeSessionID string, name string, scope string, 
 }
 
 // NewUploadManualPayload builds a skills service uploadManual endpoint payload.
-func NewUploadManualPayload(body []byte, sessionToken *string, projectSlugInput *string, name string, scope string, discoveryRoot string, sourceType string, contentSha256 string, assetFormat string, resolutionStatus string, skillID *string, skillVersionID *string, contentType string, contentLength int64) *skills.UploadManualPayload {
-	v := body
-	res := &skills.UploadManualPayload{
-		RequestBody: v,
-	}
-	res.SessionToken = sessionToken
-	res.ProjectSlugInput = projectSlugInput
-	res.Name = name
-	res.Scope = scope
-	res.DiscoveryRoot = discoveryRoot
-	res.SourceType = sourceType
-	res.ContentSha256 = contentSha256
-	res.AssetFormat = assetFormat
-	res.ResolutionStatus = resolutionStatus
-	res.SkillID = skillID
-	res.SkillVersionID = skillVersionID
-	res.ContentType = contentType
-	res.ContentLength = contentLength
+func NewUploadManualPayload(sessionToken *string, projectSlugInput *string, name string, scope string, discoveryRoot string, sourceType string, contentSha256 string, assetFormat string, resolutionStatus string, skillID *string, skillVersionID *string, contentType string, contentLength int64) *skills.UploadManualPayload {
+	v := &skills.UploadManualPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.Name = name
+	v.Scope = scope
+	v.DiscoveryRoot = discoveryRoot
+	v.SourceType = sourceType
+	v.ContentSha256 = contentSha256
+	v.AssetFormat = assetFormat
+	v.ResolutionStatus = resolutionStatus
+	v.SkillID = skillID
+	v.SkillVersionID = skillVersionID
+	v.ContentType = contentType
+	v.ContentLength = contentLength
 
-	return res
+	return v
 }
 
 // NewListVersionsPayload builds a skills service listVersions endpoint payload.
@@ -4837,7 +4834,7 @@ func NewSupersedeVersionPayload(body *SupersedeVersionRequestBody, sessionToken 
 func NewRejectVersionPayload(body *RejectVersionRequestBody, sessionToken *string, projectSlugInput *string) *skills.RejectVersionPayload {
 	v := &skills.RejectVersionPayload{
 		VersionID: *body.VersionID,
-		Reason:    body.Reason,
+		Reason:    *body.Reason,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -4894,6 +4891,9 @@ func ValidateSupersedeVersionRequestBody(body *SupersedeVersionRequestBody) (err
 func ValidateRejectVersionRequestBody(body *RejectVersionRequestBody) (err error) {
 	if body.VersionID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version_id", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
 	if body.Reason != nil {
 		if utf8.RuneCountInString(*body.Reason) > 2000 {

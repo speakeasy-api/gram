@@ -100,6 +100,7 @@ export function SkillUploadDialog({
           ...(lineageMode === "existing"
             ? { xGramSkillId: existingSkillId }
             : {}),
+          contentType: file.type || "application/zip",
           contentLength: file.size,
           requestBody: file,
         },

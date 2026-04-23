@@ -276,7 +276,7 @@ func TestService_RejectVersion_UpdatesStateAndReason(t *testing.T) {
 	reason := "Contains organization-specific secrets"
 	result, err := ti.service.RejectVersion(ctx, &gen.RejectVersionPayload{
 		VersionID:        version.ID.String(),
-		Reason:           &reason,
+		Reason:           reason,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
@@ -326,7 +326,7 @@ func TestService_RejectVersion_RejectsNonPendingVersion(t *testing.T) {
 	reason := "Rejected by reviewer"
 	_, err := ti.service.RejectVersion(ctx, &gen.RejectVersionPayload{
 		VersionID:        version.ID.String(),
-		Reason:           &reason,
+		Reason:           reason,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
@@ -360,7 +360,7 @@ func TestService_RejectVersion_RejectsMissingReason(t *testing.T) {
 
 	_, err := ti.service.RejectVersion(ctx, &gen.RejectVersionPayload{
 		VersionID:        version.ID.String(),
-		Reason:           nil,
+		Reason:           "",
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
@@ -395,7 +395,7 @@ func TestService_RejectVersion_RejectsWhitespaceReason(t *testing.T) {
 	reason := "   \n  \t "
 	_, err := ti.service.RejectVersion(ctx, &gen.RejectVersionPayload{
 		VersionID:        version.ID.String(),
-		Reason:           &reason,
+		Reason:           reason,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})

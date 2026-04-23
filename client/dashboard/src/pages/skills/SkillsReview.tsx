@@ -4,6 +4,7 @@ import {
   invalidateAllSkillsListVersions,
   useSkillsApproveVersionMutation,
   useSkillsListPending,
+  useSkillsListVersions,
   useSkillsRejectVersionMutation,
 } from "@gram/client/react-query";
 import { useMemo, useState } from "react";
@@ -83,11 +84,8 @@ function SkillsReviewInner() {
   });
 
   const rows = useMemo(() => {
-    return (data?.skills ?? []).flatMap((entry) => {
-      const activeVersion =
-        entry.versions.find((version) => version.state === "active") ?? null;
-
-      return entry.versions.map((version) => ({
+    return (data?.skills ?? []).flatMap((entry) =>
+      entry.versions.map((version) => ({
         skillId: entry.skill.id,
         skillSlug: entry.skill.slug,
         skillName: entry.skill.name,
@@ -97,10 +95,9 @@ function SkillsReviewInner() {
         sizeBytes: version.sizeBytes,
         createdAt: version.createdAt,
         assetId: version.assetId,
-        activeVersionId: activeVersion?.id ?? null,
-        activeAssetId: activeVersion?.assetId ?? null,
-      }));
-    });
+        activeVersionId: entry.skill.activeVersionId ?? null,
+      })),
+    );
   }, [data?.skills]);
 
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(
@@ -109,6 +106,34 @@ function SkillsReviewInner() {
 
   const selectedRow =
     rows.find((row) => row.versionId === selectedVersionId) ?? rows[0] ?? null;
+
+  const selectedSkillVersionsQuery = useSkillsListVersions(
+    {
+      skillId: selectedRow?.skillId ?? "",
+    },
+    undefined,
+    {
+      enabled: Boolean(selectedRow?.skillId && selectedRow?.activeVersionId),
+    },
+  );
+
+  const selectedSkillActiveVersion = useMemo(() => {
+    if (!selectedRow?.activeVersionId) {
+      return null;
+    }
+
+    return (
+      selectedSkillVersionsQuery.data?.versions.find(
+        (version) => version.id === selectedRow.activeVersionId,
+      ) ?? null
+    );
+  }, [selectedRow?.activeVersionId, selectedSkillVersionsQuery.data?.versions]);
+
+  const shouldWaitForBaseline = Boolean(
+    selectedRow?.activeVersionId &&
+    selectedRow.activeVersionId !== selectedRow.versionId &&
+    selectedSkillVersionsQuery.isPending,
+  );
 
   const handleApprove = (versionId: string) => {
     approveMutation.mutate({
@@ -292,7 +317,7 @@ function SkillsReviewInner() {
           <SkillVersionDiffPanel
             projectId={project.id}
             target={
-              selectedRow
+              selectedRow && !shouldWaitForBaseline
                 ? {
                     versionId: selectedRow.versionId,
                     assetId: selectedRow.assetId,
@@ -302,10 +327,11 @@ function SkillsReviewInner() {
             }
             baseline={
               selectedRow?.activeVersionId &&
-              selectedRow.activeVersionId !== selectedRow.versionId
+              selectedRow.activeVersionId !== selectedRow.versionId &&
+              selectedSkillVersionsQuery.isSuccess
                 ? {
                     versionId: selectedRow.activeVersionId,
-                    assetId: selectedRow.activeAssetId,
+                    assetId: selectedSkillActiveVersion?.assetId,
                     label: "Active version",
                   }
                 : null

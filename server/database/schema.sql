@@ -257,6 +257,20 @@ CREATE TABLE IF NOT EXISTS skill_versions (
   rejected_by_user_id TEXT CHECK (rejected_by_user_id <> '' AND CHAR_LENGTH(rejected_by_user_id) <= 255),
   rejected_reason TEXT CHECK (rejected_reason <> '' AND CHAR_LENGTH(rejected_reason) <= 2000),
   rejected_at timestamptz,
+  CONSTRAINT skill_versions_rejected_fields_check CHECK (
+    (
+      state = 'rejected'
+      AND rejected_by_user_id IS NOT NULL
+      AND rejected_reason IS NOT NULL
+      AND rejected_at IS NOT NULL
+    )
+    OR (
+      state <> 'rejected'
+      AND rejected_by_user_id IS NULL
+      AND rejected_reason IS NULL
+      AND rejected_at IS NULL
+    )
+  ),
   first_seen_trace_id TEXT CHECK (first_seen_trace_id <> '' AND CHAR_LENGTH(first_seen_trace_id) <= 100),
   first_seen_session_id TEXT CHECK (first_seen_session_id <> '' AND CHAR_LENGTH(first_seen_session_id) <= 100),
 

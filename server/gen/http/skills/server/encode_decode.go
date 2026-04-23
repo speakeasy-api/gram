@@ -1459,22 +1459,6 @@ func DecodeUploadManualRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 	return func(r *http.Request) (*skills.UploadManualPayload, error) {
 		var payload *skills.UploadManualPayload
 		var (
-			body []byte
-			err  error
-		)
-		err = decoder(r).Decode(&body)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return payload, goa.MissingPayloadError()
-			}
-			var gerr *goa.ServiceError
-			if errors.As(err, &gerr) {
-				return payload, gerr
-			}
-			return payload, goa.DecodePayloadError(err.Error())
-		}
-
-		var (
 			sessionToken     *string
 			projectSlugInput *string
 			name             string
@@ -1488,6 +1472,7 @@ func DecodeUploadManualRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 			skillVersionID   *string
 			contentType      string
 			contentLength    int64
+			err              error
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -1573,7 +1558,7 @@ func DecodeUploadManualRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if err != nil {
 			return payload, err
 		}
-		payload = NewUploadManualPayload(body, sessionToken, projectSlugInput, name, scope, discoveryRoot, sourceType, contentSha256, assetFormat, resolutionStatus, skillID, skillVersionID, contentType, contentLength)
+		payload = NewUploadManualPayload(sessionToken, projectSlugInput, name, scope, discoveryRoot, sourceType, contentSha256, assetFormat, resolutionStatus, skillID, skillVersionID, contentType, contentLength)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

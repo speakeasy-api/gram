@@ -162,6 +162,7 @@ export * from "./serveChatAttachmentSigned.js";
 export * from "./serveFunction.js";
 export * from "./serveImage.js";
 export * from "./serveOpenAPIv3.js";
+export * from "./serveSkill.js";
 export * from "./sessionInfo.js";
 export * from "./setPluginAssignments.js";
 export * from "./setProjectLogo.js";

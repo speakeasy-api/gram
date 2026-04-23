@@ -33,7 +33,7 @@ type Service interface {
 	CaptureClaude(context.Context, *CaptureClaudePayload, io.ReadCloser) (res *CaptureSkillResult, err error)
 	// Upload a skill artifact manually using session authentication. Always
 	// ingests as pending review.
-	UploadManual(context.Context, *UploadManualPayload) (res *CaptureSkillResult, err error)
+	UploadManual(context.Context, *UploadManualPayload, io.ReadCloser) (res *CaptureSkillResult, err error)
 	// List captured versions for a skill.
 	ListVersions(context.Context, *ListVersionsPayload) (res *ListSkillVersionsResult, err error)
 	// List skills and versions that are pending review.
@@ -197,7 +197,7 @@ type PendingSkillEntry struct {
 // method.
 type RejectVersionPayload struct {
 	VersionID        string
-	Reason           *string
+	Reason           string
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -292,7 +292,6 @@ type SupersedeVersionPayload struct {
 // UploadManualPayload is the payload type of the skills service uploadManual
 // method.
 type UploadManualPayload struct {
-	RequestBody      []byte
 	SessionToken     *string
 	ProjectSlugInput *string
 	Name             string

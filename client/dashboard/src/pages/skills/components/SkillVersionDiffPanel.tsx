@@ -52,6 +52,7 @@ type DiffResult = {
 };
 
 const MAX_COMPRESSED_ZIP_BYTES = 10 * 1024 * 1024;
+const MAX_DECOMPRESSED_ZIP_BYTES = 25 * 1024 * 1024;
 const MAX_FILES_PER_ARCHIVE = 1000;
 const MAX_PER_FILE_INLINE_TEXT_BYTES = 512 * 1024;
 const MAX_TOTAL_INLINE_TEXT_BYTES = 3 * 1024 * 1024;
@@ -155,8 +156,8 @@ export function SkillVersionDiffPanel({
       <div className="mb-3">
         <Type variant="subheading">Version diff</Type>
         <Type small muted>
-          {query.data?.targetLabel ?? target?.label ?? "Selected version"} →{" "}
-          {query.data?.baselineLabel ?? baseline?.label ?? "No active version"}
+          {query.data?.baselineLabel ?? baseline?.label ?? "No active version"}{" "}
+          → {query.data?.targetLabel ?? target?.label ?? "Selected version"}
         </Type>
       </div>
 
@@ -340,6 +341,18 @@ async function unzipFiles(
   zipBytes: Uint8Array,
   label: string,
 ): Promise<Map<string, ZipFile>> {
+  const declared = readZipDeclaredStats(zipBytes, label);
+  if (declared.fileCount > MAX_FILES_PER_ARCHIVE) {
+    throw new GuardrailError(
+      `${label} archive exceeds ${MAX_FILES_PER_ARCHIVE} file limit`,
+    );
+  }
+  if (declared.totalUncompressedBytes > MAX_DECOMPRESSED_ZIP_BYTES) {
+    throw new GuardrailError(
+      `${label} archive exceeds ${formatBytes(MAX_DECOMPRESSED_ZIP_BYTES)} decompressed limit`,
+    );
+  }
+
   const { unzipSync } = await import("fflate");
   let unzipped: Record<string, Uint8Array>;
 
@@ -354,10 +367,19 @@ async function unzipFiles(
   }
 
   const files = new Map<string, ZipFile>();
+  let totalDecompressedBytes = 0;
+
   for (const [rawPath, bytes] of Object.entries(unzipped)) {
     const path = normalizePath(rawPath);
     if (!path || path.endsWith("/")) {
       continue;
+    }
+
+    totalDecompressedBytes += bytes.byteLength;
+    if (totalDecompressedBytes > MAX_DECOMPRESSED_ZIP_BYTES) {
+      throw new GuardrailError(
+        `${label} archive exceeds ${formatBytes(MAX_DECOMPRESSED_ZIP_BYTES)} decompressed limit`,
+      );
     }
 
     files.set(path, {
@@ -460,6 +482,97 @@ function buildDiffResult({
     entries,
     summary: { added, changed, removed, unchanged },
   };
+}
+
+function readZipDeclaredStats(
+  zipBytes: Uint8Array,
+  label: string,
+): { fileCount: number; totalUncompressedBytes: number } {
+  const eocdSignature = 0x06054b50;
+  const centralSignature = 0x02014b50;
+  const minEocdSize = 22;
+
+  if (zipBytes.byteLength < minEocdSize) {
+    throw new Error(`Could not read ${label} archive: invalid zip`);
+  }
+
+  const view = new DataView(
+    zipBytes.buffer,
+    zipBytes.byteOffset,
+    zipBytes.byteLength,
+  );
+
+  let eocdOffset = -1;
+  const searchStart = Math.max(0, zipBytes.byteLength - (0xffff + minEocdSize));
+  for (let i = zipBytes.byteLength - minEocdSize; i >= searchStart; i -= 1) {
+    if (view.getUint32(i, true) === eocdSignature) {
+      eocdOffset = i;
+      break;
+    }
+  }
+
+  if (eocdOffset < 0) {
+    throw new Error(`Could not read ${label} archive: missing EOCD`);
+  }
+
+  const totalEntries = view.getUint16(eocdOffset + 10, true);
+  const centralDirectorySize = view.getUint32(eocdOffset + 12, true);
+  const centralDirectoryOffset = view.getUint32(eocdOffset + 16, true);
+
+  if (
+    totalEntries === 0xffff ||
+    centralDirectorySize === 0xffffffff ||
+    centralDirectoryOffset === 0xffffffff
+  ) {
+    throw new GuardrailError(`${label} archive uses unsupported ZIP64 format`);
+  }
+
+  if (
+    centralDirectoryOffset + centralDirectorySize > zipBytes.byteLength ||
+    centralDirectoryOffset < 0
+  ) {
+    throw new Error(
+      `Could not read ${label} archive: invalid central directory`,
+    );
+  }
+
+  let fileCount = 0;
+  let totalUncompressedBytes = 0;
+  let ptr = centralDirectoryOffset;
+  const centralEnd = centralDirectoryOffset + centralDirectorySize;
+
+  while (ptr < centralEnd) {
+    if (ptr + 46 > centralEnd) {
+      throw new Error(
+        `Could not read ${label} archive: truncated central entry`,
+      );
+    }
+    if (view.getUint32(ptr, true) !== centralSignature) {
+      throw new Error(`Could not read ${label} archive: invalid central entry`);
+    }
+
+    const uncompressedSize = view.getUint32(ptr + 24, true);
+    const nameLength = view.getUint16(ptr + 28, true);
+    const extraLength = view.getUint16(ptr + 30, true);
+    const commentLength = view.getUint16(ptr + 32, true);
+
+    fileCount += 1;
+    totalUncompressedBytes += uncompressedSize;
+
+    ptr += 46 + nameLength + extraLength + commentLength;
+  }
+
+  if (ptr !== centralEnd) {
+    throw new Error(
+      `Could not read ${label} archive: malformed central directory`,
+    );
+  }
+
+  if (fileCount !== totalEntries) {
+    throw new Error(`Could not read ${label} archive: entry count mismatch`);
+  }
+
+  return { fileCount, totalUncompressedBytes };
 }
 
 function normalizePath(path: string): string {

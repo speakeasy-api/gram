@@ -167,6 +167,7 @@ export * from "./servechatattachmentsigned.js";
 export * from "./servefunction.js";
 export * from "./serveimage.js";
 export * from "./serveopenapiv3.js";
+export * from "./serveskill.js";
 export * from "./sessioninfo.js";
 export * from "./setmcpmetadata.js";
 export * from "./setorganizationwhitelist.js";

@@ -948,7 +948,6 @@ func ParseEndpoint(
 		skillsCaptureClaudeStreamFlag           = skillsCaptureClaudeFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
 		skillsUploadManualFlags                = flag.NewFlagSet("upload-manual", flag.ExitOnError)
-		skillsUploadManualBodyFlag             = skillsUploadManualFlags.String("body", "REQUIRED", "")
 		skillsUploadManualSessionTokenFlag     = skillsUploadManualFlags.String("session-token", "", "")
 		skillsUploadManualProjectSlugInputFlag = skillsUploadManualFlags.String("project-slug-input", "", "")
 		skillsUploadManualNameFlag             = skillsUploadManualFlags.String("name", "REQUIRED", "")
@@ -962,6 +961,7 @@ func ParseEndpoint(
 		skillsUploadManualSkillVersionIDFlag   = skillsUploadManualFlags.String("skill-version-id", "", "")
 		skillsUploadManualContentTypeFlag      = skillsUploadManualFlags.String("content-type", "REQUIRED", "")
 		skillsUploadManualContentLengthFlag    = skillsUploadManualFlags.String("content-length", "REQUIRED", "")
+		skillsUploadManualStreamFlag           = skillsUploadManualFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
 		skillsListVersionsFlags                = flag.NewFlagSet("list-versions", flag.ExitOnError)
 		skillsListVersionsSkillIDFlag          = skillsListVersionsFlags.String("skill-id", "REQUIRED", "")
@@ -3034,7 +3034,10 @@ func ParseEndpoint(
 				}
 			case "upload-manual":
 				endpoint = c.UploadManual()
-				data, err = skillsc.BuildUploadManualPayload(*skillsUploadManualBodyFlag, *skillsUploadManualSessionTokenFlag, *skillsUploadManualProjectSlugInputFlag, *skillsUploadManualNameFlag, *skillsUploadManualScopeFlag, *skillsUploadManualDiscoveryRootFlag, *skillsUploadManualSourceTypeFlag, *skillsUploadManualContentSha256Flag, *skillsUploadManualAssetFormatFlag, *skillsUploadManualResolutionStatusFlag, *skillsUploadManualSkillIDFlag, *skillsUploadManualSkillVersionIDFlag, *skillsUploadManualContentTypeFlag, *skillsUploadManualContentLengthFlag)
+				data, err = skillsc.BuildUploadManualPayload(*skillsUploadManualSessionTokenFlag, *skillsUploadManualProjectSlugInputFlag, *skillsUploadManualNameFlag, *skillsUploadManualScopeFlag, *skillsUploadManualDiscoveryRootFlag, *skillsUploadManualSourceTypeFlag, *skillsUploadManualContentSha256Flag, *skillsUploadManualAssetFormatFlag, *skillsUploadManualResolutionStatusFlag, *skillsUploadManualSkillIDFlag, *skillsUploadManualSkillVersionIDFlag, *skillsUploadManualContentTypeFlag, *skillsUploadManualContentLengthFlag)
+				if err == nil {
+					data, err = skillsc.BuildUploadManualStreamPayload(data, *skillsUploadManualStreamFlag)
+				}
 			case "list-versions":
 				endpoint = c.ListVersions()
 				data, err = skillsc.BuildListVersionsPayload(*skillsListVersionsSkillIDFlag, *skillsListVersionsSessionTokenFlag, *skillsListVersionsProjectSlugInputFlag)
@@ -6965,7 +6968,6 @@ func skillsCaptureClaudeUsage() {
 func skillsUploadManualUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] skills upload-manual", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprint(os.Stderr, " -name STRING")
@@ -6979,6 +6981,7 @@ func skillsUploadManualUsage() {
 	fmt.Fprint(os.Stderr, " -skill-version-id STRING")
 	fmt.Fprint(os.Stderr, " -content-type STRING")
 	fmt.Fprint(os.Stderr, " -content-length INT64")
+	fmt.Fprint(os.Stderr, " -stream STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -6986,7 +6989,6 @@ func skillsUploadManualUsage() {
 	fmt.Fprintln(os.Stderr, `Upload a skill artifact manually using session authentication. Always ingests as pending review.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 	fmt.Fprintln(os.Stderr, `    -name STRING: `)
@@ -7000,10 +7002,11 @@ func skillsUploadManualUsage() {
 	fmt.Fprintln(os.Stderr, `    -skill-version-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -content-type STRING: `)
 	fmt.Fprintln(os.Stderr, `    -content-length INT64: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills upload-manual --body \"YWJjMTIz\" --session-token \"abc123\" --project-slug-input \"abc123\" --name \"aa\" --scope \"user\" --discovery-root \"project_claude\" --source-type \"manual_upload\" --content-sha256 \"1111111111111111111111111111111111111111111111111111111111111111\" --asset-format \"zip\" --resolution-status \"unresolved_name_only\" --skill-id \"abc123\" --skill-version-id \"abc123\" --content-type \"abc123\" --content-length 1")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills upload-manual --session-token \"abc123\" --project-slug-input \"abc123\" --name \"aa\" --scope \"user\" --discovery-root \"project_claude\" --source-type \"manual_upload\" --content-sha256 \"1111111111111111111111111111111111111111111111111111111111111111\" --asset-format \"zip\" --resolution-status \"unresolved_name_only\" --skill-id \"abc123\" --skill-version-id \"abc123\" --content-type \"abc123\" --content-length 1 --stream \"goa.png\"")
 }
 
 func skillsListVersionsUsage() {

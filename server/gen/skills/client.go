@@ -195,9 +195,9 @@ func (c *Client) CaptureClaude(ctx context.Context, p *CaptureClaudePayload, req
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) UploadManual(ctx context.Context, p *UploadManualPayload) (res *CaptureSkillResult, err error) {
+func (c *Client) UploadManual(ctx context.Context, p *UploadManualPayload, req io.ReadCloser) (res *CaptureSkillResult, err error) {
 	var ires any
-	ires, err = c.UploadManualEndpoint(ctx, p)
+	ires, err = c.UploadManualEndpoint(ctx, &UploadManualRequestData{Payload: p, Body: req})
 	if err != nil {
 		return
 	}

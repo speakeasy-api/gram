@@ -172,8 +172,6 @@ var _ = Service("skills", func() {
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
-			Required("request_body")
-			Attribute("request_body", Bytes)
 			Extend(CaptureSkillCoreForm)
 			security.SessionPayload()
 			security.ProjectPayload()
@@ -195,7 +193,7 @@ var _ = Service("skills", func() {
 			Header("skill_version_id:X-Gram-Skill-Version-Id")
 			Header("content_type:Content-Type")
 			Header("content_length:Content-Length")
-			Body("request_body")
+			SkipRequestBodyEncodeDecode()
 		})
 
 		Meta("openapi:operationId", "uploadManualSkill")
@@ -300,7 +298,7 @@ var _ = Service("skills", func() {
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
-			Required("version_id")
+			Required("version_id", "reason")
 			Attribute("version_id", String)
 			Attribute("reason", String, func() {
 				MaxLength(2000)

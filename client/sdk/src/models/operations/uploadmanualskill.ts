@@ -3,8 +3,9 @@
  */
 
 import * as z from "zod/v4-mini";
-import { remap as remap$ } from "../../lib/primitives.js";
+
 import { ClosedEnum } from "../../types/enums.js";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UploadManualSkillSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -75,6 +76,7 @@ export type UploadManualSkillRequest = {
   xGramSkillResolutionStatus: UploadManualSkillHeaderXGramSkillResolutionStatus;
   xGramSkillId?: string | undefined;
   xGramSkillVersionId?: string | undefined;
+  contentType: string;
   contentLength: number;
   requestBody: ReadableStream<Uint8Array> | Blob | ArrayBuffer | Uint8Array;
 };
@@ -152,6 +154,7 @@ export type UploadManualSkillRequest$Outbound = {
   "X-Gram-Skill-Resolution-Status": string;
   "X-Gram-Skill-Id"?: string | undefined;
   "X-Gram-Skill-Version-Id"?: string | undefined;
+  "Content-Type": string;
   "Content-Length": number;
   RequestBody: ReadableStream<Uint8Array> | Blob | ArrayBuffer | Uint8Array;
 };
@@ -177,6 +180,7 @@ export const UploadManualSkillRequest$outboundSchema: z.ZodMiniType<
       UploadManualSkillHeaderXGramSkillResolutionStatus$outboundSchema,
     xGramSkillId: z.optional(z.string()),
     xGramSkillVersionId: z.optional(z.string()),
+    contentType: z.string(),
     contentLength: z.int(),
     requestBody: z.union([
       z.custom<ReadableStream<Uint8Array>>(x => x instanceof ReadableStream),
@@ -198,6 +202,7 @@ export const UploadManualSkillRequest$outboundSchema: z.ZodMiniType<
       xGramSkillResolutionStatus: "X-Gram-Skill-Resolution-Status",
       xGramSkillId: "X-Gram-Skill-Id",
       xGramSkillVersionId: "X-Gram-Skill-Version-Id",
+      contentType: "Content-Type",
       contentLength: "Content-Length",
       requestBody: "RequestBody",
     });

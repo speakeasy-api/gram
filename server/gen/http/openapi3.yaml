@@ -14738,13 +14738,6 @@ paths:
                   schema:
                     format: int64
                     type: integer
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            format: binary
-                            type: string
-                required: true
             responses:
                 "200":
                     content:
@@ -26591,6 +26584,7 @@ components:
                     type: string
             required:
                 - version_id
+                - reason
         RemoteMcpServer:
             type: object
             properties:

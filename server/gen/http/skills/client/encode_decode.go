@@ -1564,8 +1564,16 @@ func BuildCaptureClaudeStreamPayload(payload any, fpath string) (*skills.Capture
 // BuildUploadManualRequest instantiates a HTTP request object with method and
 // path set to call the "skills" service "uploadManual" endpoint
 func (c *Client) BuildUploadManualRequest(ctx context.Context, v any) (*http.Request, error) {
+	var (
+		body io.Reader
+	)
+	rd, ok := v.(*skills.UploadManualRequestData)
+	if !ok {
+		return nil, goahttp.ErrInvalidType("skills", "uploadManual", "skills.UploadManualRequestData", v)
+	}
+	body = rd.Body
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UploadManualSkillsPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
+	req, err := http.NewRequest("POST", u.String(), body)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("skills", "uploadManual", u.String(), err)
 	}
@@ -1580,10 +1588,11 @@ func (c *Client) BuildUploadManualRequest(ctx context.Context, v any) (*http.Req
 // uploadManual server.
 func EncodeUploadManualRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*skills.UploadManualPayload)
+		data, ok := v.(*skills.UploadManualRequestData)
 		if !ok {
-			return goahttp.ErrInvalidType("skills", "uploadManual", "*skills.UploadManualPayload", v)
+			return goahttp.ErrInvalidType("skills", "uploadManual", "*skills.UploadManualRequestData", v)
 		}
+		p := data.Payload
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -1636,10 +1645,6 @@ func EncodeUploadManualRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := p.ContentLength
 			headStr := strconv.FormatInt(head, 10)
 			req.Header.Set("Content-Length", headStr)
-		}
-		body := p.RequestBody
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("skills", "uploadManual", err)
 		}
 		return nil
 	}
@@ -1842,6 +1847,19 @@ func DecodeUploadManualResponse(decoder func(*http.Response) goahttp.Decoder, re
 			return nil, goahttp.ErrInvalidResponse("skills", "uploadManual", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// // BuildUploadManualStreamPayload creates a streaming endpoint request payload
+// from the method payload and the path to the file to be streamed
+func BuildUploadManualStreamPayload(payload any, fpath string) (*skills.UploadManualRequestData, error) {
+	f, err := os.Open(fpath)
+	if err != nil {
+		return nil, err
+	}
+	return &skills.UploadManualRequestData{
+		Payload: payload.(*skills.UploadManualPayload),
+		Body:    f,
+	}, nil
 }
 
 // BuildListVersionsRequest instantiates a HTTP request object with method and
