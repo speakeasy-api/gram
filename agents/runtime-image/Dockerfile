@@ -32,8 +32,9 @@ RUN target=node_modules/playwright-core/lib/utilsBundle.js \
 
 FROM debian:bookworm-slim AS lightpanda
 ARG TARGETARCH
-ARG LIGHTPANDA_SHA256_AMD64=87a757deaccc6cf4d69690c7f97422dcd7c99e58f462091d6b3afb6c23d4c58d
-ARG LIGHTPANDA_SHA256_ARM64=01871c43298026fcc164de3c2c284e8c8c5da0098b9926642bb2e4f0e6b3c0f0
+ARG LIGHTPANDA_VERSION=0.2.8
+ARG LIGHTPANDA_SHA256_AMD64=8e3a5e04cf508699990a78a0a8686ea3398912cd9891fda90513429b89230300
+ARG LIGHTPANDA_SHA256_ARM64=9f54f2cc31b0dadd867ba06ecce59f8aa59f7876394798e97882aea680b5ad19
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl \
   && rm -rf /var/lib/apt/lists/*
@@ -42,7 +43,7 @@ RUN case "${TARGETARCH:-amd64}" in \
       arm64) asset=lightpanda-aarch64-linux; sha=$LIGHTPANDA_SHA256_ARM64 ;; \
       *) echo "unsupported arch: ${TARGETARCH}" >&2; exit 1 ;; \
     esac \
- && curl -fsSL -o /lightpanda "https://github.com/lightpanda-io/browser/releases/download/nightly/${asset}" \
+ && curl -fsSL -o /lightpanda "https://github.com/lightpanda-io/browser/releases/download/${LIGHTPANDA_VERSION}/${asset}" \
  && echo "${sha}  /lightpanda" | sha256sum -c - \
  && chmod 0755 /lightpanda
 
