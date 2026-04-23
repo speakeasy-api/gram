@@ -10,6 +10,7 @@ import { Textarea } from "@/components/moon/textarea";
 import { Page } from "@/components/page-layout";
 import { PublicMcpWarningDialog } from "@/components/public-mcp-warning-dialog";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
+import { useExternalMcpOAuthStatus } from "@/components/sources/sources-hooks";
 import { ToolList } from "@/components/tool-list";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
@@ -224,6 +225,10 @@ function MCPDetailPageInner() {
     mcpMetadataForBadge,
   );
 
+  const externalMcpOAuthStatus = useExternalMcpOAuthStatus(toolsetSlug);
+  const oauthRequiredUnconfigured =
+    externalMcpOAuthStatus === "required-unconfigured";
+
   if (isLoading || !toolset) {
     return <MCPLoading />;
   }
@@ -345,7 +350,8 @@ function MCPDetailPageInner() {
                 <PageTabsTrigger value="authentication">
                   <span className="flex items-center gap-1.5">
                     Authentication
-                    {missingRequiredEnvVars > 0 && (
+                    {(missingRequiredEnvVars > 0 ||
+                      oauthRequiredUnconfigured) && (
                       <AlertTriangle className="text-warning h-3.5 w-3.5" />
                     )}
                   </span>

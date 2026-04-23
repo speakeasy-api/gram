@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
-import { useToolset } from "@/hooks/toolTypes";
 import {
   AlertTriangleIcon,
   ArrowRight,
@@ -16,55 +15,33 @@ import {
   Package,
 } from "lucide-react";
 import { useMemo } from "react";
-import { useCatalogAuthMap, useCatalogIconMap } from "../sources/sources-hooks";
+import {
+  useCatalogIconMap,
+  useExternalMcpOAuthStatus,
+} from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
   const { installPageUrl } = useMcpUrl(toolset);
   const catalogIconMap = useCatalogIconMap();
-  const serverAuthMap = useCatalogAuthMap();
   const { data: deploymentResult } = useLatestDeployment();
-  const { data: fullToolset } = useToolset(toolset.slug);
+  const oauthStatus = useExternalMcpOAuthStatus(toolset.slug);
 
-  // Check if this toolset uses an external MCP and get its info
-  const externalMcpInfo = useMemo(() => {
+  const externalMcpLogoUrl = useMemo(() => {
     const externalMcpUrn = toolset.toolUrns?.find((urn) =>
       urn.includes(":externalmcp:"),
     );
-    if (!externalMcpUrn) return null;
+    const slug = externalMcpUrn?.split(":")[2];
+    if (!slug) return undefined;
 
-    const parts = externalMcpUrn.split(":");
-    const slug = parts[2];
-    if (!slug) return null;
-
-    const externalMcps = deploymentResult?.deployment?.externalMcps ?? [];
-    const matchingMcp = externalMcps.find((mcp) => mcp.slug === slug);
-
-    const logoUrl = matchingMcp?.registryServerSpecifier
+    const matchingMcp = deploymentResult?.deployment?.externalMcps?.find(
+      (mcp) => mcp.slug === slug,
+    );
+    return matchingMcp?.registryServerSpecifier
       ? catalogIconMap.get(matchingMcp.registryServerSpecifier)
       : undefined;
-
-    let authStatus: "unconfigured" | "configured" | null = null;
-    const authType = matchingMcp?.registryServerSpecifier
-      ? serverAuthMap.get(matchingMcp.registryServerSpecifier)
-      : undefined;
-
-    if (authType === "oauth") {
-      authStatus =
-        fullToolset?.externalOauthServer || fullToolset?.oauthProxyServer
-          ? "configured"
-          : "unconfigured";
-    }
-
-    return { slug, logoUrl, authStatus };
-  }, [
-    toolset.toolUrns,
-    catalogIconMap,
-    deploymentResult,
-    serverAuthMap,
-    fullToolset,
-  ]);
+  }, [toolset.toolUrns, catalogIconMap, deploymentResult]);
 
   // Pulse indicator for status
   const getStatusConfig = () => {
@@ -116,9 +93,9 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
       className="cursor-pointer"
       onClick={() => routes.mcp.details.goTo(toolset.slug)}
       icon={
-        externalMcpInfo?.logoUrl ? (
+        externalMcpLogoUrl ? (
           <img
-            src={externalMcpInfo.logoUrl}
+            src={externalMcpLogoUrl}
             alt={toolset.name}
             className="h-12 w-12 object-contain"
           />
@@ -138,7 +115,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
           {toolset.name}
         </Type>
         <div className="flex items-center gap-1">
-          {externalMcpInfo?.authStatus === "unconfigured" && (
+          {oauthStatus === "required-unconfigured" && (
             <Button
               type="button"
               variant="ghost"

@@ -1,3 +1,4 @@
+import { useToolset } from "@/hooks/toolTypes";
 import { useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
 import {
   PulseMcpAuthType,
@@ -64,4 +65,44 @@ export const useCatalogServerAuthType = (
 ): PulseMcpAuthType | null => {
   const authMap = useCatalogAuthMap();
   return authMap.get(registrySpecifier) ?? null;
+};
+
+export type ExternalMcpOAuthStatus =
+  | "required-unconfigured"
+  | "configured"
+  | "not-required"
+  | "not-external-mcp";
+
+export const useExternalMcpOAuthStatus = (
+  toolsetSlug: string | undefined,
+): ExternalMcpOAuthStatus => {
+  const { data: toolset } = useToolset(toolsetSlug);
+  const { data: deploymentResult } = useLatestDeployment();
+  const serverAuthMap = useCatalogAuthMap();
+
+  return useMemo<ExternalMcpOAuthStatus>(() => {
+    if (!toolset) return "not-external-mcp";
+
+    const externalMcpUrn = toolset.toolUrns?.find((urn) =>
+      urn.includes(":externalmcp:"),
+    );
+    if (!externalMcpUrn) return "not-external-mcp";
+
+    const slug = externalMcpUrn.split(":")[2];
+    if (!slug) return "not-external-mcp";
+
+    const matchingMcp = deploymentResult?.deployment?.externalMcps?.find(
+      (m) => m.slug === slug,
+    );
+    const authType = matchingMcp?.registryServerSpecifier
+      ? serverAuthMap.get(matchingMcp.registryServerSpecifier)
+      : undefined;
+    console.log(matchingMcp?.registryServerSpecifier, authType);
+
+    if (authType !== "oauth") return "not-required";
+
+    return toolset.externalOauthServer || toolset.oauthProxyServer
+      ? "configured"
+      : "required-unconfigured";
+  }, [toolset, deploymentResult, serverAuthMap]);
 };
