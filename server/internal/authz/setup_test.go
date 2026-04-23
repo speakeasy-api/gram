@@ -13,24 +13,23 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testinfra"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-var infra *testenv.Environment
+var cloneTestDatabase func(t *testing.T, name string) (*pgxpool.Pool, error)
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	container, cloneFunc, err := testinfra.NewTestPostgres(context.Background())
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 	}
-
-	infra = res
+	cloneTestDatabase = cloneFunc
 
 	code := m.Run()
 
-	if err := cleanup(); err != nil {
+	if err := container.Terminate(context.Background()); err != nil {
 		log.Fatalf("Failed to cleanup test infrastructure: %v", err)
 	}
 
@@ -59,7 +58,7 @@ func enterpriseTestCtx(ctx context.Context) context.Context {
 func newTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	conn, err := infra.CloneTestDatabase(t, "testdb")
+	conn, err := cloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
 	return conn

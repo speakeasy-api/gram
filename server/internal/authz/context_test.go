@@ -7,6 +7,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/testinfra"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -16,7 +17,7 @@ func TestPrepareContext_loadsUserGrants(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testinfra.NewLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -39,7 +40,7 @@ func TestPrepareContext_skipsNonSessionAuth(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testinfra.NewLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -59,7 +60,7 @@ func TestPrepareContext_skipsNonEnterpriseOrgs(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testinfra.NewLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
