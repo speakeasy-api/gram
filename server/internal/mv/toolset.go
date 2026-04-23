@@ -635,56 +635,67 @@ func GetToolsetsSummary(
 	variationsRepo := vr.New(tx)
 	extMCPRepo := externalmcpR.New(tx)
 
-	var httpTools []tr.FindHttpToolEntriesForProjectsRow
-	var funcTools []tr.FindFunctionToolEntriesForProjectsRow
-	var promptTools []templatesR.PeekTemplatesForProjectsRow
-	var variations []vr.FindGlobalVariationsForProjectsRow
-	var externalMCPTools []externalmcpR.FindExternalMCPToolEntriesForProjectsRow
+	httpToolsCh := make(chan []tr.FindHttpToolEntriesForProjectsRow, 1)
+	funcToolsCh := make(chan []tr.FindFunctionToolEntriesForProjectsRow, 1)
+	promptToolsCh := make(chan []templatesR.PeekTemplatesForProjectsRow, 1)
+	variationsCh := make(chan []vr.FindGlobalVariationsForProjectsRow, 1)
+	externalMCPToolsCh := make(chan []externalmcpR.FindExternalMCPToolEntriesForProjectsRow, 1)
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		var err error
-		httpTools, err = toolsRepo.FindHttpToolEntriesForProjects(egCtx, projectIDs)
+		rows, err := toolsRepo.FindHttpToolEntriesForProjects(egCtx, projectIDs)
 		if err != nil {
 			return fmt.Errorf("batch http tools: %w", err)
 		}
+		httpToolsCh <- rows
+		close(httpToolsCh)
 		return nil
 	})
 	eg.Go(func() error {
-		var err error
-		funcTools, err = toolsRepo.FindFunctionToolEntriesForProjects(egCtx, projectIDs)
+		rows, err := toolsRepo.FindFunctionToolEntriesForProjects(egCtx, projectIDs)
 		if err != nil {
 			return fmt.Errorf("batch function tools: %w", err)
 		}
+		funcToolsCh <- rows
+		close(funcToolsCh)
 		return nil
 	})
 	eg.Go(func() error {
-		var err error
-		promptTools, err = tplRepo.PeekTemplatesForProjects(egCtx, projectIDs)
+		rows, err := tplRepo.PeekTemplatesForProjects(egCtx, projectIDs)
 		if err != nil {
 			return fmt.Errorf("batch prompt tools: %w", err)
 		}
+		promptToolsCh <- rows
+		close(promptToolsCh)
 		return nil
 	})
 	eg.Go(func() error {
-		var err error
-		variations, err = variationsRepo.FindGlobalVariationsForProjects(egCtx, projectIDs)
+		rows, err := variationsRepo.FindGlobalVariationsForProjects(egCtx, projectIDs)
 		if err != nil {
 			return fmt.Errorf("batch variations: %w", err)
 		}
+		variationsCh <- rows
+		close(variationsCh)
 		return nil
 	})
 	eg.Go(func() error {
-		var err error
-		externalMCPTools, err = extMCPRepo.FindExternalMCPToolEntriesForProjects(egCtx, projectIDs)
+		rows, err := extMCPRepo.FindExternalMCPToolEntriesForProjects(egCtx, projectIDs)
 		if err != nil {
 			return fmt.Errorf("batch external mcp tools: %w", err)
 		}
+		externalMCPToolsCh <- rows
+		close(externalMCPToolsCh)
 		return nil
 	})
 	if err := eg.Wait(); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "batch fetch tool entries").Log(ctx, logger)
 	}
+
+	httpTools := <-httpToolsCh
+	funcTools := <-funcToolsCh
+	promptTools := <-promptToolsCh
+	variations := <-variationsCh
+	externalMCPTools := <-externalMCPToolsCh
 
 	// Build variation name overrides: projectID → toolURN → name.
 	variationNames := make(map[uuid.UUID]map[string]string)
