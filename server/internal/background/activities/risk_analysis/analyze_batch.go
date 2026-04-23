@@ -34,6 +34,9 @@ type AnalyzeBatch struct {
 }
 
 func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner) *AnalyzeBatch {
+	if piiScanner == nil {
+		piiScanner = &StubPIIScanner{}
+	}
 	return &AnalyzeBatch{
 		logger:     logger,
 		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),

@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -50,13 +52,53 @@ func NewPresidioClient(baseURL string, httpClient *http.Client) *PresidioClient 
 }
 
 func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string) ([][]Finding, error) {
-	results := make([][]Finding, len(texts))
-	for i, text := range texts {
-		findings, err := p.analyze(ctx, text)
-		if err != nil {
-			return nil, fmt.Errorf("presidio analyze text %d: %w", i, err)
-		}
-		results[i] = findings
+	n := len(texts)
+	if n == 0 {
+		return nil, nil
+	}
+
+	results := make([][]Finding, n)
+	workers := min(runtime.NumCPU(), n)
+
+	ch := make(chan int, n)
+	for i := range n {
+		ch <- i
+	}
+	close(ch)
+
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+		firstErr error
+	)
+
+	for range workers {
+		wg.Go(func() {
+			for idx := range ch {
+				mu.Lock()
+				failed := firstErr != nil
+				mu.Unlock()
+				if failed {
+					return
+				}
+
+				findings, err := p.analyze(ctx, texts[idx])
+				if err != nil {
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = fmt.Errorf("presidio analyze text %d: %w", idx, err)
+					}
+					mu.Unlock()
+					return
+				}
+				results[idx] = findings
+			}
+		})
+	}
+
+	wg.Wait()
+	if firstErr != nil {
+		return nil, firstErr
 	}
 	return results, nil
 }
@@ -92,18 +134,27 @@ func (p *PresidioClient) analyze(ctx context.Context, text string) ([]Finding, e
 		return nil, fmt.Errorf("decode presidio response: %w", err)
 	}
 
+	// Presidio returns character (rune) offsets, not byte offsets.
+	// Convert to runes for correct slicing, then map back to byte positions.
+	runes := []rune(text)
+
 	findings := make([]Finding, 0, len(results))
 	for _, r := range results {
 		match := ""
-		if r.Start >= 0 && r.End <= len(text) && r.Start < r.End {
-			match = text[r.Start:r.End]
+		if r.Start >= 0 && r.End >= r.Start && r.End <= len(runes) {
+			match = string(runes[r.Start:r.End])
 		}
+
+		// Convert rune offsets to byte offsets for storage.
+		startByte := len(string(runes[:r.Start]))
+		endByte := len(string(runes[:r.End]))
+
 		findings = append(findings, Finding{
 			RuleID:      r.EntityType,
 			Description: "PII detected: " + r.EntityType,
 			Match:       match,
-			StartPos:    r.Start,
-			EndPos:      r.End,
+			StartPos:    startByte,
+			EndPos:      endByte,
 			Tags:        []string{"pii", strings.ToLower(r.EntityType)},
 			Source:      "presidio",
 			Confidence:  r.Score,
