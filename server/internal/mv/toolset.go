@@ -786,7 +786,7 @@ func GetToolsetsSummary(
 	// Assemble results.
 	result := make([]*types.ToolsetSummary, 0, len(toolsets))
 	for _, ts := range toolsets {
-		var tools []*types.ToolEntry
+		tools := []*types.ToolEntry{}
 		if len(ts.LatestToolUrns) > 0 {
 			projectTools := toolsByProject[ts.ProjectID]
 			for _, u := range ts.LatestToolUrns {
@@ -794,9 +794,6 @@ func GetToolsetsSummary(
 					tools = append(tools, entry)
 				}
 			}
-		}
-		if tools == nil {
-			tools = []*types.ToolEntry{}
 		}
 
 		result = append(result, &types.ToolsetSummary{
