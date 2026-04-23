@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -110,25 +112,49 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		contents[i] = msg.Content
 	}
 
-	// Scan all messages with gitleaks (secrets) and presidio (PII) in parallel.
-	var gitleaksFindings, presidioFindings [][]Finding
+	// Scan messages with enabled sources.
+	runGitleaks := slices.Contains(args.Sources, "gitleaks")
+	runPresidio := slices.Contains(args.Sources, "presidio")
+
+	// Run enabled scanners concurrently. Gitleaks is CPU-bound, presidio is
+	// IO-bound, so they parallelize well and avoid exceeding the heartbeat timeout.
+	gitleaksFindings := make([][]Finding, len(contents))
+	presidioFindings := make([][]Finding, len(contents))
 	{
 		ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 		activity.RecordHeartbeat(ctx, 0)
 
-		var gitleaksErr, presidioErr error
-		gitleaksFindings, gitleaksErr = a.scanner.ScanBatchParallel(contents)
+		var wg sync.WaitGroup
+		var gitleaksErr error
+
+		if runGitleaks {
+			wg.Go(func() {
+				var err error
+				gitleaksFindings, err = a.scanner.ScanBatchParallel(contents)
+				if err != nil {
+					gitleaksErr = err
+				}
+			})
+		}
+
+		if runPresidio {
+			wg.Go(func() {
+				results, err := a.piiScanner.AnalyzeBatch(ctx, contents)
+				if err != nil {
+					// PII scan failure is non-fatal; log and continue with gitleaks results only.
+					a.logger.WarnContext(ctx, "presidio scan failed, continuing with gitleaks only", attr.SlogError(err))
+					return
+				}
+				presidioFindings = results
+			})
+		}
+
+		wg.Wait()
+
 		if gitleaksErr != nil {
 			scanSpan.SetStatus(codes.Error, gitleaksErr.Error())
 			scanSpan.End()
 			return nil, fmt.Errorf("gitleaks scan batch: %w", gitleaksErr)
-		}
-
-		presidioFindings, presidioErr = a.piiScanner.AnalyzeBatch(ctx, contents)
-		if presidioErr != nil {
-			// PII scan failure is non-fatal; log and continue with gitleaks results only.
-			a.logger.WarnContext(ctx, "presidio scan failed, continuing with gitleaks only", attr.SlogError(presidioErr))
-			presidioFindings = make([][]Finding, len(contents))
 		}
 		scanSpan.End()
 	}
