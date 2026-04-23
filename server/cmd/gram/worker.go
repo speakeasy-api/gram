@@ -550,12 +550,10 @@ func newWorkerCommand() *cli.Command {
 			 * END -- Agent client
 			 */
 
-			var piiScanner risk_analysis.PIIScanner
+			var piiScanner risk_analysis.PIIScanner = &risk_analysis.StubPIIScanner{}
 			if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
 				piiScanner = risk_analysis.NewPresidioClient(presidioURL, guardianPolicy.PooledClient())
 				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
-			} else {
-				piiScanner = &risk_analysis.StubPIIScanner{}
 			}
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
