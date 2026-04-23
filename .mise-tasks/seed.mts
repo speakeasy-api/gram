@@ -98,7 +98,17 @@ async function authenticateViaMockIDP(serverURL: string): Promise<string> {
   // Step 1: Hit the mock IDP login endpoint to get an auth code.
   // Use a dummy return_url — we only need the code from the redirect Location.
   const loginURL = `${idpAddress}/v1/speakeasy_provider/login?return_url=http://localhost/callback`;
-  const loginRes = await fetch(loginURL, { redirect: "manual" });
+  let loginRes: Response;
+  try {
+    loginRes = await fetch(loginURL, { redirect: "manual" });
+  } catch (err: any) {
+    if (err.cause && err.cause.code === "ECONNREFUSED") {
+      throw new Error(
+        `The dev server does not seem to be running. Start the dev server with \`mise run start\``,
+      );
+    }
+    throw err;
+  }
   const location = loginRes.headers.get("location");
   if (!location) {
     throw new Error("Mock IDP login did not return a redirect");
