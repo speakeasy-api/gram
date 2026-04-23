@@ -24,10 +24,10 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/plugins/server"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -45,7 +45,7 @@ type Service struct {
 	db        *pgxpool.Pool
 	repo      *repo.Queries
 	auth      *auth.Auth
-	access    *access.Manager
+	authz     *authz.Engine
 	serverURL string
 }
 
@@ -57,7 +57,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
-	accessManager *access.Manager,
+	authzEngine *authz.Engine,
 	serverURL string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
@@ -67,8 +67,8 @@ func NewService(
 		logger:    logger,
 		db:        db,
 		repo:      repo.New(db),
-		auth:      auth.New(logger, db, sessions, accessManager),
-		access:    accessManager,
+		auth:      auth.New(logger, db, sessions, authzEngine),
+		authz:     authzEngine,
 		serverURL: serverURL,
 	}
 }
@@ -95,7 +95,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -132,7 +132,7 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -172,7 +172,7 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -213,7 +213,7 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -265,7 +265,7 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return err
 	}
 
@@ -320,7 +320,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -378,7 +378,7 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -422,7 +422,7 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return err
 	}
 
@@ -460,7 +460,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -521,7 +521,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 		return nil, nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, nil, err
 	}
 

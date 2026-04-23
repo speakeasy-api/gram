@@ -1,13 +1,13 @@
+import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
+import { cn } from "@/lib/utils";
+import { useAssistantRuntime } from "@assistant-ui/react";
 import type { ElementsConfig } from "@gram-ai/elements";
 import { Chat, GramElementsProvider } from "@gram-ai/elements";
-import { useAssistantRuntime } from "@assistant-ui/react";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
-import { Wand2, ChevronRight, Sparkles, Terminal } from "lucide-react";
+import { ChevronRight, Sparkles, Terminal, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
-import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
-import { InsightsContext, useInsightsState } from "./insights-context";
 import type { InsightsConfigOptions } from "./insights-context";
+import { InsightsContext, useInsightsState } from "./insights-context";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
 export type { InsightsConfigOptions } from "./insights-context";
@@ -206,6 +206,13 @@ When the user asks about "current period", "selected period", "this timeframe", 
       systemPrompt,
       model: {
         defaultModel: "anthropic/claude-sonnet-4.6",
+      },
+      api: {
+        ...mcpConfig.api,
+        headers: {
+          ...mcpConfig.api?.headers,
+          "X-Gram-Source": "dashboard-ai-insights",
+        },
       },
       tools: {
         ...mcpConfig.tools,

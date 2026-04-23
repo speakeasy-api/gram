@@ -104,7 +104,7 @@ linters:
           - glint
         text: enforceo11yconventions
       # Not interesting to enforce this in tests
-      - path: _test\.go|internal/testenv/
+      - path: _test\.go|internal/testenv/|internal/testinfra/
         linters:
           - forbidigo
         text: GG001|GG002
@@ -277,6 +277,10 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).RequireAny("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).PrepareContext("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Require("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Filter("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).ShouldEnforce("
+        - "github.com/speakeasy-api/gram/server/internal/authz.GrantsForRole("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/chatsessions.Manager).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).CheckProjectAccess("

@@ -1,11 +1,11 @@
-package access
+package authz
 
 import (
 	"cmp"
 	"slices"
 )
 
-// Scope identifies an access capability granted on a resource.
+// Scope identifies an authorization capability granted on a resource.
 type Scope string
 
 const (
@@ -33,7 +33,7 @@ var scopeExpansions = map[Scope][]Scope{
 }
 
 // scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege
-// scope, the lower scopes it implies (e.g. org:admin → org:read).
+// scope, the lower scopes it implies (e.g. org:admin -> org:read).
 var scopeSubScopes map[Scope][]Scope
 
 func init() {
@@ -48,4 +48,13 @@ func init() {
 			return cmp.Compare(string(a), string(b))
 		})
 	}
+}
+
+func CalculateSubScopes(scope Scope) []string {
+	lowers := scopeSubScopes[scope]
+	out := make([]string, len(lowers))
+	for i, s := range lowers {
+		out[i] = string(s)
+	}
+	return out
 }

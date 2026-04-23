@@ -300,9 +300,8 @@ export function CreateRoleDialog({
         request: {
           updateRoleForm: {
             id: editingRole.id,
-            name,
-            description,
-            grants: sdkGrants,
+            // System roles are immutable in WorkOS — only member assignment is allowed.
+            ...(isSystemRole ? {} : { name, description, grants: sdkGrants }),
             memberIds:
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
@@ -675,10 +674,10 @@ export function CreateRoleDialog({
           <Button
             onClick={handleSubmit}
             disabled={
-              !name.trim() ||
-              !description.trim() ||
-              grantCount === 0 ||
-              isMutating
+              isMutating ||
+              (isSystemRole
+                ? selectedMembers.size === 0
+                : !name.trim() || !description.trim() || grantCount === 0)
             }
           >
             {isMutating && (
