@@ -164,14 +164,15 @@ func (p *PresidioClient) analyze(ctx context.Context, text string) (_ []Finding,
 
 	findings := make([]Finding, 0, len(results))
 	for _, r := range results {
-		match := ""
-		if r.Start >= 0 && r.End >= r.Start && r.End <= len(runes) {
-			match = string(runes[r.Start:r.End])
-		}
+		// Clamp offsets to valid rune range to prevent out-of-bounds panics.
+		start := max(0, min(r.Start, len(runes)))
+		end := max(start, min(r.End, len(runes)))
+
+		match := string(runes[start:end])
 
 		// Convert rune offsets to byte offsets for storage.
-		startByte := len(string(runes[:r.Start]))
-		endByte := len(string(runes[:r.End]))
+		startByte := len(string(runes[:start]))
+		endByte := len(string(runes[:end]))
 
 		findings = append(findings, Finding{
 			RuleID:      r.EntityType,
