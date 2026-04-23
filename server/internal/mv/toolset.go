@@ -762,6 +762,41 @@ func GetToolsetsSummary(
 				toolsByURN[entry.ToolUrn] = entry
 			}
 		}
+
+		// Batch-fetch external MCP tool entries.
+		externalMCPUrns := make([]string, 0)
+		for _, toolUrn := range pt.toolUrns {
+			var parsedUrn urn.Tool
+			if err := parsedUrn.UnmarshalText([]byte(toolUrn)); err == nil {
+				if parsedUrn.Kind == urn.ToolKindExternalMCP && !seen[toolUrn] {
+					externalMCPUrns = append(externalMCPUrns, toolUrn)
+				}
+			}
+		}
+		if len(externalMCPUrns) > 0 {
+			externalmcpRepo := externalmcpR.New(tx)
+			externalTools, err := externalmcpRepo.GetExternalMCPToolDefinitionsByURNs(ctx, externalmcpR.GetExternalMCPToolDefinitionsByURNsParams{
+				ProjectID: projectID,
+				ToolUrns:  externalMCPUrns,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to batch-fetch external mcp tools").Log(ctx, logger)
+			}
+			for _, def := range externalTools {
+				if seen[def.ToolUrn] {
+					continue
+				}
+				seen[def.ToolUrn] = true
+				toolsByURN[def.ToolUrn] = &types.ToolEntry{
+					Type:        string(urn.ToolKindExternalMCP),
+					ID:          def.ID.String(),
+					Name:        def.Slug + ":proxy",
+					ToolUrn:     def.ToolUrn,
+					Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
+					HTTPMethod:  nil,
+				}
+			}
+		}
 	}
 
 	// Assemble results.
