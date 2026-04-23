@@ -248,6 +248,13 @@ WHERE toolset_id = @toolset_id
 ORDER BY version DESC
 LIMIT 1;
 
+-- name: GetLatestToolsetVersionsBatch :many
+SELECT DISTINCT ON (toolset_id) *
+FROM toolset_versions
+WHERE toolset_id = ANY(@toolset_ids::uuid[])
+  AND deleted IS FALSE
+ORDER BY toolset_id, version DESC;
+
 -- name: GetToolsetPromptTemplateNames :many
 SELECT tp.prompt_name
 FROM toolset_prompts tp

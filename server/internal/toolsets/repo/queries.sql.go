@@ -359,6 +359,45 @@ func (q *Queries) GetLatestToolsetVersion(ctx context.Context, toolsetID uuid.UU
 	return i, err
 }
 
+const getLatestToolsetVersionsBatch = `-- name: GetLatestToolsetVersionsBatch :many
+SELECT DISTINCT ON (toolset_id) id, toolset_id, version, tool_urns, resource_urns, predecessor_id, created_at, updated_at, deleted_at, deleted
+FROM toolset_versions
+WHERE toolset_id = ANY($1::uuid[])
+  AND deleted IS FALSE
+ORDER BY toolset_id, version DESC
+`
+
+func (q *Queries) GetLatestToolsetVersionsBatch(ctx context.Context, toolsetIDs []uuid.UUID) ([]ToolsetVersion, error) {
+	rows, err := q.db.Query(ctx, getLatestToolsetVersionsBatch, toolsetIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ToolsetVersion
+	for rows.Next() {
+		var i ToolsetVersion
+		if err := rows.Scan(
+			&i.ID,
+			&i.ToolsetID,
+			&i.Version,
+			&i.ToolUrns,
+			&i.ResourceUrns,
+			&i.PredecessorID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPromptTemplateUrnsByNames = `-- name: GetPromptTemplateUrnsByNames :many
 SELECT DISTINCT pt.tool_urn
 FROM prompt_templates pt

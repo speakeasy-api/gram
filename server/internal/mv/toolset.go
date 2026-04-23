@@ -593,6 +593,213 @@ func DescribeToolset(
 	return result, nil
 }
 
+// GetToolsetsSummary builds ToolsetSummary results for a set of toolsets
+// using bulk queries grouped by project. This avoids the N+1 query pattern of
+// calling DescribeToolsetEntry per toolset.
+//
+// Returns a lightweight summary per toolset: identity fields (ID, ProjectID,
+// OrganizationID, Name, Slug), MCP config, and tool entries (Type, ID, Name,
+// ToolUrn, Annotations, HTTPMethod). Variation name overrides are applied.
+func GetToolsetsSummary(
+	ctx context.Context,
+	logger *slog.Logger,
+	tx DBTX,
+	toolsets []tsr.Toolset,
+) ([]*types.ToolsetSummary, error) {
+	if len(toolsets) == 0 {
+		return []*types.ToolsetSummary{}, nil
+	}
+
+	toolsetRepo := tsr.New(tx)
+
+	// Batch-fetch latest versions for all toolsets in one query.
+	toolsetIDs := make([]uuid.UUID, len(toolsets))
+	for i, ts := range toolsets {
+		toolsetIDs[i] = ts.ID
+	}
+
+	versions, err := toolsetRepo.GetLatestToolsetVersionsBatch(ctx, toolsetIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to batch-fetch toolset versions").Log(ctx, logger)
+	}
+
+	versionsByToolsetID := make(map[uuid.UUID]tsr.ToolsetVersion, len(versions))
+	for _, v := range versions {
+		versionsByToolsetID[v.ToolsetID] = v
+	}
+
+	// Group tool URNs by project for batch fetching.
+	type projectToolsets struct {
+		toolUrns []string
+	}
+	projectMap := make(map[uuid.UUID]*projectToolsets)
+
+	for _, ts := range toolsets {
+		v, ok := versionsByToolsetID[ts.ID]
+		if !ok {
+			continue
+		}
+		urns := make([]string, len(v.ToolUrns))
+		for i, u := range v.ToolUrns {
+			urns[i] = u.String()
+		}
+
+		pt, exists := projectMap[ts.ProjectID]
+		if !exists {
+			pt = &projectToolsets{toolUrns: nil}
+			projectMap[ts.ProjectID] = pt
+		}
+		pt.toolUrns = append(pt.toolUrns, urns...)
+	}
+
+	// Per unique project: batch-fetch tool entries and variations.
+	// This is O(projects) not O(toolsets).
+	toolsByURN := make(map[string]*types.ToolEntry)
+
+	for projectID, pt := range projectMap {
+		if len(pt.toolUrns) == 0 {
+			continue
+		}
+
+		toolsRepo := tr.New(tx)
+		variationsRepo := vr.New(tx)
+		tplRepo := templatesR.New(tx)
+
+		httpTools, err := toolsRepo.FindHttpToolEntriesByUrn(ctx, tr.FindHttpToolEntriesByUrnParams{
+			ProjectID: projectID,
+			Urns:      pt.toolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to batch-fetch http tools").Log(ctx, logger)
+		}
+
+		funcTools, err := toolsRepo.FindFunctionToolEntriesByUrn(ctx, tr.FindFunctionToolEntriesByUrnParams{
+			ProjectID: projectID,
+			Urns:      pt.toolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to batch-fetch function tools").Log(ctx, logger)
+		}
+
+		promptTools, err := tplRepo.PeekTemplatesByUrns(ctx, templatesR.PeekTemplatesByUrnsParams{
+			ProjectID: projectID,
+			Urns:      pt.toolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to batch-fetch prompt tools").Log(ctx, logger)
+		}
+
+		allVariations, err := variationsRepo.FindGlobalVariationsByToolURNs(ctx, vr.FindGlobalVariationsByToolURNsParams{
+			ProjectID: projectID,
+			ToolUrns:  pt.toolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to batch-fetch variations").Log(ctx, logger)
+		}
+
+		urnToVariedName := make(map[string]string, len(allVariations))
+		for _, variation := range allVariations {
+			n := conv.FromPGText[string](variation.Name)
+			if n == nil || *n == "" {
+				continue
+			}
+			urnToVariedName[variation.SrcToolUrn.String()] = *n
+		}
+
+		seen := make(map[string]bool)
+		for _, def := range httpTools {
+			toolURN := def.ToolUrn.String()
+			if seen[toolURN] {
+				continue
+			}
+			seen[toolURN] = true
+			name := conv.Default(urnToVariedName[toolURN], def.Name)
+			toolsByURN[toolURN] = &types.ToolEntry{
+				Type:        string(urn.ToolKindHTTP),
+				ID:          def.ID.String(),
+				Name:        name,
+				ToolUrn:     toolURN,
+				Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
+				HTTPMethod:  &def.HttpMethod,
+			}
+		}
+
+		for _, def := range funcTools {
+			toolURN := def.ToolUrn.String()
+			if seen[toolURN] {
+				continue
+			}
+			seen[toolURN] = true
+			toolsByURN[toolURN] = &types.ToolEntry{
+				Type:        string(urn.ToolKindFunction),
+				ID:          def.ID.String(),
+				Name:        def.Name,
+				ToolUrn:     toolURN,
+				Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
+				HTTPMethod:  nil,
+			}
+		}
+
+		for _, pt := range promptTools {
+			toolURN := pt.ToolUrn.String()
+			if seen[toolURN] {
+				continue
+			}
+			seen[toolURN] = true
+			toolsByURN[toolURN] = &types.ToolEntry{
+				Type:        string(urn.ToolKindPrompt),
+				ID:          pt.ID.String(),
+				Name:        pt.Name,
+				ToolUrn:     toolURN,
+				Annotations: nil,
+				HTTPMethod:  nil,
+			}
+		}
+
+		for _, entry := range platformtools.FindToolEntries(pt.toolUrns) {
+			if !seen[entry.ToolUrn] {
+				seen[entry.ToolUrn] = true
+				toolsByURN[entry.ToolUrn] = entry
+			}
+		}
+	}
+
+	// Assemble results.
+	result := make([]*types.ToolsetSummary, 0, len(toolsets))
+	for _, ts := range toolsets {
+		v, hasVersion := versionsByToolsetID[ts.ID]
+		var tools []*types.ToolEntry
+		if hasVersion {
+			for _, u := range v.ToolUrns {
+				if entry, ok := toolsByURN[u.String()]; ok {
+					tools = append(tools, entry)
+				}
+			}
+		}
+		if tools == nil {
+			tools = []*types.ToolEntry{}
+		}
+
+		result = append(result, &types.ToolsetSummary{
+			ID:                     ts.ID.String(),
+			OrganizationID:         ts.OrganizationID,
+			ProjectID:              ts.ProjectID.String(),
+			Name:                   ts.Name,
+			Slug:                   types.Slug(ts.Slug),
+			DefaultEnvironmentSlug: conv.FromPGText[types.Slug](ts.DefaultEnvironmentSlug),
+			McpSlug:                conv.FromPGText[types.Slug](ts.McpSlug),
+			McpEnabled:             &ts.McpEnabled,
+			McpIsPublic:            &ts.McpIsPublic,
+			ToolSelectionMode:      ts.ToolSelectionMode,
+			Tools:                  tools,
+			CreatedAt:              ts.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:              ts.UpdatedAt.Time.Format(time.RFC3339),
+		})
+	}
+
+	return result, nil
+}
+
 func readToolsetTools(
 	ctx context.Context,
 	logger *slog.Logger,

@@ -269,7 +269,7 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 	}, nil
 }
 
-func (s *Service) ListToolsetsForOrg(ctx context.Context, payload *gen.ListToolsetsForOrgPayload) (*gen.ListToolsetsResult, error) {
+func (s *Service) ListToolsetsForOrg(ctx context.Context, payload *gen.ListToolsetsForOrgPayload) (*gen.ListToolsetSummariesResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -284,16 +284,12 @@ func (s *Service) ListToolsetsForOrg(ctx context.Context, payload *gen.ListTools
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets for organization").Log(ctx, s.logger)
 	}
 
-	result := make([]*types.ToolsetEntry, len(toolsets))
-	for i, toolset := range toolsets {
-		toolsetDetails, err := mv.DescribeToolsetEntry(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))
-		if err != nil {
-			return nil, err
-		}
-		result[i] = toolsetDetails
+	result, err := mv.GetToolsetsSummary(ctx, s.logger, s.db, toolsets)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset summaries").Log(ctx, s.logger)
 	}
 
-	return &gen.ListToolsetsResult{
+	return &gen.ListToolsetSummariesResult{
 		Toolsets: result,
 	}, nil
 }
