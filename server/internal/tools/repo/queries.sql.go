@@ -84,65 +84,55 @@ func (q *Queries) FindFunctionToolEntriesByUrn(ctx context.Context, arg FindFunc
 	return items, nil
 }
 
-const findFunctionToolEntriesByUrnBatch = `-- name: FindFunctionToolEntriesByUrnBatch :many
+const findFunctionToolEntriesForProjects = `-- name: FindFunctionToolEntriesForProjects :many
 WITH project_deployments AS (
-    SELECT DISTINCT ON (d.project_id)
-        d.id,
-        d.project_id
+    SELECT DISTINCT ON (d.project_id) d.project_id, d.id as deployment_id
     FROM deployments d
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
-    WHERE d.project_id = ANY($2::uuid[])
+    WHERE d.project_id = ANY($1::uuid[])
       AND ds.status = 'completed'
     ORDER BY d.project_id, d.seq DESC
 )
 SELECT
-    pd.project_id,
-    ftd.id, ftd.tool_urn, ftd.deployment_id, ftd.name, ftd.variables, ftd.auth_input,
-    ftd.read_only_hint, ftd.destructive_hint, ftd.idempotent_hint, ftd.open_world_hint
-FROM project_deployments pd
-JOIN function_tool_definitions ftd ON ftd.deployment_id = pd.id
+  pd.project_id,
+  ftd.id,
+  ftd.tool_urn,
+  ftd.name,
+  ftd.read_only_hint,
+  ftd.destructive_hint,
+  ftd.idempotent_hint,
+  ftd.open_world_hint
+FROM function_tool_definitions ftd
+INNER JOIN project_deployments pd ON ftd.deployment_id = pd.deployment_id
 WHERE ftd.deleted IS FALSE
-  AND ftd.tool_urn = ANY($1::text[])
-ORDER BY ftd.id DESC
 `
 
-type FindFunctionToolEntriesByUrnBatchParams struct {
-	Urns       []string
-	ProjectIds []uuid.UUID
-}
-
-type FindFunctionToolEntriesByUrnBatchRow struct {
+type FindFunctionToolEntriesForProjectsRow struct {
 	ProjectID       uuid.UUID
 	ID              uuid.UUID
 	ToolUrn         urn.Tool
-	DeploymentID    uuid.UUID
 	Name            string
-	Variables       []byte
-	AuthInput       []byte
 	ReadOnlyHint    pgtype.Bool
 	DestructiveHint pgtype.Bool
 	IdempotentHint  pgtype.Bool
 	OpenWorldHint   pgtype.Bool
 }
 
-// Batch variant of FindFunctionToolEntriesByUrn across multiple projects.
-func (q *Queries) FindFunctionToolEntriesByUrnBatch(ctx context.Context, arg FindFunctionToolEntriesByUrnBatchParams) ([]FindFunctionToolEntriesByUrnBatchRow, error) {
-	rows, err := q.db.Query(ctx, findFunctionToolEntriesByUrnBatch, arg.Urns, arg.ProjectIds)
+// Batch-resolves function tool entries across multiple projects in a single query.
+func (q *Queries) FindFunctionToolEntriesForProjects(ctx context.Context, projectIds []uuid.UUID) ([]FindFunctionToolEntriesForProjectsRow, error) {
+	rows, err := q.db.Query(ctx, findFunctionToolEntriesForProjects, projectIds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []FindFunctionToolEntriesByUrnBatchRow
+	var items []FindFunctionToolEntriesForProjectsRow
 	for rows.Next() {
-		var i FindFunctionToolEntriesByUrnBatchRow
+		var i FindFunctionToolEntriesForProjectsRow
 		if err := rows.Scan(
 			&i.ProjectID,
 			&i.ID,
 			&i.ToolUrn,
-			&i.DeploymentID,
 			&i.Name,
-			&i.Variables,
-			&i.AuthInput,
 			&i.ReadOnlyHint,
 			&i.DestructiveHint,
 			&i.IdempotentHint,
@@ -314,50 +304,43 @@ func (q *Queries) FindHttpToolEntriesByUrn(ctx context.Context, arg FindHttpTool
 	return items, nil
 }
 
-const findHttpToolEntriesByUrnBatch = `-- name: FindHttpToolEntriesByUrnBatch :many
+const findHttpToolEntriesForProjects = `-- name: FindHttpToolEntriesForProjects :many
 WITH project_deployments AS (
-    SELECT DISTINCT ON (d.project_id)
-        d.id,
-        d.project_id
+    SELECT DISTINCT ON (d.project_id) d.project_id, d.id as deployment_id
     FROM deployments d
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
-    WHERE d.project_id = ANY($2::uuid[])
+    WHERE d.project_id = ANY($1::uuid[])
       AND ds.status = 'completed'
     ORDER BY d.project_id, d.seq DESC
 ),
 all_deployment_ids AS (
-    SELECT pd.project_id, pd.id AS deployment_id FROM project_deployments pd
-    UNION ALL
-    SELECT pd.project_id, pv.deployment_id
+    SELECT project_id, deployment_id as id FROM project_deployments
+    UNION
+    SELECT pd.project_id, pv.deployment_id as id
     FROM project_deployments pd
-    JOIN deployments_packages dp ON dp.deployment_id = pd.id
+    JOIN deployments_packages dp ON dp.deployment_id = pd.deployment_id
     JOIN package_versions pv ON dp.version_id = pv.id
 )
 SELECT
-    adi.project_id,
-    htd.id, htd.tool_urn, htd.deployment_id, htd.name, htd.security, htd.server_env_var,
-    htd.read_only_hint, htd.destructive_hint, htd.idempotent_hint, htd.open_world_hint,
-    htd.http_method
-FROM all_deployment_ids adi
-JOIN http_tool_definitions htd ON htd.deployment_id = adi.deployment_id
+  adi.project_id,
+  htd.id,
+  htd.tool_urn,
+  htd.name,
+  htd.read_only_hint,
+  htd.destructive_hint,
+  htd.idempotent_hint,
+  htd.open_world_hint,
+  htd.http_method
+FROM http_tool_definitions htd
+INNER JOIN all_deployment_ids adi ON htd.deployment_id = adi.id
 WHERE htd.deleted IS FALSE
-  AND htd.tool_urn = ANY($1::text[])
-ORDER BY htd.id DESC
 `
 
-type FindHttpToolEntriesByUrnBatchParams struct {
-	Urns       []string
-	ProjectIds []uuid.UUID
-}
-
-type FindHttpToolEntriesByUrnBatchRow struct {
+type FindHttpToolEntriesForProjectsRow struct {
 	ProjectID       uuid.UUID
 	ID              uuid.UUID
 	ToolUrn         urn.Tool
-	DeploymentID    uuid.UUID
 	Name            string
-	Security        []byte
-	ServerEnvVar    string
 	ReadOnlyHint    pgtype.Bool
 	DestructiveHint pgtype.Bool
 	IdempotentHint  pgtype.Bool
@@ -365,24 +348,23 @@ type FindHttpToolEntriesByUrnBatchRow struct {
 	HttpMethod      string
 }
 
-// Batch variant of FindHttpToolEntriesByUrn across multiple projects.
-func (q *Queries) FindHttpToolEntriesByUrnBatch(ctx context.Context, arg FindHttpToolEntriesByUrnBatchParams) ([]FindHttpToolEntriesByUrnBatchRow, error) {
-	rows, err := q.db.Query(ctx, findHttpToolEntriesByUrnBatch, arg.Urns, arg.ProjectIds)
+// Batch-resolves HTTP tool entries across multiple projects in a single query.
+// Resolves each project's latest completed deployment once, including package deployments.
+// No URN filter — caller filters in Go against toolset version URN sets.
+func (q *Queries) FindHttpToolEntriesForProjects(ctx context.Context, projectIds []uuid.UUID) ([]FindHttpToolEntriesForProjectsRow, error) {
+	rows, err := q.db.Query(ctx, findHttpToolEntriesForProjects, projectIds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []FindHttpToolEntriesByUrnBatchRow
+	var items []FindHttpToolEntriesForProjectsRow
 	for rows.Next() {
-		var i FindHttpToolEntriesByUrnBatchRow
+		var i FindHttpToolEntriesForProjectsRow
 		if err := rows.Scan(
 			&i.ProjectID,
 			&i.ID,
 			&i.ToolUrn,
-			&i.DeploymentID,
 			&i.Name,
-			&i.Security,
-			&i.ServerEnvVar,
 			&i.ReadOnlyHint,
 			&i.DestructiveHint,
 			&i.IdempotentHint,

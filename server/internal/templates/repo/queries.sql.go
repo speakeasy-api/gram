@@ -460,44 +460,35 @@ func (q *Queries) PeekTemplatesByUrns(ctx context.Context, arg PeekTemplatesByUr
 	return items, nil
 }
 
-const peekTemplatesByUrnsBatch = `-- name: PeekTemplatesByUrnsBatch :many
-SELECT DISTINCT ON (pt.project_id, pt.tool_urn)
-    pt.project_id, pt.id, pt.tool_urn, pt.history_id, pt.name
+const peekTemplatesForProjects = `-- name: PeekTemplatesForProjects :many
+SELECT DISTINCT ON (pt.project_id, pt.tool_urn) pt.project_id, pt.id, pt.tool_urn, pt.name
 FROM prompt_templates pt
 WHERE pt.project_id = ANY($1::uuid[])
-  AND pt.tool_urn = ANY($2::TEXT[])
   AND pt.deleted IS FALSE
 ORDER BY pt.project_id, pt.tool_urn, pt.id DESC
 `
 
-type PeekTemplatesByUrnsBatchParams struct {
-	ProjectIds []uuid.UUID
-	Urns       []string
-}
-
-type PeekTemplatesByUrnsBatchRow struct {
+type PeekTemplatesForProjectsRow struct {
 	ProjectID uuid.UUID
 	ID        uuid.UUID
 	ToolUrn   urn.Tool
-	HistoryID uuid.UUID
 	Name      string
 }
 
-// Batch variant of PeekTemplatesByUrns across multiple projects.
-func (q *Queries) PeekTemplatesByUrnsBatch(ctx context.Context, arg PeekTemplatesByUrnsBatchParams) ([]PeekTemplatesByUrnsBatchRow, error) {
-	rows, err := q.db.Query(ctx, peekTemplatesByUrnsBatch, arg.ProjectIds, arg.Urns)
+// Batch-resolves prompt template entries across multiple projects.
+func (q *Queries) PeekTemplatesForProjects(ctx context.Context, projectIds []uuid.UUID) ([]PeekTemplatesForProjectsRow, error) {
+	rows, err := q.db.Query(ctx, peekTemplatesForProjects, projectIds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []PeekTemplatesByUrnsBatchRow
+	var items []PeekTemplatesForProjectsRow
 	for rows.Next() {
-		var i PeekTemplatesByUrnsBatchRow
+		var i PeekTemplatesForProjectsRow
 		if err := rows.Scan(
 			&i.ProjectID,
 			&i.ID,
 			&i.ToolUrn,
-			&i.HistoryID,
 			&i.Name,
 		); err != nil {
 			return nil, err

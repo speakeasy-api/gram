@@ -179,6 +179,31 @@ WHERE t.tool_urn = ANY(@tool_urns::text[])
   AND t.deleted IS FALSE
   AND e.deleted IS FALSE;
 
+-- name: FindExternalMCPToolEntriesForProjects :many
+-- Batch-resolves external MCP tool entries across multiple projects.
+WITH project_deployments AS (
+    SELECT DISTINCT ON (d.project_id) d.project_id, d.id as deployment_id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = ANY(@project_ids::uuid[])
+      AND ds.status = 'completed'
+    ORDER BY d.project_id, d.seq DESC
+)
+SELECT
+  pd.project_id,
+  t.id,
+  t.tool_urn,
+  e.slug,
+  t.read_only_hint,
+  t.destructive_hint,
+  t.idempotent_hint,
+  t.open_world_hint
+FROM external_mcp_tool_definitions t
+JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
+JOIN project_deployments pd ON e.deployment_id = pd.deployment_id
+WHERE t.deleted IS FALSE
+  AND e.deleted IS FALSE;
+
 -- name: GetExternalMCPToolsRequiringOAuth :many
 SELECT
   t.id,
@@ -214,30 +239,3 @@ WHERE e.deployment_id = @deployment_id
   AND t.requires_oauth = TRUE
   AND t.deleted IS FALSE
   AND e.deleted IS FALSE;
-
--- name: GetExternalMCPToolDefinitionsByURNsBatch :many
--- Batch variant of GetExternalMCPToolDefinitionsByURNs across multiple projects.
-WITH project_deployments AS (
-    SELECT DISTINCT ON (d.project_id)
-        d.id,
-        d.project_id
-    FROM deployments d
-    JOIN deployment_statuses ds ON d.id = ds.deployment_id
-    WHERE d.project_id = ANY(@project_ids::uuid[])
-      AND ds.status = 'completed'
-    ORDER BY d.project_id, d.seq DESC
-)
-SELECT
-    pd.project_id,
-    t.id,
-    t.tool_urn,
-    e.slug,
-    t.read_only_hint,
-    t.destructive_hint,
-    t.idempotent_hint,
-    t.open_world_hint
-FROM project_deployments pd
-JOIN external_mcp_attachments e ON e.deployment_id = pd.id AND e.deleted IS FALSE
-JOIN external_mcp_tool_definitions t ON t.external_mcp_attachment_id = e.id
-WHERE t.tool_urn = ANY(@tool_urns::text[])
-  AND t.deleted IS FALSE;
