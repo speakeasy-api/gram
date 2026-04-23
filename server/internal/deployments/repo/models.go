@@ -36,6 +36,8 @@ type DeploymentsFunction struct {
 	Slug          string
 	Runtime       string
 	RunnerVersion pgtype.Text
+	MemoryMib     pgtype.Int4
+	Scale         pgtype.Int4
 }
 
 type DeploymentsOpenapiv3Asset struct {

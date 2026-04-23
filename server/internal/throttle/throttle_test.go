@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestThrottle_LeadingEdge(t *testing.T) {
@@ -54,6 +55,73 @@ func TestThrottle_NoTrailingWithoutPending(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 	assert.Equal(t, int64(0), trailingCount.Load(), "no trailing when nothing was pending")
+}
+
+func TestThrottle_FlushFiresPending(t *testing.T) {
+	t.Parallel()
+
+	var fired atomic.Int64
+	var lastValue atomic.Value
+	th := New[string, string](
+		time.Hour, // long cooldown so timer never fires naturally
+		func(v string) string { return v },
+		func(v string) error { fired.Add(1); lastValue.Store(v); return nil },
+	)
+
+	th.Do("a")                   // leading edge
+	th.Do("a")                   // suppressed, pending=true, latest="a"
+	require.False(t, th.Do("a")) // still suppressed
+
+	th.Flush()
+
+	require.Equal(t, int64(1), fired.Load(), "flush should fire the pending trailing callback")
+	val, ok := lastValue.Load().(string)
+	require.True(t, ok, "expected string value")
+	require.Equal(t, "a", val)
+
+	// After flush, the throttle should be clean and accept new leading calls.
+	require.True(t, th.Do("a"), "should fire again after flush")
+}
+
+func TestThrottle_FlushNoopWhenNoPending(t *testing.T) {
+	t.Parallel()
+
+	var fired atomic.Int64
+	th := New[string, string](
+		time.Hour,
+		func(v string) string { return v },
+		func(v string) error { fired.Add(1); return nil },
+	)
+
+	// Leading fire only, no suppressed calls.
+	th.Do("a")
+	th.Flush()
+
+	require.Equal(t, int64(0), fired.Load(), "flush should not fire when nothing is pending")
+
+	// Throttle should be clean.
+	require.True(t, th.Do("a"), "should fire again after flush")
+}
+
+func TestThrottle_FlushMultipleKeys(t *testing.T) {
+	t.Parallel()
+
+	var fired atomic.Int64
+	th := New[string, string](
+		time.Hour,
+		func(v string) string { return v },
+		func(v string) error { fired.Add(1); return nil },
+	)
+
+	th.Do("a")
+	th.Do("a") // pending
+	th.Do("b")
+	th.Do("b") // pending
+	th.Do("c") // leading only, no pending
+
+	th.Flush()
+
+	require.Equal(t, int64(2), fired.Load(), "flush should fire trailing for both pending keys")
 }
 
 func TestThrottle_ResetsAfterCooldown(t *testing.T) {

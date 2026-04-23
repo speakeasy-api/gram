@@ -1,4 +1,4 @@
-package access
+package authz
 
 // Check describes a single scope/resource authorization requirement.
 type Check struct {

@@ -68,6 +68,31 @@ func (t *Throttle[K, V]) Do(v V) bool {
 	return false
 }
 
+// Flush fires all pending trailing callbacks immediately and cleans up timers.
+// Call this during shutdown to prevent losing pending signals.
+func (t *Throttle[K, V]) Flush() {
+	t.mu.Lock()
+	type pending struct {
+		key   K
+		value V
+	}
+	var toFire []pending
+	for key, e := range t.entries {
+		if e.timer != nil {
+			e.timer.Stop()
+		}
+		if e.pending {
+			toFire = append(toFire, pending{key: key, value: e.latest})
+		}
+		delete(t.entries, key)
+	}
+	t.mu.Unlock()
+
+	for _, p := range toFire {
+		_ = t.onTrailing(p.value)
+	}
+}
+
 func (t *Throttle[K, V]) onExpired(key K) {
 	t.mu.Lock()
 	e, ok := t.entries[key]

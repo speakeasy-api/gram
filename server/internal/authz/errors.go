@@ -1,17 +1,17 @@
-package access
+package authz
 
 import (
 	"errors"
 	"fmt"
 )
 
-var ErrMissingGrants = errors.New("access grants missing from context")
+var ErrMissingGrants = errors.New("authz grants missing from context")
 
-var ErrNoChecks = errors.New("at least one access check is required")
+var ErrNoChecks = errors.New("at least one authz check is required")
 
-var ErrInvalidCheck = errors.New("invalid access check")
+var ErrInvalidCheck = errors.New("invalid authz check")
 
-var ErrDenied = errors.New("access denied")
+var ErrDenied = errors.New("authz denied")
 
 func InvalidCheck(scope Scope, resourceID string) error {
 	return &InvalidCheckError{
@@ -36,7 +36,7 @@ type DeniedError struct {
 }
 
 func (e *DeniedError) Error() string {
-	return fmt.Sprintf("access denied for scope %q on resource %q", e.Scope, e.ResourceID)
+	return fmt.Sprintf("authz denied for scope %q on resource %q", e.Scope, e.ResourceID)
 }
 
 func (e *DeniedError) Unwrap() error {
@@ -51,10 +51,10 @@ type InvalidCheckError struct {
 
 func (e *InvalidCheckError) Error() string {
 	if e.ResourceID == WildcardResource {
-		return fmt.Sprintf("access check for scope %q requires a specific resource id", e.Scope)
+		return fmt.Sprintf("authz check for scope %q requires a specific resource id", e.Scope)
 	}
 
-	return fmt.Sprintf("access check for scope %q requires a non-empty resource id", e.Scope)
+	return fmt.Sprintf("authz check for scope %q requires a non-empty resource id", e.Scope)
 }
 
 func (e *InvalidCheckError) Unwrap() error {

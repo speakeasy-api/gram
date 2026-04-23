@@ -154,6 +154,31 @@ WHERE t.tool_urn = @tool_urn
   AND t.deleted IS FALSE
   AND e.deleted IS FALSE;
 
+-- name: GetExternalMCPToolDefinitionsByURNs :many
+WITH deployment AS (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = @project_id
+    AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+)
+SELECT
+  t.id,
+  t.tool_urn,
+  e.slug,
+  t.read_only_hint,
+  t.destructive_hint,
+  t.idempotent_hint,
+  t.open_world_hint
+FROM external_mcp_tool_definitions t
+JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
+WHERE t.tool_urn = ANY(@tool_urns::text[])
+  AND e.deployment_id = (SELECT id FROM deployment)
+  AND t.deleted IS FALSE
+  AND e.deleted IS FALSE;
+
 -- name: GetExternalMCPToolsRequiringOAuth :many
 SELECT
   t.id,

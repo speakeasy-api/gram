@@ -1,4 +1,4 @@
-package access
+package authz
 
 import (
 	"context"
@@ -19,10 +19,10 @@ func readScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
 	return overrides, len(overrides) > 0
 }
 
-// grantsFromOverrides builds a Grants object from parsed scope overrides.
+// GrantsFromOverrides builds a Grants object from parsed scope overrides.
 // Scopes with no resources get wildcard access; scopes with resources get
 // one grant per resource ID.
-func grantsFromOverrides(overrides []RoleGrant) []Grant {
+func GrantsFromOverrides(overrides []RoleGrant) []Grant {
 	var grants []Grant
 	for _, o := range overrides {
 		if len(o.Resources) == 0 {

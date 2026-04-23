@@ -65,7 +65,7 @@ var _ = Service("toolsets", func() {
 	})
 
 	Method("listToolsetsForOrg", func() {
-		Description("List all toolsets across the organization")
+		Description("List all toolsets across the organization (summary view)")
 
 		Security(security.Session)
 		Security(security.ByKey, func() {
@@ -77,7 +77,7 @@ var _ = Service("toolsets", func() {
 			security.ByKeyPayload()
 		})
 
-		Result(ListToolsetsResult)
+		Result(ListToolsetSummariesResult)
 
 		HTTP(func() {
 			GET("/rpc/toolsets.listForOrg")
@@ -338,6 +338,11 @@ var CreateToolsetForm = Type("CreateToolsetForm", func() {
 
 var ListToolsetsResult = Type("ListToolsetsResult", func() {
 	Attribute("toolsets", ArrayOf(shared.ToolsetEntry), "The list of toolsets")
+	Required("toolsets")
+})
+
+var ListToolsetSummariesResult = Type("ListToolsetSummariesResult", func() {
+	Attribute("toolsets", ArrayOf(shared.ToolsetSummary), "The list of toolset summaries")
 	Required("toolsets")
 })
 
