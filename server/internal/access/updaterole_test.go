@@ -79,7 +79,7 @@ func TestService_UpdateRole(t *testing.T) {
 			{Scope: string(ScopeProjectWrite), Resources: []string{"project-1", "project-2"}},
 			{Scope: string(ScopeMCPConnect), Resources: nil},
 		},
-		MemberIds: []string{"user_1", "user_2"},
+		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "role_custom", role.ID)

@@ -259,6 +259,13 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 
 	assignedWorkosIDs := make([]string, 0, len(payload.MemberIds))
 	if len(payload.MemberIds) > 0 {
+		// payload.MemberIds are Gram user IDs (returned by ListMembers).
+		// Resolve them to WorkOS user IDs so we can look up WorkOS memberships.
+		gramToWorkos, err := gramToWorkosIDMap(ctx, s.db, payload.MemberIds)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve gram user ids to workos ids").Log(ctx, logger)
+		}
+
 		members, err := s.roles.ListMembers(ctx, workosOrgID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
@@ -266,8 +273,12 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 
 		membershipByUser := membershipsByUserID(members)
 
-		for _, userID := range payload.MemberIds {
-			membershipID, ok := membershipByUser[userID]
+		for _, gramID := range payload.MemberIds {
+			workosID, ok := gramToWorkos[gramID]
+			if !ok {
+				continue
+			}
+			membershipID, ok := membershipByUser[workosID]
 			if !ok {
 				continue
 			}
@@ -276,7 +287,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 				return nil, oops.E(oops.CodeUnexpected, err, "assign members to created role").Log(ctx, logger)
 			}
 
-			assignedWorkosIDs = append(assignedWorkosIDs, userID)
+			assignedWorkosIDs = append(assignedWorkosIDs, workosID)
 		}
 		s.access.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
 	}
@@ -390,10 +401,19 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	}
 
 	if payload.MemberIds != nil {
+		gramToWorkos, err := gramToWorkosIDMap(ctx, s.db, payload.MemberIds)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve gram user ids to workos ids").Log(ctx, logger)
+		}
+
 		membershipByUser := membershipsByUserID(membersBefore)
 
-		for _, userID := range payload.MemberIds {
-			membershipID, ok := membershipByUser[userID]
+		for _, gramID := range payload.MemberIds {
+			workosID, ok := gramToWorkos[gramID]
+			if !ok {
+				continue
+			}
+			membershipID, ok := membershipByUser[workosID]
 			if !ok {
 				continue
 			}
@@ -896,6 +916,23 @@ func (s *Service) localMemberCounts(ctx context.Context, organizationID string, 
 		}
 	}
 	return counts, nil
+}
+
+// gramToWorkosIDMap resolves Gram user IDs to WorkOS user IDs.
+// Dashboard sends Gram IDs (from ListMembers), but WorkOS membership lookups
+// require WorkOS user IDs.
+func gramToWorkosIDMap(ctx context.Context, db *pgxpool.Pool, gramIDs []string) (map[string]string, error) {
+	users, err := usersrepo.New(db).GetUsersByIDs(ctx, gramIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get users by ids: %w", err)
+	}
+	m := make(map[string]string, len(users))
+	for _, u := range users {
+		if u.WorkosID.Valid && u.WorkosID.String != "" {
+			m[u.ID] = u.WorkosID.String
+		}
+	}
+	return m, nil
 }
 
 func membershipsByUserID(members []workos.Member) map[string]string {

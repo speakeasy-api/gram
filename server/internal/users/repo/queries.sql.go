@@ -111,6 +111,41 @@ func (q *Queries) GetUserIDByWorkosID(ctx context.Context, workosID pgtype.Text)
 	return id, err
 }
 
+const getUsersByIDs = `-- name: GetUsersByIDs :many
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, created_at, updated_at FROM users
+WHERE id = ANY($1::text[])
+`
+
+func (q *Queries) GetUsersByIDs(ctx context.Context, ids []string) ([]User, error) {
+	rows, err := q.db.Query(ctx, getUsersByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.PhotoUrl,
+			&i.Admin,
+			&i.LastLogin,
+			&i.WorkosID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUsersByWorkosIDs = `-- name: GetUsersByWorkosIDs :many
 SELECT id, email, display_name, photo_url, admin, last_login, workos_id, created_at, updated_at FROM users
 WHERE workos_id = ANY($1::text[])
