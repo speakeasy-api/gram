@@ -70,8 +70,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 
 	start := time.Now()
 	defer func() {
-		outcome := o11y.OutcomeFromError(err)
-		a.metrics.RecordScan(ctx, args.OrganizationID, outcome, len(args.MessageIDs), time.Since(start))
+		a.metrics.RecordScan(ctx, args.OrganizationID, o11y.OutcomeFromError(err), len(args.MessageIDs), time.Since(start))
 	}()
 
 	ctx, span := a.tracer.Start(ctx, "risk.analyzeBatch", trace.WithAttributes(
@@ -87,88 +86,105 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		span.End()
 	}()
 
-	// Fetch message content for the batch.
-	queries := repo.New(a.db)
-	var messages []repo.GetMessageContentBatchRow
-	{
-		ctx, fetchSpan := a.tracer.Start(ctx, "risk.fetchContent")
-		var fetchErr error
-		messages, fetchErr = queries.GetMessageContentBatch(ctx, repo.GetMessageContentBatchParams{
-			Ids:       args.MessageIDs,
-			ProjectID: uuid.NullUUID{UUID: args.ProjectID, Valid: true},
-		})
-		if fetchErr != nil {
-			fetchSpan.SetStatus(codes.Error, fetchErr.Error())
-		}
-		fetchSpan.End()
-		if fetchErr != nil {
-			return nil, fmt.Errorf("get message content batch: %w", fetchErr)
-		}
+	messages, err := a.fetchContent(ctx, args)
+	if err != nil {
+		return nil, err
 	}
 
-	// Build content slice for parallel scanning.
 	contents := make([]string, len(messages))
 	for i, msg := range messages {
 		contents[i] = msg.Content
 	}
 
-	// Scan messages with enabled sources.
-	runGitleaks := slices.Contains(args.Sources, "gitleaks")
-	runPresidio := slices.Contains(args.Sources, "presidio")
-
-	// Run enabled scanners concurrently. Gitleaks is CPU-bound, presidio is
-	// IO-bound, so they parallelize well and avoid exceeding the heartbeat timeout.
-	gitleaksFindings := make([][]Finding, len(contents))
-	presidioFindings := make([][]Finding, len(contents))
-	{
-		ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
-		activity.RecordHeartbeat(ctx, 0)
-
-		var wg sync.WaitGroup
-		var gitleaksErr error
-
-		if runGitleaks {
-			wg.Go(func() {
-				var err error
-				gitleaksFindings, err = a.scanner.ScanBatchParallel(contents)
-				if err != nil {
-					gitleaksErr = err
-				}
-			})
-		}
-
-		if runPresidio {
-			wg.Go(func() {
-				results, err := a.piiScanner.AnalyzeBatch(ctx, contents)
-				if err != nil {
-					// PII scan failure is non-fatal; log and continue with gitleaks results only.
-					a.logger.WarnContext(ctx, "presidio scan failed, continuing with gitleaks only", attr.SlogError(err))
-					return
-				}
-				presidioFindings = results
-			})
-		}
-
-		wg.Wait()
-
-		if gitleaksErr != nil {
-			scanSpan.SetStatus(codes.Error, gitleaksErr.Error())
-			scanSpan.End()
-			return nil, fmt.Errorf("gitleaks scan batch: %w", gitleaksErr)
-		}
-		scanSpan.End()
+	findings, err := a.scan(ctx, args.Sources, contents)
+	if err != nil {
+		return nil, err
 	}
 
-	// Merge findings from both scanners.
-	batchFindings := make([][]Finding, len(contents))
-	for i := range contents {
-		merged := make([]Finding, 0, len(gitleaksFindings[i])+len(presidioFindings[i]))
-		merged = append(merged, gitleaksFindings[i]...)
-		merged = append(merged, presidioFindings[i]...)
-		batchFindings[i] = merged
+	rows, findingsCount := a.buildRows(ctx, args, messages, findings)
+
+	if err := a.writeResults(ctx, args, rows); err != nil {
+		return nil, err
 	}
 
-	// Convert scan results to DB rows.
+	span.SetAttributes(
+		attribute.Int("risk.messages_processed", len(messages)),
+		attribute.Int("risk.findings_count", findingsCount),
+		attribute.Int("risk.rows_written", len(rows)),
+	)
+
+	return &AnalyzeBatchResult{
+		Processed: len(messages),
+		Findings:  findingsCount,
+	}, nil
+}
+
+func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) ([]repo.GetMessageContentBatchRow, error) {
+	ctx, fetchSpan := a.tracer.Start(ctx, "risk.fetchContent")
+	defer fetchSpan.End()
+
+	messages, err := repo.New(a.db).GetMessageContentBatch(ctx, repo.GetMessageContentBatchParams{
+		Ids:       args.MessageIDs,
+		ProjectID: uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+	})
+	if err != nil {
+		fetchSpan.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("get message content batch: %w", err)
+	}
+	return messages, nil
+}
+
+// scan runs enabled scanners concurrently. Gitleaks is CPU-bound, presidio is
+// IO-bound, so they parallelize well and avoid exceeding the heartbeat timeout.
+func (a *AnalyzeBatch) scan(ctx context.Context, sources []string, contents []string) ([][]Finding, error) {
+	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
+	defer scanSpan.End()
+	activity.RecordHeartbeat(ctx, 0)
+
+	n := len(contents)
+	gitleaksFindings := make([][]Finding, n)
+	presidioFindings := make([][]Finding, n)
+
+	var wg sync.WaitGroup
+	var gitleaksErr error
+
+	if slices.Contains(sources, "gitleaks") {
+		wg.Go(func() {
+			results, err := a.scanner.ScanBatchParallel(contents)
+			if err != nil {
+				gitleaksErr = err
+				return
+			}
+			gitleaksFindings = results
+		})
+	}
+
+	if slices.Contains(sources, "presidio") {
+		wg.Go(func() {
+			results, err := a.piiScanner.AnalyzeBatch(ctx, contents)
+			if err != nil {
+				a.logger.WarnContext(ctx, "presidio scan failed, continuing with gitleaks only", attr.SlogError(err))
+				return
+			}
+			presidioFindings = results
+		})
+	}
+
+	wg.Wait()
+
+	if gitleaksErr != nil {
+		scanSpan.SetStatus(codes.Error, gitleaksErr.Error())
+		return nil, fmt.Errorf("gitleaks scan batch: %w", gitleaksErr)
+	}
+
+	merged := make([][]Finding, n)
+	for i := range n {
+		merged[i] = append(gitleaksFindings[i], presidioFindings[i]...)
+	}
+	return merged, nil
+}
+
+func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, batchFindings [][]Finding) ([]repo.InsertRiskResultsParams, int) {
 	var rows []repo.InsertRiskResultsParams
 	findingsCount := 0
 
@@ -176,10 +192,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		findings := batchFindings[i]
 
 		if len(findings) == 0 {
-			resultID, err := uuid.NewV7()
-			if err != nil {
-				return nil, fmt.Errorf("generate result id: %w", err)
-			}
+			resultID, _ := uuid.NewV7()
 			rows = append(rows, emptyResultRow(resultID, args, msg.ID))
 			continue
 		}
@@ -187,10 +200,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		for _, f := range findings {
 			findingsCount++
 			a.metrics.RecordFindingConfidence(ctx, args.OrganizationID, f.RuleID, f.Confidence)
-			resultID, err := uuid.NewV7()
-			if err != nil {
-				return nil, fmt.Errorf("generate result id: %w", err)
-			}
+			resultID, _ := uuid.NewV7()
 			rows = append(rows, repo.InsertRiskResultsParams{
 				ID:                resultID,
 				ProjectID:         args.ProjectID,
@@ -210,54 +220,42 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 			})
 		}
 	}
-	// Atomically delete old results (any version) and insert new ones.
-	writeErr := func() (writeErr error) {
-		ctx, writeSpan := a.tracer.Start(ctx, "risk.writeResults")
-		defer func() {
-			if writeErr != nil {
-				writeSpan.SetStatus(codes.Error, writeErr.Error())
-			}
-			writeSpan.End()
-		}()
+	return rows, findingsCount
+}
 
-		tx, err := a.db.Begin(ctx)
-		if err != nil {
-			return fmt.Errorf("begin transaction: %w", err)
-		}
-		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, rows []repo.InsertRiskResultsParams) error {
+	ctx, writeSpan := a.tracer.Start(ctx, "risk.writeResults")
+	defer writeSpan.End()
 
-		txRepo := queries.WithTx(tx)
+	tx, err := a.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-		if err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
-			RiskPolicyID: args.RiskPolicyID,
-			ProjectID:    args.ProjectID,
-			MessageIds:   args.MessageIDs,
-		}); err != nil {
-			return fmt.Errorf("delete old results: %w", err)
-		}
+	txRepo := repo.New(a.db).WithTx(tx)
 
-		if len(rows) > 0 {
-			if _, err := txRepo.InsertRiskResults(ctx, rows); err != nil {
-				return fmt.Errorf("insert risk results: %w", err)
-			}
-		}
-
-		return tx.Commit(ctx)
-	}()
-	if writeErr != nil {
-		return nil, writeErr
+	if err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
+		RiskPolicyID: args.RiskPolicyID,
+		ProjectID:    args.ProjectID,
+		MessageIds:   args.MessageIDs,
+	}); err != nil {
+		writeSpan.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("delete old results: %w", err)
 	}
 
-	span.SetAttributes(
-		attribute.Int("risk.messages_processed", len(messages)),
-		attribute.Int("risk.findings_count", findingsCount),
-		attribute.Int("risk.rows_written", len(rows)),
-	)
+	if len(rows) > 0 {
+		if _, err := txRepo.InsertRiskResults(ctx, rows); err != nil {
+			writeSpan.SetStatus(codes.Error, err.Error())
+			return fmt.Errorf("insert risk results: %w", err)
+		}
+	}
 
-	return &AnalyzeBatchResult{
-		Processed: len(messages),
-		Findings:  findingsCount,
-	}, nil
+	if err := tx.Commit(ctx); err != nil {
+		writeSpan.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("commit results: %w", err)
+	}
+	return nil
 }
 
 func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) repo.InsertRiskResultsParams {
