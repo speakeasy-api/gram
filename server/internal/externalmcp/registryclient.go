@@ -89,11 +89,11 @@ type listResponse struct {
 }
 
 type serverEntry struct {
-	Server serverJSON `json:"server"`
-	Meta   serverMeta `json:"_meta"`
+	Server serverJSON         `json:"server"`
+	Meta   pulseMCPServerMeta `json:"_meta"`
 }
 
-type serverMeta struct {
+type pulseMCPServerMeta struct {
 	Server  serverMetaServer  `json:"com.pulsemcp/server"`
 	Version serverMetaVersion `json:"com.pulsemcp/server-version"`
 }
@@ -156,8 +156,8 @@ type serverRemoteMetaAuthOptions struct {
 
 // serverDetailsEntry represents the response from the server details endpoint
 type serverDetailsEntry struct {
-	Server serverDetailsJSON `json:"server"`
-	Meta   serverMeta        `json:"_meta"`
+	Server serverDetailsJSON  `json:"server"`
+	Meta   pulseMCPServerMeta `json:"_meta"`
 }
 
 type serverDetailsJSON struct {
