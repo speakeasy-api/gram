@@ -151,3 +151,13 @@ WHERE project_id = @project_id
   AND id = @id
   AND deleted IS FALSE
 RETURNING id, name, tool_urn;
+
+-- name: PeekTemplatesByUrnsBatch :many
+-- Batch variant of PeekTemplatesByUrns across multiple projects.
+SELECT DISTINCT ON (pt.project_id, pt.tool_urn)
+    pt.project_id, pt.id, pt.tool_urn, pt.history_id, pt.name
+FROM prompt_templates pt
+WHERE pt.project_id = ANY(@project_ids::uuid[])
+  AND pt.tool_urn = ANY(@urns::TEXT[])
+  AND pt.deleted IS FALSE
+ORDER BY pt.project_id, pt.tool_urn, pt.id DESC;

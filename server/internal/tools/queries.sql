@@ -306,3 +306,56 @@ SELECT
     (SELECT id FROM third_party),
     (SELECT id FROM function_tools)
   ) AS id;
+
+-- name: FindHttpToolEntriesByUrnBatch :many
+-- Batch variant of FindHttpToolEntriesByUrn across multiple projects.
+WITH project_deployments AS (
+    SELECT DISTINCT ON (d.project_id)
+        d.id,
+        d.project_id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = ANY(@project_ids::uuid[])
+      AND ds.status = 'completed'
+    ORDER BY d.project_id, d.seq DESC
+),
+all_deployment_ids AS (
+    SELECT pd.project_id, pd.id AS deployment_id FROM project_deployments pd
+    UNION ALL
+    SELECT pd.project_id, pv.deployment_id
+    FROM project_deployments pd
+    JOIN deployments_packages dp ON dp.deployment_id = pd.id
+    JOIN package_versions pv ON dp.version_id = pv.id
+)
+SELECT
+    adi.project_id,
+    htd.id, htd.tool_urn, htd.deployment_id, htd.name, htd.security, htd.server_env_var,
+    htd.read_only_hint, htd.destructive_hint, htd.idempotent_hint, htd.open_world_hint,
+    htd.http_method
+FROM all_deployment_ids adi
+JOIN http_tool_definitions htd ON htd.deployment_id = adi.deployment_id
+WHERE htd.deleted IS FALSE
+  AND htd.tool_urn = ANY(@urns::text[])
+ORDER BY htd.id DESC;
+
+-- name: FindFunctionToolEntriesByUrnBatch :many
+-- Batch variant of FindFunctionToolEntriesByUrn across multiple projects.
+WITH project_deployments AS (
+    SELECT DISTINCT ON (d.project_id)
+        d.id,
+        d.project_id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = ANY(@project_ids::uuid[])
+      AND ds.status = 'completed'
+    ORDER BY d.project_id, d.seq DESC
+)
+SELECT
+    pd.project_id,
+    ftd.id, ftd.tool_urn, ftd.deployment_id, ftd.name, ftd.variables, ftd.auth_input,
+    ftd.read_only_hint, ftd.destructive_hint, ftd.idempotent_hint, ftd.open_world_hint
+FROM project_deployments pd
+JOIN function_tool_definitions ftd ON ftd.deployment_id = pd.id
+WHERE ftd.deleted IS FALSE
+  AND ftd.tool_urn = ANY(@urns::text[])
+ORDER BY ftd.id DESC;

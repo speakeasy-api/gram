@@ -399,6 +399,79 @@ func (q *Queries) GetExternalMCPToolDefinitionsByURNs(ctx context.Context, arg G
 	return items, nil
 }
 
+const getExternalMCPToolDefinitionsByURNsBatch = `-- name: GetExternalMCPToolDefinitionsByURNsBatch :many
+WITH project_deployments AS (
+    SELECT DISTINCT ON (d.project_id)
+        d.id,
+        d.project_id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = ANY($2::uuid[])
+      AND ds.status = 'completed'
+    ORDER BY d.project_id, d.seq DESC
+)
+SELECT
+    pd.project_id,
+    t.id,
+    t.tool_urn,
+    e.slug,
+    t.read_only_hint,
+    t.destructive_hint,
+    t.idempotent_hint,
+    t.open_world_hint
+FROM project_deployments pd
+JOIN external_mcp_attachments e ON e.deployment_id = pd.id AND e.deleted IS FALSE
+JOIN external_mcp_tool_definitions t ON t.external_mcp_attachment_id = e.id
+WHERE t.tool_urn = ANY($1::text[])
+  AND t.deleted IS FALSE
+`
+
+type GetExternalMCPToolDefinitionsByURNsBatchParams struct {
+	ToolUrns   []string
+	ProjectIds []uuid.UUID
+}
+
+type GetExternalMCPToolDefinitionsByURNsBatchRow struct {
+	ProjectID       uuid.UUID
+	ID              uuid.UUID
+	ToolUrn         string
+	Slug            string
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+}
+
+// Batch variant of GetExternalMCPToolDefinitionsByURNs across multiple projects.
+func (q *Queries) GetExternalMCPToolDefinitionsByURNsBatch(ctx context.Context, arg GetExternalMCPToolDefinitionsByURNsBatchParams) ([]GetExternalMCPToolDefinitionsByURNsBatchRow, error) {
+	rows, err := q.db.Query(ctx, getExternalMCPToolDefinitionsByURNsBatch, arg.ToolUrns, arg.ProjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetExternalMCPToolDefinitionsByURNsBatchRow
+	for rows.Next() {
+		var i GetExternalMCPToolDefinitionsByURNsBatchRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.ID,
+			&i.ToolUrn,
+			&i.Slug,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getExternalMCPToolsRequiringOAuth = `-- name: GetExternalMCPToolsRequiringOAuth :many
 SELECT
   t.id,

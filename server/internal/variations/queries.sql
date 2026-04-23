@@ -111,3 +111,24 @@ WHERE tool_variations.id = @id
   )
   AND tool_variations.deleted IS FALSE
 RETURNING tool_variations.id, tool_variations.src_tool_urn;
+
+-- name: FindGlobalVariationNamesByToolURNsBatch :many
+-- Batch variant of FindGlobalVariationsByToolURNs: returns only the fields
+-- needed for the variation-name mapping across multiple projects.
+WITH project_groups AS (
+    SELECT DISTINCT ON (ptv.project_id)
+        ptv.project_id,
+        tvg.id AS group_id
+    FROM tool_variations_groups tvg
+    INNER JOIN project_tool_variations ptv ON tvg.id = ptv.group_id
+    WHERE ptv.project_id = ANY(@project_ids::uuid[])
+    ORDER BY ptv.project_id, ptv.id DESC
+)
+SELECT
+    pg.project_id,
+    tv.src_tool_urn,
+    tv.name
+FROM project_groups pg
+JOIN tool_variations tv ON tv.group_id = pg.group_id
+WHERE tv.src_tool_urn = ANY(@tool_urns::text[])
+  AND tv.deleted IS FALSE;

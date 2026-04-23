@@ -43,6 +43,59 @@ func (q *Queries) DeleteGlobalToolVariation(ctx context.Context, arg DeleteGloba
 	return i, err
 }
 
+const findGlobalVariationNamesByToolURNsBatch = `-- name: FindGlobalVariationNamesByToolURNsBatch :many
+WITH project_groups AS (
+    SELECT DISTINCT ON (ptv.project_id)
+        ptv.project_id,
+        tvg.id AS group_id
+    FROM tool_variations_groups tvg
+    INNER JOIN project_tool_variations ptv ON tvg.id = ptv.group_id
+    WHERE ptv.project_id = ANY($2::uuid[])
+    ORDER BY ptv.project_id, ptv.id DESC
+)
+SELECT
+    pg.project_id,
+    tv.src_tool_urn,
+    tv.name
+FROM project_groups pg
+JOIN tool_variations tv ON tv.group_id = pg.group_id
+WHERE tv.src_tool_urn = ANY($1::text[])
+  AND tv.deleted IS FALSE
+`
+
+type FindGlobalVariationNamesByToolURNsBatchParams struct {
+	ToolUrns   []string
+	ProjectIds []uuid.UUID
+}
+
+type FindGlobalVariationNamesByToolURNsBatchRow struct {
+	ProjectID  uuid.UUID
+	SrcToolUrn urn.Tool
+	Name       pgtype.Text
+}
+
+// Batch variant of FindGlobalVariationsByToolURNs: returns only the fields
+// needed for the variation-name mapping across multiple projects.
+func (q *Queries) FindGlobalVariationNamesByToolURNsBatch(ctx context.Context, arg FindGlobalVariationNamesByToolURNsBatchParams) ([]FindGlobalVariationNamesByToolURNsBatchRow, error) {
+	rows, err := q.db.Query(ctx, findGlobalVariationNamesByToolURNsBatch, arg.ToolUrns, arg.ProjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindGlobalVariationNamesByToolURNsBatchRow
+	for rows.Next() {
+		var i FindGlobalVariationNamesByToolURNsBatchRow
+		if err := rows.Scan(&i.ProjectID, &i.SrcToolUrn, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findGlobalVariationsByToolURNs = `-- name: FindGlobalVariationsByToolURNs :many
 WITH global_group AS (
   SELECT tool_variations_groups.id
