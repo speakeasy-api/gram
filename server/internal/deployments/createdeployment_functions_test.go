@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"math"
 	"strings"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
+	deprepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -1361,4 +1363,133 @@ func TestCreateDeployment_FunctionsDeploymentLogs(t *testing.T) {
 	}
 	require.True(t, foundFunctionsStart, "expected log for processing function source")
 	require.True(t, foundFunctionsEnd, "expected log for processed function source")
+}
+
+func TestCreateDeployment_FunctionsWithMemoryAndScale(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-functions-memory-scale",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*gen.AddFunctionsForm{
+			{
+				AssetID:   fres.Asset.ID,
+				Name:      "mem-scale-functions",
+				Slug:      "mem-scale-functions",
+				Runtime:   "nodejs:24",
+				MemoryMib: new(uint(2048)),
+				Scale:     new(uint(3)),
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment with memory and scale")
+	require.Equal(t, "completed", dep.Deployment.Status)
+	require.Len(t, dep.Deployment.FunctionsAssets, 1)
+	require.NotNil(t, dep.Deployment.FunctionsAssets[0].MemoryMib)
+	require.Equal(t, int32(2048), *dep.Deployment.FunctionsAssets[0].MemoryMib)
+	require.NotNil(t, dep.Deployment.FunctionsAssets[0].Scale)
+	require.Equal(t, int32(3), *dep.Deployment.FunctionsAssets[0].Scale)
+}
+
+func TestCreateDeployment_FunctionsWithNilMemoryAndScale(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-functions-nil-memory-scale",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*gen.AddFunctionsForm{
+			{
+				AssetID:   fres.Asset.ID,
+				Name:      "nil-mem-functions",
+				Slug:      "nil-mem-functions",
+				Runtime:   "nodejs:24",
+				MemoryMib: nil,
+				Scale:     nil,
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment with nil memory and scale")
+	require.Equal(t, "completed", dep.Deployment.Status)
+	require.Len(t, dep.Deployment.FunctionsAssets, 1)
+	require.Nil(t, dep.Deployment.FunctionsAssets[0].MemoryMib)
+	require.Nil(t, dep.Deployment.FunctionsAssets[0].Scale)
+}
+
+func TestCreateDeployment_FunctionsClampsOversizedMemoryAndScale(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-functions-clamped-memory-scale",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*gen.AddFunctionsForm{
+			{
+				AssetID:   fres.Asset.ID,
+				Name:      "clamped-functions",
+				Slug:      "clamped-functions",
+				Runtime:   "nodejs:24",
+				MemoryMib: new(uint(math.MaxUint)),
+				Scale:     new(uint(math.MaxUint)),
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment with oversized memory and scale")
+	// The deployment is created but the Temporal activity rejects the clamped
+	// values because they exceed business limits (4096 MiB / 5 instances), so
+	// the deployment ends up in a failed state.
+	require.Equal(t, "failed", dep.Deployment.Status)
+
+	// Verify the clamping still wrote the correct values to the DB.
+	depRepo := deprepo.New(ti.conn)
+	funcs, err := depRepo.GetDeploymentFunctions(ctx, deprepo.GetDeploymentFunctionsParams{
+		ProjectID:    uuid.MustParse(dep.Deployment.ProjectID),
+		DeploymentID: uuid.MustParse(dep.Deployment.ID),
+	})
+	require.NoError(t, err, "get deployment functions")
+	require.Len(t, funcs, 1)
+	require.Equal(t, int32(math.MaxInt32), funcs[0].MemoryMib.Int32)
+	require.True(t, funcs[0].MemoryMib.Valid)
+	require.Equal(t, int32(math.MaxInt32), funcs[0].Scale.Int32)
+	require.True(t, funcs[0].Scale.Valid)
 }
