@@ -560,16 +560,21 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "list org users from workos").Log(ctx, s.logger)
 	}
 
-	// Batch-resolve WorkOS user IDs to local Gram users so the member list
-	// returns Gram user IDs (the stable identity used by UpdateMemberRole
-	// and the organization_user_relationships table).
+	// Batch-resolve WorkOS user IDs to local Gram users, filtering to only
+	// those connected to this organization via organization_user_relationships.
+	// This single joined query prevents the list from surfacing users who
+	// exist in Gram but aren't connected to the current org (which would
+	// cause UpdateMemberRole to fail).
 	workosIDs := make([]string, 0, len(users))
 	for workosUID := range users {
 		workosIDs = append(workosIDs, workosUID)
 	}
-	localUserRows, err := usersrepo.New(s.db).GetUsersByWorkosIDs(ctx, workosIDs)
+	localUserRows, err := usersrepo.New(s.db).GetConnectedUsersByWorkosIDs(ctx, usersrepo.GetConnectedUsersByWorkosIDsParams{
+		WorkosIds:      workosIDs,
+		OrganizationID: ac.ActiveOrganizationID,
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve local users by workos ids").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve connected users by workos ids").Log(ctx, s.logger)
 	}
 	localUsers := make(map[string]usersrepo.User, len(localUserRows))
 	for _, u := range localUserRows {
@@ -587,7 +592,7 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 
 		local, ok := localUsers[member.UserID]
 		if !ok {
-			continue // user exists in WorkOS but hasn't logged into Gram yet
+			continue
 		}
 
 		result = append(result, &gen.AccessMember{

@@ -11,6 +11,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getConnectedUsersByWorkosIDs = `-- name: GetConnectedUsersByWorkosIDs :many
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.created_at, u.updated_at FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE u.workos_id = ANY($1::text[])
+  AND our.organization_id = $2
+  AND our.deleted_at IS NULL
+`
+
+type GetConnectedUsersByWorkosIDsParams struct {
+	WorkosIds      []string
+	OrganizationID string
+}
+
+func (q *Queries) GetConnectedUsersByWorkosIDs(ctx context.Context, arg GetConnectedUsersByWorkosIDsParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, getConnectedUsersByWorkosIDs, arg.WorkosIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.PhotoUrl,
+			&i.Admin,
+			&i.LastLogin,
+			&i.WorkosID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUser = `-- name: GetUser :one
 SELECT id, email, display_name, photo_url, admin, last_login, workos_id, created_at, updated_at FROM users
 WHERE id = $1
