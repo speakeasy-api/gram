@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ExternalMCPMeta,
+  ExternalMCPMeta$inboundSchema,
+} from "./externalmcpmeta.js";
+import {
   ExternalMCPRemote,
   ExternalMCPRemote$inboundSchema,
 } from "./externalmcpremote.js";
@@ -28,10 +32,7 @@ export type ExternalMCPServer = {
    * URL to the server's icon
    */
   iconUrl?: string | undefined;
-  /**
-   * Opaque metadata from the registry
-   */
-  meta?: any | undefined;
+  meta?: ExternalMCPMeta | undefined;
   /**
    * ID of the internal collection registry this server came from
    */
@@ -74,7 +75,7 @@ export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
   z.object({
     description: z.string(),
     icon_url: z.optional(z.string()),
-    meta: z.optional(z.any()),
+    meta: z.optional(ExternalMCPMeta$inboundSchema),
     organization_mcp_collection_registry_id: z.optional(z.string()),
     registry_id: z.optional(z.string()),
     registry_specifier: z.string(),

@@ -1,5 +1,5 @@
 import { useSdkClient } from "@/contexts/Sdk";
-import type { Server } from "@/pages/catalog/hooks";
+import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import {
   useDeployment,
   useDeploymentLogs,
@@ -28,7 +28,7 @@ export type ReleasePhase =
   | "error";
 
 export interface ServerConfig {
-  server: Server;
+  server: PulseMCPServer;
   name: string;
   /** For multi-remote servers, track which remotes are selected */
   selectedRemotes?: ExternalMCPRemote[];
@@ -36,7 +36,7 @@ export interface ServerConfig {
 
 /** Configuration for a server with multiple remotes during the selectRemotes phase */
 export interface MultiRemoteServerConfig {
-  server: Server;
+  server: PulseMCPServer;
   name: string;
   remotes: ExternalMCPRemote[];
   selectedRemoteUrls: Set<string>;
@@ -53,7 +53,7 @@ export interface ServerToolsetStatus {
 
 interface WorkflowBase {
   projectSlug?: string;
-  isServerAlreadyInstalled: (server: Server) => boolean;
+  isServerAlreadyInstalled: (server: PulseMCPServer) => boolean;
   reset: () => void;
 }
 
@@ -114,7 +114,7 @@ export type ExternalMcpReleaseWorkflow =
   | ErrorPhase;
 
 interface UseExternalMcpReleaseWorkflowOptions {
-  servers: Server[];
+  servers: PulseMCPServer[];
   projectSlug?: string;
 }
 
@@ -144,13 +144,13 @@ function buildToolUrns(config: ServerConfig): string[] {
   );
 }
 
-function buildToolsetOrigin(server: Server) {
+function buildToolsetOrigin(server: PulseMCPServer) {
   return {
     registrySpecifier: server.registrySpecifier,
   };
 }
 
-function buildForkPrefillName(server: Server): string {
+function buildForkPrefillName(server: PulseMCPServer): string {
   const baseName = server.title ?? server.registrySpecifier;
   return `${baseName} Copy`;
 }
@@ -195,7 +195,7 @@ export function useExternalMcpReleaseWorkflow({
     [latestDeployment?.externalMcps],
   );
   const isServerAlreadyInstalled = useCallback(
-    (server: Server) =>
+    (server: PulseMCPServer) =>
       existingSpecifiers.has(server.registrySpecifier) ||
       (!!server.toolsetId && existingToolsetIds.has(server.toolsetId)),
     [existingSpecifiers, existingToolsetIds],
@@ -436,7 +436,9 @@ export function useExternalMcpReleaseWorkflow({
           if (i !== currentServerIndex) return config;
           return {
             ...config,
-            ...(updates.name !== undefined && { name: updates.name }),
+            ...(updates.name !== undefined && {
+              name: updates.name,
+            }),
             ...(updates.selectedRemoteUrls !== undefined && {
               selectedRemoteUrls: updates.selectedRemoteUrls,
             }),
@@ -669,6 +671,12 @@ export function useExternalMcpReleaseWorkflow({
     case "complete":
       return { phase, toolsetStatuses, ...base };
     case "error":
-      return { phase, error: error!, deploymentId, deploymentLogs, ...base };
+      return {
+        phase,
+        error: error!,
+        deploymentId,
+        deploymentLogs,
+        ...base,
+      };
   }
 }

@@ -146,8 +146,12 @@ type RemoteHeader struct {
 }
 
 type serverRemoteMeta struct {
-	Auth  any          `json:"auth"`
-	Tools []serverTool `json:"tools"`
+	AuthOptions []serverRemoteMetaAuthOptions `json:"authOptions"`
+	Tools       []serverTool                  `json:"tools"`
+}
+
+type serverRemoteMetaAuthOptions struct {
+	Type string `json:"type"`
 }
 
 // serverDetailsEntry represents the response from the server details endpoint
@@ -168,6 +172,25 @@ type serverTool struct {
 	Description string          `json:"description"`
 	InputSchema json.RawMessage `json:"inputSchema"`
 	Annotations map[string]any  `json:"annotations"`
+}
+
+// toCacheSafeAny round-trips v through JSON so the resulting value is built
+// from plain Go types (map[string]any, []any, primitives). This is required
+// because the cache serializes with msgpack: concrete struct types stored in
+// an `any` field lose their type on decode, and raw []byte-like values
+// (json.RawMessage) come back as []byte which JSON-encodes as base64. Plain
+// maps/slices round-trip through msgpack cleanly and re-marshal to identical
+// JSON on both cache-miss and cache-hit paths.
+func toCacheSafeAny(v any) (any, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("marshal: %w", err)
+	}
+	var out any
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, fmt.Errorf("unmarshal: %w", err)
+	}
+	return out, nil
 }
 
 // ListServers fetches servers from the given registry.
@@ -228,6 +251,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 	registryID := registry.ID.String()
 	servers := make([]*types.ExternalMCPServer, 0, len(listResp.Servers))
 	for _, s := range listResp.Servers {
+
 		if s.Meta.Version.Status == "deleted" {
 			continue
 		}
@@ -255,6 +279,15 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			})
 		}
 
+		serverMetaAny, err := toCacheSafeAny(s.Meta.Server)
+		if err != nil {
+			return nil, fmt.Errorf("convert server meta: %w", err)
+		}
+		versionMetaAny, err := toCacheSafeAny(s.Meta.Version)
+		if err != nil {
+			return nil, fmt.Errorf("convert version meta: %w", err)
+		}
+
 		server := &types.ExternalMCPServer{
 			RegistrySpecifier:                   s.Server.Name,
 			Version:                             s.Server.Version,
@@ -264,9 +297,12 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			OrganizationMcpCollectionRegistryID: nil,
 			Title:                               s.Server.Title,
 			IconURL:                             iconURL,
-			Meta:                                s.Meta,
-			Tools:                               tools,
-			Remotes:                             remotes,
+			Meta: &types.ExternalMCPMeta{
+				ComPulsemcpServer:        serverMetaAny,
+				ComPulsemcpServerVersion: versionMetaAny,
+			},
+			Tools:   tools,
+			Remotes: remotes,
 		}
 
 		servers = append(servers, server)

@@ -958,7 +958,9 @@ func marshalTypesExternalMCPServerToExternalMCPServerResponseBody(v *types.Exter
 		OrganizationMcpCollectionRegistryID: v.OrganizationMcpCollectionRegistryID,
 		Title:                               v.Title,
 		IconURL:                             v.IconURL,
-		Meta:                                v.Meta,
+	}
+	if v.Meta != nil {
+		res.Meta = marshalTypesExternalMCPMetaToExternalMCPMetaResponseBody(v.Meta)
 	}
 	if v.Tools != nil {
 		res.Tools = make([]*ExternalMCPToolResponseBody, len(v.Tools))
@@ -979,6 +981,21 @@ func marshalTypesExternalMCPServerToExternalMCPServerResponseBody(v *types.Exter
 			}
 			res.Remotes[i] = marshalTypesExternalMCPRemoteToExternalMCPRemoteResponseBody(val)
 		}
+	}
+
+	return res
+}
+
+// marshalTypesExternalMCPMetaToExternalMCPMetaResponseBody builds a value of
+// type *ExternalMCPMetaResponseBody from a value of type
+// *types.ExternalMCPMeta.
+func marshalTypesExternalMCPMetaToExternalMCPMetaResponseBody(v *types.ExternalMCPMeta) *ExternalMCPMetaResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ExternalMCPMetaResponseBody{
+		ComPulsemcpServer:        v.ComPulsemcpServer,
+		ComPulsemcpServerVersion: v.ComPulsemcpServerVersion,
 	}
 
 	return res
