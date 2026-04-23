@@ -95,8 +95,8 @@ export default function CatalogDetail() {
     },
   });
 
-  const meta = server?.meta?.comPulsemcpServer;
-  const versionMeta = server?.meta?.comPulsemcpServerVersion;
+  const meta = server?.meta?.["com.pulsemcp/server"];
+  const versionMeta = server?.meta?.["com.pulsemcp/server-version"];
   const isOfficial = meta?.isOfficial;
   const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
   const decodedSpecifier = serverSpecifier

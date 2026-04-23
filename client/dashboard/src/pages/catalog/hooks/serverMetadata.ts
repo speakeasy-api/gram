@@ -48,7 +48,7 @@ export type PulseMcpAuthType = "none" | "apikey" | "oauth" | "other";
  * Extract the authentication type from server metadata.
  */
 export function extractAuthType(server: PulseMCPServer): PulseMcpAuthType {
-  const versionMeta = server.meta?.comPulsemcpServerVersion;
+  const versionMeta = server.meta?.["com.pulsemcp/server-version"];
   const remote = versionMeta?.["remotes[0]"];
   const authOptions = remote?.authOptions?.[0];
 
@@ -93,7 +93,7 @@ function extractToolMetadata(server: PulseMCPServer): {
   toolCount: number;
   isReadOnly: boolean;
 } {
-  const versionMeta = server.meta?.comPulsemcpServerVersion;
+  const versionMeta = server.meta?.["com.pulsemcp/server-version"];
   const remote = versionMeta?.["remotes[0]"];
   const metaTools = remote?.tools ?? [];
   const serverTools: ToolInfo[] = (server.tools ?? []) as ToolInfo[];
@@ -141,8 +141,8 @@ function estimateWeeklyData(
 export function parseServerMetadata(
   server: PulseMCPServer,
 ): ParsedServerMetadata {
-  const serverMeta = server.meta?.comPulsemcpServer;
-  const versionMeta = server.meta?.comPulsemcpServerVersion;
+  const serverMeta = server.meta?.["com.pulsemcp/server"];
+  const versionMeta = server.meta?.["com.pulsemcp/server-version"];
 
   const visitorsWeek = serverMeta?.visitorsEstimateMostRecentWeek ?? 0;
   const visitorsMonth = serverMeta?.visitorsEstimateLastFourWeeks ?? 0;

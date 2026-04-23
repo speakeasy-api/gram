@@ -5,13 +5,13 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 interface ServerMeta {
-  comPulsemcpServer?: {
+  "com.pulsemcp/server"?: {
     visitorsEstimateMostRecentWeek?: number;
     visitorsEstimateLastFourWeeks?: number;
     visitorsEstimateTotal?: number;
     isOfficial?: boolean;
   };
-  comPulsemcpServerVersion?: {
+  "com.pulsemcp/server-version"?: {
     source?: string;
     status?: string;
     publishedAt?: string;
