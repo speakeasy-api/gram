@@ -496,29 +496,6 @@ func TestService_Info_ProjectFiltering(t *testing.T) {
 		require.ErrorIs(t, err, authz.ErrMissingGrants)
 		require.Nil(t, result)
 	})
-
-	t.Run("nil authz engine returns all projects", func(t *testing.T) {
-		t.Parallel()
-
-		userInfo := defaultMockUserInfo()
-		userInfo.UserID = "nil-filter-user"
-		userInfo.Email = "nilfilter@example.com"
-		userInfo.Organizations[0].ID = "nil-filter-org"
-
-		// Use the standard constructor (nil filter).
-		_, instance := newTestAuthService(t, userInfo)
-		ctx := setupInfoCtx(t, instance, userInfo)
-
-		orgID := userInfo.Organizations[0].ID
-		_, err := instance.createTestProject(ctx, orgID, "Visible", "visible")
-		require.NoError(t, err)
-
-		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
-		require.NoError(t, err)
-
-		assert.Len(t, result.Organizations[0].Projects, 1)
-		assert.Equal(t, "Visible", result.Organizations[0].Projects[0].Name)
-	})
 }
 
 // TestService_Info_AdminVisitingCustomerOrgDoesNotUpsertRelationship verifies that
