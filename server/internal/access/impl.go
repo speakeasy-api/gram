@@ -367,6 +367,9 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	if sysRole && (payload.Name != nil || payload.Description != nil || payload.Grants != nil) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "system role properties cannot be updated, only member assignment is allowed").Log(ctx, logger)
 	}
+	if sysRole && payload.MemberIds == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "system role update requires member_ids").Log(ctx, logger)
+	}
 	if payload.Name != nil {
 		if _, err := slugify(*payload.Name); err != nil {
 			return nil, err

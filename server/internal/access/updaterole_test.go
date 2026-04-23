@@ -174,6 +174,22 @@ func TestService_UpdateRole_SystemRole_RejectsPropertyChanges(t *testing.T) {
 	require.Contains(t, err.Error(), "system role properties cannot be updated")
 }
 
+func TestService_UpdateRole_SystemRole_RejectsNoopUpdate(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
+		mockRole("role_admin", "Admin", "admin", "Full access"),
+	}, nil).Once()
+
+	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID: "role_admin",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "system role update requires member_ids")
+}
+
 func TestService_UpdateRole_SystemRole_AuditLog(t *testing.T) {
 	t.Parallel()
 
