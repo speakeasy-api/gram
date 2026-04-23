@@ -346,6 +346,19 @@ run();
 * [byChat](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 * [list](docs/sdks/results/README.md#list) - listRiskResults risk
 
+### [Skills](docs/sdks/skills/README.md)
+
+* [approveVersion](docs/sdks/skills/README.md#approveversion) - approveVersion skills
+* [capture](docs/sdks/skills/README.md#capture) - capture skills
+* [captureClaude](docs/sdks/skills/README.md#captureclaude) - captureClaude skills
+* [getBySlug](docs/sdks/skills/README.md#getbyslug) - get skills
+* [getSettings](docs/sdks/skills/README.md#getsettings) - getSettings skills
+* [list](docs/sdks/skills/README.md#list) - list skills
+* [listPending](docs/sdks/skills/README.md#listpending) - listPending skills
+* [setSettings](docs/sdks/skills/README.md#setsettings) - setSettings skills
+* [supersedeVersion](docs/sdks/skills/README.md#supersedeversion) - supersedeVersion skills
+* [listVersions](docs/sdks/skills/README.md#listversions) - listVersions skills
+
 ### [Slack](docs/sdks/slack/README.md)
 
 * [configureSlackApp](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
@@ -578,6 +591,16 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskPoliciesUpdate`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
 - [`riskResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
+- [`skillsApproveVersion`](docs/sdks/skills/README.md#approveversion) - approveVersion skills
+- [`skillsCapture`](docs/sdks/skills/README.md#capture) - capture skills
+- [`skillsCaptureClaude`](docs/sdks/skills/README.md#captureclaude) - captureClaude skills
+- [`skillsGetBySlug`](docs/sdks/skills/README.md#getbyslug) - get skills
+- [`skillsGetSettings`](docs/sdks/skills/README.md#getsettings) - getSettings skills
+- [`skillsList`](docs/sdks/skills/README.md#list) - list skills
+- [`skillsListPending`](docs/sdks/skills/README.md#listpending) - listPending skills
+- [`skillsListVersions`](docs/sdks/skills/README.md#listversions) - listVersions skills
+- [`skillsSetSettings`](docs/sdks/skills/README.md#setsettings) - setSettings skills
+- [`skillsSupersedeVersion`](docs/sdks/skills/README.md#supersedeversion) - supersedeVersion skills
 - [`slackConfigureSlackApp`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
 - [`slackCreateSlackApp`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`slackDeleteSlackApp`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
@@ -762,6 +785,7 @@ To learn about this feature and how to get started, check
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
 - [`useListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
+- [`useListSkills`](docs/sdks/skills/README.md#list) - list skills
 - [`useListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
@@ -817,8 +841,17 @@ To learn about this feature and how to get started, check
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`useSetPluginAssignmentsMutation`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
 - [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects
+- [`useSetSkillsSettingsMutation`](docs/sdks/skills/README.md#setsettings) - setSettings skills
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
+- [`useSkill`](docs/sdks/skills/README.md#getbyslug) - get skills
+- [`useSkillsApproveVersionMutation`](docs/sdks/skills/README.md#approveversion) - approveVersion skills
+- [`useSkillsCaptureClaudeMutation`](docs/sdks/skills/README.md#captureclaude) - captureClaude skills
+- [`useSkillsCaptureMutation`](docs/sdks/skills/README.md#capture) - capture skills
+- [`useSkillsListPending`](docs/sdks/skills/README.md#listpending) - listPending skills
+- [`useSkillsListVersions`](docs/sdks/skills/README.md#listversions) - listVersions skills
+- [`useSkillsSettings`](docs/sdks/skills/README.md#getsettings) - getSettings skills
+- [`useSkillsSupersedeVersionMutation`](docs/sdks/skills/README.md#supersedeversion) - supersedeVersion skills
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates

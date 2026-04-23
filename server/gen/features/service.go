@@ -60,6 +60,8 @@ type GramProductFeatures struct {
 	ToolIoLogsEnabled bool
 	// Whether Claude Code session capture is enabled
 	SessionCaptureEnabled bool
+	// Whether skills capture and registry features are enabled
+	SkillsCaptureEnabled bool
 }
 
 // SetProductFeaturePayload is the payload type of the features service
@@ -149,6 +151,9 @@ func newGramProductFeatures(vres *featuresviews.GramProductFeaturesView) *GramPr
 	if vres.SessionCaptureEnabled != nil {
 		res.SessionCaptureEnabled = *vres.SessionCaptureEnabled
 	}
+	if vres.SkillsCaptureEnabled != nil {
+		res.SkillsCaptureEnabled = *vres.SkillsCaptureEnabled
+	}
 	return res
 }
 
@@ -159,6 +164,7 @@ func newGramProductFeaturesView(res *GramProductFeatures) *featuresviews.GramPro
 		LogsEnabled:           &res.LogsEnabled,
 		ToolIoLogsEnabled:     &res.ToolIoLogsEnabled,
 		SessionCaptureEnabled: &res.SessionCaptureEnabled,
+		SkillsCaptureEnabled:  &res.SkillsCaptureEnabled,
 	}
 	return vres
 }

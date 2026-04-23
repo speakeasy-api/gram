@@ -72,14 +72,15 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 		// port-forwarding is fully routing to Redis, causing transient
 		// connection errors under CI load.
 		ctx := t.Context()
-		for attempt := range 10 {
+		const maxAttempts = 30
+		for attempt := range maxAttempts {
 			if err := client.Ping(ctx).Err(); err == nil {
 				break
-			} else if attempt == 9 {
+			} else if attempt == maxAttempts-1 {
 				_ = client.Close()
 				return nil, fmt.Errorf("redis not ready after retries: %w", err)
 			}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(250 * time.Millisecond)
 		}
 
 		t.Cleanup(func() {

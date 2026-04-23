@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -253,6 +254,9 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 			s.logger.WarnContext(ctx, "Failed to marshal Cursor ToolResponse", attr.SlogError(err))
 		}
 	}
+
+	skillAttrs := s.extractSkillTelemetryAttributes(ctx, payload.AdditionalData)
+	maps.Copy(attrs, skillAttrs)
 
 	return attrs
 }

@@ -1,13 +1,14 @@
+import { Link, useLocation, useParams } from "react-router";
+import { capitalize, cn } from "@/lib/utils.ts";
+import { useOrganization, useProject } from "@/contexts/Auth.tsx";
+
+import { Heading } from "./ui/heading.tsx";
 import { InsightsTrigger } from "@/components/insights-sidebar";
+import React from "react";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { useOrganization, useProject } from "@/contexts/Auth.tsx";
-import { useSlugs } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
-import { capitalize, cn } from "@/lib/utils.ts";
-import React from "react";
-import { Link, useLocation, useParams } from "react-router";
-import { Heading } from "./ui/heading.tsx";
+import { useSlugs } from "@/contexts/Sdk.tsx";
 
 function PageHeaderComponent({
   className,
@@ -70,11 +71,10 @@ const breadcrumbSubstitutions = {
   "api-keys": "API Keys",
   "audit-logs": "Audit Logs",
   "admin-settings": "Admin Settings",
-  // The URL segments `slack` and `clis` are preserved for backwards
-  // compatibility, but the sidebar/route titles were rebranded — map them
-  // here so breadcrumbs stay in sync with the rest of the UI.
+  // The URL segment `slack` is preserved for backwards compatibility,
+  // but the sidebar/route title was rebranded — map it here so
+  // breadcrumbs stay in sync with the rest of the UI.
   slack: "Assistants",
-  clis: "Skills",
 };
 
 function PageHeaderBreadcrumbs({

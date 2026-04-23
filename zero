@@ -82,6 +82,16 @@ if ! $agent_mode; then
     check_command "docker" "
     Install it from here: https://www.docker.com/
     "
+
+    if ! docker compose version > /dev/null 2>&1; then
+        echo "❌ Docker Compose is required but \`docker compose\` is not available."
+        echo ""
+        echo "If you installed Docker via Homebrew, you may need to add the Compose plugin directory to ~/.docker/config.json:"
+        echo '  "cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"]'
+        echo ""
+        echo "Or install a Docker runtime that includes Compose v2, such as Docker Desktop or OrbStack."
+        onboarding_pass=false
+    fi
 fi
 
 if [ $onboarding_pass = "false" ]; then

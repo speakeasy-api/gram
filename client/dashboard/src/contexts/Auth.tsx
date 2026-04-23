@@ -3,9 +3,10 @@ import {
   OrganizationEntry,
   ProjectEntry,
 } from "@gram/client/models/components";
+import { createContext, useContext, useEffect } from "react";
+
 import { SessionInfoResponse } from "@gram/client/models/operations";
 import { useSessionInfo } from "@gram/client/react-query";
-import { createContext, useContext, useEffect } from "react";
 
 // We don't include accountType here because it is actively confusing. See useProductTier
 type Session = Omit<

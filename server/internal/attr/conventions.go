@@ -225,6 +225,15 @@ const (
 	HookSourceKey               = attribute.Key("gram.hook.source")
 	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")
 
+	// Skills
+	SkillNameKey             = attribute.Key("gram.skill.name")
+	SkillScopeKey            = attribute.Key("gram.skill.scope")
+	SkillDiscoveryRootKey    = attribute.Key("gram.skill.discovery_root")
+	SkillSourceTypeKey       = attribute.Key("gram.skill.source_type")
+	SkillIDKey               = attribute.Key("gram.skill.id")
+	SkillVersionIDKey        = attribute.Key("gram.skill.version_id")
+	SkillResolutionStatusKey = attribute.Key("gram.skill.resolution_status")
+
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")
 	PaginationCursorKey      = attribute.Key("gram.pagination.cursor")

@@ -3,6 +3,7 @@ package hooks
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -341,4 +342,155 @@ func TestBuildCursorTelemetryAttributes_ToolInputStringified(t *testing.T) {
 	require.True(t, ok, "ToolInput should be stored as a string")
 	assert.Contains(t, val, "file_path")
 	assert.Contains(t, val, "/tmp/test.go")
+}
+
+func TestBuildCursorTelemetryAttributes_SkillsMetadata(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	skillID := uuid.NewString()
+	skillVersionID := uuid.NewString()
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "preToolUse",
+		AdditionalData: map[string]any{
+			"skills": []any{
+				map[string]any{
+					"name":              "golang",
+					"scope":             "project",
+					"discovery_root":    "project_agents",
+					"source_type":       "local_filesystem",
+					"skill_id":          skillID,
+					"skill_version_id":  skillVersionID,
+					"resolution_status": "resolved",
+				},
+			},
+		},
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	require.Equal(t, "golang", attrs[attr.SkillNameKey])
+	require.Equal(t, "project", attrs[attr.SkillScopeKey])
+	require.Equal(t, "project_agents", attrs[attr.SkillDiscoveryRootKey])
+	require.Equal(t, "local_filesystem", attrs[attr.SkillSourceTypeKey])
+	require.Equal(t, skillID, attrs[attr.SkillIDKey])
+	require.Equal(t, skillVersionID, attrs[attr.SkillVersionIDKey])
+	require.Equal(t, "resolved", attrs[attr.SkillResolutionStatusKey])
+}
+
+func TestBuildCursorTelemetryAttributes_InvalidSkillsMetadataIgnored(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "preToolUse",
+		AdditionalData: map[string]any{
+			"skills": "invalid",
+		},
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	_, hasSkillName := attrs[attr.SkillNameKey]
+	_, hasSkillScope := attrs[attr.SkillScopeKey]
+	_, hasSkillResolutionStatus := attrs[attr.SkillResolutionStatusKey]
+	require.False(t, hasSkillName)
+	require.False(t, hasSkillScope)
+	require.False(t, hasSkillResolutionStatus)
+}
+
+func TestBuildCursorTelemetryAttributes_NullSkillsIgnored(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "preToolUse",
+		AdditionalData: map[string]any{
+			"skills": nil,
+		},
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	_, hasSkillName := attrs[attr.SkillNameKey]
+	_, hasSkillScope := attrs[attr.SkillScopeKey]
+	require.False(t, hasSkillName)
+	require.False(t, hasSkillScope)
+}
+
+func TestBuildCursorTelemetryAttributes_EmptySkillsSliceIgnored(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "preToolUse",
+		AdditionalData: map[string]any{
+			"skills": []any{},
+		},
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	_, hasSkillName := attrs[attr.SkillNameKey]
+	require.False(t, hasSkillName)
+}
+
+func TestBuildCursorTelemetryAttributes_SkillsMixedInvalidAndValid(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "preToolUse",
+		AdditionalData: map[string]any{
+			"skills": []any{
+				"notamap",
+				map[string]any{
+					"name": "golang",
+				},
+			},
+		},
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	require.Equal(t, "golang", attrs[attr.SkillNameKey])
+}
+
+func TestBuildCursorTelemetryAttributes_SkillsPartialFields(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "preToolUse",
+		AdditionalData: map[string]any{
+			"skills": []any{
+				map[string]any{
+					"name": "golang",
+				},
+			},
+		},
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	require.Equal(t, "golang", attrs[attr.SkillNameKey])
+	_, hasScope := attrs[attr.SkillScopeKey]
+	_, hasDiscoveryRoot := attrs[attr.SkillDiscoveryRootKey]
+	_, hasSourceType := attrs[attr.SkillSourceTypeKey]
+	_, hasSkillID := attrs[attr.SkillIDKey]
+	_, hasSkillVersionID := attrs[attr.SkillVersionIDKey]
+	_, hasResolutionStatus := attrs[attr.SkillResolutionStatusKey]
+	require.False(t, hasScope)
+	require.False(t, hasDiscoveryRoot)
+	require.False(t, hasSourceType)
+	require.False(t, hasSkillID)
+	require.False(t, hasSkillVersionID)
+	require.False(t, hasResolutionStatus)
 }

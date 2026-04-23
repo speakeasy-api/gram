@@ -1,4 +1,7 @@
-import { NavButton } from "@/components/nav-menu";
+import * as React from "react";
+
+import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
+import { MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -9,20 +12,19 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useSlugs } from "@/contexts/Sdk";
-import { Scope } from "@/hooks/useRBAC";
-import { useProductTier } from "@/hooks/useProductTier";
-import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
-import { useGetPeriodUsage } from "@gram/client/react-query";
-import { cn, Stack } from "@speakeasy-api/moonshine";
-import { MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
-import * as React from "react";
-import { useState } from "react";
-import { Link } from "react-router";
-import { RequireScope } from "./require-scope";
-import { FeatureRequestModal } from "./FeatureRequestModal";
+import { Stack, cn } from "@speakeasy-api/moonshine";
+import { useFeaturesGet, useGetPeriodUsage } from "@gram/client/react-query";
+
 import { Button } from "./ui/button";
+import { FeatureRequestModal } from "./FeatureRequestModal";
+import { Link } from "react-router";
+import { NavButton } from "@/components/nav-menu";
+import { RequireScope } from "./require-scope";
+import { Scope } from "@/hooks/useRBAC";
 import { Type } from "./ui/type";
+import { useProductTier } from "@/hooks/useProductTier";
+import { useSlugs } from "@/contexts/Sdk";
+import { useState } from "react";
 
 function ScopeGatedNavItem({
   item,
@@ -49,6 +51,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const { orgSlug } = useSlugs();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const { data: featuresData } = useFeaturesGet(undefined, undefined, {
+    throwOnError: false,
+  });
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -84,6 +89,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>build</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+              {featuresData?.skillsCaptureEnabled && (
+                <ScopeGatedNavItem item={routes.skills} scope="project:read" />
+              )}
               <ScopeGatedNavItem item={routes.elements} scope="project:read" />
               <ScopeGatedNavItem
                 item={routes.mcp}
@@ -93,7 +101,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={routes.slackApps}
                 scope={["mcp:read", "mcp:write"]}
               />
-              <ScopeGatedNavItem item={routes.clis} scope="project:read" />
+
               <ScopeGatedNavItem
                 item={routes.plugins}
                 scope={["project:read", "project:write"]}

@@ -3263,6 +3263,18 @@ type HookTraceSummaryResponseBody struct {
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 	// Skill name (from materialized column, only for Skill tool)
 	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
+	// Skill scope (from materialized column)
+	SkillScope *string `form:"skill_scope,omitempty" json:"skill_scope,omitempty" xml:"skill_scope,omitempty"`
+	// Skill discovery root (from materialized column)
+	SkillDiscoveryRoot *string `form:"skill_discovery_root,omitempty" json:"skill_discovery_root,omitempty" xml:"skill_discovery_root,omitempty"`
+	// Skill source type (from materialized column)
+	SkillSourceType *string `form:"skill_source_type,omitempty" json:"skill_source_type,omitempty" xml:"skill_source_type,omitempty"`
+	// Skill ID (from materialized column)
+	SkillID *string `form:"skill_id,omitempty" json:"skill_id,omitempty" xml:"skill_id,omitempty"`
+	// Skill version ID (from materialized column)
+	SkillVersionID *string `form:"skill_version_id,omitempty" json:"skill_version_id,omitempty" xml:"skill_version_id,omitempty"`
+	// Skill resolution status (from materialized column)
+	SkillResolutionStatus *string `form:"skill_resolution_status,omitempty" json:"skill_resolution_status,omitempty" xml:"skill_resolution_status,omitempty"`
 }
 
 // NewSearchLogsRequestBody builds the HTTP request body from the payload of

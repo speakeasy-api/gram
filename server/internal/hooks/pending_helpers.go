@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -151,6 +152,9 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 			s.logger.WarnContext(ctx, "Failed to marshal ToolResponse", attr.SlogError(err))
 		}
 	}
+
+	skillAttrs := s.extractSkillTelemetryAttributes(ctx, payload.AdditionalData)
+	maps.Copy(attrs, skillAttrs)
 
 	return attrs
 }

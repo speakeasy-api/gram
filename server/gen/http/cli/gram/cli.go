@@ -40,6 +40,7 @@ import (
 	remotemcpc "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/client"
 	resourcesc "github.com/speakeasy-api/gram/server/gen/http/resources/client"
 	riskc "github.com/speakeasy-api/gram/server/gen/http/risk/client"
+	skillsc "github.com/speakeasy-api/gram/server/gen/http/skills/client"
 	slackc "github.com/speakeasy-api/gram/server/gen/http/slack/client"
 	telemetryc "github.com/speakeasy-api/gram/server/gen/http/telemetry/client"
 	templatesc "github.com/speakeasy-api/gram/server/gen/http/templates/client"
@@ -84,6 +85,7 @@ func UsageCommands() []string {
 		"remote-mcp (create-server|list-servers|get-server|update-server|delete-server)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|get-risk-policy-status|trigger-risk-analysis)",
+		"skills (get|list|get-settings|set-settings|capture|capture-claude|list-versions|list-pending|approve-version|supersede-version)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -888,6 +890,76 @@ func ParseEndpoint(
 		riskTriggerRiskAnalysisSessionTokenFlag     = riskTriggerRiskAnalysisFlags.String("session-token", "", "")
 		riskTriggerRiskAnalysisProjectSlugInputFlag = riskTriggerRiskAnalysisFlags.String("project-slug-input", "", "")
 
+		skillsFlags = flag.NewFlagSet("skills", flag.ContinueOnError)
+
+		skillsGetFlags                = flag.NewFlagSet("get", flag.ExitOnError)
+		skillsGetSlugFlag             = skillsGetFlags.String("slug", "REQUIRED", "")
+		skillsGetSessionTokenFlag     = skillsGetFlags.String("session-token", "", "")
+		skillsGetProjectSlugInputFlag = skillsGetFlags.String("project-slug-input", "", "")
+
+		skillsListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
+		skillsListSessionTokenFlag     = skillsListFlags.String("session-token", "", "")
+		skillsListProjectSlugInputFlag = skillsListFlags.String("project-slug-input", "", "")
+
+		skillsGetSettingsFlags                = flag.NewFlagSet("get-settings", flag.ExitOnError)
+		skillsGetSettingsSessionTokenFlag     = skillsGetSettingsFlags.String("session-token", "", "")
+		skillsGetSettingsProjectSlugInputFlag = skillsGetSettingsFlags.String("project-slug-input", "", "")
+
+		skillsSetSettingsFlags                = flag.NewFlagSet("set-settings", flag.ExitOnError)
+		skillsSetSettingsBodyFlag             = skillsSetSettingsFlags.String("body", "REQUIRED", "")
+		skillsSetSettingsSessionTokenFlag     = skillsSetSettingsFlags.String("session-token", "", "")
+		skillsSetSettingsProjectSlugInputFlag = skillsSetSettingsFlags.String("project-slug-input", "", "")
+
+		skillsCaptureFlags                = flag.NewFlagSet("capture", flag.ExitOnError)
+		skillsCaptureApikeyTokenFlag      = skillsCaptureFlags.String("apikey-token", "", "")
+		skillsCaptureProjectSlugInputFlag = skillsCaptureFlags.String("project-slug-input", "", "")
+		skillsCaptureNameFlag             = skillsCaptureFlags.String("name", "REQUIRED", "")
+		skillsCaptureScopeFlag            = skillsCaptureFlags.String("scope", "REQUIRED", "")
+		skillsCaptureDiscoveryRootFlag    = skillsCaptureFlags.String("discovery-root", "REQUIRED", "")
+		skillsCaptureSourceTypeFlag       = skillsCaptureFlags.String("source-type", "REQUIRED", "")
+		skillsCaptureContentSha256Flag    = skillsCaptureFlags.String("content-sha256", "REQUIRED", "")
+		skillsCaptureAssetFormatFlag      = skillsCaptureFlags.String("asset-format", "REQUIRED", "")
+		skillsCaptureResolutionStatusFlag = skillsCaptureFlags.String("resolution-status", "REQUIRED", "")
+		skillsCaptureSkillIDFlag          = skillsCaptureFlags.String("skill-id", "", "")
+		skillsCaptureSkillVersionIDFlag   = skillsCaptureFlags.String("skill-version-id", "", "")
+		skillsCaptureContentTypeFlag      = skillsCaptureFlags.String("content-type", "REQUIRED", "")
+		skillsCaptureContentLengthFlag    = skillsCaptureFlags.String("content-length", "REQUIRED", "")
+		skillsCaptureStreamFlag           = skillsCaptureFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+
+		skillsCaptureClaudeFlags                = flag.NewFlagSet("capture-claude", flag.ExitOnError)
+		skillsCaptureClaudeClaudeSessionIDFlag  = skillsCaptureClaudeFlags.String("claude-session-id", "REQUIRED", "")
+		skillsCaptureClaudeNameFlag             = skillsCaptureClaudeFlags.String("name", "REQUIRED", "")
+		skillsCaptureClaudeScopeFlag            = skillsCaptureClaudeFlags.String("scope", "REQUIRED", "")
+		skillsCaptureClaudeDiscoveryRootFlag    = skillsCaptureClaudeFlags.String("discovery-root", "REQUIRED", "")
+		skillsCaptureClaudeSourceTypeFlag       = skillsCaptureClaudeFlags.String("source-type", "REQUIRED", "")
+		skillsCaptureClaudeContentSha256Flag    = skillsCaptureClaudeFlags.String("content-sha256", "REQUIRED", "")
+		skillsCaptureClaudeAssetFormatFlag      = skillsCaptureClaudeFlags.String("asset-format", "REQUIRED", "")
+		skillsCaptureClaudeResolutionStatusFlag = skillsCaptureClaudeFlags.String("resolution-status", "REQUIRED", "")
+		skillsCaptureClaudeSkillIDFlag          = skillsCaptureClaudeFlags.String("skill-id", "", "")
+		skillsCaptureClaudeSkillVersionIDFlag   = skillsCaptureClaudeFlags.String("skill-version-id", "", "")
+		skillsCaptureClaudeContentTypeFlag      = skillsCaptureClaudeFlags.String("content-type", "REQUIRED", "")
+		skillsCaptureClaudeContentLengthFlag    = skillsCaptureClaudeFlags.String("content-length", "REQUIRED", "")
+		skillsCaptureClaudeStreamFlag           = skillsCaptureClaudeFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+
+		skillsListVersionsFlags                = flag.NewFlagSet("list-versions", flag.ExitOnError)
+		skillsListVersionsSkillIDFlag          = skillsListVersionsFlags.String("skill-id", "REQUIRED", "")
+		skillsListVersionsSessionTokenFlag     = skillsListVersionsFlags.String("session-token", "", "")
+		skillsListVersionsProjectSlugInputFlag = skillsListVersionsFlags.String("project-slug-input", "", "")
+
+		skillsListPendingFlags                = flag.NewFlagSet("list-pending", flag.ExitOnError)
+		skillsListPendingSessionTokenFlag     = skillsListPendingFlags.String("session-token", "", "")
+		skillsListPendingProjectSlugInputFlag = skillsListPendingFlags.String("project-slug-input", "", "")
+
+		skillsApproveVersionFlags                = flag.NewFlagSet("approve-version", flag.ExitOnError)
+		skillsApproveVersionBodyFlag             = skillsApproveVersionFlags.String("body", "REQUIRED", "")
+		skillsApproveVersionSessionTokenFlag     = skillsApproveVersionFlags.String("session-token", "", "")
+		skillsApproveVersionProjectSlugInputFlag = skillsApproveVersionFlags.String("project-slug-input", "", "")
+
+		skillsSupersedeVersionFlags                = flag.NewFlagSet("supersede-version", flag.ExitOnError)
+		skillsSupersedeVersionBodyFlag             = skillsSupersedeVersionFlags.String("body", "REQUIRED", "")
+		skillsSupersedeVersionSessionTokenFlag     = skillsSupersedeVersionFlags.String("session-token", "", "")
+		skillsSupersedeVersionProjectSlugInputFlag = skillsSupersedeVersionFlags.String("project-slug-input", "", "")
+
 		slackFlags = flag.NewFlagSet("slack", flag.ContinueOnError)
 
 		slackCreateSlackAppFlags                = flag.NewFlagSet("create-slack-app", flag.ExitOnError)
@@ -1395,6 +1467,18 @@ func ParseEndpoint(
 	riskGetRiskPolicyStatusFlags.Usage = riskGetRiskPolicyStatusUsage
 	riskTriggerRiskAnalysisFlags.Usage = riskTriggerRiskAnalysisUsage
 
+	skillsFlags.Usage = skillsUsage
+	skillsGetFlags.Usage = skillsGetUsage
+	skillsListFlags.Usage = skillsListUsage
+	skillsGetSettingsFlags.Usage = skillsGetSettingsUsage
+	skillsSetSettingsFlags.Usage = skillsSetSettingsUsage
+	skillsCaptureFlags.Usage = skillsCaptureUsage
+	skillsCaptureClaudeFlags.Usage = skillsCaptureClaudeUsage
+	skillsListVersionsFlags.Usage = skillsListVersionsUsage
+	skillsListPendingFlags.Usage = skillsListPendingUsage
+	skillsApproveVersionFlags.Usage = skillsApproveVersionUsage
+	skillsSupersedeVersionFlags.Usage = skillsSupersedeVersionUsage
+
 	slackFlags.Usage = slackUsage
 	slackCreateSlackAppFlags.Usage = slackCreateSlackAppUsage
 	slackListSlackAppsFlags.Usage = slackListSlackAppsUsage
@@ -1534,6 +1618,8 @@ func ParseEndpoint(
 			svcf = resourcesFlags
 		case "risk":
 			svcf = riskFlags
+		case "skills":
+			svcf = skillsFlags
 		case "slack":
 			svcf = slackFlags
 		case "telemetry":
@@ -2084,6 +2170,40 @@ func ParseEndpoint(
 
 			case "trigger-risk-analysis":
 				epf = riskTriggerRiskAnalysisFlags
+
+			}
+
+		case "skills":
+			switch epn {
+			case "get":
+				epf = skillsGetFlags
+
+			case "list":
+				epf = skillsListFlags
+
+			case "get-settings":
+				epf = skillsGetSettingsFlags
+
+			case "set-settings":
+				epf = skillsSetSettingsFlags
+
+			case "capture":
+				epf = skillsCaptureFlags
+
+			case "capture-claude":
+				epf = skillsCaptureClaudeFlags
+
+			case "list-versions":
+				epf = skillsListVersionsFlags
+
+			case "list-pending":
+				epf = skillsListPendingFlags
+
+			case "approve-version":
+				epf = skillsApproveVersionFlags
+
+			case "supersede-version":
+				epf = skillsSupersedeVersionFlags
 
 			}
 
@@ -2833,6 +2953,46 @@ func ParseEndpoint(
 			case "trigger-risk-analysis":
 				endpoint = c.TriggerRiskAnalysis()
 				data, err = riskc.BuildTriggerRiskAnalysisPayload(*riskTriggerRiskAnalysisBodyFlag, *riskTriggerRiskAnalysisApikeyTokenFlag, *riskTriggerRiskAnalysisSessionTokenFlag, *riskTriggerRiskAnalysisProjectSlugInputFlag)
+			}
+		case "skills":
+			c := skillsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get":
+				endpoint = c.Get()
+				data, err = skillsc.BuildGetPayload(*skillsGetSlugFlag, *skillsGetSessionTokenFlag, *skillsGetProjectSlugInputFlag)
+			case "list":
+				endpoint = c.List()
+				data, err = skillsc.BuildListPayload(*skillsListSessionTokenFlag, *skillsListProjectSlugInputFlag)
+			case "get-settings":
+				endpoint = c.GetSettings()
+				data, err = skillsc.BuildGetSettingsPayload(*skillsGetSettingsSessionTokenFlag, *skillsGetSettingsProjectSlugInputFlag)
+			case "set-settings":
+				endpoint = c.SetSettings()
+				data, err = skillsc.BuildSetSettingsPayload(*skillsSetSettingsBodyFlag, *skillsSetSettingsSessionTokenFlag, *skillsSetSettingsProjectSlugInputFlag)
+			case "capture":
+				endpoint = c.Capture()
+				data, err = skillsc.BuildCapturePayload(*skillsCaptureApikeyTokenFlag, *skillsCaptureProjectSlugInputFlag, *skillsCaptureNameFlag, *skillsCaptureScopeFlag, *skillsCaptureDiscoveryRootFlag, *skillsCaptureSourceTypeFlag, *skillsCaptureContentSha256Flag, *skillsCaptureAssetFormatFlag, *skillsCaptureResolutionStatusFlag, *skillsCaptureSkillIDFlag, *skillsCaptureSkillVersionIDFlag, *skillsCaptureContentTypeFlag, *skillsCaptureContentLengthFlag)
+				if err == nil {
+					data, err = skillsc.BuildCaptureStreamPayload(data, *skillsCaptureStreamFlag)
+				}
+			case "capture-claude":
+				endpoint = c.CaptureClaude()
+				data, err = skillsc.BuildCaptureClaudePayload(*skillsCaptureClaudeClaudeSessionIDFlag, *skillsCaptureClaudeNameFlag, *skillsCaptureClaudeScopeFlag, *skillsCaptureClaudeDiscoveryRootFlag, *skillsCaptureClaudeSourceTypeFlag, *skillsCaptureClaudeContentSha256Flag, *skillsCaptureClaudeAssetFormatFlag, *skillsCaptureClaudeResolutionStatusFlag, *skillsCaptureClaudeSkillIDFlag, *skillsCaptureClaudeSkillVersionIDFlag, *skillsCaptureClaudeContentTypeFlag, *skillsCaptureClaudeContentLengthFlag)
+				if err == nil {
+					data, err = skillsc.BuildCaptureClaudeStreamPayload(data, *skillsCaptureClaudeStreamFlag)
+				}
+			case "list-versions":
+				endpoint = c.ListVersions()
+				data, err = skillsc.BuildListVersionsPayload(*skillsListVersionsSkillIDFlag, *skillsListVersionsSessionTokenFlag, *skillsListVersionsProjectSlugInputFlag)
+			case "list-pending":
+				endpoint = c.ListPending()
+				data, err = skillsc.BuildListPendingPayload(*skillsListPendingSessionTokenFlag, *skillsListPendingProjectSlugInputFlag)
+			case "approve-version":
+				endpoint = c.ApproveVersion()
+				data, err = skillsc.BuildApproveVersionPayload(*skillsApproveVersionBodyFlag, *skillsApproveVersionSessionTokenFlag, *skillsApproveVersionProjectSlugInputFlag)
+			case "supersede-version":
+				endpoint = c.SupersedeVersion()
+				data, err = skillsc.BuildSupersedeVersionPayload(*skillsSupersedeVersionBodyFlag, *skillsSupersedeVersionSessionTokenFlag, *skillsSupersedeVersionProjectSlugInputFlag)
 			}
 		case "slack":
 			c := slackc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -6523,6 +6683,281 @@ func riskTriggerRiskAnalysisUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk trigger-risk-analysis --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// skillsUsage displays the usage of the skills command and its subcommands.
+func skillsUsage() {
+	fmt.Fprintln(os.Stderr, `Capture skill artifacts and metadata from local hook producers.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] skills COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get: Get a captured skill by slug.`)
+	fmt.Fprintln(os.Stderr, `    list: List captured skills for a project.`)
+	fmt.Fprintln(os.Stderr, `    get-settings: Get capture settings for a project.`)
+	fmt.Fprintln(os.Stderr, `    set-settings: Update capture settings for a project.`)
+	fmt.Fprintln(os.Stderr, `    capture: Capture a skill artifact and associated metadata via producer authentication.`)
+	fmt.Fprintln(os.Stderr, `    capture-claude: Capture a skill artifact and associated metadata via validated Claude session metadata.`)
+	fmt.Fprintln(os.Stderr, `    list-versions: List captured versions for a skill.`)
+	fmt.Fprintln(os.Stderr, `    list-pending: List skills and versions that are pending review.`)
+	fmt.Fprintln(os.Stderr, `    approve-version: Approve a captured skill version and mark it active for the lineage.`)
+	fmt.Fprintln(os.Stderr, `    supersede-version: Mark a captured skill version as superseded.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s skills COMMAND --help\n", os.Args[0])
+}
+func skillsGetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills get", os.Args[0])
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a captured skill by slug.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills get --slug \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List captured skills for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills list --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsGetSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills get-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get capture settings for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills get-settings --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsSetSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills set-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update capture settings for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills set-settings --body '{\n      \"capture_project_skills\": false,\n      \"capture_user_skills\": false,\n      \"enabled\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsCaptureUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills capture", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -name STRING")
+	fmt.Fprint(os.Stderr, " -scope STRING")
+	fmt.Fprint(os.Stderr, " -discovery-root STRING")
+	fmt.Fprint(os.Stderr, " -source-type STRING")
+	fmt.Fprint(os.Stderr, " -content-sha256 STRING")
+	fmt.Fprint(os.Stderr, " -asset-format STRING")
+	fmt.Fprint(os.Stderr, " -resolution-status STRING")
+	fmt.Fprint(os.Stderr, " -skill-id STRING")
+	fmt.Fprint(os.Stderr, " -skill-version-id STRING")
+	fmt.Fprint(os.Stderr, " -content-type STRING")
+	fmt.Fprint(os.Stderr, " -content-length INT64")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Capture a skill artifact and associated metadata via producer authentication.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -scope STRING: `)
+	fmt.Fprintln(os.Stderr, `    -discovery-root STRING: `)
+	fmt.Fprintln(os.Stderr, `    -source-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-sha256 STRING: `)
+	fmt.Fprintln(os.Stderr, `    -asset-format STRING: `)
+	fmt.Fprintln(os.Stderr, `    -resolution-status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -skill-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -skill-version-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-length INT64: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills capture --apikey-token \"abc123\" --project-slug-input \"abc123\" --name \"aa\" --scope \"user\" --discovery-root \"project_claude\" --source-type \"local_filesystem\" --content-sha256 \"1111111111111111111111111111111111111111111111111111111111111111\" --asset-format \"zip\" --resolution-status \"unresolved_name_only\" --skill-id \"abc123\" --skill-version-id \"abc123\" --content-type \"abc123\" --content-length 1 --stream \"goa.png\"")
+}
+
+func skillsCaptureClaudeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills capture-claude", os.Args[0])
+	fmt.Fprint(os.Stderr, " -claude-session-id STRING")
+	fmt.Fprint(os.Stderr, " -name STRING")
+	fmt.Fprint(os.Stderr, " -scope STRING")
+	fmt.Fprint(os.Stderr, " -discovery-root STRING")
+	fmt.Fprint(os.Stderr, " -source-type STRING")
+	fmt.Fprint(os.Stderr, " -content-sha256 STRING")
+	fmt.Fprint(os.Stderr, " -asset-format STRING")
+	fmt.Fprint(os.Stderr, " -resolution-status STRING")
+	fmt.Fprint(os.Stderr, " -skill-id STRING")
+	fmt.Fprint(os.Stderr, " -skill-version-id STRING")
+	fmt.Fprint(os.Stderr, " -content-type STRING")
+	fmt.Fprint(os.Stderr, " -content-length INT64")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Capture a skill artifact and associated metadata via validated Claude session metadata.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -claude-session-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -scope STRING: `)
+	fmt.Fprintln(os.Stderr, `    -discovery-root STRING: `)
+	fmt.Fprintln(os.Stderr, `    -source-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-sha256 STRING: `)
+	fmt.Fprintln(os.Stderr, `    -asset-format STRING: `)
+	fmt.Fprintln(os.Stderr, `    -resolution-status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -skill-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -skill-version-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-length INT64: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills capture-claude --claude-session-id \"abc123\" --name \"aa\" --scope \"user\" --discovery-root \"project_claude\" --source-type \"local_filesystem\" --content-sha256 \"1111111111111111111111111111111111111111111111111111111111111111\" --asset-format \"zip\" --resolution-status \"unresolved_name_only\" --skill-id \"abc123\" --skill-version-id \"abc123\" --content-type \"abc123\" --content-length 1 --stream \"goa.png\"")
+}
+
+func skillsListVersionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills list-versions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -skill-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List captured versions for a skill.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -skill-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills list-versions --skill-id \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsListPendingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills list-pending", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List skills and versions that are pending review.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills list-pending --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsApproveVersionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills approve-version", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Approve a captured skill version and mark it active for the lineage.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills approve-version --body '{\n      \"version_id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsSupersedeVersionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills supersede-version", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Mark a captured skill version as superseded.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills supersede-version --body '{\n      \"version_id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // slackUsage displays the usage of the slack command and its subcommands.

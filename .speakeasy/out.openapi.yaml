@@ -13492,6 +13492,1090 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: RiskListResults
+  /rpc/skills.approveVersion:
+    post:
+      description: Approve a captured skill version and mark it active for the lineage.
+      operationId: approveSkillVersion
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveVersionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillVersion'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: approveVersion skills
+      tags:
+        - skills
+      x-speakeasy-name-override: approveVersion
+  /rpc/skills.capture:
+    post:
+      description: Capture a skill artifact and associated metadata via producer authentication.
+      operationId: captureSkill
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Name
+          required: true
+          schema:
+            maxLength: 100
+            minLength: 1
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Scope
+          required: true
+          schema:
+            enum:
+              - project
+              - user
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Discovery-Root
+          required: true
+          schema:
+            enum:
+              - project_agents
+              - project_claude
+              - project_cursor
+              - user_agents
+              - user_claude
+              - user_cursor
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Source-Type
+          required: true
+          schema:
+            enum:
+              - local_filesystem
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Content-Sha256
+          required: true
+          schema:
+            pattern: ^[a-fA-F0-9]{64}$
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Asset-Format
+          required: true
+          schema:
+            enum:
+              - zip
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Resolution-Status
+          required: true
+          schema:
+            enum:
+              - resolved
+              - unresolved_name_only
+              - invalid_skill_root
+              - skipped_by_author
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Id
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Version-Id
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: Content-Type
+          required: true
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: Content-Length
+          required: true
+          schema:
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaptureSkillResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: capture skills
+      tags:
+        - skills
+      x-speakeasy-name-override: capture
+  /rpc/skills.captureClaude:
+    post:
+      description: Capture a skill artifact and associated metadata via validated Claude session metadata.
+      operationId: captureClaudeSkill
+      parameters:
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Claude-Session-ID
+          required: true
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Name
+          required: true
+          schema:
+            maxLength: 100
+            minLength: 1
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Scope
+          required: true
+          schema:
+            enum:
+              - project
+              - user
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Discovery-Root
+          required: true
+          schema:
+            enum:
+              - project_agents
+              - project_claude
+              - project_cursor
+              - user_agents
+              - user_claude
+              - user_cursor
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Source-Type
+          required: true
+          schema:
+            enum:
+              - local_filesystem
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Content-Sha256
+          required: true
+          schema:
+            pattern: ^[a-fA-F0-9]{64}$
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Asset-Format
+          required: true
+          schema:
+            enum:
+              - zip
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Resolution-Status
+          required: true
+          schema:
+            enum:
+              - resolved
+              - unresolved_name_only
+              - invalid_skill_root
+              - skipped_by_author
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Id
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Version-Id
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: Content-Type
+          required: true
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: Content-Length
+          required: true
+          schema:
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaptureSkillResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: captureClaude skills
+      tags:
+        - skills
+      x-speakeasy-name-override: captureClaude
+  /rpc/skills.get:
+    get:
+      description: Get a captured skill by slug.
+      operationId: getSkill
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the skill
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Skill'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: get skills
+      tags:
+        - skills
+      x-speakeasy-name-override: getBySlug
+      x-speakeasy-react-hook:
+        name: Skill
+  /rpc/skills.getSettings:
+    get:
+      description: Get capture settings for a project.
+      operationId: getSkillsSettings
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillCaptureSettings'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getSettings skills
+      tags:
+        - skills
+      x-speakeasy-name-override: getSettings
+      x-speakeasy-react-hook:
+        name: SkillsSettings
+  /rpc/skills.list:
+    get:
+      description: List captured skills for a project.
+      operationId: listSkills
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSkillsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: list skills
+      tags:
+        - skills
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: ListSkills
+  /rpc/skills.pending:
+    get:
+      description: List skills and versions that are pending review.
+      operationId: listPendingSkills
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListPendingSkillsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listPending skills
+      tags:
+        - skills
+      x-speakeasy-name-override: listPending
+  /rpc/skills.setSettings:
+    post:
+      description: Update capture settings for a project.
+      operationId: setSkillsSettings
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetSkillCaptureSettingsForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillCaptureSettings'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: setSettings skills
+      tags:
+        - skills
+      x-speakeasy-name-override: setSettings
+      x-speakeasy-react-hook:
+        name: SetSkillsSettings
+  /rpc/skills.supersedeVersion:
+    post:
+      description: Mark a captured skill version as superseded.
+      operationId: supersedeSkillVersion
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveVersionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillVersion'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: supersedeVersion skills
+      tags:
+        - skills
+      x-speakeasy-name-override: supersedeVersion
+  /rpc/skills.versions:
+    get:
+      description: List captured versions for a skill.
+      operationId: listSkillVersions
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: skill_id
+          required: true
+          schema:
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSkillVersionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listVersions skills
+      tags:
+        - skills
+      x-speakeasy-name-override: listVersions
   /rpc/slack-apps.configure:
     post:
       description: Store Slack credentials (client ID, client secret, signing secret) for an app.
@@ -19256,6 +20340,13 @@ components:
         - status
         - created_at
         - updated_at
+    ApproveVersionRequestBody:
+      type: object
+      properties:
+        version_id:
+          type: string
+      required:
+        - version_id
     Asset:
       type: object
       properties:
@@ -19535,6 +20626,221 @@ components:
       description: Result of capturing a telemetry event
       required:
         - success
+    CaptureSkillAsset:
+      type: object
+      properties:
+        content_length:
+          type: integer
+          format: int64
+        content_type:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+            - skill
+        sha256:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - kind
+        - sha256
+        - content_type
+        - content_length
+        - created_at
+        - updated_at
+    CaptureSkillClaudeForm:
+      type: object
+      properties:
+        asset_format:
+          type: string
+          enum:
+            - zip
+        content_length:
+          type: integer
+          format: int64
+        content_sha256:
+          type: string
+          pattern: ^[a-fA-F0-9]{64}$
+        content_type:
+          type: string
+        discovery_root:
+          type: string
+          enum:
+            - project_agents
+            - project_claude
+            - project_cursor
+            - user_agents
+            - user_claude
+            - user_cursor
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        resolution_status:
+          type: string
+          enum:
+            - resolved
+            - unresolved_name_only
+            - invalid_skill_root
+            - skipped_by_author
+        scope:
+          type: string
+          enum:
+            - project
+            - user
+        skill_id:
+          type: string
+        skill_version_id:
+          type: string
+        source_type:
+          type: string
+          enum:
+            - local_filesystem
+      required:
+        - name
+        - scope
+        - discovery_root
+        - source_type
+        - content_sha256
+        - asset_format
+        - resolution_status
+        - content_type
+        - content_length
+    CaptureSkillCoreForm:
+      type: object
+      properties:
+        asset_format:
+          type: string
+          enum:
+            - zip
+        content_length:
+          type: integer
+          format: int64
+        content_sha256:
+          type: string
+          pattern: ^[a-fA-F0-9]{64}$
+        content_type:
+          type: string
+        discovery_root:
+          type: string
+          enum:
+            - project_agents
+            - project_claude
+            - project_cursor
+            - user_agents
+            - user_claude
+            - user_cursor
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        resolution_status:
+          type: string
+          enum:
+            - resolved
+            - unresolved_name_only
+            - invalid_skill_root
+            - skipped_by_author
+        scope:
+          type: string
+          enum:
+            - project
+            - user
+        skill_id:
+          type: string
+        skill_version_id:
+          type: string
+        source_type:
+          type: string
+          enum:
+            - local_filesystem
+      required:
+        - name
+        - scope
+        - discovery_root
+        - source_type
+        - content_sha256
+        - asset_format
+        - resolution_status
+        - content_type
+        - content_length
+    CaptureSkillProducerForm:
+      type: object
+      properties:
+        apikey_token:
+          type: string
+        asset_format:
+          type: string
+          enum:
+            - zip
+        content_length:
+          type: integer
+          format: int64
+        content_sha256:
+          type: string
+          pattern: ^[a-fA-F0-9]{64}$
+        content_type:
+          type: string
+        discovery_root:
+          type: string
+          enum:
+            - project_agents
+            - project_claude
+            - project_cursor
+            - user_agents
+            - user_claude
+            - user_cursor
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        project_slug_input:
+          type: string
+        resolution_status:
+          type: string
+          enum:
+            - resolved
+            - unresolved_name_only
+            - invalid_skill_root
+            - skipped_by_author
+        scope:
+          type: string
+          enum:
+            - project
+            - user
+        skill_id:
+          type: string
+        skill_version_id:
+          type: string
+        source_type:
+          type: string
+          enum:
+            - local_filesystem
+      required:
+        - name
+        - scope
+        - discovery_root
+        - source_type
+        - content_sha256
+        - asset_format
+        - resolution_status
+        - content_type
+        - content_length
+    CaptureSkillResult:
+      type: object
+      properties:
+        asset:
+          $ref: '#/components/schemas/CaptureSkillAsset'
+      required:
+        - asset
     Chat:
       type: object
       properties:
@@ -22177,6 +23483,9 @@ components:
         session_capture_enabled:
           type: boolean
           description: Whether Claude Code session capture is enabled
+        skills_capture_enabled:
+          type: boolean
+          description: Whether skills capture and registry features are enabled
         tool_io_logs_enabled:
           type: boolean
           description: Whether tool I/O logging is enabled
@@ -22185,6 +23494,7 @@ components:
         - logs_enabled
         - tool_io_logs_enabled
         - session_capture_enabled
+        - skills_capture_enabled
     HTTPToolDefinition:
       type: object
       properties:
@@ -22336,9 +23646,27 @@ components:
           type: integer
           description: Total number of logs in this trace
           format: int64
+        skill_discovery_root:
+          type: string
+          description: Skill discovery root (from materialized column)
+        skill_id:
+          type: string
+          description: Skill ID (from materialized column)
         skill_name:
           type: string
           description: Skill name (from materialized column, only for Skill tool)
+        skill_resolution_status:
+          type: string
+          description: Skill resolution status (from materialized column)
+        skill_scope:
+          type: string
+          description: Skill scope (from materialized column)
+        skill_source_type:
+          type: string
+          description: Skill source type (from materialized column)
+        skill_version_id:
+          type: string
+          description: Skill version ID (from materialized column)
         start_time_unix_nano:
           type: string
           description: Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
@@ -23010,6 +24338,15 @@ components:
           description: The list of packages
       required:
         - packages
+    ListPendingSkillsResult:
+      type: object
+      properties:
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingSkillEntry'
+      required:
+        - skills
     ListPluginsResult:
       type: object
       properties:
@@ -23200,6 +24537,24 @@ components:
       description: Result type for listing remote MCP servers
       required:
         - remote_mcp_servers
+    ListSkillVersionsResult:
+      type: object
+      properties:
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillVersion'
+      required:
+        - versions
+    ListSkillsResult:
+      type: object
+      properties:
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillEntry'
+      required:
+        - skills
     ListSlackAppsResult:
       type: object
       properties:
@@ -24283,6 +25638,18 @@ components:
         - visibility
         - semver
         - created_at
+    PendingSkillEntry:
+      type: object
+      properties:
+        skill:
+          $ref: '#/components/schemas/Skill'
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillVersion'
+      required:
+        - skill
+        - versions
     PeriodUsage:
       type: object
       properties:
@@ -26021,6 +27388,7 @@ components:
             - logs
             - tool_io_logs
             - session_capture
+            - skills_capture
           maxLength: 60
       required:
         - feature_name
@@ -26040,6 +27408,19 @@ components:
           $ref: '#/components/schemas/Project'
       required:
         - project
+    SetSkillCaptureSettingsForm:
+      type: object
+      properties:
+        capture_project_skills:
+          type: boolean
+        capture_user_skills:
+          type: boolean
+        enabled:
+          type: boolean
+      required:
+        - enabled
+        - capture_project_skills
+        - capture_user_skills
     SetSourceEnvironmentLinkRequestBody:
       type: object
       properties:
@@ -26074,6 +27455,102 @@ components:
       required:
         - toolset_id
         - environment_id
+    Skill:
+      type: object
+      properties:
+        active_version_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        description:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        skill_uuid:
+          type: string
+        slug:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - slug
+        - created_at
+        - updated_at
+    SkillCaptureSettings:
+      type: object
+      properties:
+        capture_project_skills:
+          type: boolean
+        capture_user_skills:
+          type: boolean
+        effective_mode:
+          type: string
+          enum:
+            - disabled
+            - project_only
+            - user_only
+            - project_and_user
+        enabled:
+          type: boolean
+        inherited_from_organization:
+          type: boolean
+        org_default_mode:
+          type: string
+          enum:
+            - disabled
+            - project_only
+            - user_only
+            - project_and_user
+        project_override_mode:
+          type: string
+          enum:
+            - disabled
+            - project_only
+            - user_only
+            - project_and_user
+      required:
+        - effective_mode
+        - enabled
+        - capture_project_skills
+        - capture_user_skills
+        - inherited_from_organization
+    SkillEntry:
+      type: object
+      properties:
+        active_version:
+          $ref: '#/components/schemas/SkillVersionSummary'
+        created_at:
+          type: string
+          format: date-time
+        description:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        skill_uuid:
+          type: string
+        slug:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+        version_count:
+          type: integer
+          format: int64
+      required:
+        - id
+        - name
+        - slug
+        - created_at
+        - updated_at
+        - version_count
     SkillSummary:
       type: object
       properties:
@@ -26093,6 +27570,89 @@ components:
         - skill_name
         - use_count
         - unique_users
+    SkillVersion:
+      type: object
+      properties:
+        asset_format:
+          type: string
+        asset_id:
+          type: string
+        author_name:
+          type: string
+        captured_by_user_id:
+          type: string
+        content_sha256:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        first_seen_at:
+          type: string
+          format: date-time
+        first_seen_session_id:
+          type: string
+        first_seen_trace_id:
+          type: string
+        id:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        skill_bytes:
+          type: integer
+          format: int64
+        skill_id:
+          type: string
+        state:
+          type: string
+          enum:
+            - pending_review
+            - active
+            - superseded
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - skill_id
+        - content_sha256
+        - asset_format
+        - size_bytes
+        - state
+        - created_at
+        - updated_at
+    SkillVersionSummary:
+      type: object
+      properties:
+        asset_format:
+          type: string
+        author_name:
+          type: string
+        content_sha256:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        first_seen_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        state:
+          type: string
+          enum:
+            - pending_review
+            - active
+            - superseded
+      required:
+        - id
+        - content_sha256
+        - asset_format
+        - size_bytes
+        - created_at
     SlackAppResult:
       type: object
       properties:
@@ -27951,6 +29511,8 @@ tags:
     description: Dashboard API for interacting with resources.
   - name: risk
     description: Manage risk analysis policies and view scan results.
+  - name: skills
+    description: Capture skill artifacts and metadata from local hook producers.
   - name: slack
     description: Auth and interactions for the Gram Slack App.
   - name: telemetry
