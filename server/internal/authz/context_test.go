@@ -1,6 +1,7 @@
 package authz
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -12,12 +13,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+func rbacAlwaysEnabled(context.Context, string) (bool, error) { return true, nil }
+
 func TestPrepareContext_loadsUserGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testinfra.NewLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testinfra.NewLogger(t), conn, rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -40,7 +43,7 @@ func TestPrepareContext_skipsNonSessionAuth(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testinfra.NewLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testinfra.NewLogger(t), conn, rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -60,7 +63,7 @@ func TestPrepareContext_skipsNonEnterpriseOrgs(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testinfra.NewLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testinfra.NewLogger(t), conn, rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

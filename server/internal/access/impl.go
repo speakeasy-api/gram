@@ -832,7 +832,7 @@ func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContex
 }
 
 func isSystemRole(roleSlug string) bool {
-	return roleSlug == "admin" || roleSlug == "member"
+	return roleSlug == authz.SystemRoleAdmin || roleSlug == authz.SystemRoleMember
 }
 
 func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {

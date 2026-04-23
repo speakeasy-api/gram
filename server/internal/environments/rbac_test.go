@@ -8,6 +8,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/environments"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -16,7 +17,7 @@ func TestEnvironments_RBAC_ReadOps_DeniedWithNoGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestEnvironmentService(t)
-	ctx = authz.WithExactGrants(t, ctx)
+	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
@@ -36,7 +37,7 @@ func TestEnvironments_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
@@ -54,7 +55,7 @@ func TestEnvironments_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
@@ -67,7 +68,7 @@ func TestEnvironments_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestEnvironmentService(t)
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: uuid.NewString()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: uuid.NewString()})
 
 	_, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
@@ -82,7 +83,7 @@ func TestEnvironments_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestEnvironmentService(t)
-	ctx = authz.WithExactGrants(t, ctx)
+	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
 		SessionToken:     nil,
@@ -106,7 +107,7 @@ func TestEnvironments_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
 		SessionToken:     nil,
@@ -130,7 +131,7 @@ func TestEnvironments_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
 		SessionToken:     nil,

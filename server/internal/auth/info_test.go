@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -417,7 +418,7 @@ func TestService_Info_ProjectFiltering(t *testing.T) {
 		p2, err := instance.createTestProject(ctx, orgID, "ProjectB", "project-b")
 		require.NoError(t, err)
 
-		ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: p1.ID.String()})
+		ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: p1.ID.String()})
 
 		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
 		require.NoError(t, err)
@@ -443,7 +444,7 @@ func TestService_Info_ProjectFiltering(t *testing.T) {
 		_, err = instance.createTestProject(ctx, orgID, "ProjY", "proj-y")
 		require.NoError(t, err)
 
-		ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authz.WildcardResource})
+		ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authz.WildcardResource})
 
 		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
 		require.NoError(t, err)
@@ -465,7 +466,7 @@ func TestService_Info_ProjectFiltering(t *testing.T) {
 		_, err := instance.createTestProject(ctx, orgID, "Hidden", "hidden")
 		require.NoError(t, err)
 
-		ctx = authz.WithExactGrants(t, ctx)
+		ctx = authztest.WithExactGrants(t, ctx)
 
 		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
 		require.NoError(t, err)

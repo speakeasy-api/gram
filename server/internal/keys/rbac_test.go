@@ -8,6 +8,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -16,7 +17,7 @@ func TestKeysService_CreateKey_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestKeysService(t)
-	ctx = authz.WithExactGrants(t, ctx)
+	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "rbac-denied-create", Scopes: []string{"consumer"}})
 	var oopsErr *oops.ShareableError
@@ -28,7 +29,7 @@ func TestKeysService_CreateKey_AllowsOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestKeysService(t)
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: testAuthContext(t, ctx).ActiveOrganizationID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: testAuthContext(t, ctx).ActiveOrganizationID})
 
 	key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "rbac-allow-create", Scopes: []string{"consumer"}})
 	require.NoError(t, err)
@@ -39,7 +40,7 @@ func TestKeysService_ListKeys_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestKeysService(t)
-	ctx = authz.WithExactGrants(t, ctx)
+	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := ti.service.ListKeys(ctx, &gen.ListKeysPayload{})
 	var oopsErr *oops.ShareableError
@@ -51,7 +52,7 @@ func TestKeysService_ListKeys_AllowsOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestKeysService(t)
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: testAuthContext(t, ctx).ActiveOrganizationID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: testAuthContext(t, ctx).ActiveOrganizationID})
 	_, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "rbac-allow-list", Scopes: []string{"consumer"}})
 	require.NoError(t, err)
 
@@ -64,11 +65,11 @@ func TestKeysService_RevokeKey_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestKeysService(t)
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: testAuthContext(t, ctx).ActiveOrganizationID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: testAuthContext(t, ctx).ActiveOrganizationID})
 	key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "rbac-denied-revoke", Scopes: []string{"consumer"}})
 	require.NoError(t, err)
 
-	ctx = authz.WithExactGrants(t, ctx)
+	ctx = authztest.WithExactGrants(t, ctx)
 	err = ti.service.RevokeKey(ctx, &gen.RevokeKeyPayload{ID: key.ID})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -79,7 +80,7 @@ func TestKeysService_RevokeKey_AllowsOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestKeysService(t)
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: testAuthContext(t, ctx).ActiveOrganizationID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: testAuthContext(t, ctx).ActiveOrganizationID})
 	key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "rbac-allow-revoke", Scopes: []string{"consumer"}})
 	require.NoError(t, err)
 

@@ -7,6 +7,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/resources"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -15,7 +16,7 @@ func TestResources_RBAC_List_DeniedWithNoGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestResourcesService(t)
-	ctx = authz.WithExactGrants(t, ctx)
+	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := ti.service.ListResources(ctx, &gen.ListResourcesPayload{
 		SessionToken:     nil,
@@ -38,7 +39,7 @@ func TestResources_RBAC_List_DeniedWithUnrelatedGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: "other-project-id"})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: "other-project-id"})
 
 	_, err := ti.service.ListResources(ctx, &gen.ListResourcesPayload{
 		SessionToken:     nil,
@@ -61,7 +62,7 @@ func TestResources_RBAC_List_AllowedWithBuildReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()})
 
 	result, err := ti.service.ListResources(ctx, &gen.ListResourcesPayload{
 		SessionToken:     nil,
@@ -83,7 +84,7 @@ func TestResources_RBAC_List_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()})
 
 	result, err := ti.service.ListResources(ctx, &gen.ListResourcesPayload{
 		SessionToken:     nil,

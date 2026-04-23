@@ -1,4 +1,4 @@
-package authz
+package authztest
 
 import (
 	"context"
@@ -6,12 +6,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 // WithExactGrants marks the context as enterprise and loads the given grants
 // directly into the context. Pass no grants to simulate RBAC active with no permissions.
-func WithExactGrants(t *testing.T, ctx context.Context, grants ...Grant) context.Context {
+func WithExactGrants(t *testing.T, ctx context.Context, grants ...authz.Grant) context.Context {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -19,7 +20,7 @@ func WithExactGrants(t *testing.T, ctx context.Context, grants ...Grant) context
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	return GrantsToContext(ctx, grants)
+	return authz.GrantsToContext(ctx, grants)
 }
 
 func RBACAlwaysEnabled(context.Context, string) (bool, error) {

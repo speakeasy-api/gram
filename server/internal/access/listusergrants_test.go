@@ -2,14 +2,16 @@ package access
 
 import (
 	"errors"
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
+
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -136,7 +138,7 @@ func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
 
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, authz.RBACAlwaysDisabled, ti.roles, nil)
+	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, authztest.RBACAlwaysDisabled, ti.roles, nil)
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
