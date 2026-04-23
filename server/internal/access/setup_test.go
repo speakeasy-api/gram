@@ -152,6 +152,28 @@ func listPrincipalGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	return grants
 }
 
+// seedDisconnectedUser creates a user in the users table with a workos_id but
+// does NOT insert into organization_user_relationships, simulating a WorkOS
+// user who hasn't been connected to the Gram org.
+func seedDisconnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, userID string, email string, displayName string, workosUserID string) {
+	t.Helper()
+
+	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          userID,
+		Email:       email,
+		DisplayName: displayName,
+		PhotoUrl:    conv.PtrToPGText(nil),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+
+	err = usersrepo.New(conn).SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
+		WorkosID: conv.PtrToPGText(conv.PtrEmpty(workosUserID)),
+		ID:       userID,
+	})
+	require.NoError(t, err)
+}
+
 func seedConnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string, email string, displayName string, workosUserID string, workosMembershipID string) {
 	t.Helper()
 

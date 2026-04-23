@@ -69,7 +69,7 @@ func TestService_CreateRole(t *testing.T) {
 			{Scope: string(ScopeProjectRead), Resources: []string{"project-1", "project-2"}},
 			{Scope: string(ScopeMCPConnect), Resources: nil},
 		},
-		MemberIds: []string{"user_1", "user_2"},
+		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "Custom Builder", role.Name)
@@ -230,7 +230,7 @@ func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
 		Grants: []*gen.RoleGrant{
 			{Scope: string(ScopeProjectRead), Resources: []string{"project-1"}},
 		},
-		MemberIds: []string{"user_1", "user_2"},
+		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "sync grants for created role")

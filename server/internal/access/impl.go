@@ -127,7 +127,7 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
 	}
-	memberCounts, err := s.localMemberCounts(ctx, members)
+	memberCounts, err := s.localMemberCounts(ctx, ac.ActiveOrganizationID, members)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count local members by role").Log(ctx, s.logger)
 	}
@@ -175,7 +175,7 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
 	}
 
-	memberCounts, err := s.localMemberCounts(ctx, members)
+	memberCounts, err := s.localMemberCounts(ctx, ac.ActiveOrganizationID, members)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count local members by role").Log(ctx, s.logger)
 	}
@@ -259,6 +259,13 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 
 	assignedWorkosIDs := make([]string, 0, len(payload.MemberIds))
 	if len(payload.MemberIds) > 0 {
+		// payload.MemberIds are Gram user IDs (returned by ListMembers).
+		// Resolve them to WorkOS user IDs so we can look up WorkOS memberships.
+		gramToWorkos, err := gramToWorkosIDMap(ctx, s.db, payload.MemberIds)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve gram user ids to workos ids").Log(ctx, logger)
+		}
+
 		members, err := s.roles.ListMembers(ctx, workosOrgID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
@@ -266,8 +273,12 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 
 		membershipByUser := membershipsByUserID(members)
 
-		for _, userID := range payload.MemberIds {
-			membershipID, ok := membershipByUser[userID]
+		for _, gramID := range payload.MemberIds {
+			workosID, ok := gramToWorkos[gramID]
+			if !ok {
+				continue
+			}
+			membershipID, ok := membershipByUser[workosID]
 			if !ok {
 				continue
 			}
@@ -276,18 +287,21 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 				return nil, oops.E(oops.CodeUnexpected, err, "assign members to created role").Log(ctx, logger)
 			}
 
-			assignedWorkosIDs = append(assignedWorkosIDs, userID)
+			assignedWorkosIDs = append(assignedWorkosIDs, workosID)
 		}
 		s.access.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
 	}
 
-	// Only count assigned members who have local Gram accounts, consistent with
-	// how ListRoles/GetRole/UpdateRole count members via localMemberCounts.
+	// Only count assigned members who have local Gram accounts and are
+	// connected to this org, consistent with how ListMembers filters users.
 	assignedCount := 0
 	if len(assignedWorkosIDs) > 0 {
-		localRows, err := usersrepo.New(s.db).GetUsersByWorkosIDs(ctx, assignedWorkosIDs)
+		localRows, err := usersrepo.New(s.db).GetConnectedUsersByWorkosIDs(ctx, usersrepo.GetConnectedUsersByWorkosIDsParams{
+			WorkosIds:      assignedWorkosIDs,
+			OrganizationID: ac.ActiveOrganizationID,
+		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get users by workos ids: %w", err), "resolve local assigned members").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get connected users by workos ids: %w", err), "resolve local assigned members").Log(ctx, logger)
 		}
 		assignedCount = len(localRows)
 	}
@@ -361,7 +375,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
 	}
-	memberCountsBefore, err := s.localMemberCounts(ctx, membersBefore)
+	memberCountsBefore, err := s.localMemberCounts(ctx, ac.ActiveOrganizationID, membersBefore)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count local members by role").Log(ctx, logger)
 	}
@@ -387,10 +401,19 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	}
 
 	if payload.MemberIds != nil {
+		gramToWorkos, err := gramToWorkosIDMap(ctx, s.db, payload.MemberIds)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve gram user ids to workos ids").Log(ctx, logger)
+		}
+
 		membershipByUser := membershipsByUserID(membersBefore)
 
-		for _, userID := range payload.MemberIds {
-			membershipID, ok := membershipByUser[userID]
+		for _, gramID := range payload.MemberIds {
+			workosID, ok := gramToWorkos[gramID]
+			if !ok {
+				continue
+			}
+			membershipID, ok := membershipByUser[workosID]
 			if !ok {
 				continue
 			}
@@ -407,7 +430,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
 	}
 
-	memberCounts, err := s.localMemberCounts(ctx, members)
+	memberCounts, err := s.localMemberCounts(ctx, ac.ActiveOrganizationID, members)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count local members by role").Log(ctx, logger)
 	}
@@ -560,16 +583,21 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "list org users from workos").Log(ctx, s.logger)
 	}
 
-	// Batch-resolve WorkOS user IDs to local Gram users so the member list
-	// returns Gram user IDs (the stable identity used by UpdateMemberRole
-	// and the organization_user_relationships table).
+	// Batch-resolve WorkOS user IDs to local Gram users, filtering to only
+	// those connected to this organization via organization_user_relationships.
+	// This single joined query prevents the list from surfacing users who
+	// exist in Gram but aren't connected to the current org (which would
+	// cause UpdateMemberRole to fail).
 	workosIDs := make([]string, 0, len(users))
 	for workosUID := range users {
 		workosIDs = append(workosIDs, workosUID)
 	}
-	localUserRows, err := usersrepo.New(s.db).GetUsersByWorkosIDs(ctx, workosIDs)
+	localUserRows, err := usersrepo.New(s.db).GetConnectedUsersByWorkosIDs(ctx, usersrepo.GetConnectedUsersByWorkosIDsParams{
+		WorkosIds:      workosIDs,
+		OrganizationID: ac.ActiveOrganizationID,
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve local users by workos ids").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve connected users by workos ids").Log(ctx, s.logger)
 	}
 	localUsers := make(map[string]usersrepo.User, len(localUserRows))
 	for _, u := range localUserRows {
@@ -587,7 +615,7 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 
 		local, ok := localUsers[member.UserID]
 		if !ok {
-			continue // user exists in WorkOS but hasn't logged into Gram yet
+			continue
 		}
 
 		result = append(result, &gen.AccessMember{
@@ -860,16 +888,20 @@ func formatUserName(user workos.User) string {
 }
 
 // localMemberCounts counts WorkOS members per role slug, but only for members
-// who have a local Gram account. This ensures counts match what ListMembers
-// returns — users in WorkOS who have never logged into Gram are excluded.
-func (s *Service) localMemberCounts(ctx context.Context, members []workos.Member) (map[string]int, error) {
+// who have a local Gram account and are connected to the given organization
+// via organization_user_relationships. This ensures counts match what
+// ListMembers returns.
+func (s *Service) localMemberCounts(ctx context.Context, organizationID string, members []workos.Member) (map[string]int, error) {
 	workosIDs := make([]string, 0, len(members))
 	for _, m := range members {
 		workosIDs = append(workosIDs, m.UserID)
 	}
-	localRows, err := usersrepo.New(s.db).GetUsersByWorkosIDs(ctx, workosIDs)
+	localRows, err := usersrepo.New(s.db).GetConnectedUsersByWorkosIDs(ctx, usersrepo.GetConnectedUsersByWorkosIDsParams{
+		WorkosIds:      workosIDs,
+		OrganizationID: organizationID,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("get users by workos ids: %w", err)
+		return nil, fmt.Errorf("get connected users by workos ids: %w", err)
 	}
 	localSet := make(map[string]struct{}, len(localRows))
 	for _, u := range localRows {
@@ -884,6 +916,23 @@ func (s *Service) localMemberCounts(ctx context.Context, members []workos.Member
 		}
 	}
 	return counts, nil
+}
+
+// gramToWorkosIDMap resolves Gram user IDs to WorkOS user IDs.
+// Dashboard sends Gram IDs (from ListMembers), but WorkOS membership lookups
+// require WorkOS user IDs.
+func gramToWorkosIDMap(ctx context.Context, db *pgxpool.Pool, gramIDs []string) (map[string]string, error) {
+	users, err := usersrepo.New(db).GetUsersByIDs(ctx, gramIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get users by ids: %w", err)
+	}
+	m := make(map[string]string, len(users))
+	for _, u := range users {
+		if u.WorkosID.Valid && u.WorkosID.String != "" {
+			m[u.ID] = u.WorkosID.String
+		}
+	}
+	return m, nil
 }
 
 func membershipsByUserID(members []workos.Member) map[string]string {
