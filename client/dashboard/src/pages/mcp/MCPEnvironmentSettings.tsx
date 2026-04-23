@@ -1065,12 +1065,13 @@ function OAuthStatusDisplay({
 
   if (externalMcpRequiresOAuth) {
     return (
-      <div className="border-warning/40 bg-warning/10 rounded-lg border border-dashed p-4 text-center">
+      <div className="border-warning-foreground/80 bg-warning rounded-lg border border-dashed px-6 py-8 text-center">
         <AlertTriangle className="text-warning mx-auto mb-1 h-5 w-5" />
-        <p className="text-warning mb-1 font-medium">OAuth setup required</p>
-        <p className="text-warning/80 mb-3 text-sm">
-          This MCP server requires OAuth authentication. Configure it before
-          users can connect.
+        <p className="text-warning-foreground mb-1 font-bold">
+          OAuth setup required
+        </p>
+        <p className="text-warning-foreground/80 mb-3 text-sm">
+          This MCP server requires OAuth configuration before it can be used.
         </p>
         <Button variant="secondary" onClick={onConfigureClick}>
           <Button.Text>Configure OAuth</Button.Text>
