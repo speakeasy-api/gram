@@ -62,7 +62,8 @@ type ClaudeRequestBody struct {
 // request body.
 type CursorRequestBody struct {
 	// The type of hook event (e.g. beforeSubmitPrompt, stop, afterAgentResponse,
-	// afterAgentThought, preToolUse, postToolUse, postToolUseFailure)
+	// afterAgentThought, preToolUse, postToolUse, postToolUseFailure,
+	// beforeMCPExecution, afterMCPExecution)
 	HookEventName string `form:"hook_event_name" json:"hook_event_name" xml:"hook_event_name"`
 	// The Cursor conversation ID
 	ConversationID *string `form:"conversation_id,omitempty" json:"conversation_id,omitempty" xml:"conversation_id,omitempty"`
@@ -100,19 +101,30 @@ type CursorRequestBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Number of agentic loops executed (stop only)
 	LoopCount *int `form:"loop_count,omitempty" json:"loop_count,omitempty" xml:"loop_count,omitempty"`
-	// Total input tokens used (stop only)
+	// Total input tokens used (stop, afterAgentResponse)
 	InputTokens *int `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
-	// Total output tokens used (stop only)
+	// Total output tokens used (stop, afterAgentResponse)
 	OutputTokens *int `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
-	// Tokens read from cache (stop only)
+	// Tokens read from cache (stop, afterAgentResponse)
 	CacheReadTokens *int `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
-	// Tokens written to cache (stop only)
+	// Tokens written to cache (stop, afterAgentResponse)
 	CacheWriteTokens *int `form:"cache_write_tokens,omitempty" json:"cache_write_tokens,omitempty" xml:"cache_write_tokens,omitempty"`
 	// The assistant's response text (afterAgentResponse) or thinking text
 	// (afterAgentThought)
 	Text *string `form:"text,omitempty" json:"text,omitempty" xml:"text,omitempty"`
 	// Duration in milliseconds for the thinking block (afterAgentThought only)
 	DurationMs *int `form:"duration_ms,omitempty" json:"duration_ms,omitempty" xml:"duration_ms,omitempty"`
+	// URL of the MCP server (beforeMCPExecution / afterMCPExecution, URL-based
+	// servers only)
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Command string for command-based MCP servers (beforeMCPExecution /
+	// afterMCPExecution only)
+	Command *string `form:"command,omitempty" json:"command,omitempty" xml:"command,omitempty"`
+	// JSON-encoded string of the MCP tool response (afterMCPExecution only)
+	ResultJSON *string `form:"result_json,omitempty" json:"result_json,omitempty" xml:"result_json,omitempty"`
+	// Execution duration in milliseconds, excluding approval wait time
+	// (afterMCPExecution only)
+	Duration *float64 `form:"duration,omitempty" json:"duration,omitempty" xml:"duration,omitempty"`
 }
 
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
@@ -145,12 +157,14 @@ type ClaudeResponseBody struct {
 // CursorResponseBody is the type of the "hooks" service "cursor" endpoint HTTP
 // response body.
 type CursorResponseBody struct {
-	// Permission decision for preToolUse: allow or deny
+	// Permission decision for preToolUse / beforeMCPExecution: allow, deny, or ask
 	Permission *string `form:"permission,omitempty" json:"permission,omitempty" xml:"permission,omitempty"`
 	// Message to display to the user
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 	// Additional context to inject into the conversation
 	AdditionalContext *string `form:"additional_context,omitempty" json:"additional_context,omitempty" xml:"additional_context,omitempty"`
+	// Message sent back to the agent (beforeMCPExecution only)
+	AgentMessage *string `form:"agent_message,omitempty" json:"agent_message,omitempty" xml:"agent_message,omitempty"`
 }
 
 // ClaudeUnauthorizedResponseBody is the type of the "hooks" service "claude"
@@ -1067,6 +1081,10 @@ func NewCursorRequestBody(p *hooks.CursorPayload) *CursorRequestBody {
 		CacheWriteTokens: p.CacheWriteTokens,
 		Text:             p.Text,
 		DurationMs:       p.DurationMs,
+		URL:              p.URL,
+		Command:          p.Command,
+		ResultJSON:       p.ResultJSON,
+		Duration:         p.Duration,
 	}
 	if p.AdditionalData != nil {
 		body.AdditionalData = make(map[string]any, len(p.AdditionalData))
@@ -1281,6 +1299,7 @@ func NewCursorHookResultOK(body *CursorResponseBody) *hooks.CursorHookResult {
 		Permission:        body.Permission,
 		UserMessage:       body.UserMessage,
 		AdditionalContext: body.AdditionalContext,
+		AgentMessage:      body.AgentMessage,
 	}
 
 	return v

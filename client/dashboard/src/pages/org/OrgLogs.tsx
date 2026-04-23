@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
@@ -8,7 +9,6 @@ import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Eye, FileText, Monitor } from "lucide-react";
 import { useState } from "react";
-import { RequireScope } from "@/components/require-scope";
 
 export default function OrgLogs() {
   return (
@@ -178,15 +178,15 @@ export function OrgLogsInner() {
               <Stack direction="horizontal" align="center" gap={2}>
                 <Monitor className="text-muted-foreground h-4 w-4" />
                 <Type variant="body" className="font-medium">
-                  Claude Code Session Capture
+                  Agent Session Capture
                 </Type>
               </Stack>
               <Type
                 variant="body"
                 className="text-muted-foreground ml-6 text-sm"
               >
-                Capture user prompts and assistant responses from Claude Code
-                sessions. Sessions appear in the Agent Sessions tab.
+                Capture user prompts and assistant responses from agents like Cursor, Claude Code, and more.
+                Sessions appear in the Agent Sessions tab.
               </Type>
             </Stack>
             {!featuresLoading && (

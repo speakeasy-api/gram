@@ -20,8 +20,8 @@ type Service interface {
 	// PreToolUse, PostToolUse, and PostToolUseFailure.
 	Claude(context.Context, *ClaudeHookPayload) (res *ClaudeHookResult, err error)
 	// Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop,
-	// afterAgentResponse, afterAgentThought, preToolUse, postToolUse, and
-	// postToolUseFailure.
+	// afterAgentResponse, afterAgentThought, preToolUse, postToolUse,
+	// postToolUseFailure, beforeMCPExecution, and afterMCPExecution.
 	Cursor(context.Context, *CursorPayload) (res *CursorHookResult, err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
@@ -112,12 +112,14 @@ type ClaudeHookResult struct {
 
 // CursorHookResult is the result type of the hooks service cursor method.
 type CursorHookResult struct {
-	// Permission decision for preToolUse: allow or deny
+	// Permission decision for preToolUse / beforeMCPExecution: allow, deny, or ask
 	Permission *string
 	// Message to display to the user
 	UserMessage *string
 	// Additional context to inject into the conversation
 	AdditionalContext *string
+	// Message sent back to the agent (beforeMCPExecution only)
+	AgentMessage *string
 }
 
 // CursorPayload is the payload type of the hooks service cursor method.
@@ -125,7 +127,8 @@ type CursorPayload struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// The type of hook event (e.g. beforeSubmitPrompt, stop, afterAgentResponse,
-	// afterAgentThought, preToolUse, postToolUse, postToolUseFailure)
+	// afterAgentThought, preToolUse, postToolUse, postToolUseFailure,
+	// beforeMCPExecution, afterMCPExecution)
 	HookEventName string
 	// The Cursor conversation ID
 	ConversationID *string
@@ -163,19 +166,30 @@ type CursorPayload struct {
 	Status *string
 	// Number of agentic loops executed (stop only)
 	LoopCount *int
-	// Total input tokens used (stop only)
+	// Total input tokens used (stop, afterAgentResponse)
 	InputTokens *int
-	// Total output tokens used (stop only)
+	// Total output tokens used (stop, afterAgentResponse)
 	OutputTokens *int
-	// Tokens read from cache (stop only)
+	// Tokens read from cache (stop, afterAgentResponse)
 	CacheReadTokens *int
-	// Tokens written to cache (stop only)
+	// Tokens written to cache (stop, afterAgentResponse)
 	CacheWriteTokens *int
 	// The assistant's response text (afterAgentResponse) or thinking text
 	// (afterAgentThought)
 	Text *string
 	// Duration in milliseconds for the thinking block (afterAgentThought only)
 	DurationMs *int
+	// URL of the MCP server (beforeMCPExecution / afterMCPExecution, URL-based
+	// servers only)
+	URL *string
+	// Command string for command-based MCP servers (beforeMCPExecution /
+	// afterMCPExecution only)
+	Command *string
+	// JSON-encoded string of the MCP tool response (afterMCPExecution only)
+	ResultJSON *string
+	// Execution duration in milliseconds, excluding approval wait time
+	// (afterMCPExecution only)
+	Duration *float64
 }
 
 // LogsPayload is the payload type of the hooks service logs method.

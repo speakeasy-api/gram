@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Shared script to send Cursor hook events to Gram
 
-server_url="${GRAM_HOOKS_SERVER_URL:-https://app.getgram.ai}"
-api_key="${GRAM_API_KEY:-}"
+server_url="https://recent-patrica-unmonastically.ngrok-free.dev" # TODO "${GRAM_HOOKS_SERVER_URL:-https://app.getgram.ai}"
+api_key="gram_local_3bfe0ef1d332662029c1acc75c4a55161415ed6e883db3dc7bf6b93de0751d4a" # TODO "${GRAM_API_KEY:-}"
 project_slug="${GRAM_PROJECT_SLUG:-}"
 
 # Fail silently if credentials are not configured
