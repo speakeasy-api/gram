@@ -113,6 +113,11 @@ func (s *Service) OnMessagesStored(ctx context.Context, projectID uuid.UUID) {
 		return
 	}
 
+	s.logger.DebugContext(ctx, "risk observer signaling policies",
+		attr.SlogProjectID(projectID.String()),
+		attr.SlogRiskPolicyCount(len(policies)),
+	)
+
 	for _, p := range policies {
 		if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
 			ProjectID:    p.ProjectID,
