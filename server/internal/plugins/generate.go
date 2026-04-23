@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
@@ -99,6 +100,23 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	return files, nil
 }
 
+// escapeMarkdownCell sanitizes user-controlled text for inclusion in a single
+// Markdown table cell: collapses line breaks, escapes pipes that would otherwise
+// split the row, and caps excessively long values.
+func escapeMarkdownCell(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "|", `\|`)
+
+	const maxRunes = 200
+	if utf8.RuneCountInString(s) > maxRunes {
+		runes := []rune(s)
+		s = string(runes[:maxRunes]) + "…"
+	}
+	return s
+}
+
 func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	var b strings.Builder
 
@@ -114,18 +132,18 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 		b.WriteString("| Plugin | Description | Servers |\n")
 		b.WriteString("|--------|-------------|--------:|\n")
 		for _, p := range plugins {
-			desc := p.Description
+			desc := strings.TrimSpace(p.Description)
 			if desc == "" {
 				desc = "—"
 			}
-			fmt.Fprintf(&b, "| %s | %s | %d |\n", p.Name, desc, len(p.Servers))
+			fmt.Fprintf(&b, "| %s | %s | %d |\n", escapeMarkdownCell(p.Name), escapeMarkdownCell(desc), len(p.Servers))
 		}
 		b.WriteString("\n")
 	}
 
 	b.WriteString("## Installation\n\n")
 	b.WriteString("### Claude Code\n\n")
-	b.WriteString("1. Go to your organization's [Claude admin console](https://console.anthropic.com)\n")
+	b.WriteString("1. Go to your organization's [Claude admin console](https://claude.ai)\n")
 	b.WriteString("2. Navigate to **Settings → Plugin Marketplaces**\n")
 	b.WriteString("3. Click **Add Marketplace** and paste this repository's URL\n")
 	b.WriteString("4. Plugins will be automatically available to members of your organization\n\n")
