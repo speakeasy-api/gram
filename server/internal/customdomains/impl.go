@@ -9,11 +9,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/server/gen/domains"
 	srv "github.com/speakeasy-api/gram/server/gen/http/domains/server"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -33,7 +33,7 @@ type Service struct {
 	logger         *slog.Logger
 	db             *pgxpool.Pool
 	auth           *auth.Auth
-	access         *access.Manager
+	authz          *authz.Engine
 	temporalClient TemporalClient
 }
 
@@ -45,15 +45,15 @@ type TemporalClient interface {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, temporal TemporalClient, accessManager *access.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, temporal TemporalClient, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("custom_domains"))
 
 	return &Service{
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/customdomains"),
 		logger:         logger,
 		db:             db,
-		auth:           auth.New(logger, db, sessions, accessManager),
-		access:         accessManager,
+		auth:           auth.New(logger, db, sessions, authzEngine),
+		authz:          authzEngine,
 		temporalClient: temporal,
 	}
 }
@@ -77,7 +77,7 @@ func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) 
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -110,7 +110,7 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
 		return err
 	}
 
@@ -137,7 +137,7 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
 		return err
 	}
 

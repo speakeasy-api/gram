@@ -1,4 +1,4 @@
-package access
+package authz
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -16,6 +15,11 @@ import (
 )
 
 const WildcardResource = "*"
+
+const (
+	SystemRoleAdmin  = "admin"
+	SystemRoleMember = "member"
+)
 
 type RoleGrant struct {
 	Scope     string
@@ -26,7 +30,7 @@ type RoleGrant struct {
 // roles. These are seeded when RBAC is enabled and replace any existing grants
 // for these roles (idempotent, won't clobber custom roles).
 var SystemRoleGrants = map[string][]*RoleGrant{
-	"admin": {
+	SystemRoleAdmin: {
 		{Scope: string(ScopeOrgAdmin)},
 		{Scope: string(ScopeOrgRead)},
 		{Scope: string(ScopeProjectRead)},
@@ -35,7 +39,7 @@ var SystemRoleGrants = map[string][]*RoleGrant{
 		{Scope: string(ScopeMCPWrite)},
 		{Scope: string(ScopeMCPConnect)},
 	},
-	"member": {
+	SystemRoleMember: {
 		{Scope: string(ScopeOrgRead)},
 		{Scope: string(ScopeProjectRead)},
 		{Scope: string(ScopeMCPRead)},
@@ -46,7 +50,7 @@ var SystemRoleGrants = map[string][]*RoleGrant{
 // SeedSystemRoleGrants upserts the fixed grant sets for all system roles.
 func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
 	for roleSlug, grants := range SystemRoleGrants {
-		if err := syncGrants(ctx, logger, db, organizationID, roleSlug, grants); err != nil {
+		if err := SyncGrants(ctx, logger, db, organizationID, roleSlug, grants); err != nil {
 			return fmt.Errorf("seed %s grants: %w", roleSlug, err)
 		}
 	}
@@ -56,6 +60,12 @@ func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.
 type Grant struct {
 	Scope    Scope
 	Resource string
+}
+
+type ScopedGrant struct {
+	Scope     string
+	SubScopes []string
+	Resources []string
 }
 
 func grantsSatisfy(grants []Grant, checks []Check) bool {
@@ -69,7 +79,7 @@ func grantsSatisfy(grants []Grant, checks []Check) bool {
 	return false
 }
 
-func syncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, grants []*RoleGrant) error {
+func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, grants []*RoleGrant) error {
 	if orgID == "" {
 		return fmt.Errorf("organization id is required")
 	}
@@ -128,7 +138,7 @@ func syncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 	return nil
 }
 
-func grantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string) ([]*gen.ListRoleGrant, error) {
+func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string) ([]*ScopedGrant, error) {
 	rows, err := repo.New(db).ListPrincipalGrantsByOrg(ctx, repo.ListPrincipalGrantsByOrgParams{
 		OrganizationID: orgID,
 		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug).String(),
@@ -145,7 +155,7 @@ func grantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 		})
 	}
 
-	return grantsFromRows(grantRows), nil
+	return GrantsFromRows(grantRows), nil
 }
 
 type scopeAgg struct {
@@ -153,7 +163,7 @@ type scopeAgg struct {
 	resources    []string
 }
 
-func grantsFromRows(rows []Grant) []*gen.ListRoleGrant {
+func GrantsFromRows(rows []Grant) []*ScopedGrant {
 	byScope := make(map[string]*scopeAgg)
 	for _, row := range rows {
 		scope := string(row.Scope)
@@ -178,7 +188,7 @@ func grantsFromRows(rows []Grant) []*gen.ListRoleGrant {
 	}
 	slices.Sort(scopes)
 
-	grants := make([]*gen.ListRoleGrant, 0, len(byScope))
+	grants := make([]*ScopedGrant, 0, len(byScope))
 	for _, scope := range scopes {
 		agg := byScope[scope]
 		if !agg.unrestricted {
@@ -190,9 +200,9 @@ func grantsFromRows(rows []Grant) []*gen.ListRoleGrant {
 		scopeEnum := Scope(scope)
 
 		// The expansions map is reversed in the sense that the key is the lower privilege scope and the value is the higher privilege scopes that also satisfy it, so we need to reverse it.
-		subScopes := calculateSubScopes(scopeEnum)
+		subScopes := CalculateSubScopes(scopeEnum)
 
-		grant := &gen.ListRoleGrant{Scope: scope, SubScopes: subScopes, Resources: nil}
+		grant := &ScopedGrant{Scope: scope, SubScopes: subScopes, Resources: nil}
 		if agg.unrestricted {
 			grant.Resources = nil
 		} else {
@@ -202,13 +212,4 @@ func grantsFromRows(rows []Grant) []*gen.ListRoleGrant {
 	}
 
 	return grants
-}
-
-func calculateSubScopes(scope Scope) []string {
-	lowers := scopeSubScopes[scope]
-	out := make([]string, len(lowers))
-	for i, s := range lowers {
-		out[i] = string(s)
-	}
-	return out
 }

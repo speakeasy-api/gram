@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -80,12 +81,12 @@ func NewService(
 	posthog *posthog.Posthog,
 	telemetryService *telemetry.Service,
 	assetStorage assets.BlobStore,
-	accessLoader auth.AccessLoader,
+	authzEngine *authz.Engine,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:             auth.New(logger, db, sessions, accessLoader),
+		auth:             auth.New(logger, db, sessions, authzEngine),
 		db:               db,
 		sessions:         sessions,
 		chatSessions:     chatSessions,

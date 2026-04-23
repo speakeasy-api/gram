@@ -1,10 +1,10 @@
-package access
+package authz
 
 import "context"
 
 type contextKey string
 
-const grantsContextKey contextKey = "access_grants"
+const grantsContextKey contextKey = "authz_grants"
 
 // GrantsToContext stores resolved grants on the request context.
 func GrantsToContext(ctx context.Context, grants []Grant) context.Context {

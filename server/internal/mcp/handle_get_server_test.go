@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -30,7 +30,7 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 		testInstance.serverURL,
 		testInstance.siteURL,
 		testInstance.cacheAdapter,
-		access.NewManager(testInstance.logger, testInstance.conn, nil, workos.NewStubClient(), cache.NoopCache),
+		authz.NewEngine(testInstance.logger, testInstance.conn, nil, workos.NewStubClient(), cache.NoopCache),
 	)
 
 	tests := []struct {
