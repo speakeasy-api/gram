@@ -35,7 +35,7 @@ func TestEngineRequire_requiresAuthContext(t *testing.T) {
 
 	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
 
-	err := engine.Require(t.Context(), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := engine.Require(t.Context(), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
@@ -46,7 +46,7 @@ func TestEngineRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
 
 	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(false), workos.NewStubClient(), cache.NoopCache)
 
-	err := engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	require.NoError(t, err)
 }
 
@@ -56,7 +56,7 @@ func TestEngineRequire_mapsDeniedToForbidden(t *testing.T) {
 	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), nil)
 
-	err := engine.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -67,7 +67,7 @@ func TestEngineRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 
 	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
 
-	err := engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
@@ -79,7 +79,7 @@ func TestEngineRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 
 	engine := NewEngine(testinfra.NewLogger(t), nil, failingRBAC(errors.New("boom")), workos.NewStubClient(), cache.NoopCache)
 
-	err := engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
@@ -129,9 +129,9 @@ func TestEngineFilter_returnsAllowedSubset(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Resource: "proj_123"}})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeProjectRead, Resource: "proj_123"}})
 
-	resourceIDs, err := engine.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
+	resourceIDs, err := engine.Filter(ctx, ScopeProjectRead, []string{"proj_123", "proj_456"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj_123"}, resourceIDs)
 }
@@ -140,9 +140,9 @@ func TestEngineRequire_rejectsInvalidCheck(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Resource: WildcardResource}})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeProjectRead, Resource: WildcardResource}})
 
-	err := engine.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: ""})
+	err := engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: ""})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
@@ -153,7 +153,7 @@ func TestEngineRequire_requiresChecks(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeBuildRead, Resource: WildcardResource}})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeProjectRead, Resource: WildcardResource}})
 
 	err := engine.Require(ctx)
 	var oopsErr *oops.ShareableError
@@ -183,7 +183,7 @@ func TestEngineRequire_skipsForAPIKeyAuth(t *testing.T) {
 		APIKeyScopes:          nil,
 	})
 
-	err := engine.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"})
+	err := engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	require.NoError(t, err)
 }
 
@@ -208,7 +208,7 @@ func TestEngineFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 		APIKeyScopes:          nil,
 	})
 
-	resourceIDs, err := engine.Filter(ctx, ScopeBuildRead, []string{"proj_123", "proj_456"})
+	resourceIDs, err := engine.Filter(ctx, ScopeProjectRead, []string{"proj_123", "proj_456"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
 }
@@ -316,7 +316,7 @@ func scopeOverrideCtx(t *testing.T, isAdmin bool, accountType string) context.Co
 		APIKeyScopes:          nil,
 		IsAdmin:               isAdmin,
 	})
-	return contextvalues.SetRBACScopeOverride(ctx, "build:read")
+	return contextvalues.SetRBACScopeOverride(ctx, "project:read")
 }
 
 func TestCanUseOverride_devPlusAdmin(t *testing.T) {

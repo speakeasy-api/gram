@@ -93,6 +93,13 @@ WHERE project_id = @project_id
   AND risk_policy_version = @risk_policy_version
   AND found IS TRUE;
 
+-- name: CountAllFindings :one
+SELECT COUNT(*)::BIGINT
+FROM risk_results rr
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+WHERE rr.project_id = @project_id
+  AND rr.found IS TRUE;
+
 -- name: FetchUnanalyzedMessageIDs :many
 SELECT cm.id
 FROM chat_messages cm
@@ -100,12 +107,10 @@ WHERE cm.project_id = @project_id
   AND NOT EXISTS (
     SELECT 1
     FROM risk_results rr
-    WHERE rr.project_id = @project_id
-      AND rr.chat_message_id = cm.id
+    WHERE rr.chat_message_id = cm.id
       AND rr.risk_policy_id = @risk_policy_id
       AND rr.risk_policy_version = @risk_policy_version
   )
-ORDER BY cm.seq ASC
 LIMIT @batch_limit;
 
 -- name: GetMessageContentBatch :many
@@ -150,43 +155,26 @@ VALUES (
   , @tags
 );
 
--- name: DeleteStaleRiskResults :exec
-DELETE FROM risk_results
-WHERE risk_policy_id = @risk_policy_id
-  AND project_id = @project_id
-  AND risk_policy_version < @risk_policy_version;
-
--- name: DeleteAllRiskResultsForPolicy :exec
-DELETE FROM risk_results
-WHERE risk_policy_id = @risk_policy_id
-  AND project_id = @project_id;
-
 -- name: DeleteRiskResultsForMessages :exec
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND chat_message_id = ANY(@message_ids::uuid[]);
 
--- name: ListRiskResultsByProject :many
-SELECT *
-FROM risk_results
-WHERE project_id = @project_id
-ORDER BY created_at DESC
-LIMIT @result_limit;
-
 -- name: ListRiskResultsByProjectFound :many
-SELECT rr.*, cm.chat_id, c.title AS chat_title
+SELECT rr.*, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = @project_id
   AND rr.found IS TRUE
-ORDER BY rr.created_at DESC
-LIMIT @result_limit;
+  AND (sqlc.narg(cursor)::uuid IS NULL OR rr.id <= sqlc.narg(cursor)::uuid)
+ORDER BY rr.id DESC
+LIMIT 51;
 
 -- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.*, cm.chat_id, c.title AS chat_title
+SELECT rr.*, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -194,11 +182,12 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
   AND rr.found IS TRUE
-ORDER BY rr.created_at DESC
-LIMIT @result_limit;
+  AND (sqlc.narg(cursor)::uuid IS NULL OR rr.id <= sqlc.narg(cursor)::uuid)
+ORDER BY rr.id DESC
+LIMIT 51;
 
 -- name: ListRiskResultsByChatFound :many
-SELECT rr.*, cm.chat_id, c.title AS chat_title
+SELECT rr.*, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -206,12 +195,24 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE cm.chat_id = @chat_id
   AND rr.project_id = @project_id
   AND rr.found IS TRUE
-ORDER BY rr.created_at DESC
-LIMIT @result_limit;
+  AND (sqlc.narg(cursor)::uuid IS NULL OR rr.id <= sqlc.narg(cursor)::uuid)
+ORDER BY rr.id DESC
+LIMIT 51;
 
--- name: ListRiskResultsByMessage :many
-SELECT *
-FROM risk_results
-WHERE chat_message_id = @chat_message_id
-  AND project_id = @project_id
-ORDER BY created_at DESC;
+-- name: ListRiskResultsGroupedByChat :many
+SELECT
+    cm.chat_id
+  , c.title AS chat_title
+  , c.external_user_id AS chat_user_id
+  , COUNT(*)::BIGINT AS findings_count
+  , MAX(rr.created_at)::TIMESTAMPTZ AS latest_detected
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+WHERE rr.project_id = @project_id
+  AND rr.found IS TRUE
+  AND (sqlc.narg(cursor)::uuid IS NULL OR cm.chat_id <= sqlc.narg(cursor)::uuid)
+GROUP BY cm.chat_id, c.title, c.external_user_id
+ORDER BY cm.chat_id DESC
+LIMIT 51;

@@ -62,7 +62,7 @@ func TestProjectsService_ListProjects_FiltersByBuildReadGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeBuildRead, Resource: allowedProject.ID.String()})
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeProjectRead, Resource: allowedProject.ID.String()})
 
 	result, err := ti.service.ListProjects(ctx, &gen.ListProjectsPayload{
 		SessionToken:   nil,

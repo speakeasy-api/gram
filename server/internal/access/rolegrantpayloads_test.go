@@ -12,8 +12,8 @@ func TestRoleGrantPayloadsPreservesNilAndEmptyResources(t *testing.T) {
 	t.Parallel()
 
 	grants := roleGrantPayloads([]*gen.RoleGrant{
-		{Scope: string(authz.ScopeBuildRead), Resources: nil},
-		{Scope: string(authz.ScopeBuildWrite), Resources: []string{}},
+		{Scope: string(authz.ScopeProjectRead), Resources: nil},
+		{Scope: string(authz.ScopeProjectWrite), Resources: []string{}},
 	})
 
 	require.Len(t, grants, 2)

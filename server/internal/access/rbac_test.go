@@ -71,7 +71,7 @@ func TestService_GetRole_AllowsOrgReadGrant(t *testing.T) {
 	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
 		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
 	}, nil).Once()
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeBuildRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
 	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
 	require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestService_ListScopes_AllowsOrgReadGrant(t *testing.T) {
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Scopes, 10)
+	require.Len(t, result.Scopes, 7)
 }
 
 func TestService_ListMembers_ForbiddenWithoutOrgReadGrant(t *testing.T) {
@@ -235,7 +235,7 @@ func TestService_DeleteRole_AllowsOrgAdminGrant(t *testing.T) {
 		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
 	}, nil).Once()
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeBuildRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
 	require.NoError(t, err)

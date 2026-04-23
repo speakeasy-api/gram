@@ -460,10 +460,11 @@ func newWorkerCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			riskSignaler := background.NewThrottledSignaler(
-				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv},
+				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
 				30*time.Second,
 				logger,
 			)
+			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
 			captureStrategy.AddObserver(risk.NewObserver(logger, db, riskSignaler))
 
 			completionsClient := openrouter.NewUnifiedClient(

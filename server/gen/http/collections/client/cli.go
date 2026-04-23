@@ -18,7 +18,7 @@ import (
 
 // BuildCreatePayload builds the payload for the collections create endpoint
 // from CLI flags.
-func BuildCreatePayload(collectionsCreateBody string, collectionsCreateSessionToken string, collectionsCreateApikeyToken string, collectionsCreateProjectSlugInput string) (*collections.CreatePayload, error) {
+func BuildCreatePayload(collectionsCreateBody string, collectionsCreateSessionToken string, collectionsCreateApikeyToken string) (*collections.CreatePayload, error) {
 	var err error
 	var body CreateRequestBody
 	{
@@ -68,12 +68,6 @@ func BuildCreatePayload(collectionsCreateBody string, collectionsCreateSessionTo
 			apikeyToken = &collectionsCreateApikeyToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if collectionsCreateProjectSlugInput != "" {
-			projectSlugInput = &collectionsCreateProjectSlugInput
-		}
-	}
 	v := &collections.CreatePayload{
 		Name:                 body.Name,
 		Slug:                 body.Slug,
@@ -95,14 +89,13 @@ func BuildCreatePayload(collectionsCreateBody string, collectionsCreateSessionTo
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildListPayload builds the payload for the collections list endpoint from
 // CLI flags.
-func BuildListPayload(collectionsListSessionToken string, collectionsListApikeyToken string, collectionsListProjectSlugInput string) (*collections.ListPayload, error) {
+func BuildListPayload(collectionsListSessionToken string, collectionsListApikeyToken string) (*collections.ListPayload, error) {
 	var sessionToken *string
 	{
 		if collectionsListSessionToken != "" {
@@ -115,23 +108,16 @@ func BuildListPayload(collectionsListSessionToken string, collectionsListApikeyT
 			apikeyToken = &collectionsListApikeyToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if collectionsListProjectSlugInput != "" {
-			projectSlugInput = &collectionsListProjectSlugInput
-		}
-	}
 	v := &collections.ListPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildUpdatePayload builds the payload for the collections update endpoint
 // from CLI flags.
-func BuildUpdatePayload(collectionsUpdateBody string, collectionsUpdateSessionToken string, collectionsUpdateApikeyToken string, collectionsUpdateProjectSlugInput string) (*collections.UpdatePayload, error) {
+func BuildUpdatePayload(collectionsUpdateBody string, collectionsUpdateSessionToken string, collectionsUpdateApikeyToken string) (*collections.UpdatePayload, error) {
 	var err error
 	var body UpdateRequestBody
 	{
@@ -176,12 +162,6 @@ func BuildUpdatePayload(collectionsUpdateBody string, collectionsUpdateSessionTo
 			apikeyToken = &collectionsUpdateApikeyToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if collectionsUpdateProjectSlugInput != "" {
-			projectSlugInput = &collectionsUpdateProjectSlugInput
-		}
-	}
 	v := &collections.UpdatePayload{
 		CollectionID: body.CollectionID,
 		Name:         body.Name,
@@ -190,14 +170,13 @@ func BuildUpdatePayload(collectionsUpdateBody string, collectionsUpdateSessionTo
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildDeletePayload builds the payload for the collections delete endpoint
 // from CLI flags.
-func BuildDeletePayload(collectionsDeleteCollectionID string, collectionsDeleteSessionToken string, collectionsDeleteApikeyToken string, collectionsDeleteProjectSlugInput string) (*collections.DeletePayload, error) {
+func BuildDeletePayload(collectionsDeleteCollectionID string, collectionsDeleteSessionToken string, collectionsDeleteApikeyToken string) (*collections.DeletePayload, error) {
 	var err error
 	var collectionID string
 	{
@@ -219,24 +198,17 @@ func BuildDeletePayload(collectionsDeleteCollectionID string, collectionsDeleteS
 			apikeyToken = &collectionsDeleteApikeyToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if collectionsDeleteProjectSlugInput != "" {
-			projectSlugInput = &collectionsDeleteProjectSlugInput
-		}
-	}
 	v := &collections.DeletePayload{}
 	v.CollectionID = collectionID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildAttachServerPayload builds the payload for the collections attachServer
 // endpoint from CLI flags.
-func BuildAttachServerPayload(collectionsAttachServerBody string, collectionsAttachServerSessionToken string, collectionsAttachServerApikeyToken string, collectionsAttachServerProjectSlugInput string) (*collections.AttachServerPayload, error) {
+func BuildAttachServerPayload(collectionsAttachServerBody string, collectionsAttachServerSessionToken string, collectionsAttachServerApikeyToken string) (*collections.AttachServerPayload, error) {
 	var err error
 	var body AttachServerRequestBody
 	{
@@ -262,26 +234,19 @@ func BuildAttachServerPayload(collectionsAttachServerBody string, collectionsAtt
 			apikeyToken = &collectionsAttachServerApikeyToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if collectionsAttachServerProjectSlugInput != "" {
-			projectSlugInput = &collectionsAttachServerProjectSlugInput
-		}
-	}
 	v := &collections.AttachServerPayload{
 		CollectionID: body.CollectionID,
 		ToolsetID:    body.ToolsetID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildDetachServerPayload builds the payload for the collections detachServer
 // endpoint from CLI flags.
-func BuildDetachServerPayload(collectionsDetachServerBody string, collectionsDetachServerSessionToken string, collectionsDetachServerApikeyToken string, collectionsDetachServerProjectSlugInput string) (*collections.DetachServerPayload, error) {
+func BuildDetachServerPayload(collectionsDetachServerBody string, collectionsDetachServerSessionToken string, collectionsDetachServerApikeyToken string) (*collections.DetachServerPayload, error) {
 	var err error
 	var body DetachServerRequestBody
 	{
@@ -307,26 +272,19 @@ func BuildDetachServerPayload(collectionsDetachServerBody string, collectionsDet
 			apikeyToken = &collectionsDetachServerApikeyToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if collectionsDetachServerProjectSlugInput != "" {
-			projectSlugInput = &collectionsDetachServerProjectSlugInput
-		}
-	}
 	v := &collections.DetachServerPayload{
 		CollectionID: body.CollectionID,
 		ToolsetID:    body.ToolsetID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildListServersPayload builds the payload for the collections listServers
 // endpoint from CLI flags.
-func BuildListServersPayload(collectionsListServersCollectionSlug string, collectionsListServersSessionToken string, collectionsListServersApikeyToken string, collectionsListServersProjectSlugInput string) (*collections.ListServersPayload, error) {
+func BuildListServersPayload(collectionsListServersCollectionSlug string, collectionsListServersSessionToken string, collectionsListServersApikeyToken string) (*collections.ListServersPayload, error) {
 	var collectionSlug string
 	{
 		collectionSlug = collectionsListServersCollectionSlug
@@ -343,17 +301,10 @@ func BuildListServersPayload(collectionsListServersCollectionSlug string, collec
 			apikeyToken = &collectionsListServersApikeyToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if collectionsListServersProjectSlugInput != "" {
-			projectSlugInput = &collectionsListServersProjectSlugInput
-		}
-	}
 	v := &collections.ListServersPayload{}
 	v.CollectionSlug = collectionSlug
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

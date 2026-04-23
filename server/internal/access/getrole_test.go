@@ -38,7 +38,7 @@ func TestService_GetRole(t *testing.T) {
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_3", "user3@test.com", "User 3", "user_3", "membership_3")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeBuildRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, authz.WildcardResource)
 
 	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
@@ -56,7 +56,7 @@ func TestService_GetRole(t *testing.T) {
 	for _, grant := range role.Grants {
 		grantsByScope[grant.Scope] = grant
 	}
-	require.ElementsMatch(t, []string{"project-1"}, grantsByScope[string(authz.ScopeBuildRead)].Resources)
+	require.ElementsMatch(t, []string{"project-1"}, grantsByScope[string(authz.ScopeProjectRead)].Resources)
 	require.Nil(t, grantsByScope[string(authz.ScopeMCPConnect)].Resources)
 }
 

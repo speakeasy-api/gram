@@ -36,7 +36,7 @@ func TestEnvironments_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
@@ -54,7 +54,7 @@ func TestEnvironments_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
@@ -67,7 +67,7 @@ func TestEnvironments_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestEnvironmentService(t)
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeBuildRead, Resource: uuid.NewString()})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: uuid.NewString()})
 
 	_, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
@@ -106,7 +106,7 @@ func TestEnvironments_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
 		SessionToken:     nil,
@@ -130,7 +130,7 @@ func TestEnvironments_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
 		SessionToken:     nil,

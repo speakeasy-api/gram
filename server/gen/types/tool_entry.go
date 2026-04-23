@@ -15,4 +15,8 @@ type ToolEntry struct {
 	ToolUrn string
 	// The name of the tool
 	Name string
+	// Tool annotations providing behavioral hints
+	Annotations *ToolAnnotations
+	// HTTP method for HTTP tools (GET, POST, PUT, PATCH, DELETE)
+	HTTPMethod *string
 }

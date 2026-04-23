@@ -36,6 +36,35 @@ INSERT INTO toolsets (
 )
 RETURNING *;
 
+-- name: CreateToolsetOrigin :one
+INSERT INTO toolset_origins (
+    organization_id
+  , toolset_id
+  , origin_registry_specifier
+) VALUES (
+    @organization_id
+  , @toolset_id
+  , @registry_specifier
+)
+RETURNING
+    id
+  , toolset_id
+  , origin_registry_specifier AS registry_specifier
+  , created_at
+  , updated_at;
+
+-- name: GetToolsetOriginByToolsetID :one
+SELECT
+    id
+  , toolset_id
+  , origin_registry_specifier AS registry_specifier
+  , created_at
+  , updated_at
+FROM toolset_origins
+WHERE toolset_id = @toolset_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
 -- name: ListToolsetsByProject :many
 SELECT *
 FROM toolsets

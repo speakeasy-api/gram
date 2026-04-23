@@ -759,6 +759,7 @@ func newStartCommand() *cli.Command {
 				30*time.Second,
 				logger,
 			)
+			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
 			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler)
 			captureStrategy.AddObserver(riskService)
 			risk.Attach(mux, riskService)

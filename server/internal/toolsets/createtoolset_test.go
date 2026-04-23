@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func TestToolsetsService_CreateToolset_Success(t *testing.T) {
@@ -75,6 +76,39 @@ func TestToolsetsService_CreateToolset_Success(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestToolsetsService_CreateToolset_WithOrigin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	result, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Origin Toolset",
+		Description:            new("A toolset with registry lineage"),
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		Origin: &types.ToolsetOrigin{
+			RegistrySpecifier: "com.speakeasy.example/server",
+		},
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Origin)
+	require.Equal(t, "com.speakeasy.example/server", result.Origin.RegistrySpecifier)
+
+	origin, err := toolsetsRepo.New(ti.conn).GetToolsetOriginByToolsetID(
+		ctx,
+		toolsetsRepo.GetToolsetOriginByToolsetIDParams{
+			OrganizationID: result.OrganizationID,
+			ToolsetID:      uuid.MustParse(result.ID),
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, "com.speakeasy.example/server", origin.RegistrySpecifier)
 }
 
 func TestToolsetsService_CreateToolset_WithDefaultEnvironment(t *testing.T) {

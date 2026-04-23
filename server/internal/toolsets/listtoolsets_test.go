@@ -75,6 +75,39 @@ func TestToolsetsService_ListToolsets_Success(t *testing.T) {
 	require.Equal(t, beforeCount, afterCount)
 }
 
+func TestToolsetsService_ListToolsets_IncludesOrigin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	_, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Origin Toolset",
+		Description:            new("A toolset with origin"),
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		Origin: &types.ToolsetOrigin{
+			RegistrySpecifier: "com.speakeasy.example/server",
+		},
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Toolsets, 1)
+	require.NotNil(t, result.Toolsets[0].Origin)
+	require.Equal(
+		t,
+		"com.speakeasy.example/server",
+		result.Toolsets[0].Origin.RegistrySpecifier,
+	)
+}
+
 func TestToolsetsService_ListToolsets_EmptyList(t *testing.T) {
 	t.Parallel()
 

@@ -13,7 +13,7 @@ import (
 //
 // Header format: comma-separated entries, each optionally with resource IDs:
 //
-//	X-Gram-Scope-Override: build:read=proj_1|proj_2,mcp:read,org:admin
+//	X-Gram-Scope-Override: project:read=proj_1|proj_2,mcp:read,org:admin
 func RBACOverrideMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

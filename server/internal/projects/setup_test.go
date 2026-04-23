@@ -81,8 +81,8 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	ctx = withAccessGrants(t, ctx, conn,
-		authz.Grant{Scope: authz.ScopeBuildRead, Resource: authCtx.ProjectID.String()},
-		authz.Grant{Scope: authz.ScopeBuildWrite, Resource: authCtx.ProjectID.String()},
+		authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()},
+		authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()},
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 

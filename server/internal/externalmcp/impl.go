@@ -151,7 +151,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, fmt.Errorf("require build read: %w", err)
 	}
 
@@ -231,7 +231,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, fmt.Errorf("require build read: %w", err)
 	}
 
@@ -259,6 +259,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		RegistrySpecifier:                   details.Name,
 		Version:                             details.Version,
 		Description:                         details.Description,
+		ToolsetID:                           nil,
 		RegistryID:                          &registryIDStr,
 		OrganizationMcpCollectionRegistryID: nil,
 		Title:                               nil,

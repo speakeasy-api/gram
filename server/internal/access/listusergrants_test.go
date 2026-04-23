@@ -18,14 +18,11 @@ import (
 var expectedFullAccessScopes = []string{
 	string(authz.ScopeOrgRead),
 	string(authz.ScopeOrgAdmin),
-	string(authz.ScopeBuildRead),
-	string(authz.ScopeBuildWrite),
+	string(authz.ScopeProjectRead),
+	string(authz.ScopeProjectWrite),
 	string(authz.ScopeMCPRead),
 	string(authz.ScopeMCPWrite),
 	string(authz.ScopeMCPConnect),
-	string(authz.ScopeRemoteMCPRead),
-	string(authz.ScopeRemoteMCPWrite),
-	string(authz.ScopeRemoteMCPConnect),
 }
 
 func TestService_ListGrants(t *testing.T) {
@@ -39,7 +36,7 @@ func TestService_ListGrants(t *testing.T) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeBuildRead, "project_123")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeProjectRead, "project_123")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, "tool_456")
 
 	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
@@ -49,10 +46,12 @@ func TestService_ListGrants(t *testing.T) {
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
 	require.Len(t, result.Grants, 2)
-	require.Equal(t, "build:read", result.Grants[0].Scope)
-	require.Equal(t, []string{"project_123"}, result.Grants[0].Resources)
-	require.Equal(t, "mcp:connect", result.Grants[1].Scope)
-	require.Equal(t, []string{"tool_456"}, result.Grants[1].Resources)
+	byScope := make(map[string]*gen.ListRoleGrant, len(result.Grants))
+	for _, grant := range result.Grants {
+		byScope[grant.Scope] = grant
+	}
+	require.Equal(t, []string{"project_123"}, byScope["project:read"].Resources)
+	require.Equal(t, []string{"tool_456"}, byScope["mcp:connect"].Resources)
 }
 
 func TestService_ListGrants_MultipleRoles(t *testing.T) {
@@ -66,7 +65,7 @@ func TestService_ListGrants_MultipleRoles(t *testing.T) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeBuildRead, "project_123")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project_123")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-mcp"), authz.ScopeMCPConnect, "tool_456")
 
 	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
@@ -77,10 +76,12 @@ func TestService_ListGrants_MultipleRoles(t *testing.T) {
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
 	require.Len(t, result.Grants, 2)
-	require.Equal(t, "build:read", result.Grants[0].Scope)
-	require.Equal(t, []string{"project_123"}, result.Grants[0].Resources)
-	require.Equal(t, "mcp:connect", result.Grants[1].Scope)
-	require.Equal(t, []string{"tool_456"}, result.Grants[1].Resources)
+	byScope := make(map[string]*gen.ListRoleGrant, len(result.Grants))
+	for _, grant := range result.Grants {
+		byScope[grant.Scope] = grant
+	}
+	require.Equal(t, []string{"project_123"}, byScope["project:read"].Resources)
+	require.Equal(t, []string{"tool_456"}, byScope["mcp:connect"].Resources)
 }
 
 func TestService_ListGrants_NotConnected(t *testing.T) {

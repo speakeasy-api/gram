@@ -22,7 +22,7 @@ func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "role_require_integration")
 
 	seedOrganization(t, ctx, conn, organizationID)
-	seedGrant(t, ctx, conn, organizationID, userPrincipal, ScopeBuildRead, WildcardResource)
+	seedGrant(t, ctx, conn, organizationID, userPrincipal, ScopeProjectRead, WildcardResource)
 	seedGrant(t, ctx, conn, organizationID, rolePrincipal, ScopeMCPConnect, "toolA")
 
 	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{userPrincipal, rolePrincipal})
@@ -32,7 +32,7 @@ func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 	engine := NewEngine(testinfra.NewLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	err = engine.Require(ctx,
-		Check{Scope: ScopeBuildRead, ResourceID: "proj:123"},
+		Check{Scope: ScopeProjectRead, ResourceID: "proj:123"},
 		Check{Scope: ScopeMCPConnect, ResourceID: "toolA"},
 	)
 	require.NoError(t, err)
@@ -53,7 +53,7 @@ func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
 	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "role_filter_integration")
 
 	seedOrganization(t, ctx, conn, organizationID)
-	seedGrant(t, ctx, conn, organizationID, userPrincipal, ScopeBuildRead, "proj:123")
+	seedGrant(t, ctx, conn, organizationID, userPrincipal, ScopeProjectRead, "proj:123")
 	seedGrant(t, ctx, conn, organizationID, rolePrincipal, ScopeMCPConnect, "toolA")
 	seedGrant(t, ctx, conn, organizationID, rolePrincipal, ScopeMCPConnect, "toolB")
 
@@ -63,7 +63,7 @@ func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
 	ctx = GrantsToContext(ctx, grants)
 	engine := NewEngine(testinfra.NewLogger(t), conn, RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
-	projectIDs, err := engine.Filter(ctx, ScopeBuildRead, []string{"proj:123", "proj:456"})
+	projectIDs, err := engine.Filter(ctx, ScopeProjectRead, []string{"proj:123", "proj:456"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj:123"}, projectIDs)
 

@@ -518,14 +518,11 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 	return &gen.ListScopesResult{Scopes: []*gen.ScopeDefinition{
 		{Slug: string(authz.ScopeOrgRead), Description: "Read organization metadata and members.", ResourceType: "org"},
 		{Slug: string(authz.ScopeOrgAdmin), Description: "Manage organization access and settings.", ResourceType: "org"},
-		{Slug: string(authz.ScopeBuildRead), Description: "View projects and build-related resources.", ResourceType: "project"},
-		{Slug: string(authz.ScopeBuildWrite), Description: "Create and modify projects and build-related resources.", ResourceType: "project"},
+		{Slug: string(authz.ScopeProjectRead), Description: "View projects and project-related resources.", ResourceType: "project"},
+		{Slug: string(authz.ScopeProjectWrite), Description: "Create and modify projects and project-related resources.", ResourceType: "project"},
 		{Slug: string(authz.ScopeMCPRead), Description: "View MCP servers and configuration.", ResourceType: "mcp"},
 		{Slug: string(authz.ScopeMCPWrite), Description: "Create and modify MCP servers and configuration.", ResourceType: "mcp"},
 		{Slug: string(authz.ScopeMCPConnect), Description: "Connect to and use MCP servers.", ResourceType: "mcp"},
-		{Slug: string(authz.ScopeRemoteMCPRead), Description: "View remote MCP servers and configuration.", ResourceType: "remote-mcp"},
-		{Slug: string(authz.ScopeRemoteMCPWrite), Description: "Create and modify remote MCP servers and configuration.", ResourceType: "remote-mcp"},
-		{Slug: string(authz.ScopeRemoteMCPConnect), Description: "Connect to and use remote MCP servers.", ResourceType: "remote-mcp"},
 	}}, nil
 }
 
@@ -624,14 +621,11 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return &gen.ListUserGrantsResult{Grants: []*gen.ListRoleGrant{
 			{Scope: string(authz.ScopeOrgRead), Resources: nil},
 			{Scope: string(authz.ScopeOrgAdmin), Resources: nil},
-			{Scope: string(authz.ScopeBuildRead), Resources: nil},
-			{Scope: string(authz.ScopeBuildWrite), Resources: nil},
+			{Scope: string(authz.ScopeProjectRead), Resources: nil},
+			{Scope: string(authz.ScopeProjectWrite), Resources: nil},
 			{Scope: string(authz.ScopeMCPRead), Resources: nil},
 			{Scope: string(authz.ScopeMCPWrite), Resources: nil},
 			{Scope: string(authz.ScopeMCPConnect), Resources: nil},
-			{Scope: string(authz.ScopeRemoteMCPRead), Resources: nil},
-			{Scope: string(authz.ScopeRemoteMCPWrite), Resources: nil},
-			{Scope: string(authz.ScopeRemoteMCPConnect), Resources: nil},
 		}}, nil
 	}
 

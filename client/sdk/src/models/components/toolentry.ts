@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  ToolAnnotations,
+  ToolAnnotations$inboundSchema,
+} from "./toolannotations.js";
 
 export const ToolEntryType = {
   Http: "http",
@@ -19,6 +23,14 @@ export const ToolEntryType = {
 export type ToolEntryType = ClosedEnum<typeof ToolEntryType>;
 
 export type ToolEntry = {
+  /**
+   * Tool annotations providing behavioral hints about the tool
+   */
+  annotations?: ToolAnnotations | undefined;
+  /**
+   * HTTP method for HTTP tools (GET, POST, PUT, PATCH, DELETE)
+   */
+  httpMethod?: string | undefined;
   /**
    * The ID of the tool
    */
@@ -42,6 +54,8 @@ export const ToolEntryType$inboundSchema: z.ZodMiniEnum<typeof ToolEntryType> =
 export const ToolEntry$inboundSchema: z.ZodMiniType<ToolEntry, unknown> = z
   .pipe(
     z.object({
+      annotations: z.optional(ToolAnnotations$inboundSchema),
+      http_method: z.optional(z.string()),
       id: z.string(),
       name: z.string(),
       tool_urn: z.string(),
@@ -49,6 +63,7 @@ export const ToolEntry$inboundSchema: z.ZodMiniType<ToolEntry, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "http_method": "httpMethod",
         "tool_urn": "toolUrn",
       });
     }),

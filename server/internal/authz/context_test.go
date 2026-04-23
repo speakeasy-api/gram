@@ -25,14 +25,14 @@ func TestPrepareContext_loadsUserGrants(t *testing.T) {
 
 	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
 	seedConnectedUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "test@example.com", "Test User", "user_workos_test", "membership_test")
-	seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeBuildRead, WildcardResource)
+	seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeProjectRead, WildcardResource)
 
 	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
 
 	_, ok = GrantsFromContext(ctx)
 	require.True(t, ok)
-	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeBuildRead, ResourceID: "project_123"}))
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_123"}))
 }
 
 func TestPrepareContext_skipsNonSessionAuth(t *testing.T) {
@@ -68,7 +68,7 @@ func TestPrepareContext_skipsNonEnterpriseOrgs(t *testing.T) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
-	seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeBuildRead, WildcardResource)
+	seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeProjectRead, WildcardResource)
 
 	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)

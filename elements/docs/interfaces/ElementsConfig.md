@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.28.0**](../README.md)
+[**@gram-ai/elements v1.29.0**](../README.md)
 
 ***
 
@@ -332,6 +332,16 @@ const config: ElementsConfig = {
   },
 }
 ```
+
+***
+
+### contextCompaction?
+
+> `optional` **contextCompaction**: `ContextCompactionConfig`
+
+Configuration for automatic conversation compaction when the estimated
+input size approaches the model's context window. Defaults are safe for
+all models; override per-page to tighten or disable.
 
 ***
 

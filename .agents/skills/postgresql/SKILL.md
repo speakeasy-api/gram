@@ -99,6 +99,10 @@ use:
 UPDATE example SET deleted_at = clock_timestamp() WHERE id = ?;
 ```
 
+### File structure
+
+`server/database/schema.sql` is DDL only — no `DO`, `ALTER`, or other procedural blocks. Declare tables in dependency order so every `FOREIGN KEY` resolves inline; if a target is declared later, move it up.
+
 ### Constraint naming
 
 All constraints should be named with this format:

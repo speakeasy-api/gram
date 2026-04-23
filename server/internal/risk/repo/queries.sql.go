@@ -46,6 +46,21 @@ func (q *Queries) BumpRiskPolicyVersion(ctx context.Context, arg BumpRiskPolicyV
 	return i, err
 }
 
+const countAllFindings = `-- name: CountAllFindings :one
+SELECT COUNT(*)::BIGINT
+FROM risk_results rr
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+WHERE rr.project_id = $1
+  AND rr.found IS TRUE
+`
+
+func (q *Queries) CountAllFindings(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countAllFindings, projectID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countAnalyzedMessages = `-- name: CountAnalyzedMessages :one
 SELECT COUNT(DISTINCT rr.chat_message_id)::BIGINT
 FROM risk_results rr
@@ -159,22 +174,6 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 	return i, err
 }
 
-const deleteAllRiskResultsForPolicy = `-- name: DeleteAllRiskResultsForPolicy :exec
-DELETE FROM risk_results
-WHERE risk_policy_id = $1
-  AND project_id = $2
-`
-
-type DeleteAllRiskResultsForPolicyParams struct {
-	RiskPolicyID uuid.UUID
-	ProjectID    uuid.UUID
-}
-
-func (q *Queries) DeleteAllRiskResultsForPolicy(ctx context.Context, arg DeleteAllRiskResultsForPolicyParams) error {
-	_, err := q.db.Exec(ctx, deleteAllRiskResultsForPolicy, arg.RiskPolicyID, arg.ProjectID)
-	return err
-}
-
 const deleteRiskPolicy = `-- name: DeleteRiskPolicy :exec
 UPDATE risk_policies
 SET deleted_at = clock_timestamp()
@@ -212,24 +211,6 @@ func (q *Queries) DeleteRiskResultsForMessages(ctx context.Context, arg DeleteRi
 	return err
 }
 
-const deleteStaleRiskResults = `-- name: DeleteStaleRiskResults :exec
-DELETE FROM risk_results
-WHERE risk_policy_id = $1
-  AND project_id = $2
-  AND risk_policy_version < $3
-`
-
-type DeleteStaleRiskResultsParams struct {
-	RiskPolicyID      uuid.UUID
-	ProjectID         uuid.UUID
-	RiskPolicyVersion int64
-}
-
-func (q *Queries) DeleteStaleRiskResults(ctx context.Context, arg DeleteStaleRiskResultsParams) error {
-	_, err := q.db.Exec(ctx, deleteStaleRiskResults, arg.RiskPolicyID, arg.ProjectID, arg.RiskPolicyVersion)
-	return err
-}
-
 const fetchUnanalyzedMessageIDs = `-- name: FetchUnanalyzedMessageIDs :many
 SELECT cm.id
 FROM chat_messages cm
@@ -237,12 +218,10 @@ WHERE cm.project_id = $1
   AND NOT EXISTS (
     SELECT 1
     FROM risk_results rr
-    WHERE rr.project_id = $1
-      AND rr.chat_message_id = cm.id
+    WHERE rr.chat_message_id = cm.id
       AND rr.risk_policy_id = $2
       AND rr.risk_policy_version = $3
   )
-ORDER BY cm.seq ASC
 LIMIT $4
 `
 
@@ -446,7 +425,7 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 }
 
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -454,14 +433,15 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE cm.chat_id = $1
   AND rr.project_id = $2
   AND rr.found IS TRUE
-ORDER BY rr.created_at DESC
-LIMIT $3
+  AND ($3::uuid IS NULL OR rr.id <= $3::uuid)
+ORDER BY rr.id DESC
+LIMIT 51
 `
 
 type ListRiskResultsByChatFoundParams struct {
-	ChatID      uuid.UUID
-	ProjectID   uuid.UUID
-	ResultLimit int32
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+	Cursor    uuid.NullUUID
 }
 
 type ListRiskResultsByChatFoundRow struct {
@@ -483,10 +463,11 @@ type ListRiskResultsByChatFoundRow struct {
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
 	ChatTitle         pgtype.Text
+	ChatUserID        pgtype.Text
 }
 
 func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskResultsByChatFoundParams) ([]ListRiskResultsByChatFoundRow, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsByChatFound, arg.ChatID, arg.ProjectID, arg.ResultLimit)
+	rows, err := q.db.Query(ctx, listRiskResultsByChatFound, arg.ChatID, arg.ProjectID, arg.Cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -513,106 +494,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 			&i.CreatedAt,
 			&i.ChatID,
 			&i.ChatTitle,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRiskResultsByMessage = `-- name: ListRiskResultsByMessage :many
-SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, created_at
-FROM risk_results
-WHERE chat_message_id = $1
-  AND project_id = $2
-ORDER BY created_at DESC
-`
-
-type ListRiskResultsByMessageParams struct {
-	ChatMessageID uuid.UUID
-	ProjectID     uuid.UUID
-}
-
-func (q *Queries) ListRiskResultsByMessage(ctx context.Context, arg ListRiskResultsByMessageParams) ([]RiskResult, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsByMessage, arg.ChatMessageID, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RiskResult
-	for rows.Next() {
-		var i RiskResult
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.OrganizationID,
-			&i.RiskPolicyID,
-			&i.RiskPolicyVersion,
-			&i.ChatMessageID,
-			&i.Source,
-			&i.Found,
-			&i.RuleID,
-			&i.Description,
-			&i.Match,
-			&i.StartPos,
-			&i.EndPos,
-			&i.Confidence,
-			&i.Tags,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRiskResultsByProject = `-- name: ListRiskResultsByProject :many
-SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, created_at
-FROM risk_results
-WHERE project_id = $1
-ORDER BY created_at DESC
-LIMIT $2
-`
-
-type ListRiskResultsByProjectParams struct {
-	ProjectID   uuid.UUID
-	ResultLimit int32
-}
-
-func (q *Queries) ListRiskResultsByProject(ctx context.Context, arg ListRiskResultsByProjectParams) ([]RiskResult, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsByProject, arg.ProjectID, arg.ResultLimit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RiskResult
-	for rows.Next() {
-		var i RiskResult
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.OrganizationID,
-			&i.RiskPolicyID,
-			&i.RiskPolicyVersion,
-			&i.ChatMessageID,
-			&i.Source,
-			&i.Found,
-			&i.RuleID,
-			&i.Description,
-			&i.Match,
-			&i.StartPos,
-			&i.EndPos,
-			&i.Confidence,
-			&i.Tags,
-			&i.CreatedAt,
+			&i.ChatUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -625,7 +507,7 @@ func (q *Queries) ListRiskResultsByProject(ctx context.Context, arg ListRiskResu
 }
 
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -633,14 +515,15 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE rr.project_id = $1
   AND rr.risk_policy_id = $2
   AND rr.found IS TRUE
-ORDER BY rr.created_at DESC
-LIMIT $3
+  AND ($3::uuid IS NULL OR rr.id <= $3::uuid)
+ORDER BY rr.id DESC
+LIMIT 51
 `
 
 type ListRiskResultsByProjectAndPolicyParams struct {
 	ProjectID    uuid.UUID
 	RiskPolicyID uuid.UUID
-	ResultLimit  int32
+	Cursor       uuid.NullUUID
 }
 
 type ListRiskResultsByProjectAndPolicyRow struct {
@@ -662,10 +545,11 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
 	ChatTitle         pgtype.Text
+	ChatUserID        pgtype.Text
 }
 
 func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg ListRiskResultsByProjectAndPolicyParams) ([]ListRiskResultsByProjectAndPolicyRow, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsByProjectAndPolicy, arg.ProjectID, arg.RiskPolicyID, arg.ResultLimit)
+	rows, err := q.db.Query(ctx, listRiskResultsByProjectAndPolicy, arg.ProjectID, arg.RiskPolicyID, arg.Cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -692,6 +576,7 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 			&i.CreatedAt,
 			&i.ChatID,
 			&i.ChatTitle,
+			&i.ChatUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -704,20 +589,21 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 }
 
 const listRiskResultsByProjectFound = `-- name: ListRiskResultsByProjectFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE
-ORDER BY rr.created_at DESC
-LIMIT $2
+  AND ($2::uuid IS NULL OR rr.id <= $2::uuid)
+ORDER BY rr.id DESC
+LIMIT 51
 `
 
 type ListRiskResultsByProjectFoundParams struct {
-	ProjectID   uuid.UUID
-	ResultLimit int32
+	ProjectID uuid.UUID
+	Cursor    uuid.NullUUID
 }
 
 type ListRiskResultsByProjectFoundRow struct {
@@ -739,10 +625,11 @@ type ListRiskResultsByProjectFoundRow struct {
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
 	ChatTitle         pgtype.Text
+	ChatUserID        pgtype.Text
 }
 
 func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRiskResultsByProjectFoundParams) ([]ListRiskResultsByProjectFoundRow, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsByProjectFound, arg.ProjectID, arg.ResultLimit)
+	rows, err := q.db.Query(ctx, listRiskResultsByProjectFound, arg.ProjectID, arg.Cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -769,6 +656,65 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 			&i.CreatedAt,
 			&i.ChatID,
 			&i.ChatTitle,
+			&i.ChatUserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskResultsGroupedByChat = `-- name: ListRiskResultsGroupedByChat :many
+SELECT
+    cm.chat_id
+  , c.title AS chat_title
+  , c.external_user_id AS chat_user_id
+  , COUNT(*)::BIGINT AS findings_count
+  , MAX(rr.created_at)::TIMESTAMPTZ AS latest_detected
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+WHERE rr.project_id = $1
+  AND rr.found IS TRUE
+  AND ($2::uuid IS NULL OR cm.chat_id <= $2::uuid)
+GROUP BY cm.chat_id, c.title, c.external_user_id
+ORDER BY cm.chat_id DESC
+LIMIT 51
+`
+
+type ListRiskResultsGroupedByChatParams struct {
+	ProjectID uuid.UUID
+	Cursor    uuid.NullUUID
+}
+
+type ListRiskResultsGroupedByChatRow struct {
+	ChatID         uuid.UUID
+	ChatTitle      pgtype.Text
+	ChatUserID     pgtype.Text
+	FindingsCount  int64
+	LatestDetected pgtype.Timestamptz
+}
+
+func (q *Queries) ListRiskResultsGroupedByChat(ctx context.Context, arg ListRiskResultsGroupedByChatParams) ([]ListRiskResultsGroupedByChatRow, error) {
+	rows, err := q.db.Query(ctx, listRiskResultsGroupedByChat, arg.ProjectID, arg.Cursor)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRiskResultsGroupedByChatRow
+	for rows.Next() {
+		var i ListRiskResultsGroupedByChatRow
+		if err := rows.Scan(
+			&i.ChatID,
+			&i.ChatTitle,
+			&i.ChatUserID,
+			&i.FindingsCount,
+			&i.LatestDetected,
 		); err != nil {
 			return nil, err
 		}

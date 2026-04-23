@@ -88,8 +88,21 @@ func newTestCollectionsService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-func createMCPEnabledToolset(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.Toolset {
+func createMCPEnabledToolset(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	name string,
+	registrySpecifier string,
+) *types.Toolset {
 	t.Helper()
+
+	var origin *types.ToolsetOrigin
+	if registrySpecifier != "" {
+		origin = &types.ToolsetOrigin{
+			RegistrySpecifier: registrySpecifier,
+		}
+	}
 
 	created, err := ti.toolsets.CreateToolset(ctx, &tgen.CreateToolsetPayload{
 		SessionToken:           nil,
@@ -99,7 +112,7 @@ func createMCPEnabledToolset(t *testing.T, ctx context.Context, ti *testInstance
 		ToolUrns:               []string{},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
-		ProjectSlugInput:       nil,
+		Origin:                 origin,
 	})
 	require.NoError(t, err)
 
@@ -118,7 +131,6 @@ func createMCPEnabledToolset(t *testing.T, ctx context.Context, ti *testInstance
 		McpIsPublic:            nil,
 		McpEnabled:             &mcpEnabled,
 		CustomDomainID:         nil,
-		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
 	require.True(t, *updated.McpEnabled)
@@ -138,7 +150,6 @@ func createCollection(t *testing.T, ctx context.Context, ti *testInstance, name,
 		ToolsetIds:           []string{},
 		SessionToken:         nil,
 		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
 	})
 	require.NoError(t, err)
 

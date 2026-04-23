@@ -25,7 +25,8 @@ WITH deployment AS (
     LIMIT 1
 )
 SELECT
-  ftd.id, ftd.tool_urn, ftd.deployment_id, ftd.name, ftd.variables, ftd.auth_input
+  ftd.id, ftd.tool_urn, ftd.deployment_id, ftd.name, ftd.variables, ftd.auth_input,
+  ftd.read_only_hint, ftd.destructive_hint, ftd.idempotent_hint, ftd.open_world_hint
 FROM function_tool_definitions ftd
 WHERE
   ftd.deployment_id = (SELECT id FROM deployment)
@@ -40,12 +41,16 @@ type FindFunctionToolEntriesByUrnParams struct {
 }
 
 type FindFunctionToolEntriesByUrnRow struct {
-	ID           uuid.UUID
-	ToolUrn      urn.Tool
-	DeploymentID uuid.UUID
-	Name         string
-	Variables    []byte
-	AuthInput    []byte
+	ID              uuid.UUID
+	ToolUrn         urn.Tool
+	DeploymentID    uuid.UUID
+	Name            string
+	Variables       []byte
+	AuthInput       []byte
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
 }
 
 func (q *Queries) FindFunctionToolEntriesByUrn(ctx context.Context, arg FindFunctionToolEntriesByUrnParams) ([]FindFunctionToolEntriesByUrnRow, error) {
@@ -64,6 +69,10 @@ func (q *Queries) FindFunctionToolEntriesByUrn(ctx context.Context, arg FindFunc
 			&i.Name,
 			&i.Variables,
 			&i.AuthInput,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
 		); err != nil {
 			return nil, err
 		}
@@ -168,8 +177,10 @@ external_deployments AS (
   INNER JOIN package_versions ON deployments_packages.version_id = package_versions.id
   WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
 )
-SELECT 
-  htd.id, htd.tool_urn, htd.deployment_id, htd.name, htd.security, htd.server_env_var
+SELECT
+  htd.id, htd.tool_urn, htd.deployment_id, htd.name, htd.security, htd.server_env_var,
+  htd.read_only_hint, htd.destructive_hint, htd.idempotent_hint, htd.open_world_hint,
+  htd.http_method
 FROM http_tool_definitions htd
 WHERE
   htd.deployment_id = ANY (SELECT id FROM deployment UNION ALL SELECT id FROM external_deployments)
@@ -184,12 +195,17 @@ type FindHttpToolEntriesByUrnParams struct {
 }
 
 type FindHttpToolEntriesByUrnRow struct {
-	ID           uuid.UUID
-	ToolUrn      urn.Tool
-	DeploymentID uuid.UUID
-	Name         string
-	Security     []byte
-	ServerEnvVar string
+	ID              uuid.UUID
+	ToolUrn         urn.Tool
+	DeploymentID    uuid.UUID
+	Name            string
+	Security        []byte
+	ServerEnvVar    string
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+	HttpMethod      string
 }
 
 func (q *Queries) FindHttpToolEntriesByUrn(ctx context.Context, arg FindHttpToolEntriesByUrnParams) ([]FindHttpToolEntriesByUrnRow, error) {
@@ -208,6 +224,11 @@ func (q *Queries) FindHttpToolEntriesByUrn(ctx context.Context, arg FindHttpTool
 			&i.Name,
 			&i.Security,
 			&i.ServerEnvVar,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+			&i.HttpMethod,
 		); err != nil {
 			return nil, err
 		}

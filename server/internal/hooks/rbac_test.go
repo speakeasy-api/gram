@@ -37,7 +37,7 @@ func TestHooks_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.List(ctx, &gen.ListPayload{
 		ApikeyToken:      nil,
@@ -56,7 +56,7 @@ func TestHooks_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.List(ctx, &gen.ListPayload{
 		ApikeyToken:      nil,
@@ -70,7 +70,7 @@ func TestHooks_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeBuildRead, Resource: uuid.NewString()})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: uuid.NewString()})
 
 	_, err := ti.service.List(ctx, &gen.ListPayload{
 		ApikeyToken:      nil,
@@ -109,7 +109,7 @@ func TestHooks_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.Upsert(ctx, &gen.UpsertPayload{
 		ApikeyToken:      nil,
@@ -132,7 +132,7 @@ func TestHooks_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
+	ctx = authz.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()})
 
 	_, err := ti.service.Upsert(ctx, &gen.UpsertPayload{
 		ApikeyToken:      nil,

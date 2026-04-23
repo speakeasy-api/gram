@@ -35,7 +35,7 @@ export default function CustomTools() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope={["build:read", "build:write"]} level="page">
+        <RequireScope scope={["project:read", "project:write"]} level="page">
           <CustomToolsInner />
         </RequireScope>
       </Page.Body>

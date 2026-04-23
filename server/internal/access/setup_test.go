@@ -118,7 +118,7 @@ func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizati
 	require.NoError(t, err)
 }
 
-func listPrincipalGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal) []accessrepo.PrincipalGrant {
+func listPrincipalGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal) []accessrepo.ListPrincipalGrantsByOrgRow {
 	t.Helper()
 
 	grants, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{

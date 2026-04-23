@@ -8,7 +8,7 @@ import (
 
 var _ = Service("risk", func() {
 	Description("Manage risk analysis policies and view scan results.")
-	Meta("openapi:extension:x-speakeasy-group", "risks")
+	Meta("openapi:extension:x-speakeasy-group", "risk")
 
 	Security(security.ByKey, security.ProjectSlug, func() { Scope("producer") })
 	Security(security.Session, security.ProjectSlug)
@@ -38,7 +38,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "createRiskPolicy")
-		Meta("openapi:extension:x-speakeasy-name-override", "createPolicy")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreatePolicy", "type": "mutation"}`)
 	})
 
@@ -62,7 +63,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "listRiskPolicies")
-		Meta("openapi:extension:x-speakeasy-name-override", "listPolicies")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicies"}`)
 	})
 
@@ -91,7 +93,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "getRiskPolicy")
-		Meta("openapi:extension:x-speakeasy-name-override", "getPolicy")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
 	})
 
 	Method("updateRiskPolicy", func() {
@@ -121,7 +124,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "updateRiskPolicy")
-		Meta("openapi:extension:x-speakeasy-name-override", "updatePolicy")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "update")
 	})
 
 	Method("deleteRiskPolicy", func() {
@@ -147,7 +151,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "deleteRiskPolicy")
-		Meta("openapi:extension:x-speakeasy-name-override", "deletePolicy")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "delete")
 	})
 
 	Method("listRiskResults", func() {
@@ -163,9 +168,7 @@ var _ = Service("risk", func() {
 			Attribute("chat_id", String, "Optional chat ID to filter by.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("limit", Int, "Maximum number of results to return.", func() {
-				Default(100)
-			})
+			Attribute("cursor", String, "Cursor to fetch the next page of results.")
 		})
 
 		Result(ListRiskResultsResult)
@@ -177,13 +180,41 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("policy_id")
 			Param("chat_id")
-			Param("limit")
+			Param("cursor")
 			Response(StatusOK)
 		})
 
 		Meta("openapi:operationId", "listRiskResults")
-		Meta("openapi:extension:x-speakeasy-name-override", "listResults")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResults"}`)
+	})
+
+	Method("listRiskResultsByChat", func() {
+		Description("List risk results grouped by chat session for the current project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("cursor", String, "Cursor to fetch the next page of results.")
+		})
+
+		Result(ListRiskResultsByChatResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.results.byChat")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("cursor")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskResultsByChat")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "byChat")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResultsByChat"}`)
 	})
 
 	Method("getRiskPolicyStatus", func() {
@@ -211,7 +242,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "getRiskPolicyStatus")
-		Meta("openapi:extension:x-speakeasy-name-override", "getPolicyStatus")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "status")
 	})
 
 	Method("triggerRiskAnalysis", func() {
@@ -236,7 +268,8 @@ var _ = Service("risk", func() {
 		})
 
 		Meta("openapi:operationId", "triggerRiskAnalysis")
-		Meta("openapi:extension:x-speakeasy-name-override", "triggerAnalysis")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "trigger")
 	})
 })
 
@@ -247,5 +280,13 @@ var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {
 
 var ListRiskResultsResult = Type("ListRiskResultsResult", func() {
 	Attribute("results", ArrayOf(shared.RiskResult), "The list of risk results.")
-	Required("results")
+	Attribute("total_count", Int64, "Total number of findings across all enabled policies.")
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
+	Required("results", "total_count")
+})
+
+var ListRiskResultsByChatResult = Type("ListRiskResultsByChatResult", func() {
+	Attribute("chats", ArrayOf(shared.RiskChatSummary), "Risk results grouped by chat.")
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
+	Required("chats")
 })

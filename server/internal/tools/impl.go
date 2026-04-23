@@ -74,7 +74,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
 

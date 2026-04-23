@@ -167,6 +167,7 @@ const (
 	OAuthConnectedKey              = attribute.Key("gram.oauth.connected")
 	OAuthExpiredKey                = attribute.Key("gram.oauth.expired")
 	OAuthProxyServerIDKey          = attribute.Key("gram.oauth.proxy_server_id")
+	MessageObserverCountKey        = attribute.Key("gram.message_observer.count")
 	OAuthProviderCountKey          = attribute.Key("gram.oauth.provider_count")
 	OpenAPIMethodKey               = attribute.Key("gram.openapi.method")
 	OpenAPIOperationIDKey          = attribute.Key("gram.openapi.operation_id")
@@ -190,6 +191,8 @@ const (
 	ProjectIDKey                   = attribute.Key("gram.project.id")
 	ProjectNameKey                 = attribute.Key("gram.project.name")
 	ProjectSlugKey                 = attribute.Key("gram.project.slug")
+	RiskPolicyCountKey             = attribute.Key("gram.risk.policy_count")
+	RiskPolicyIDKey                = attribute.Key("gram.risk.policy_id")
 	RiskRuleIDKey                  = attribute.Key("gram.risk.rule_id")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
@@ -775,6 +778,11 @@ func SlogOAuthProxyServerID(v string) slog.Attr {
 	return slog.String(string(OAuthProxyServerIDKey), v)
 }
 
+func MessageObserverCount(v int) attribute.KeyValue { return MessageObserverCountKey.Int(v) }
+func SlogMessageObserverCount(v int) slog.Attr {
+	return slog.Int(string(MessageObserverCountKey), v)
+}
+
 func OAuthProviderCount(v int) attribute.KeyValue { return OAuthProviderCountKey.Int(v) }
 func SlogOAuthProviderCount(v int) slog.Attr      { return slog.Int(string(OAuthProviderCountKey), v) }
 
@@ -856,11 +864,20 @@ func SlogProjectSlug(v string) slog.Attr      { return slog.String(string(Projec
 func ProjectName(v string) attribute.KeyValue { return ProjectNameKey.String(v) }
 func SlogProjectName(v string) slog.Attr      { return slog.String(string(ProjectNameKey), v) }
 
+func RiskPolicyCount(v int) attribute.KeyValue { return RiskPolicyCountKey.Int(v) }
+func SlogRiskPolicyCount(v int) slog.Attr      { return slog.Int(string(RiskPolicyCountKey), v) }
+
+func RiskPolicyID(v string) attribute.KeyValue { return RiskPolicyIDKey.String(v) }
+func SlogRiskPolicyID(v string) slog.Attr      { return slog.String(string(RiskPolicyIDKey), v) }
+
 func RiskRuleID(v string) attribute.KeyValue { return RiskRuleIDKey.String(v) }
 func SlogRiskRuleID(v string) slog.Attr      { return slog.String(string(RiskRuleIDKey), v) }
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }
+
+func TemporalWorkflowID(v string) attribute.KeyValue { return TemporalWorkflowIDKey.String(v) }
+func SlogTemporalWorkflowID(v string) slog.Attr      { return slog.String(string(TemporalWorkflowIDKey), v) }
 
 func SecurityPlacement(v string) attribute.KeyValue { return SecurityPlacementKey.String(v) }
 func SlogSecurityPlacement(v string) slog.Attr      { return slog.String(string(SecurityPlacementKey), v) }

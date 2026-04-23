@@ -667,6 +667,30 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeBadRequest, err, "failed to parse request body").Log(ctx, s.logger)
 	}
 
+	// Defense-in-depth: reject any single tool-result message larger than the
+	// per-tool byte cap. The client is expected to truncate oversized tool
+	// results before sending, but if it doesn't, a huge payload here will
+	// waste upstream tokens and typically trip the provider's own context
+	// limit with an opaque 400. Failing fast here keeps the error clean.
+	const maxToolMessageBytes = 200 * 1024
+	for i, m := range chatRequest.Messages {
+		if openrouter.GetRole(m) != "tool" {
+			continue
+		}
+		content, err := openrouter.GetContentJSON(m)
+		if err != nil {
+			continue // other validation will catch malformed messages
+		}
+		if len(content) > maxToolMessageBytes {
+			return oops.E(
+				oops.CodeRequestTooLarge,
+				nil,
+				"tool message %d exceeds %d bytes; truncate tool output client-side",
+				i, maxToolMessageBytes,
+			).Log(ctx, s.logger)
+		}
+	}
+
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
 
 	eventProperties["model"] = chatRequest.Model

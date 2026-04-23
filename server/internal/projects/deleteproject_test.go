@@ -74,7 +74,7 @@ func TestProjectsService_DeleteProject_ForbiddenWithoutOrgAdminGrant(t *testing.
 
 	ctx, ti := newTestProjectsService(t, true)
 	project := createProjectForDeletion(t, ctx, ti, "no-wildcard-"+uuid.NewString()[:8])
-	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeBuildWrite, Resource: project.ID.String()})
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: project.ID.String()})
 
 	err := ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
 		ID:           project.ID.String(),

@@ -57,3 +57,4 @@ package-lock.json
 .worktrees
 .granary/
 .claude/hooks/*
+flagged-chats.jsonl

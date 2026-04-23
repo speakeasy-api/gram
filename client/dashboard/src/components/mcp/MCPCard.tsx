@@ -1,12 +1,13 @@
 import { CopyButton } from "@/components/ui/copy-button";
 import { DotCard } from "@/components/ui/dot-card";
+import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
-import { ArrowRight, Link2, Network } from "lucide-react";
+import { ArrowRight, Link2, Network, Package } from "lucide-react";
 import { useMemo } from "react";
 import { useCatalogIconMap } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
@@ -55,6 +56,9 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   };
 
   const status = getStatusConfig();
+  const installSourceTooltip = toolset.origin?.registrySpecifier
+    ? `Installed from ${toolset.origin.registrySpecifier}`
+    : undefined;
 
   const statusIndicator = (
     <div className="flex items-center gap-2">
@@ -114,6 +118,18 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
               icon={Link2}
               tooltip="Copy install page URL"
             />
+          )}
+          {installSourceTooltip && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              tooltip={installSourceTooltip}
+              aria-label={installSourceTooltip}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Package className="text-muted-foreground group-hover:text-foreground h-4 w-4" />
+            </Button>
           )}
           <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
         </div>

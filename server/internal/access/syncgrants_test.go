@@ -19,13 +19,13 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
 
 	seedInternalOrganization(t, ctx, conn, organizationID)
-	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeBuildRead), "project-old")
-	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeBuildWrite), "project-stale")
-	seedInternalGrant(t, ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "other-role"), string(authz.ScopeBuildRead), "project-other")
+	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeProjectRead), "project-old")
+	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeProjectWrite), "project-stale")
+	seedInternalGrant(t, ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "other-role"), string(authz.ScopeProjectRead), "project-other")
 
 	err := authz.SyncGrants(ctx, svc.logger, conn, organizationID, roleSlug, []*authz.RoleGrant{
 		{
-			Scope:     string(authz.ScopeBuildRead),
+			Scope:     string(authz.ScopeProjectRead),
 			Resources: nil,
 		},
 		{
@@ -33,7 +33,7 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 			Resources: []string{"tool:payments", "tool:analytics"},
 		},
 		{
-			Scope:     string(authz.ScopeBuildWrite),
+			Scope:     string(authz.ScopeProjectWrite),
 			Resources: []string{},
 		},
 	})
@@ -51,7 +51,7 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 		got = append(got, row.Scope+"|"+row.Resource)
 	}
 	require.ElementsMatch(t, []string{
-		string(authz.ScopeBuildRead) + "|" + authz.WildcardResource,
+		string(authz.ScopeProjectRead) + "|" + authz.WildcardResource,
 		string(authz.ScopeMCPConnect) + "|tool:analytics",
 		string(authz.ScopeMCPConnect) + "|tool:payments",
 	}, got)
@@ -74,7 +74,7 @@ func TestService_syncGrants_clearsRoleGrantsWhenEmpty(t *testing.T) {
 	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
 
 	seedInternalOrganization(t, ctx, conn, organizationID)
-	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeBuildRead), authz.WildcardResource)
+	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeProjectRead), authz.WildcardResource)
 	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeMCPRead), "tool:payments")
 
 	err := authz.SyncGrants(ctx, svc.logger, conn, organizationID, roleSlug, nil)
