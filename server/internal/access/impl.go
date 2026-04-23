@@ -362,8 +362,9 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 		attr.UserID(ac.UserID),
 		attr.AccessRoleSlug(currentRole.Slug),
 	)
-	if isSystemRole(currentRole.Slug) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "system roles cannot be updated").Log(ctx, logger)
+	sysRole := isSystemRole(currentRole.Slug)
+	if sysRole && (payload.Name != nil || payload.Description != nil || payload.Grants != nil) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "system role properties cannot be updated, only member assignment is allowed").Log(ctx, logger)
 	}
 	if payload.Name != nil {
 		if _, err := slugify(*payload.Name); err != nil {
@@ -384,19 +385,25 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 		return nil, err
 	}
 
-	updatedRole, err := s.roles.UpdateRole(ctx, workosOrgID, currentRole.Slug, workos.UpdateRoleOpts{
-		Name:        payload.Name,
-		Description: payload.Description,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "update role in workos").Log(ctx, logger)
-	}
+	// System roles are immutable in WorkOS — skip the role update call and grant sync.
+	var updatedRole *workos.Role
+	if sysRole {
+		updatedRole = &currentRole
+	} else {
+		updatedRole, err = s.roles.UpdateRole(ctx, workosOrgID, currentRole.Slug, workos.UpdateRoleOpts{
+			Name:        payload.Name,
+			Description: payload.Description,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "update role in workos").Log(ctx, logger)
+		}
 
-	// As with role creation, member reassignment happens after local grant sync so
-	// a failed sync never leaves users attached to a role with incomplete access.
-	if payload.Grants != nil {
-		if err := syncGrants(ctx, s.logger, s.db, ac.ActiveOrganizationID, currentRole.Slug, roleGrantPayloads(payload.Grants)); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "sync grants for updated role").Log(ctx, logger)
+		// As with role creation, member reassignment happens after local grant sync so
+		// a failed sync never leaves users attached to a role with incomplete access.
+		if payload.Grants != nil {
+			if err := syncGrants(ctx, s.logger, s.db, ac.ActiveOrganizationID, currentRole.Slug, roleGrantPayloads(payload.Grants)); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "sync grants for updated role").Log(ctx, logger)
+			}
 		}
 	}
 

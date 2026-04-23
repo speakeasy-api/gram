@@ -95,6 +95,129 @@ func TestService_UpdateRole(t *testing.T) {
 	require.Len(t, grants, 3)
 }
 
+func TestService_UpdateRole_SystemRole_MemberAssignment(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	// admin and member are system roles — WorkOS UpdateRole must NOT be called.
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
+		mockRole("role_admin", "Admin", "admin", "Full access"),
+	}, nil).Once()
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "member"),
+		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "member"),
+	}, nil).Once()
+	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "admin").Return(&thirdpartyworkos.Member{
+		ID:             "membership_1",
+		UserID:         "user_1",
+		OrganizationID: mockidp.MockOrgID,
+		RoleSlug:       "admin",
+		CreatedAt:      mockMembershipTimestamp,
+	}, nil).Once()
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
+		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "member"),
+	}, nil).Once()
+
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
+
+	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID:        "role_admin",
+		MemberIds: []string{"local_user_1"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "role_admin", role.ID)
+	require.True(t, role.IsSystem)
+	require.Equal(t, 1, role.MemberCount)
+
+	// WorkOS UpdateRole must NOT have been called for a system role.
+	ti.roles.AssertNotCalled(t, "UpdateRole", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestService_UpdateRole_SystemRole_RejectsPropertyChanges(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
+		mockRole("role_member", "Member", "member", "Default role"),
+	}, nil)
+
+	name := "Custom Name"
+	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID:   "role_member",
+		Name: &name,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "system role properties cannot be updated")
+
+	description := "Custom description"
+	_, err = ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID:          "role_member",
+		Description: &description,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "system role properties cannot be updated")
+
+	_, err = ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID:     "role_member",
+		Grants: []*gen.RoleGrant{{Scope: string(ScopeProjectRead)}},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "system role properties cannot be updated")
+}
+
+func TestService_UpdateRole_SystemRole_AuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessRoleUpdate)
+	require.NoError(t, err)
+
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
+		mockRole("role_admin", "Admin", "admin", "Full access"),
+	}, nil).Once()
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "member"),
+	}, nil).Once()
+	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "admin").Return(&thirdpartyworkos.Member{
+		ID:             "membership_1",
+		UserID:         "user_1",
+		OrganizationID: mockidp.MockOrgID,
+		RoleSlug:       "admin",
+		CreatedAt:      mockMembershipTimestamp,
+	}, nil).Once()
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
+	}, nil).Once()
+
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
+
+	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID:        "role_admin",
+		MemberIds: []string{"local_user_1"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, role)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessRoleUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAccessRoleUpdate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionAccessRoleUpdate), record.Action)
+	require.Equal(t, "admin", record.SubjectSlug)
+}
+
 func TestService_UpdateRole_NotFound(t *testing.T) {
 	t.Parallel()
 
