@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/collections/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -52,7 +53,7 @@ const defaultCollectionSlug = "registry"
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, accessLoader auth.AccessLoader, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, serverURL *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("collections"))
 
 	return &Service{
@@ -62,7 +63,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		repo:      repo.New(db),
 		toolsets:  toolsetsRepo.New(db),
 		orgRepo:   orgRepo.New(db),
-		auth:      auth.New(logger, db, sessions, accessLoader),
+		auth:      auth.New(logger, db, sessions, authzEngine),
 		sessions:  sessions,
 		serverURL: serverURL,
 	}
