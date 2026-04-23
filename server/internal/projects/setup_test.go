@@ -9,16 +9,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -55,14 +54,6 @@ type testInstance struct {
 	assetStorage   assets.BlobStore
 }
 
-type stubFeatureChecker struct {
-	enabled bool
-}
-
-func (s stubFeatureChecker) IsFeatureEnabled(_ context.Context, _ string, _ productfeatures.Feature) (bool, error) {
-	return s.enabled, nil
-}
-
 func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *testInstance) {
 	t.Helper()
 
@@ -90,15 +81,17 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	ctx = withAccessGrants(t, ctx, conn,
-		access.Grant{Scope: access.ScopeProjectRead, Resource: authCtx.ProjectID.String()},
-		access.Grant{Scope: access.ScopeProjectWrite, Resource: authCtx.ProjectID.String()},
-		access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
+		authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()},
+		authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()},
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
 	// Create test asset storage for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
 
-	svc := projects.NewService(logger, tracerProvider, conn, sessionManager, access.NewManager(logger, conn, stubFeatureChecker{enabled: enableRBAC}, workos.NewStubClient(), cache.NoopCache))
+	svc := projects.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, func(context.Context, string) (bool, error) {
+		return enableRBAC, nil
+	}, workos.NewStubClient(), cache.NoopCache))
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -108,7 +101,7 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 	}
 }
 
-func withAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...access.Grant) context.Context {
+func withAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -119,13 +112,13 @@ func withAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, gra
 		seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, userPrincipal, grant.Scope, grant.Resource)
 	}
 
-	loadedGrants, err := access.LoadGrants(ctx, conn, authCtx.ActiveOrganizationID, []urn.Principal{userPrincipal})
+	loadedGrants, err := authz.LoadGrants(ctx, conn, authCtx.ActiveOrganizationID, []urn.Principal{userPrincipal})
 	require.NoError(t, err)
 
-	return access.GrantsToContext(ctx, loadedGrants)
+	return authz.GrantsToContext(ctx, loadedGrants)
 }
 
-func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...access.Grant) context.Context {
+func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -136,13 +129,13 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 		seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, principal, grant.Scope, grant.Resource)
 	}
 
-	loadedGrants, err := access.LoadGrants(ctx, conn, authCtx.ActiveOrganizationID, []urn.Principal{principal})
+	loadedGrants, err := authz.LoadGrants(ctx, conn, authCtx.ActiveOrganizationID, []urn.Principal{principal})
 	require.NoError(t, err)
 
-	return access.GrantsToContext(ctx, loadedGrants)
+	return authz.GrantsToContext(ctx, loadedGrants)
 }
 
-func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope access.Scope, resource string) {
+func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope authz.Scope, resource string) {
 	t.Helper()
 
 	_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{

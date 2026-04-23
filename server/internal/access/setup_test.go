@@ -9,14 +9,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -26,6 +28,11 @@ import (
 var (
 	infra *testenv.Environment
 )
+
+type noopFeatureCacheWriter struct{}
+
+func (noopFeatureCacheWriter) UpdateFeatureCache(context.Context, string, productfeatures.Feature, bool) {
+}
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
@@ -79,41 +86,13 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	roles := newMockRoleProvider(t)
 
-	svc := NewService(logger, tracerProvider, conn, sessionManager, roles, NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache), noopFeatureCacheWriter{})
+	svc := NewService(logger, tracerProvider, conn, sessionManager, roles, authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), noopFeatureCacheWriter{})
 
 	return ctx, &testInstance{
 		service: svc,
 		conn:    conn,
 		roles:   roles,
 	}
-}
-
-func enterpriseTestCtx(ctx context.Context) context.Context {
-	sessionID := "session_test"
-	return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-		ActiveOrganizationID:  "org_test",
-		UserID:                "user_test",
-		ExternalUserID:        "",
-		APIKeyID:              "",
-		SessionID:             &sessionID,
-		ProjectID:             nil,
-		OrganizationSlug:      "",
-		Email:                 nil,
-		AccountType:           "enterprise",
-		HasActiveSubscription: false,
-		Whitelisted:           false,
-		ProjectSlug:           nil,
-		APIKeyScopes:          nil,
-	})
-}
-
-func newTestDB(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-
-	conn, err := infra.CloneTestDatabase(t, "testdb")
-	require.NoError(t, err)
-
-	return conn
 }
 
 func seedOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) {
@@ -128,7 +107,7 @@ func seedOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 	require.NoError(t, err)
 }
 
-func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope Scope, resource string) {
+func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope authz.Scope, resource string) {
 	t.Helper()
 
 	_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
@@ -150,6 +129,28 @@ func listPrincipalGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	require.NoError(t, err)
 
 	return grants
+}
+
+// seedDisconnectedUser creates a user in the users table with a workos_id but
+// does NOT insert into organization_user_relationships, simulating a WorkOS
+// user who hasn't been connected to the Gram org.
+func seedDisconnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, userID string, email string, displayName string, workosUserID string) {
+	t.Helper()
+
+	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          userID,
+		Email:       email,
+		DisplayName: displayName,
+		PhotoUrl:    conv.PtrToPGText(nil),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+
+	err = usersrepo.New(conn).SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
+		WorkosID: conv.PtrToPGText(conv.PtrEmpty(workosUserID)),
+		ID:       userID,
+	})
+	require.NoError(t, err)
 }
 
 func seedConnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string, email string, displayName string, workosUserID string, workosMembershipID string) {

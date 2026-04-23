@@ -27,6 +27,17 @@ LIMIT 1;
 SELECT * FROM users
 WHERE workos_id = ANY(@workos_ids::text[]);
 
+-- name: GetConnectedUsersByWorkosIDs :many
+SELECT u.* FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE u.workos_id = ANY(@workos_ids::text[])
+  AND our.organization_id = @organization_id
+  AND our.deleted_at IS NULL;
+
+-- name: GetUsersByIDs :many
+SELECT * FROM users
+WHERE id = ANY(@ids::text[]);
+
 -- name: SetUserWorkosID :exec
 UPDATE users 
 SET workos_id = @workos_id, 

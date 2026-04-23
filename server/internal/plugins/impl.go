@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,11 +27,11 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/plugins/server"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
@@ -70,7 +71,7 @@ type Service struct {
 	db        *pgxpool.Pool
 	repo      *repo.Queries
 	auth      *auth.Auth
-	access    *access.Manager
+	authz     *authz.Engine
 	github    *GitHubConfig
 	serverURL string
 	keyPrefix string
@@ -84,7 +85,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
-	accessManager *access.Manager,
+	authzEngine *authz.Engine,
 	github *GitHubConfig,
 	env string,
 	serverURL string,
@@ -96,8 +97,8 @@ func NewService(
 		logger:    logger,
 		db:        db,
 		repo:      repo.New(db),
-		auth:      auth.New(logger, db, sessions, accessManager),
-		access:    accessManager,
+		auth:      auth.New(logger, db, sessions, authzEngine),
+		authz:     authzEngine,
 		github:    github,
 		serverURL: serverURL,
 		keyPrefix: auth.APIKeyPrefix(env),
@@ -126,7 +127,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -163,7 +164,7 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -203,7 +204,7 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -244,7 +245,7 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -296,7 +297,7 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return err
 	}
 
@@ -351,7 +352,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -412,7 +413,7 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -456,7 +457,7 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return err
 	}
 
@@ -494,7 +495,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -555,7 +556,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 		return nil, nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, nil, err
 	}
 
@@ -643,7 +644,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -678,7 +679,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -718,16 +719,20 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeUnexpected, err, "generate plugin packages").Log(ctx, s.logger)
 	}
 
-	repoName := ac.OrganizationSlug + "-" + *ac.ProjectSlug + "-plugins"
+	// GitHub repo owner/name are case-insensitive. Normalize at the boundary
+	// so the rows we persist round-trip cleanly through the case-insensitive
+	// unique index on (installation_id, LOWER(repo_owner), LOWER(repo_name)).
+	repoOwner := strings.ToLower(s.github.Org)
+	repoName := strings.ToLower(ac.OrganizationSlug + "-" + *ac.ProjectSlug + "-plugins")
 
-	if err := s.github.Client.CreateRepo(ctx, s.github.InstallationID, s.github.Org, repoName, true); err != nil {
+	if err := s.github.Client.CreateRepo(ctx, s.github.InstallationID, repoOwner, repoName, true); err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "create github repo").Log(ctx, s.logger)
 	}
 
 	_, err = s.github.Client.PushFiles(
 		ctx,
 		s.github.InstallationID,
-		s.github.Org,
+		repoOwner,
 		repoName,
 		"main",
 		"Update plugin packages",
@@ -738,7 +743,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	}
 
 	if payload.GithubUsername != nil && *payload.GithubUsername != "" {
-		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, s.github.Org, repoName, *payload.GithubUsername, "pull"); err != nil {
+		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, *payload.GithubUsername, "pull"); err != nil {
 			s.logger.WarnContext(ctx, "failed to add collaborator (non-fatal)",
 				attr.SlogOrganizationID(ac.ActiveOrganizationID),
 				attr.SlogError(err),
@@ -751,11 +756,11 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	// consumer credentials when GitHub fails. If this transaction itself
 	// fails, the published repo contains a key string with no DB record —
 	// re-publish overwrites it with a fresh valid key.
-	if err := s.persistPluginAPIKey(ctx, ac, candidate, repoName); err != nil {
+	if err := s.persistPluginAPIKey(ctx, ac, candidate, repoOwner, repoName); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api key").Log(ctx, s.logger)
 	}
 
-	repoURL := fmt.Sprintf("https://github.com/%s/%s", s.github.Org, repoName)
+	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
 	return &gen.PublishPluginsResult{RepoURL: repoURL}, nil
 }
 
@@ -800,7 +805,7 @@ func (s *Service) persistPluginAPIKey(
 	ctx context.Context,
 	ac *contextvalues.AuthContext,
 	candidate pluginAPIKeyCandidate,
-	repoName string,
+	repoOwner, repoName string,
 ) error {
 	scopes := []string{auth.APIKeyScopeConsumer.String()}
 	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
@@ -840,7 +845,7 @@ func (s *Service) persistPluginAPIKey(
 	if _, err := s.repo.WithTx(tx).UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
 		ProjectID:      *ac.ProjectID,
 		InstallationID: s.github.InstallationID,
-		RepoOwner:      s.github.Org,
+		RepoOwner:      repoOwner,
 		RepoName:       repoName,
 	}); err != nil {
 		return fmt.Errorf("upsert github connection: %w", err)

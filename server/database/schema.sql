@@ -327,6 +327,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 
 CREATE INDEX IF NOT EXISTS http_tool_definitions_name_idx ON http_tool_definitions (name);
 CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_deleted_id_idx ON http_tool_definitions(deployment_id, deleted, id DESC) WHERE deleted IS FALSE;
+CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_tool_urn_idx ON http_tool_definitions (deployment_id, tool_urn) WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS deployments_functions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -336,6 +337,9 @@ CREATE TABLE IF NOT EXISTS deployments_functions (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
   runtime TEXT NOT NULL, -- nodejs:22, python:3.12, ...
   runner_version TEXT,
+
+  memory_mib INT,
+  scale INT,
 
   CONSTRAINT deployments_functions_pkey PRIMARY KEY (id),
   CONSTRAINT deployments_functions_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
@@ -1216,6 +1220,10 @@ CREATE INDEX IF NOT EXISTS prompt_templates_latest_revision
 ON prompt_templates (project_id, history_id, id DESC)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS prompt_templates_project_id_tool_urn_idx
+ON prompt_templates (project_id, tool_urn)
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS toolset_prompts (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
   project_id UUID NOT NULL,
@@ -1629,6 +1637,10 @@ CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
 
 CREATE INDEX IF NOT EXISTS external_mcp_tool_definitions_external_mcp_attachment_id_idx
 ON external_mcp_tool_definitions (external_mcp_attachment_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS external_mcp_tool_definitions_tool_urn_idx
+ON external_mcp_tool_definitions (tool_urn)
 WHERE deleted IS FALSE;
 
 -- Allowed origins, primarily used for Elements
@@ -2049,6 +2061,13 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_project_id_key
   ON plugin_github_connections (project_id);
 
+-- Prevent two projects from writing to the same GitHub repo under the same
+-- App installation. Two distinct installations could in theory point at the
+-- same external repo path; that's permitted and harmless. The LOWER()
+-- expressions match GitHub's case-insensitive owner/name semantics so
+-- "Octocat/Hello-World" and "octocat/hello-world" collide as expected.
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_installation_repo_key
+  ON plugin_github_connections (installation_id, LOWER(repo_owner), LOWER(repo_name));
 
 -- Risk analysis policies for scanning chat messages against configurable rules.
 -- One workflow per policy drains unanalyzed messages and produces risk_results.

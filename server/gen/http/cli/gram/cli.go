@@ -7308,7 +7308,7 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-toolset: Create a new toolset with associated tools`)
 	fmt.Fprintln(os.Stderr, `    list-toolsets: List all toolsets for a project`)
-	fmt.Fprintln(os.Stderr, `    list-toolsets-for-org: List all toolsets across the organization`)
+	fmt.Fprintln(os.Stderr, `    list-toolsets-for-org: List all toolsets across the organization (summary view)`)
 	fmt.Fprintln(os.Stderr, `    update-toolset: Update a toolset's properties including name, description, and HTTP tools`)
 	fmt.Fprintln(os.Stderr, `    delete-toolset: Delete a toolset by its ID`)
 	fmt.Fprintln(os.Stderr, `    get-toolset: Get detailed information about a toolset including full HTTP tool definitions`)
@@ -7377,7 +7377,7 @@ func toolsetsListToolsetsForOrgUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List all toolsets across the organization`)
+	fmt.Fprintln(os.Stderr, `List all toolsets across the organization (summary view)`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)

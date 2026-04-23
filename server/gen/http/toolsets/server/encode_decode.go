@@ -479,7 +479,7 @@ func EncodeListToolsetsError(encoder func(context.Context, http.ResponseWriter) 
 // by the toolsets listToolsetsForOrg endpoint.
 func EncodeListToolsetsForOrgResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*toolsets.ListToolsetsResult)
+		res, _ := v.(*toolsets.ListToolsetSummariesResult)
 		enc := encoder(ctx, w)
 		body := NewListToolsetsForOrgResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -3617,6 +3617,45 @@ func marshalTypesPromptTemplateEntryToPromptTemplateEntryResponseBody(v *types.P
 		ID:   v.ID,
 		Name: string(v.Name),
 		Kind: v.Kind,
+	}
+
+	return res
+}
+
+// marshalTypesToolsetSummaryToToolsetSummaryResponseBody builds a value of
+// type *ToolsetSummaryResponseBody from a value of type *types.ToolsetSummary.
+func marshalTypesToolsetSummaryToToolsetSummaryResponseBody(v *types.ToolsetSummary) *ToolsetSummaryResponseBody {
+	res := &ToolsetSummaryResponseBody{
+		ID:                v.ID,
+		ProjectID:         v.ProjectID,
+		OrganizationID:    v.OrganizationID,
+		Name:              v.Name,
+		Slug:              string(v.Slug),
+		McpEnabled:        v.McpEnabled,
+		McpIsPublic:       v.McpIsPublic,
+		ToolSelectionMode: v.ToolSelectionMode,
+		CreatedAt:         v.CreatedAt,
+		UpdatedAt:         v.UpdatedAt,
+	}
+	if v.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*v.DefaultEnvironmentSlug)
+		res.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if v.McpSlug != nil {
+		mcpSlug := string(*v.McpSlug)
+		res.McpSlug = &mcpSlug
+	}
+	if v.Tools != nil {
+		res.Tools = make([]*ToolEntryResponseBody, len(v.Tools))
+		for i, val := range v.Tools {
+			if val == nil {
+				res.Tools[i] = nil
+				continue
+			}
+			res.Tools[i] = marshalTypesToolEntryToToolEntryResponseBody(val)
+		}
+	} else {
+		res.Tools = []*ToolEntryResponseBody{}
 	}
 
 	return res

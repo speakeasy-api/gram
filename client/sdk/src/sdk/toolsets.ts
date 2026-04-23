@@ -176,13 +176,13 @@ export class Toolsets extends ClientSDK {
    * listToolsetsForOrg toolsets
    *
    * @remarks
-   * List all toolsets across the organization
+   * List all toolsets across the organization (summary view)
    */
   async listForOrg(
     request?: operations.ListToolsetsForOrgRequest | undefined,
     security?: operations.ListToolsetsForOrgSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListToolsetsResult> {
+  ): Promise<components.ListToolsetSummariesResult> {
     return unwrapAsync(toolsetsListForOrg(
       this,
       request,

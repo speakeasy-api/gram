@@ -16,10 +16,10 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -428,6 +428,7 @@ func newWorkerCommand() *cli.Command {
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 			sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
+			rbacEnabled := authz.IsRBACEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureRBAC))
 
 			// Create ClickHouse client and telemetry service for resolution events
 			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
@@ -437,19 +438,19 @@ func newWorkerCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
 
 			// we don't require a real workOS client for workers as they bypass RBAC
-			accessManager := access.NewManager(
+			authzEngine := authz.NewEngine(
 				logger,
 				db,
-				productFeatures,
+				rbacEnabled,
 				workos.NewStubClient(),
 				cache.NewRedisCacheAdapter(redisClient),
-				access.ManagerOpts{DevMode: c.String("environment") == "local"},
+				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
 
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, sessionCaptureEnabled, posthogClient, accessManager)
+			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
 			/**
 			 * BEGIN -- MCP service setup for agent client
@@ -459,10 +460,11 @@ func newWorkerCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			riskSignaler := background.NewThrottledSignaler(
-				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv},
+				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
 				30*time.Second,
 				logger,
 			)
+			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
 			captureStrategy.AddObserver(risk.NewObserver(logger, db, riskSignaler))
 
 			completionsClient := openrouter.NewUnifiedClient(
@@ -526,7 +528,7 @@ func newWorkerCommand() *cli.Command {
 				ragService,
 				triggerApp,
 				temporalEnv,
-				accessManager,
+				authzEngine,
 			)
 
 			chatClient := chat.NewAgenticChatClient(

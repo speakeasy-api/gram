@@ -12,3 +12,7 @@ CREATE TABLE "plugin_github_connections" (
 );
 -- Create index "plugin_github_connections_project_id_key" to table: "plugin_github_connections"
 CREATE UNIQUE INDEX "plugin_github_connections_project_id_key" ON "plugin_github_connections" ("project_id");
+-- Prevent two projects from writing to the same GitHub repo under the same
+-- App installation. GitHub repo owners and names are case-insensitive, so
+-- the comparison must be too.
+CREATE UNIQUE INDEX "plugin_github_connections_installation_repo_key" ON "plugin_github_connections" ("installation_id", LOWER("repo_owner"), LOWER("repo_name"));

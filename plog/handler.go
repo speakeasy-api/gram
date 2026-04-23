@@ -62,22 +62,31 @@ func (h *Handler) Handle(_ context.Context, r slog.Record) error {
 		}
 	}
 
-	// Collect attributes, filtering omitted keys
+	// Collect attributes, filtering omitted keys and deduplicating by key.
+	// Later values override earlier ones, matching the common intent of
+	// chained slog.Logger.With calls that narrow a previously-set attribute
+	// (e.g. a component name). The first position of a key is preserved so
+	// the visual layout stays stable across log lines.
 	var attrs []Attr
-
-	// Add pre-defined attrs from WithAttrs
-	for _, attr := range h.attrs {
-		if !h.cfg.ShouldOmit(attr.Key) {
-			attrs = append(attrs, attr)
+	idx := make(map[string]int)
+	addAttr := func(a Attr) {
+		if h.cfg.ShouldOmit(a.Key) {
+			return
 		}
+		if i, ok := idx[a.Key]; ok {
+			attrs[i] = a
+			return
+		}
+		idx[a.Key] = len(attrs)
+		attrs = append(attrs, a)
 	}
 
-	// Add attrs from the record
+	for _, a := range h.attrs {
+		addAttr(a)
+	}
+
 	r.Attrs(func(a slog.Attr) bool {
-		attr := slogAttrToAttr(h.groups, a)
-		if !h.cfg.ShouldOmit(attr.Key) {
-			attrs = append(attrs, attr)
-		}
+		addAttr(slogAttrToAttr(h.groups, a))
 		return true
 	})
 

@@ -142,6 +142,32 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 	Required("id", "project_id", "organization_id", "name", "slug", "tools", "tool_selection_mode", "prompt_templates", "tool_urns", "resources", "resource_urns", "created_at", "updated_at")
 })
 
+var ToolsetSummary = Type("ToolsetSummary", func() {
+	Description("A lightweight summary of a toolset, containing only the fields needed for org-level listing (e.g. RBAC UI).")
+	Meta("struct:pkg:path", "types")
+
+	Attribute("id", String, "The ID of the toolset")
+	Attribute("project_id", String, "The project ID this toolset belongs to")
+	Attribute("organization_id", String, "The organization ID this toolset belongs to")
+	Attribute("name", String, "The name of the toolset")
+	Attribute("slug", Slug, "The slug of the toolset")
+	Attribute("default_environment_slug", Slug, "The slug of the environment to use as the default for the toolset")
+	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
+	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
+	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
+	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
+	Attribute("tools", ArrayOf(ToolEntry), "The tools in this toolset")
+	Attribute("created_at", String, func() {
+		Description("When the toolset was created.")
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Description("When the toolset was last updated.")
+		Format(FormatDateTime)
+	})
+	Required("id", "project_id", "organization_id", "name", "slug", "tool_selection_mode", "tools", "created_at", "updated_at")
+})
+
 var ExternalOAuthServer = Type("ExternalOAuthServer", func() {
 	Meta("struct:pkg:path", "types")
 

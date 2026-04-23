@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * listToolsetsForOrg toolsets
  *
  * @remarks
- * List all toolsets across the organization
+ * List all toolsets across the organization (summary view)
  */
 export function toolsetsListForOrg(
   client: GramCore,
@@ -40,7 +40,7 @@ export function toolsetsListForOrg(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ListToolsetsResult,
+    components.ListToolsetSummariesResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -68,7 +68,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      components.ListToolsetsResult,
+      components.ListToolsetSummariesResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -186,7 +186,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ListToolsetsResult,
+    components.ListToolsetSummariesResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -197,7 +197,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.ListToolsetsResult$inboundSchema),
+    M.json(200, components.ListToolsetSummariesResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

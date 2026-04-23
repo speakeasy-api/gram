@@ -12,10 +12,10 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -34,7 +34,7 @@ type Service struct {
 	db                 *pgxpool.Pool
 	telemetryLogger    *telemetry.Logger
 	auth               *auth.Auth
-	access             *access.Manager
+	authz              *authz.Engine
 	cache              cache.Cache
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
@@ -82,7 +82,7 @@ func NewService(
 	cacheAdapter cache.Cache,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
-	accessManager *access.Manager,
+	authz *authz.Engine,
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
 ) *Service {
@@ -91,8 +91,8 @@ func NewService(
 		logger:             logger.With(attr.SlogComponent("hooks")),
 		db:                 db,
 		telemetryLogger:    telemetryLogger,
-		auth:               auth.New(logger, db, sessionsMgr, accessManager),
-		access:             accessManager,
+		auth:               auth.New(logger, db, sessionsMgr, authz),
+		authz:              authz,
 		cache:              cacheAdapter,
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),

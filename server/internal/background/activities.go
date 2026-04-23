@@ -105,7 +105,7 @@ func NewActivities(
 		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
 		provisionFunctionsAccess:      activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:         activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
-		reapFlyApps:                   activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 3),
+		reapFlyApps:                   activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:           activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		slackChatCompletion:           activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),

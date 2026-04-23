@@ -10,10 +10,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/access"
-	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -88,9 +88,9 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 
 	sig := &signalerStub{}
 
-	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, accessManager, sig)
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -101,7 +101,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...access.Grant) context.Context {
+func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -121,8 +121,8 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 		require.NoError(t, err)
 	}
 
-	loadedGrants, err := access.LoadGrants(ctx, conn, authCtx.ActiveOrganizationID, []urn.Principal{principal})
+	loadedGrants, err := authz.LoadGrants(ctx, conn, authCtx.ActiveOrganizationID, []urn.Principal{principal})
 	require.NoError(t, err)
 
-	return access.GrantsToContext(ctx, loadedGrants)
+	return authz.GrantsToContext(ctx, loadedGrants)
 }

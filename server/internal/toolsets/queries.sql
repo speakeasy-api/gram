@@ -190,6 +190,37 @@ WHERE p.organization_id = @organization_id
   AND p.deleted IS FALSE
 ORDER BY t.created_at DESC;
 
+-- name: ListToolsetsWithVersionsByOrganization :many
+SELECT
+  t.id,
+  t.organization_id,
+  t.project_id,
+  t.name,
+  t.slug,
+  t.description,
+  t.default_environment_slug,
+  t.mcp_slug,
+  t.mcp_is_public,
+  t.mcp_enabled,
+  t.tool_selection_mode,
+  t.created_at,
+  t.updated_at,
+  COALESCE(tv.tool_urns, ARRAY[]::TEXT[]) AS latest_tool_urns,
+  COALESCE(tv.resource_urns, ARRAY[]::TEXT[]) AS latest_resource_urns
+FROM toolsets t
+JOIN projects p ON t.project_id = p.id
+LEFT JOIN LATERAL (
+  SELECT tool_urns, resource_urns
+  FROM toolset_versions
+  WHERE toolset_id = t.id AND deleted IS FALSE
+  ORDER BY version DESC
+  LIMIT 1
+) tv ON TRUE
+WHERE p.organization_id = @organization_id
+  AND t.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY t.created_at DESC;
+
 -- name: UpdateToolsetExternalOAuthServer :one
 UPDATE toolsets
 SET
@@ -247,6 +278,13 @@ WHERE toolset_id = @toolset_id
   AND deleted IS FALSE
 ORDER BY version DESC
 LIMIT 1;
+
+-- name: GetLatestToolsetVersionsBatch :many
+SELECT DISTINCT ON (toolset_id) *
+FROM toolset_versions
+WHERE toolset_id = ANY(@toolset_ids::uuid[])
+  AND deleted IS FALSE
+ORDER BY toolset_id, version DESC;
 
 -- name: GetToolsetPromptTemplateNames :many
 SELECT tp.prompt_name
