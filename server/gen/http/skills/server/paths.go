@@ -37,6 +37,11 @@ func CaptureClaudeSkillsPath() string {
 	return "/rpc/skills.captureClaude"
 }
 
+// UploadManualSkillsPath returns the URL path to the skills service uploadManual HTTP endpoint.
+func UploadManualSkillsPath() string {
+	return "/rpc/skills.uploadManual"
+}
+
 // ListVersionsSkillsPath returns the URL path to the skills service listVersions HTTP endpoint.
 func ListVersionsSkillsPath() string {
 	return "/rpc/skills.versions"
@@ -55,4 +60,14 @@ func ApproveVersionSkillsPath() string {
 // SupersedeVersionSkillsPath returns the URL path to the skills service supersedeVersion HTTP endpoint.
 func SupersedeVersionSkillsPath() string {
 	return "/rpc/skills.supersedeVersion"
+}
+
+// RejectVersionSkillsPath returns the URL path to the skills service rejectVersion HTTP endpoint.
+func RejectVersionSkillsPath() string {
+	return "/rpc/skills.rejectVersion"
+}
+
+// ArchiveSkillsPath returns the URL path to the skills service archive HTTP endpoint.
+func ArchiveSkillsPath() string {
+	return "/rpc/skills.archive"
 }

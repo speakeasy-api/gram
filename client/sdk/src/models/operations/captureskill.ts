@@ -24,6 +24,7 @@ export const XGramSkillDiscoveryRoot = {
   UserAgents: "user_agents",
   UserClaude: "user_claude",
   UserCursor: "user_cursor",
+  ManualUpload: "manual_upload",
 } as const;
 export type XGramSkillDiscoveryRoot = ClosedEnum<
   typeof XGramSkillDiscoveryRoot
@@ -31,6 +32,7 @@ export type XGramSkillDiscoveryRoot = ClosedEnum<
 
 export const XGramSkillSourceType = {
   LocalFilesystem: "local_filesystem",
+  ManualUpload: "manual_upload",
 } as const;
 export type XGramSkillSourceType = ClosedEnum<typeof XGramSkillSourceType>;
 

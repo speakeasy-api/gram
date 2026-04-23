@@ -260,6 +260,38 @@ func BuildServeFunctionPayload(assetsServeFunctionID string, assetsServeFunction
 	return v, nil
 }
 
+// BuildServeSkillPayload builds the payload for the assets serveSkill endpoint
+// from CLI flags.
+func BuildServeSkillPayload(assetsServeSkillID string, assetsServeSkillProjectID string, assetsServeSkillApikeyToken string, assetsServeSkillSessionToken string) (*assets.ServeSkillForm, error) {
+	var id string
+	{
+		id = assetsServeSkillID
+	}
+	var projectID string
+	{
+		projectID = assetsServeSkillProjectID
+	}
+	var apikeyToken *string
+	{
+		if assetsServeSkillApikeyToken != "" {
+			apikeyToken = &assetsServeSkillApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if assetsServeSkillSessionToken != "" {
+			sessionToken = &assetsServeSkillSessionToken
+		}
+	}
+	v := &assets.ServeSkillForm{}
+	v.ID = id
+	v.ProjectID = projectID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListAssetsPayload builds the payload for the assets listAssets endpoint
 // from CLI flags.
 func BuildListAssetsPayload(assetsListAssetsSessionToken string, assetsListAssetsProjectSlugInput string, assetsListAssetsApikeyToken string) (*assets.ListAssetsPayload, error) {

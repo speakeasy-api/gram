@@ -13,6 +13,7 @@ export const Kind = {
   Openapiv3: "openapiv3",
   Image: "image",
   Functions: "functions",
+  Skill: "skill",
   ChatAttachment: "chat_attachment",
   Unknown: "unknown",
 } as const;

@@ -24,6 +24,7 @@ type Endpoints struct {
 	FetchOpenAPIv3FromURL         goa.Endpoint
 	ServeOpenAPIv3                goa.Endpoint
 	ServeFunction                 goa.Endpoint
+	ServeSkill                    goa.Endpoint
 	ListAssets                    goa.Endpoint
 	UploadChatAttachment          goa.Endpoint
 	ServeChatAttachment           goa.Endpoint
@@ -85,6 +86,15 @@ type ServeFunctionResponseData struct {
 	Body io.ReadCloser
 }
 
+// ServeSkillResponseData holds both the result and the HTTP response body
+// reader of the "serveSkill" method.
+type ServeSkillResponseData struct {
+	// Result is the method result.
+	Result *ServeSkillResult
+	// Body streams the HTTP response body.
+	Body io.ReadCloser
+}
+
 // UploadChatAttachmentRequestData holds both the payload and the HTTP request
 // body reader of the "uploadChatAttachment" method.
 type UploadChatAttachmentRequestData struct {
@@ -124,6 +134,7 @@ func NewEndpoints(s Service) *Endpoints {
 		FetchOpenAPIv3FromURL:         NewFetchOpenAPIv3FromURLEndpoint(s, a.APIKeyAuth),
 		ServeOpenAPIv3:                NewServeOpenAPIv3Endpoint(s, a.APIKeyAuth),
 		ServeFunction:                 NewServeFunctionEndpoint(s, a.APIKeyAuth),
+		ServeSkill:                    NewServeSkillEndpoint(s, a.APIKeyAuth),
 		ListAssets:                    NewListAssetsEndpoint(s, a.APIKeyAuth),
 		UploadChatAttachment:          NewUploadChatAttachmentEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 		ServeChatAttachment:           NewServeChatAttachmentEndpoint(s, a.APIKeyAuth, a.JWTAuth),
@@ -141,6 +152,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.FetchOpenAPIv3FromURL = m(e.FetchOpenAPIv3FromURL)
 	e.ServeOpenAPIv3 = m(e.ServeOpenAPIv3)
 	e.ServeFunction = m(e.ServeFunction)
+	e.ServeSkill = m(e.ServeSkill)
 	e.ListAssets = m(e.ListAssets)
 	e.UploadChatAttachment = m(e.UploadChatAttachment)
 	e.ServeChatAttachment = m(e.ServeChatAttachment)
@@ -472,6 +484,45 @@ func NewServeFunctionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return &ServeFunctionResponseData{Result: res, Body: body}, nil
+	}
+}
+
+// NewServeSkillEndpoint returns an endpoint function that calls the method
+// "serveSkill" of service "assets".
+func NewServeSkillEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ServeSkillForm)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		res, body, err := s.ServeSkill(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		return &ServeSkillResponseData{Result: res, Body: body}, nil
 	}
 }
 

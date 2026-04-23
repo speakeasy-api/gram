@@ -1829,6 +1829,260 @@ func DecodeServeFunctionResponse(decoder func(*http.Response) goahttp.Decoder, r
 	}
 }
 
+// BuildServeSkillRequest instantiates a HTTP request object with method and
+// path set to call the "assets" service "serveSkill" endpoint
+func (c *Client) BuildServeSkillRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ServeSkillAssetsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assets", "serveSkill", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeServeSkillRequest returns an encoder for requests sent to the assets
+// serveSkill server.
+func EncodeServeSkillRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assets.ServeSkillForm)
+		if !ok {
+			return goahttp.ErrInvalidType("assets", "serveSkill", "*assets.ServeSkillForm", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		values.Add("project_id", p.ProjectID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeServeSkillResponse returns a decoder for responses returned by the
+// assets serveSkill endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeServeSkillResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeServeSkillResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				contentType   string
+				contentLength int64
+				lastModified  string
+				err           error
+			)
+			contentTypeRaw := resp.Header.Get("Content-Type")
+			if contentTypeRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_type", "header"))
+			}
+			contentType = contentTypeRaw
+			{
+				contentLengthRaw := resp.Header.Get("Content-Length")
+				if contentLengthRaw == "" {
+					return nil, goahttp.ErrValidationError("assets", "serveSkill", goa.MissingFieldError("content_length", "header"))
+				}
+				v, err2 := strconv.ParseInt(contentLengthRaw, 10, 64)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("content_length", contentLengthRaw, "integer"))
+				}
+				contentLength = v
+			}
+			lastModifiedRaw := resp.Header.Get("Last-Modified")
+			if lastModifiedRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("last_modified", "header"))
+			}
+			lastModified = lastModifiedRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveSkill", err)
+			}
+			res := NewServeSkillResultOK(contentType, contentLength, lastModified)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ServeSkillUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveSkill", err)
+			}
+			err = ValidateServeSkillUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveSkill", err)
+			}
+			return nil, NewServeSkillUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ServeSkillForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveSkill", err)
+			}
+			err = ValidateServeSkillForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveSkill", err)
+			}
+			return nil, NewServeSkillForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ServeSkillBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveSkill", err)
+			}
+			err = ValidateServeSkillBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveSkill", err)
+			}
+			return nil, NewServeSkillBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ServeSkillNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveSkill", err)
+			}
+			err = ValidateServeSkillNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveSkill", err)
+			}
+			return nil, NewServeSkillNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ServeSkillConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveSkill", err)
+			}
+			err = ValidateServeSkillConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveSkill", err)
+			}
+			return nil, NewServeSkillConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ServeSkillUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveSkill", err)
+			}
+			err = ValidateServeSkillUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveSkill", err)
+			}
+			return nil, NewServeSkillUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ServeSkillInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveSkill", err)
+			}
+			err = ValidateServeSkillInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveSkill", err)
+			}
+			return nil, NewServeSkillInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ServeSkillInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveSkill", err)
+				}
+				err = ValidateServeSkillInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveSkill", err)
+				}
+				return nil, NewServeSkillInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ServeSkillUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "serveSkill", err)
+				}
+				err = ValidateServeSkillUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "serveSkill", err)
+				}
+				return nil, NewServeSkillUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "serveSkill", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ServeSkillGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "serveSkill", err)
+			}
+			err = ValidateServeSkillGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "serveSkill", err)
+			}
+			return nil, NewServeSkillGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assets", "serveSkill", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListAssetsRequest instantiates a HTTP request object with method and
 // path set to call the "assets" service "listAssets" endpoint
 func (c *Client) BuildListAssetsRequest(ctx context.Context, v any) (*http.Request, error) {

@@ -1,20 +1,59 @@
+import {
+  invalidateAllListSkills,
+  invalidateAllSkillsListPending,
+  invalidateAllSkillsListVersions,
+  useListSkills,
+  useSkillsArchiveMutation,
+} from "@gram/client/react-query";
+
+import { Button } from "@/components/ui/button";
 import { DotCard } from "@/components/ui/dot-card";
 import { DotRow } from "@/components/ui/dot-row";
 import { DotTable } from "@/components/ui/dot-table";
 import { Icon } from "@speakeasy-api/moonshine";
+import { RequireScope } from "@/components/require-scope";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SkillEntry } from "@gram/client/models/components";
+import { SkillUploadDialog } from "@/pages/skills/components/SkillUploadDialog";
 import { Type } from "@/components/ui/type";
 import { ViewToggle } from "@/components/ui/view-toggle";
-import { useListSkills } from "@gram/client/react-query";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRoutes } from "@/routes";
 import { useViewMode } from "@/components/ui/use-view-mode";
 
 export default function SkillsRegistry() {
   const [viewMode, setViewMode] = useViewMode();
+  const queryClient = useQueryClient();
   const { data, isPending, error } = useListSkills();
 
-  const skills = data?.skills ?? [];
+  const archiveMutation = useSkillsArchiveMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAllListSkills(queryClient),
+        invalidateAllSkillsListPending(queryClient),
+        invalidateAllSkillsListVersions(queryClient),
+      ]);
+      toast.success("Skill archived");
+    },
+    onError: () => {
+      toast.error("Failed to archive skill");
+    },
+  });
+
+  const skills = (data?.skills ?? []).filter(
+    (skill) => skill.activeVersion != null,
+  );
+
+  const handleArchive = (skillId: string) => {
+    archiveMutation.mutate({
+      request: {
+        archiveRequestBody: {
+          skillId,
+        },
+      },
+    });
+  };
 
   return (
     <div className="p-8">
@@ -27,7 +66,20 @@ export default function SkillsRegistry() {
               to open the details for that skill.
             </Type>
           </div>
-          <ViewToggle value={viewMode} onChange={setViewMode} />
+          <div className="flex items-center gap-2">
+            <RequireScope scope="project:write" level="component">
+              <SkillUploadDialog
+                onUploaded={async () => {
+                  await Promise.all([
+                    invalidateAllListSkills(queryClient),
+                    invalidateAllSkillsListPending(queryClient),
+                    invalidateAllSkillsListVersions(queryClient),
+                  ]);
+                }}
+              />
+            </RequireScope>
+            <ViewToggle value={viewMode} onChange={setViewMode} />
+          </div>
         </div>
 
         {error ? (
@@ -41,16 +93,32 @@ export default function SkillsRegistry() {
         ) : skills.length === 0 ? (
           <RegistryEmptyState />
         ) : viewMode === "table" ? (
-          <SkillsTable skills={skills} />
+          <SkillsTable
+            skills={skills}
+            onArchive={handleArchive}
+            isArchiving={archiveMutation.isPending}
+          />
         ) : (
-          <SkillsGrid skills={skills} />
+          <SkillsGrid
+            skills={skills}
+            onArchive={handleArchive}
+            isArchiving={archiveMutation.isPending}
+          />
         )}
       </div>
     </div>
   );
 }
 
-function SkillsGrid({ skills }: { skills: SkillEntry[] }) {
+function SkillsGrid({
+  skills,
+  onArchive,
+  isArchiving,
+}: {
+  skills: SkillEntry[];
+  onArchive: (skillId: string) => void;
+  isArchiving: boolean;
+}) {
   const routes = useRoutes();
 
   return (
@@ -91,6 +159,21 @@ function SkillsGrid({ skills }: { skills: SkillEntry[] }) {
               </div>
               <code className="font-mono">v{skill.versionCount}</code>
             </div>
+            <div
+              className="mt-3 flex justify-end"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <RequireScope scope="project:write" level="component">
+                <Button
+                  size="sm"
+                  variant="destructiveGhost"
+                  disabled={isArchiving}
+                  onClick={() => onArchive(skill.id)}
+                >
+                  Unpublish
+                </Button>
+              </RequireScope>
+            </div>
           </div>
         </DotCard>
       ))}
@@ -98,7 +181,15 @@ function SkillsGrid({ skills }: { skills: SkillEntry[] }) {
   );
 }
 
-function SkillsTable({ skills }: { skills: SkillEntry[] }) {
+function SkillsTable({
+  skills,
+  onArchive,
+  isArchiving,
+}: {
+  skills: SkillEntry[];
+  onArchive: (skillId: string) => void;
+  isArchiving: boolean;
+}) {
   const routes = useRoutes();
 
   return (
@@ -108,6 +199,7 @@ function SkillsTable({ skills }: { skills: SkillEntry[] }) {
         { label: "Version" },
         { label: "Author" },
         { label: "Updated" },
+        { label: "Actions" },
       ]}
     >
       {skills.map((skill) => (
@@ -146,6 +238,18 @@ function SkillsTable({ skills }: { skills: SkillEntry[] }) {
               {formatDateTime(skill.updatedAt)}
             </Type>
           </td>
+          <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+            <RequireScope scope="project:write" level="component">
+              <Button
+                size="sm"
+                variant="destructiveGhost"
+                disabled={isArchiving}
+                onClick={() => onArchive(skill.id)}
+              >
+                Unpublish
+              </Button>
+            </RequireScope>
+          </td>
         </DotRow>
       ))}
     </DotTable>
@@ -162,7 +266,8 @@ function RegistryEmptyState() {
         No skills yet
       </Type>
       <Type small muted className="max-w-md">
-        Skills will appear here once they are captured for this project.
+        Published skills will appear here once versions are reviewed and
+        activated.
       </Type>
     </div>
   );

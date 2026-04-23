@@ -980,6 +980,9 @@ type SkillVersion struct {
 	State              string
 	CapturedByUserID   string
 	AuthorName         pgtype.Text
+	RejectedByUserID   pgtype.Text
+	RejectedReason     pgtype.Text
+	RejectedAt         pgtype.Timestamptz
 	FirstSeenTraceID   pgtype.Text
 	FirstSeenSessionID pgtype.Text
 	ID                 uuid.UUID

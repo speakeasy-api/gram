@@ -166,6 +166,41 @@ var _ = Service("skills", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "captureClaude")
 	})
 
+	Method("uploadManual", func() {
+		Description("Upload a skill artifact manually using session authentication. Always ingests as pending review.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(CaptureSkillCoreForm)
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(CaptureSkillResult)
+
+		HTTP(func() {
+			POST("/rpc/skills.uploadManual")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Header("name:X-Gram-Skill-Name")
+			Header("scope:X-Gram-Skill-Scope")
+			Header("discovery_root:X-Gram-Skill-Discovery-Root")
+			Header("source_type:X-Gram-Skill-Source-Type")
+			Header("content_sha256:X-Gram-Skill-Content-Sha256")
+			Header("asset_format:X-Gram-Skill-Asset-Format")
+			Header("resolution_status:X-Gram-Skill-Resolution-Status")
+			Header("skill_id:X-Gram-Skill-Id")
+			Header("skill_version_id:X-Gram-Skill-Version-Id")
+			Header("content_type:Content-Type")
+			Header("content_length:Content-Length")
+			SkipRequestBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "uploadManualSkill")
+		Meta("openapi:extension:x-speakeasy-name-override", "uploadManual")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillsUploadManual"}`)
+	})
+
 	Method("listVersions", func() {
 		Description("List captured versions for a skill.")
 
@@ -256,6 +291,55 @@ var _ = Service("skills", func() {
 		Meta("openapi:operationId", "supersedeSkillVersion")
 		Meta("openapi:extension:x-speakeasy-name-override", "supersedeVersion")
 	})
+
+	Method("rejectVersion", func() {
+		Description("Reject a captured skill version.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Required("version_id", "reason")
+			Attribute("version_id", String)
+			Attribute("reason", String, func() {
+				MaxLength(2000)
+			})
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(SkillVersion)
+
+		HTTP(func() {
+			POST("/rpc/skills.rejectVersion")
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "rejectSkillVersion")
+		Meta("openapi:extension:x-speakeasy-name-override", "rejectVersion")
+	})
+
+	Method("archive", func() {
+		Description("Archive a skill lineage.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Required("skill_id")
+			Attribute("skill_id", String)
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(Skill)
+
+		HTTP(func() {
+			POST("/rpc/skills.archive")
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "archiveSkill")
+		Meta("openapi:extension:x-speakeasy-name-override", "archive")
+	})
 })
 
 var ListSkillsResult = Type("ListSkillsResult", func() {
@@ -307,7 +391,7 @@ var SkillVersionSummary = Type("SkillVersionSummary", func() {
 	Attribute("size_bytes", Int64)
 	Attribute("author_name", String)
 	Attribute("state", String, func() {
-		Enum("pending_review", "active", "superseded")
+		Enum("pending_review", "active", "superseded", "rejected")
 	})
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
@@ -337,10 +421,15 @@ var SkillVersion = Type("SkillVersion", func() {
 	Attribute("size_bytes", Int64)
 	Attribute("skill_bytes", Int64)
 	Attribute("state", String, func() {
-		Enum("pending_review", "active", "superseded")
+		Enum("pending_review", "active", "superseded", "rejected")
 	})
 	Attribute("captured_by_user_id", String)
 	Attribute("author_name", String)
+	Attribute("rejected_by_user_id", String)
+	Attribute("rejected_reason", String)
+	Attribute("rejected_at", String, func() {
+		Format(FormatDateTime)
+	})
 	Attribute("first_seen_trace_id", String)
 	Attribute("first_seen_session_id", String)
 	Attribute("first_seen_at", String, func() {
@@ -398,10 +487,11 @@ var CaptureSkillCoreForm = Type("CaptureSkillCoreForm", func() {
 			"user_agents",
 			"user_claude",
 			"user_cursor",
+			"manual_upload",
 		)
 	})
 	Attribute("source_type", String, func() {
-		Enum("local_filesystem")
+		Enum("local_filesystem", "manual_upload")
 	})
 	Attribute("content_sha256", String, func() {
 		Pattern("^[a-fA-F0-9]{64}$")
