@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 555ebe65444be5db705104612b010039
+  docChecksum: ad2a7ccd158de7737d96715b9e776746
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -224,12 +224,10 @@ trackedFiles:
     last_write_checksum: sha1:40e4d7ae27440bfd5a593b31a6e25cc5a7a4f7ad
   docs/models/components/externalmcpheaderdefinition.md:
     last_write_checksum: sha1:da0a881710691ca1f0cc1c45d1f2bf3daad3c4e3
-  docs/models/components/externalmcpmeta.md:
-    last_write_checksum: sha1:60f5ccc644a9276b0c70baf590f857c02425e16c
   docs/models/components/externalmcpremote.md:
     last_write_checksum: sha1:b0f27d78c3a4213bf0b487ca3eed7d0a5d235015
   docs/models/components/externalmcpserver.md:
-    last_write_checksum: sha1:66b5b95e570ef758dedf63ce904423de35d182ee
+    last_write_checksum: sha1:2c24221b11f3c9ac7d273ef35ff2791e6ed88b87
   docs/models/components/externalmcptool.md:
     last_write_checksum: sha1:719b8eb5236a84fd95fcc4c72d4f4eeaa77c065d
   docs/models/components/externalmcptooldefinition.md:
@@ -2950,13 +2948,11 @@ trackedFiles:
     last_write_checksum: sha1:39ceae9ebec465fcd7ffa438b779cd2539d0d05d
   src/models/components/externalmcpheaderdefinition.ts:
     last_write_checksum: sha1:12572263ec71fa2fdc5fc5d17a333e356567f86c
-  src/models/components/externalmcpmeta.ts:
-    last_write_checksum: sha1:309e79cef44a7b1b44d6198dba9101bc9dbc677f
   src/models/components/externalmcpremote.ts:
     last_write_checksum: sha1:4d97b661fee50acb5578cb59c9be41eeb8b93a10
   src/models/components/externalmcpserver.ts:
     id: 17ea92ac12e8
-    last_write_checksum: sha1:ad547682835e283bf01a7dce86e49dbcc2cb5abb
+    last_write_checksum: sha1:5d022a71305e904032b391cfa4b76b3011024b2e
     pristine_git_object: 2a5d08551bb3547337d6d0b692ee56f0f830e5e7
   src/models/components/externalmcptool.ts:
     last_write_checksum: sha1:55574649b1ec65964750666d902ac9bd87c5e989
@@ -3072,7 +3068,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:51288f9f417dd1b89849149b09eebd5d0285fa32
+    last_write_checksum: sha1:164a22df6e5cac59efe13a9d0dbf7635f7552530
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
