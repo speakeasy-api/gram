@@ -279,13 +279,9 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			})
 		}
 
-		serverMetaAny, err := toCacheSafeAny(s.Meta.Server)
+		meta, err := toCacheSafeAny(&s.Meta)
 		if err != nil {
-			return nil, fmt.Errorf("convert server meta: %w", err)
-		}
-		versionMetaAny, err := toCacheSafeAny(s.Meta.Version)
-		if err != nil {
-			return nil, fmt.Errorf("convert version meta: %w", err)
+			return nil, fmt.Errorf("convert meta: %w", err)
 		}
 
 		server := &types.ExternalMCPServer{
@@ -297,12 +293,9 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			OrganizationMcpCollectionRegistryID: nil,
 			Title:                               s.Server.Title,
 			IconURL:                             iconURL,
-			Meta: &types.ExternalMCPMeta{
-				ComPulsemcpServer:        serverMetaAny,
-				ComPulsemcpServerVersion: versionMetaAny,
-			},
-			Tools:   tools,
-			Remotes: remotes,
+			Meta:                                meta,
+			Tools:                               tools,
+			Remotes:                             remotes,
 		}
 
 		servers = append(servers, server)

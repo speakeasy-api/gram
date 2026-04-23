@@ -1436,19 +1436,11 @@ type ExternalMCPServerResponseBody struct {
 	// URL to the server's icon
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
 	// Opaque metadata from the registry
-	Meta *ExternalMCPMetaResponseBody `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
+	Meta any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
 	// Tools available on the server
 	Tools []*ExternalMCPToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
-}
-
-// ExternalMCPMetaResponseBody is used to define fields on response body types.
-type ExternalMCPMetaResponseBody struct {
-	// Opaque server metadata from the registry
-	ComPulsemcpServer any `form:"com.pulsemcp/server,omitempty" json:"com.pulsemcp/server,omitempty" xml:"com.pulsemcp/server,omitempty"`
-	// Server version from the registry
-	ComPulsemcpServerVersion any `form:"com.pulsemcp/server-version,omitempty" json:"com.pulsemcp/server-version,omitempty" xml:"com.pulsemcp/server-version,omitempty"`
 }
 
 // ExternalMCPToolResponseBody is used to define fields on response body types.
