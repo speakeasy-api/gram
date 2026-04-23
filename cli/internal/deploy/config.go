@@ -43,6 +43,12 @@ type Source struct {
 	// Runtime is the runtime to use for function execution (required for functions).
 	// Allowed values are: nodejs:22, nodejs:24, python:3.12
 	Runtime string `json:"runtime,omitempty" yaml:"runtime,omitempty" toml:"runtime,omitempty"`
+
+	// Scale is the number of instances to run for the function (optional).
+	Scale *uint `json:"scale,omitempty" yaml:"scale,omitempty" toml:"scale,omitempty"`
+
+	// MemoryMiB is the amount of memory in MiB to allocate for the function (optional).
+	MemoryMiB *uint `json:"memory_mib,omitempty" yaml:"memory_mib,omitempty" toml:"memory_mib,omitempty"`
 }
 
 // Validate returns an error if the source is missing required fields.
