@@ -1,4 +1,4 @@
-h1:bGqEXAHQVGwJSGMFNueR2I9s4Gv+PLG21Mtxs/iolIs=
+h1:z+U7rIe8lkCuJ25vXX8yWXxZGS7tFi4HRoZvpVqzphE=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -133,3 +133,6 @@ h1:bGqEXAHQVGwJSGMFNueR2I9s4Gv+PLG21Mtxs/iolIs=
 20260422120000_add-selectors-to-principal-grants.sql h1:LyCyuDJg+NCG3gbcwOPeJE8JnievSXhZXNYCV44hY7c=
 20260422130000_risk-results-add-project-found-idx.sql h1:Ei9VSk1gqaVcFzsN5ToK7F6m269mixOF4NiyNM/eZ3I=
 20260422140000_assistants-v0.sql h1:cydJm4nEn/Sp8MORH2qgbbANRDZ+Wz/G0FOBcJgNUEk=
+20260423100000_http-tool-definitions-deployment-tool-urn-idx.sql h1:/QswsN5QFVzo/XpvzLX9JWe8VrOthViQemIZTl4oFGI=
+20260423100001_prompt-templates-project-tool-urn-idx.sql h1:5QTsAtHrIvT12QS2/OeICut3HlurbgiZfIJwouG/SQk=
+20260423100002_external-mcp-tool-definitions-tool-urn-idx.sql h1:4gyE/U5pj1jyYV3i8b0jLsYaUK8/8Cv1pzllNVOpBNA=
