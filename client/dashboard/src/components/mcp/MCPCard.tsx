@@ -17,7 +17,7 @@ import {
 import { useMemo } from "react";
 import {
   useCatalogIconMap,
-  useExternalMcpOAuthStatus,
+  useExternalMcpOAuthConfigStatus,
 } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
 
@@ -26,7 +26,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   const { installPageUrl } = useMcpUrl(toolset);
   const catalogIconMap = useCatalogIconMap();
   const { data: deploymentResult } = useLatestDeployment();
-  const oauthStatus = useExternalMcpOAuthStatus(toolset.slug);
+  const oauthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
 
   const externalMcpLogoUrl = useMemo(() => {
     const externalMcpUrn = toolset.toolUrns?.find((urn) =>

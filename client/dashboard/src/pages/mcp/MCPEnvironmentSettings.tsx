@@ -1,4 +1,4 @@
-import { useExternalMcpOAuthStatus } from "@/components/sources/sources-hooks";
+import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -901,7 +901,7 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   );
   const availableOAuthAuthCode =
     toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
-  const externalMcpOAuthStatus = useExternalMcpOAuthStatus(toolset.slug);
+  const externalMcpOAuthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
   const externalMcpRequiresOAuth =
     externalMcpOAuthStatus === "required-unconfigured";
   const isOAuthEligible =

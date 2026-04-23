@@ -67,20 +67,20 @@ export const useCatalogServerAuthType = (
   return authMap.get(registrySpecifier) ?? null;
 };
 
-export type ExternalMcpOAuthStatus =
+export type ExternalMcpOAuthConfigStatus =
   | "required-unconfigured"
   | "configured"
   | "not-required"
   | "not-external-mcp";
 
-export const useExternalMcpOAuthStatus = (
+export const useExternalMcpOAuthConfigStatus = (
   toolsetSlug: string | undefined,
-): ExternalMcpOAuthStatus => {
+): ExternalMcpOAuthConfigStatus => {
   const { data: toolset } = useToolset(toolsetSlug);
   const { data: deploymentResult } = useLatestDeployment();
   const serverAuthMap = useCatalogAuthMap();
 
-  return useMemo<ExternalMcpOAuthStatus>(() => {
+  return useMemo<ExternalMcpOAuthConfigStatus>(() => {
     if (!toolset) return "not-external-mcp";
 
     const externalMcpUrn = toolset.toolUrns?.find((urn) =>
