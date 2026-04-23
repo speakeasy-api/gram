@@ -327,6 +327,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 
 CREATE INDEX IF NOT EXISTS http_tool_definitions_name_idx ON http_tool_definitions (name);
 CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_deleted_id_idx ON http_tool_definitions(deployment_id, deleted, id DESC) WHERE deleted IS FALSE;
+CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_tool_urn_idx ON http_tool_definitions (deployment_id, tool_urn) WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS deployments_functions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1216,6 +1217,10 @@ CREATE INDEX IF NOT EXISTS prompt_templates_latest_revision
 ON prompt_templates (project_id, history_id, id DESC)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS prompt_templates_project_id_tool_urn_idx
+ON prompt_templates (project_id, tool_urn)
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS toolset_prompts (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
   project_id UUID NOT NULL,
@@ -1629,6 +1634,10 @@ CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
 
 CREATE INDEX IF NOT EXISTS external_mcp_tool_definitions_external_mcp_attachment_id_idx
 ON external_mcp_tool_definitions (external_mcp_attachment_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS external_mcp_tool_definitions_tool_urn_idx
+ON external_mcp_tool_definitions (tool_urn)
 WHERE deleted IS FALSE;
 
 -- Allowed origins, primarily used for Elements
