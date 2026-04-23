@@ -56,7 +56,7 @@ export type ListToolsetsForOrgQueryError =
  * listToolsetsForOrg toolsets
  *
  * @remarks
- * List all toolsets across the organization
+ * List all toolsets across the organization (summary view)
  */
 export function useListToolsetsForOrg(
   request?: operations.ListToolsetsForOrgRequest | undefined,
@@ -82,7 +82,7 @@ export function useListToolsetsForOrg(
  * listToolsetsForOrg toolsets
  *
  * @remarks
- * List all toolsets across the organization
+ * List all toolsets across the organization (summary view)
  */
 export function useListToolsetsForOrgSuspense(
   request?: operations.ListToolsetsForOrgRequest | undefined,

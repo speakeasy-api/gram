@@ -17182,7 +17182,7 @@ paths:
         name: ListToolsets
   /rpc/toolsets.listForOrg:
     get:
-      description: List all toolsets across the organization
+      description: List all toolsets across the organization (summary view)
       operationId: listToolsetsForOrg
       parameters:
         - allowEmptyValue: true
@@ -17204,7 +17204,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListToolsetsResult'
+                $ref: '#/components/schemas/ListToolsetSummariesResult'
           description: OK response.
         "400":
           content:
@@ -23223,6 +23223,16 @@ components:
           description: The list of tools (polymorphic union of HTTP tools and prompt templates)
       required:
         - tools
+    ListToolsetSummariesResult:
+      type: object
+      properties:
+        toolsets:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolsetSummary'
+          description: The list of toolset summaries
+      required:
+        - toolsets
     ListToolsetsResult:
       type: object
       properties:
@@ -26873,6 +26883,69 @@ components:
           description: The globally unique registry specifier this toolset originated from
       required:
         - registry_specifier
+    ToolsetSummary:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the toolset was created.
+          format: date-time
+        default_environment_slug:
+          type: string
+          description: A short url-friendly label that uniquely identifies a resource.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
+        id:
+          type: string
+          description: The ID of the toolset
+        mcp_enabled:
+          type: boolean
+          description: Whether the toolset is enabled for MCP
+        mcp_is_public:
+          type: boolean
+          description: Whether the toolset is public in MCP
+        mcp_slug:
+          type: string
+          description: A short url-friendly label that uniquely identifies a resource.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
+        name:
+          type: string
+          description: The name of the toolset
+        organization_id:
+          type: string
+          description: The organization ID this toolset belongs to
+        project_id:
+          type: string
+          description: The project ID this toolset belongs to
+        slug:
+          type: string
+          description: A short url-friendly label that uniquely identifies a resource.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
+        tool_selection_mode:
+          type: string
+          description: The mode to use for tool selection
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolEntry'
+          description: The tools in this toolset
+        updated_at:
+          type: string
+          description: When the toolset was last updated.
+          format: date-time
+      description: A lightweight summary of a toolset, containing only the fields needed for org-level listing (e.g. RBAC UI).
+      required:
+        - id
+        - project_id
+        - organization_id
+        - name
+        - slug
+        - tool_selection_mode
+        - tools
+        - created_at
+        - updated_at
     TopServer:
       type: object
       properties:
