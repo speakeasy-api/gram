@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -33,6 +32,7 @@ type ProcessWorkOSOrganizationEventsParams struct {
 type ProcessWorkOSOrganizationEventsResult struct {
 	SinceEventID string `json:"since_event_id"`
 	LastEventID  string `json:"last_event_id"`
+	HasMore      bool   `json:"has_more"`
 }
 
 type ProcessWorkOSOrganizationEvents struct {
@@ -58,8 +58,21 @@ func (p *ProcessWorkOSOrganizationEvents) do(ctx context.Context, params Process
 	workOSOrgID := params.WorkOSOrganizationID
 
 	logger := p.logger
-	// get the latest cursor from the database
-	sinceEventID := "todo_cursor"
+
+	sinceEventID := conv.PtrValOr(params.SinceEventID, "")
+	if sinceEventID == "" {
+		cursor, err := workosrepo.New(p.db).GetOrganizationSyncLastEventID(ctx, workOSOrgID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// no cursor yet, full sync from beginning
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization sync last event ID").Log(ctx, logger)
+		default:
+			sinceEventID = cursor
+		}
+	}
+
+	const pageSize = 100
 
 	options := events.ListEventsOpts{
 		Events: stringifyEventKinds(
@@ -75,7 +88,7 @@ func (p *ProcessWorkOSOrganizationEvents) do(ctx context.Context, params Process
 			workos.EventKindOrganizationRoleDeleted,
 			workos.EventKindOrganizationRoleUpdated,
 		),
-		Limit:          100,
+		Limit:          pageSize,
 		After:          sinceEventID,
 		RangeStart:     "",
 		RangeEnd:       "",
@@ -95,6 +108,7 @@ func (p *ProcessWorkOSOrganizationEvents) do(ctx context.Context, params Process
 	return &ProcessWorkOSOrganizationEventsResult{
 		SinceEventID: sinceEventID,
 		LastEventID:  lastEventID,
+		HasMore:      len(resp.Data) == pageSize,
 	}, nil
 }
 
@@ -204,6 +218,10 @@ type workosOrganizationEvent struct {
 	ExternalID string `json:"external_id"`
 }
 
+// handleOrganizationCreatedOrUpdated will create or update an organization internally.
+// It attempts to fetch an organization ID mapped to a workOS ID. If it cannot be found, it relies on
+// the external_id from WorkOS (which should exist and map to an organization in speakeasy registry).
+// It then creates or upserts the metadata for that organization.
 func handleOrganizationCreatedOrUpdated(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
 	var payload workosOrganizationEvent
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
@@ -215,7 +233,12 @@ func handleOrganizationCreatedOrUpdated(ctx context.Context, logger *slog.Logger
 	organizationID, err := repo.GetOrganizationIDByWorkosID(ctx, conv.ToPGText(payload.ID))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		organizationID = uuid.NewString()
+		// when an organization is not yet mapped to workOS interna
+		if payload.ExternalID == "" {
+			return fmt.Errorf("workos organization %q has no external_id", payload.ID)
+		}
+		organizationID = payload.ExternalID
+
 	case err != nil:
 		return fmt.Errorf("get organization by workos id %q: %w", payload.ID, err)
 	}

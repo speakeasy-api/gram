@@ -113,6 +113,6 @@ func ProcessWorkOSOrganizationEventsWorkflow(ctx workflow.Context, params Proces
 	}
 
 	return &ProcessWorkOSEventsResult{
-		HasMore: processRes.LastEventID != "",
+		HasMore: processRes.HasMore,
 	}, nil
 }

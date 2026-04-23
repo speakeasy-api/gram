@@ -25,6 +25,9 @@ func (q *Queries) GetOrganizationSyncLastEventID(ctx context.Context, workosOrga
 const setOrganizationSyncLastEventID = `-- name: SetOrganizationSyncLastEventID :one
 INSERT INTO workos_organization_syncs (workos_organization_id, last_event_id)
 VALUES ($1, $2)
+ON CONFLICT (workos_organization_id) DO UPDATE SET
+    last_event_id = EXCLUDED.last_event_id,
+    created_at = clock_timestamp()
 RETURNING id
 `
 
