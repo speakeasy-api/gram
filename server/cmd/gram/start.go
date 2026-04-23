@@ -755,7 +755,7 @@ func newStartCommand() *cli.Command {
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
 			riskSignaler := background.NewThrottledSignaler(
-				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv},
+				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
 				30*time.Second,
 				logger,
 			)

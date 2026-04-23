@@ -8,7 +8,6 @@ import (
 // Scope identifies an authorization capability granted on a resource.
 type Scope string
 
-//nolint:gosec // Authorization scope slugs, not credentials.
 const (
 	ScopeRoot         Scope = "root"
 	ScopeOrgRead      Scope = "org:read"
