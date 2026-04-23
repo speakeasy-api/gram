@@ -232,10 +232,15 @@ func DescribeToolsetEntry(
 			if err != nil {
 				continue // Skip if not found
 			}
+			// Extract the actual tool name from the URN (tools:external-mcp:<source>:<name>).
+			externalToolName := externalMCPTool.Slug
+			if parsed, parseErr := urn.ParseTool(toolUrn); parseErr == nil {
+				externalToolName = parsed.Name
+			}
 			tools = append(tools, &types.ToolEntry{
 				Type:        string(urn.ToolKindExternalMCP),
 				ID:          externalMCPTool.ID.String(),
-				Name:        externalMCPTool.Slug + ":proxy",
+				Name:        externalToolName,
 				ToolUrn:     externalMCPTool.ToolUrn,
 				Annotations: conv.AnnotationsFromColumns(externalMCPTool.ReadOnlyHint, externalMCPTool.DestructiveHint, externalMCPTool.IdempotentHint, externalMCPTool.OpenWorldHint),
 				HTTPMethod:  nil,
@@ -771,10 +776,14 @@ func GetToolsetsSummary(
 					continue
 				}
 				seen[def.ToolUrn] = true
+				externalToolName := def.Slug
+				if parsed, parseErr := urn.ParseTool(def.ToolUrn); parseErr == nil {
+					externalToolName = parsed.Name
+				}
 				projectTools[def.ToolUrn] = &types.ToolEntry{
 					Type:        string(urn.ToolKindExternalMCP),
 					ID:          def.ID.String(),
-					Name:        def.Slug + ":proxy",
+					Name:        externalToolName,
 					ToolUrn:     def.ToolUrn,
 					Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
 					HTTPMethod:  nil,
