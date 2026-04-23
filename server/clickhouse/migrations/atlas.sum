@@ -1,4 +1,4 @@
-h1:Ke1cCzdovNEVRMHyQD12oRS/RjNYz4R2weLoWV9trck=
+h1:KhSjM7A+OngNQBINILncRePew+dXO9xpIYFdTBnYEq0=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -35,4 +35,4 @@ h1:Ke1cCzdovNEVRMHyQD12oRS/RjNYz4R2weLoWV9trck=
 20260407215736_materialzie_skill_name.sql h1:Wip8uGwT5fGot1WLOd/x6yblZz6W+pb1KWmpzjxTZK8=
 20260410153705_add-attribute-keys-mv.sql h1:CQfFMzGGspqKUgZ68ivuxW9b83XtBj5OQamE5n3asjE=
 20260416194400_add-cache-cost-metrics.sql h1:cHzMEcEt2sP/FpsFEWrUJ5B/72bXI+hNE67cZfN3U/E=
-20260423195354_trace-status-from-attributes.sql h1:/McqYj2M8UKnZetSTAMo7jSklNNgCmAuTI+b7YfjqFU=
+20260423195354_trace-status-from-attributes.sql h1:dxHrGPIllQdKbrf+VxG8WKVsQOy7FCdRS8mNRPCxggU=
