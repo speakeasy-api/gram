@@ -155,7 +155,7 @@ func seedSkillVersion(
 
 	state := params.state
 	if state == "" {
-		state = "active"
+		state = "pending_review"
 	}
 
 	version, err := ti.skillsRepo.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
@@ -167,6 +167,9 @@ func seedSkillVersion(
 		State:              state,
 		CapturedByUserID:   userID,
 		AuthorName:         pgtype.Text{String: params.authorName, Valid: params.authorName != ""},
+		RejectedByUserID:   pgtype.Text{},
+		RejectedReason:     pgtype.Text{},
+		RejectedAt:         pgtype.Timestamptz{},
 		FirstSeenTraceID:   pgtype.Text{},
 		FirstSeenSessionID: pgtype.Text{},
 		FirstSeenAt:        params.firstSeenAt,

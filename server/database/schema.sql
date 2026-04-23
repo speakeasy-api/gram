@@ -251,9 +251,12 @@ CREATE TABLE IF NOT EXISTS skill_versions (
 
   content_sha256 TEXT NOT NULL,
   asset_format TEXT NOT NULL CHECK (asset_format IN ('zip')),
-  state TEXT NOT NULL CHECK (state IN ('pending_review', 'active', 'superseded')),
+  state TEXT NOT NULL CHECK (state IN ('pending_review', 'active', 'superseded', 'rejected')),
   captured_by_user_id TEXT NOT NULL,
   author_name TEXT CHECK (author_name <> '' AND CHAR_LENGTH(author_name) <= 255),
+  rejected_by_user_id TEXT CHECK (rejected_by_user_id <> '' AND CHAR_LENGTH(rejected_by_user_id) <= 255),
+  rejected_reason TEXT CHECK (rejected_reason <> '' AND CHAR_LENGTH(rejected_reason) <= 2000),
+  rejected_at timestamptz,
   first_seen_trace_id TEXT CHECK (first_seen_trace_id <> '' AND CHAR_LENGTH(first_seen_trace_id) <= 100),
   first_seen_session_id TEXT CHECK (first_seen_session_id <> '' AND CHAR_LENGTH(first_seen_session_id) <= 100),
 

@@ -43,6 +43,12 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	ServeFunction(context.Context, *ServeFunctionForm) (res *ServeFunctionResult, body io.ReadCloser, err error)
+	// Serve a skill asset from Gram.
+
+	// If body implements [io.WriterTo], that implementation will be used instead.
+	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
+	// implementations.
+	ServeSkill(context.Context, *ServeSkillForm) (res *ServeSkillResult, body io.ReadCloser, err error)
 	// List all assets for a project.
 	ListAssets(context.Context, *ListAssetsPayload) (res *ListAssetsResult, err error)
 	// Upload a chat attachment to Gram.
@@ -86,7 +92,7 @@ const ServiceName = "assets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "fetchOpenAPIv3FromURL", "serveOpenAPIv3", "serveFunction", "listAssets", "uploadChatAttachment", "serveChatAttachment", "createSignedChatAttachmentURL", "serveChatAttachmentSigned"}
+var MethodNames = [13]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "fetchOpenAPIv3FromURL", "serveOpenAPIv3", "serveFunction", "serveSkill", "listAssets", "uploadChatAttachment", "serveChatAttachment", "createSignedChatAttachmentURL", "serveChatAttachmentSigned"}
 
 type Asset struct {
 	// The ID of the asset
@@ -195,7 +201,7 @@ type ServeFunctionForm struct {
 	SessionToken *string
 	// The ID of the asset to serve
 	ID string
-	// The procect ID that the asset belongs to
+	// The project ID that the asset belongs to
 	ProjectID string
 }
 
@@ -228,13 +234,30 @@ type ServeOpenAPIv3Form struct {
 	SessionToken *string
 	// The ID of the asset to serve
 	ID string
-	// The procect ID that the asset belongs to
+	// The project ID that the asset belongs to
 	ProjectID string
 }
 
 // ServeOpenAPIv3Result is the result type of the assets service serveOpenAPIv3
 // method.
 type ServeOpenAPIv3Result struct {
+	ContentType   string
+	ContentLength int64
+	LastModified  string
+}
+
+// ServeSkillForm is the payload type of the assets service serveSkill method.
+type ServeSkillForm struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The ID of the asset to serve
+	ID string
+	// The project ID that the asset belongs to
+	ProjectID string
+}
+
+// ServeSkillResult is the result type of the assets service serveSkill method.
+type ServeSkillResult struct {
 	ContentType   string
 	ContentLength int64
 	LastModified  string

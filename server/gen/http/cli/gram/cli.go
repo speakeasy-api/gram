@@ -60,7 +60,7 @@ func UsageCommands() []string {
 	return []string{
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role|get-rbac-status|enable-rbac|disable-rbac)",
-		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
+		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|serve-skill|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
 		"chat (list-chats|load-chat|generate-title|credit-usage|list-chats-with-resolutions|delete-chat|submit-feedback)",
@@ -85,7 +85,7 @@ func UsageCommands() []string {
 		"remote-mcp (create-server|list-servers|get-server|update-server|delete-server)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|get-risk-policy-status|trigger-risk-analysis)",
-		"skills (get|list|get-settings|set-settings|capture|capture-claude|list-versions|list-pending|approve-version|supersede-version)",
+		"skills (get|list|get-settings|set-settings|capture|capture-claude|upload-manual|list-versions|list-pending|approve-version|supersede-version|reject-version|archive)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -219,6 +219,12 @@ func ParseEndpoint(
 		assetsServeFunctionProjectIDFlag    = assetsServeFunctionFlags.String("project-id", "REQUIRED", "")
 		assetsServeFunctionApikeyTokenFlag  = assetsServeFunctionFlags.String("apikey-token", "", "")
 		assetsServeFunctionSessionTokenFlag = assetsServeFunctionFlags.String("session-token", "", "")
+
+		assetsServeSkillFlags            = flag.NewFlagSet("serve-skill", flag.ExitOnError)
+		assetsServeSkillIDFlag           = assetsServeSkillFlags.String("id", "REQUIRED", "")
+		assetsServeSkillProjectIDFlag    = assetsServeSkillFlags.String("project-id", "REQUIRED", "")
+		assetsServeSkillApikeyTokenFlag  = assetsServeSkillFlags.String("apikey-token", "", "")
+		assetsServeSkillSessionTokenFlag = assetsServeSkillFlags.String("session-token", "", "")
 
 		assetsListAssetsFlags                = flag.NewFlagSet("list-assets", flag.ExitOnError)
 		assetsListAssetsSessionTokenFlag     = assetsListAssetsFlags.String("session-token", "", "")
@@ -941,6 +947,22 @@ func ParseEndpoint(
 		skillsCaptureClaudeContentLengthFlag    = skillsCaptureClaudeFlags.String("content-length", "REQUIRED", "")
 		skillsCaptureClaudeStreamFlag           = skillsCaptureClaudeFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
+		skillsUploadManualFlags                = flag.NewFlagSet("upload-manual", flag.ExitOnError)
+		skillsUploadManualBodyFlag             = skillsUploadManualFlags.String("body", "REQUIRED", "")
+		skillsUploadManualSessionTokenFlag     = skillsUploadManualFlags.String("session-token", "", "")
+		skillsUploadManualProjectSlugInputFlag = skillsUploadManualFlags.String("project-slug-input", "", "")
+		skillsUploadManualNameFlag             = skillsUploadManualFlags.String("name", "REQUIRED", "")
+		skillsUploadManualScopeFlag            = skillsUploadManualFlags.String("scope", "REQUIRED", "")
+		skillsUploadManualDiscoveryRootFlag    = skillsUploadManualFlags.String("discovery-root", "REQUIRED", "")
+		skillsUploadManualSourceTypeFlag       = skillsUploadManualFlags.String("source-type", "REQUIRED", "")
+		skillsUploadManualContentSha256Flag    = skillsUploadManualFlags.String("content-sha256", "REQUIRED", "")
+		skillsUploadManualAssetFormatFlag      = skillsUploadManualFlags.String("asset-format", "REQUIRED", "")
+		skillsUploadManualResolutionStatusFlag = skillsUploadManualFlags.String("resolution-status", "REQUIRED", "")
+		skillsUploadManualSkillIDFlag          = skillsUploadManualFlags.String("skill-id", "", "")
+		skillsUploadManualSkillVersionIDFlag   = skillsUploadManualFlags.String("skill-version-id", "", "")
+		skillsUploadManualContentTypeFlag      = skillsUploadManualFlags.String("content-type", "REQUIRED", "")
+		skillsUploadManualContentLengthFlag    = skillsUploadManualFlags.String("content-length", "REQUIRED", "")
+
 		skillsListVersionsFlags                = flag.NewFlagSet("list-versions", flag.ExitOnError)
 		skillsListVersionsSkillIDFlag          = skillsListVersionsFlags.String("skill-id", "REQUIRED", "")
 		skillsListVersionsSessionTokenFlag     = skillsListVersionsFlags.String("session-token", "", "")
@@ -959,6 +981,16 @@ func ParseEndpoint(
 		skillsSupersedeVersionBodyFlag             = skillsSupersedeVersionFlags.String("body", "REQUIRED", "")
 		skillsSupersedeVersionSessionTokenFlag     = skillsSupersedeVersionFlags.String("session-token", "", "")
 		skillsSupersedeVersionProjectSlugInputFlag = skillsSupersedeVersionFlags.String("project-slug-input", "", "")
+
+		skillsRejectVersionFlags                = flag.NewFlagSet("reject-version", flag.ExitOnError)
+		skillsRejectVersionBodyFlag             = skillsRejectVersionFlags.String("body", "REQUIRED", "")
+		skillsRejectVersionSessionTokenFlag     = skillsRejectVersionFlags.String("session-token", "", "")
+		skillsRejectVersionProjectSlugInputFlag = skillsRejectVersionFlags.String("project-slug-input", "", "")
+
+		skillsArchiveFlags                = flag.NewFlagSet("archive", flag.ExitOnError)
+		skillsArchiveBodyFlag             = skillsArchiveFlags.String("body", "REQUIRED", "")
+		skillsArchiveSessionTokenFlag     = skillsArchiveFlags.String("session-token", "", "")
+		skillsArchiveProjectSlugInputFlag = skillsArchiveFlags.String("project-slug-input", "", "")
 
 		slackFlags = flag.NewFlagSet("slack", flag.ContinueOnError)
 
@@ -1300,6 +1332,7 @@ func ParseEndpoint(
 	assetsFetchOpenAPIv3FromURLFlags.Usage = assetsFetchOpenAPIv3FromURLUsage
 	assetsServeOpenAPIv3Flags.Usage = assetsServeOpenAPIv3Usage
 	assetsServeFunctionFlags.Usage = assetsServeFunctionUsage
+	assetsServeSkillFlags.Usage = assetsServeSkillUsage
 	assetsListAssetsFlags.Usage = assetsListAssetsUsage
 	assetsUploadChatAttachmentFlags.Usage = assetsUploadChatAttachmentUsage
 	assetsServeChatAttachmentFlags.Usage = assetsServeChatAttachmentUsage
@@ -1474,10 +1507,13 @@ func ParseEndpoint(
 	skillsSetSettingsFlags.Usage = skillsSetSettingsUsage
 	skillsCaptureFlags.Usage = skillsCaptureUsage
 	skillsCaptureClaudeFlags.Usage = skillsCaptureClaudeUsage
+	skillsUploadManualFlags.Usage = skillsUploadManualUsage
 	skillsListVersionsFlags.Usage = skillsListVersionsUsage
 	skillsListPendingFlags.Usage = skillsListPendingUsage
 	skillsApproveVersionFlags.Usage = skillsApproveVersionUsage
 	skillsSupersedeVersionFlags.Usage = skillsSupersedeVersionUsage
+	skillsRejectVersionFlags.Usage = skillsRejectVersionUsage
+	skillsArchiveFlags.Usage = skillsArchiveUsage
 
 	slackFlags.Usage = slackUsage
 	slackCreateSlackAppFlags.Usage = slackCreateSlackAppUsage
@@ -1720,6 +1756,9 @@ func ParseEndpoint(
 
 			case "serve-function":
 				epf = assetsServeFunctionFlags
+
+			case "serve-skill":
+				epf = assetsServeSkillFlags
 
 			case "list-assets":
 				epf = assetsListAssetsFlags
@@ -2193,6 +2232,9 @@ func ParseEndpoint(
 			case "capture-claude":
 				epf = skillsCaptureClaudeFlags
 
+			case "upload-manual":
+				epf = skillsUploadManualFlags
+
 			case "list-versions":
 				epf = skillsListVersionsFlags
 
@@ -2204,6 +2246,12 @@ func ParseEndpoint(
 
 			case "supersede-version":
 				epf = skillsSupersedeVersionFlags
+
+			case "reject-version":
+				epf = skillsRejectVersionFlags
+
+			case "archive":
+				epf = skillsArchiveFlags
 
 			}
 
@@ -2500,6 +2548,9 @@ func ParseEndpoint(
 			case "serve-function":
 				endpoint = c.ServeFunction()
 				data, err = assetsc.BuildServeFunctionPayload(*assetsServeFunctionIDFlag, *assetsServeFunctionProjectIDFlag, *assetsServeFunctionApikeyTokenFlag, *assetsServeFunctionSessionTokenFlag)
+			case "serve-skill":
+				endpoint = c.ServeSkill()
+				data, err = assetsc.BuildServeSkillPayload(*assetsServeSkillIDFlag, *assetsServeSkillProjectIDFlag, *assetsServeSkillApikeyTokenFlag, *assetsServeSkillSessionTokenFlag)
 			case "list-assets":
 				endpoint = c.ListAssets()
 				data, err = assetsc.BuildListAssetsPayload(*assetsListAssetsSessionTokenFlag, *assetsListAssetsProjectSlugInputFlag, *assetsListAssetsApikeyTokenFlag)
@@ -2981,6 +3032,9 @@ func ParseEndpoint(
 				if err == nil {
 					data, err = skillsc.BuildCaptureClaudeStreamPayload(data, *skillsCaptureClaudeStreamFlag)
 				}
+			case "upload-manual":
+				endpoint = c.UploadManual()
+				data, err = skillsc.BuildUploadManualPayload(*skillsUploadManualBodyFlag, *skillsUploadManualSessionTokenFlag, *skillsUploadManualProjectSlugInputFlag, *skillsUploadManualNameFlag, *skillsUploadManualScopeFlag, *skillsUploadManualDiscoveryRootFlag, *skillsUploadManualSourceTypeFlag, *skillsUploadManualContentSha256Flag, *skillsUploadManualAssetFormatFlag, *skillsUploadManualResolutionStatusFlag, *skillsUploadManualSkillIDFlag, *skillsUploadManualSkillVersionIDFlag, *skillsUploadManualContentTypeFlag, *skillsUploadManualContentLengthFlag)
 			case "list-versions":
 				endpoint = c.ListVersions()
 				data, err = skillsc.BuildListVersionsPayload(*skillsListVersionsSkillIDFlag, *skillsListVersionsSessionTokenFlag, *skillsListVersionsProjectSlugInputFlag)
@@ -2993,6 +3047,12 @@ func ParseEndpoint(
 			case "supersede-version":
 				endpoint = c.SupersedeVersion()
 				data, err = skillsc.BuildSupersedeVersionPayload(*skillsSupersedeVersionBodyFlag, *skillsSupersedeVersionSessionTokenFlag, *skillsSupersedeVersionProjectSlugInputFlag)
+			case "reject-version":
+				endpoint = c.RejectVersion()
+				data, err = skillsc.BuildRejectVersionPayload(*skillsRejectVersionBodyFlag, *skillsRejectVersionSessionTokenFlag, *skillsRejectVersionProjectSlugInputFlag)
+			case "archive":
+				endpoint = c.Archive()
+				data, err = skillsc.BuildArchivePayload(*skillsArchiveBodyFlag, *skillsArchiveSessionTokenFlag, *skillsArchiveProjectSlugInputFlag)
 			}
 		case "slack":
 			c := slackc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3499,6 +3559,7 @@ func assetsUsage() {
 	fmt.Fprintln(os.Stderr, `    fetch-open-ap-iv3-from-url: Fetch an OpenAPI v3 document from a URL and upload it to Gram.`)
 	fmt.Fprintln(os.Stderr, `    serve-open-ap-iv3: Serve an OpenAPIv3 asset from Gram.`)
 	fmt.Fprintln(os.Stderr, `    serve-function: Serve a Gram Functions asset from Gram.`)
+	fmt.Fprintln(os.Stderr, `    serve-skill: Serve a skill asset from Gram.`)
 	fmt.Fprintln(os.Stderr, `    list-assets: List all assets for a project.`)
 	fmt.Fprintln(os.Stderr, `    upload-chat-attachment: Upload a chat attachment to Gram.`)
 	fmt.Fprintln(os.Stderr, `    serve-chat-attachment: Serve a chat attachment from Gram.`)
@@ -3680,6 +3741,30 @@ func assetsServeFunctionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assets serve-function --id \"abc123\" --project-id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func assetsServeSkillUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assets serve-skill", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -project-id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Serve a skill asset from Gram.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assets serve-skill --id \"abc123\" --project-id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func assetsListAssetsUsage() {
@@ -6696,10 +6781,13 @@ func skillsUsage() {
 	fmt.Fprintln(os.Stderr, `    set-settings: Update capture settings for a project.`)
 	fmt.Fprintln(os.Stderr, `    capture: Capture a skill artifact and associated metadata via producer authentication.`)
 	fmt.Fprintln(os.Stderr, `    capture-claude: Capture a skill artifact and associated metadata via validated Claude session metadata.`)
+	fmt.Fprintln(os.Stderr, `    upload-manual: Upload a skill artifact manually using session authentication. Always ingests as pending review.`)
 	fmt.Fprintln(os.Stderr, `    list-versions: List captured versions for a skill.`)
 	fmt.Fprintln(os.Stderr, `    list-pending: List skills and versions that are pending review.`)
 	fmt.Fprintln(os.Stderr, `    approve-version: Approve a captured skill version and mark it active for the lineage.`)
 	fmt.Fprintln(os.Stderr, `    supersede-version: Mark a captured skill version as superseded.`)
+	fmt.Fprintln(os.Stderr, `    reject-version: Reject a captured skill version.`)
+	fmt.Fprintln(os.Stderr, `    archive: Archive a skill lineage.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s skills COMMAND --help\n", os.Args[0])
@@ -6829,7 +6917,7 @@ func skillsCaptureUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills capture --apikey-token \"abc123\" --project-slug-input \"abc123\" --name \"aa\" --scope \"user\" --discovery-root \"project_claude\" --source-type \"local_filesystem\" --content-sha256 \"1111111111111111111111111111111111111111111111111111111111111111\" --asset-format \"zip\" --resolution-status \"unresolved_name_only\" --skill-id \"abc123\" --skill-version-id \"abc123\" --content-type \"abc123\" --content-length 1 --stream \"goa.png\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills capture --apikey-token \"abc123\" --project-slug-input \"abc123\" --name \"aa\" --scope \"user\" --discovery-root \"project_claude\" --source-type \"manual_upload\" --content-sha256 \"1111111111111111111111111111111111111111111111111111111111111111\" --asset-format \"zip\" --resolution-status \"unresolved_name_only\" --skill-id \"abc123\" --skill-version-id \"abc123\" --content-type \"abc123\" --content-length 1 --stream \"goa.png\"")
 }
 
 func skillsCaptureClaudeUsage() {
@@ -6871,7 +6959,51 @@ func skillsCaptureClaudeUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills capture-claude --claude-session-id \"abc123\" --name \"aa\" --scope \"user\" --discovery-root \"project_claude\" --source-type \"local_filesystem\" --content-sha256 \"1111111111111111111111111111111111111111111111111111111111111111\" --asset-format \"zip\" --resolution-status \"unresolved_name_only\" --skill-id \"abc123\" --skill-version-id \"abc123\" --content-type \"abc123\" --content-length 1 --stream \"goa.png\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills capture-claude --claude-session-id \"abc123\" --name \"aa\" --scope \"user\" --discovery-root \"project_claude\" --source-type \"manual_upload\" --content-sha256 \"1111111111111111111111111111111111111111111111111111111111111111\" --asset-format \"zip\" --resolution-status \"unresolved_name_only\" --skill-id \"abc123\" --skill-version-id \"abc123\" --content-type \"abc123\" --content-length 1 --stream \"goa.png\"")
+}
+
+func skillsUploadManualUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills upload-manual", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -name STRING")
+	fmt.Fprint(os.Stderr, " -scope STRING")
+	fmt.Fprint(os.Stderr, " -discovery-root STRING")
+	fmt.Fprint(os.Stderr, " -source-type STRING")
+	fmt.Fprint(os.Stderr, " -content-sha256 STRING")
+	fmt.Fprint(os.Stderr, " -asset-format STRING")
+	fmt.Fprint(os.Stderr, " -resolution-status STRING")
+	fmt.Fprint(os.Stderr, " -skill-id STRING")
+	fmt.Fprint(os.Stderr, " -skill-version-id STRING")
+	fmt.Fprint(os.Stderr, " -content-type STRING")
+	fmt.Fprint(os.Stderr, " -content-length INT64")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Upload a skill artifact manually using session authentication. Always ingests as pending review.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -scope STRING: `)
+	fmt.Fprintln(os.Stderr, `    -discovery-root STRING: `)
+	fmt.Fprintln(os.Stderr, `    -source-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-sha256 STRING: `)
+	fmt.Fprintln(os.Stderr, `    -asset-format STRING: `)
+	fmt.Fprintln(os.Stderr, `    -resolution-status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -skill-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -skill-version-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-length INT64: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills upload-manual --body \"YWJjMTIz\" --session-token \"abc123\" --project-slug-input \"abc123\" --name \"aa\" --scope \"user\" --discovery-root \"project_claude\" --source-type \"manual_upload\" --content-sha256 \"1111111111111111111111111111111111111111111111111111111111111111\" --asset-format \"zip\" --resolution-status \"unresolved_name_only\" --skill-id \"abc123\" --skill-version-id \"abc123\" --content-type \"abc123\" --content-length 1")
 }
 
 func skillsListVersionsUsage() {
@@ -6958,6 +7090,50 @@ func skillsSupersedeVersionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills supersede-version --body '{\n      \"version_id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsRejectVersionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills reject-version", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Reject a captured skill version.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills reject-version --body '{\n      \"reason\": \"aaa\",\n      \"version_id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsArchiveUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills archive", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Archive a skill lineage.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills archive --body '{\n      \"skill_id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // slackUsage displays the usage of the slack command and its subcommands.

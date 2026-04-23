@@ -22,14 +22,17 @@ type Client struct {
 	SetSettingsEndpoint      goa.Endpoint
 	CaptureEndpoint          goa.Endpoint
 	CaptureClaudeEndpoint    goa.Endpoint
+	UploadManualEndpoint     goa.Endpoint
 	ListVersionsEndpoint     goa.Endpoint
 	ListPendingEndpoint      goa.Endpoint
 	ApproveVersionEndpoint   goa.Endpoint
 	SupersedeVersionEndpoint goa.Endpoint
+	RejectVersionEndpoint    goa.Endpoint
+	ArchiveEndpoint          goa.Endpoint
 }
 
 // NewClient initializes a "skills" service client given the endpoints.
-func NewClient(get, list, getSettings, setSettings, capture, captureClaude, listVersions, listPending, approveVersion, supersedeVersion goa.Endpoint) *Client {
+func NewClient(get, list, getSettings, setSettings, capture, captureClaude, uploadManual, listVersions, listPending, approveVersion, supersedeVersion, rejectVersion, archive goa.Endpoint) *Client {
 	return &Client{
 		GetEndpoint:              get,
 		ListEndpoint:             list,
@@ -37,10 +40,13 @@ func NewClient(get, list, getSettings, setSettings, capture, captureClaude, list
 		SetSettingsEndpoint:      setSettings,
 		CaptureEndpoint:          capture,
 		CaptureClaudeEndpoint:    captureClaude,
+		UploadManualEndpoint:     uploadManual,
 		ListVersionsEndpoint:     listVersions,
 		ListPendingEndpoint:      listPending,
 		ApproveVersionEndpoint:   approveVersion,
 		SupersedeVersionEndpoint: supersedeVersion,
+		RejectVersionEndpoint:    rejectVersion,
+		ArchiveEndpoint:          archive,
 	}
 }
 
@@ -176,6 +182,28 @@ func (c *Client) CaptureClaude(ctx context.Context, p *CaptureClaudePayload, req
 	return ires.(*CaptureSkillResult), nil
 }
 
+// UploadManual calls the "uploadManual" endpoint of the "skills" service.
+// UploadManual may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UploadManual(ctx context.Context, p *UploadManualPayload) (res *CaptureSkillResult, err error) {
+	var ires any
+	ires, err = c.UploadManualEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CaptureSkillResult), nil
+}
+
 // ListVersions calls the "listVersions" endpoint of the "skills" service.
 // ListVersions may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
@@ -263,4 +291,48 @@ func (c *Client) SupersedeVersion(ctx context.Context, p *SupersedeVersionPayloa
 		return
 	}
 	return ires.(*SkillVersion), nil
+}
+
+// RejectVersion calls the "rejectVersion" endpoint of the "skills" service.
+// RejectVersion may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RejectVersion(ctx context.Context, p *RejectVersionPayload) (res *SkillVersion, err error) {
+	var ires any
+	ires, err = c.RejectVersionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SkillVersion), nil
+}
+
+// Archive calls the "archive" endpoint of the "skills" service.
+// Archive may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Archive(ctx context.Context, p *ArchivePayload) (res *Skill, err error) {
+	var ires any
+	ires, err = c.ArchiveEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*Skill), nil
 }

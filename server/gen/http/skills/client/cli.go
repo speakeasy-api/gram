@@ -173,8 +173,8 @@ func BuildCapturePayload(skillsCaptureApikeyToken string, skillsCaptureProjectSl
 	var discoveryRoot string
 	{
 		discoveryRoot = skillsCaptureDiscoveryRoot
-		if !(discoveryRoot == "project_agents" || discoveryRoot == "project_claude" || discoveryRoot == "project_cursor" || discoveryRoot == "user_agents" || discoveryRoot == "user_claude" || discoveryRoot == "user_cursor") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("discovery_root", discoveryRoot, []any{"project_agents", "project_claude", "project_cursor", "user_agents", "user_claude", "user_cursor"}))
+		if !(discoveryRoot == "project_agents" || discoveryRoot == "project_claude" || discoveryRoot == "project_cursor" || discoveryRoot == "user_agents" || discoveryRoot == "user_claude" || discoveryRoot == "user_cursor" || discoveryRoot == "manual_upload") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("discovery_root", discoveryRoot, []any{"project_agents", "project_claude", "project_cursor", "user_agents", "user_claude", "user_cursor", "manual_upload"}))
 		}
 		if err != nil {
 			return nil, err
@@ -183,8 +183,8 @@ func BuildCapturePayload(skillsCaptureApikeyToken string, skillsCaptureProjectSl
 	var sourceType string
 	{
 		sourceType = skillsCaptureSourceType
-		if !(sourceType == "local_filesystem") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("source_type", sourceType, []any{"local_filesystem"}))
+		if !(sourceType == "local_filesystem" || sourceType == "manual_upload") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("source_type", sourceType, []any{"local_filesystem", "manual_upload"}))
 		}
 		if err != nil {
 			return nil, err
@@ -293,8 +293,8 @@ func BuildCaptureClaudePayload(skillsCaptureClaudeClaudeSessionID string, skills
 	var discoveryRoot string
 	{
 		discoveryRoot = skillsCaptureClaudeDiscoveryRoot
-		if !(discoveryRoot == "project_agents" || discoveryRoot == "project_claude" || discoveryRoot == "project_cursor" || discoveryRoot == "user_agents" || discoveryRoot == "user_claude" || discoveryRoot == "user_cursor") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("discovery_root", discoveryRoot, []any{"project_agents", "project_claude", "project_cursor", "user_agents", "user_claude", "user_cursor"}))
+		if !(discoveryRoot == "project_agents" || discoveryRoot == "project_claude" || discoveryRoot == "project_cursor" || discoveryRoot == "user_agents" || discoveryRoot == "user_claude" || discoveryRoot == "user_cursor" || discoveryRoot == "manual_upload") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("discovery_root", discoveryRoot, []any{"project_agents", "project_claude", "project_cursor", "user_agents", "user_claude", "user_cursor", "manual_upload"}))
 		}
 		if err != nil {
 			return nil, err
@@ -303,8 +303,8 @@ func BuildCaptureClaudePayload(skillsCaptureClaudeClaudeSessionID string, skills
 	var sourceType string
 	{
 		sourceType = skillsCaptureClaudeSourceType
-		if !(sourceType == "local_filesystem") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("source_type", sourceType, []any{"local_filesystem"}))
+		if !(sourceType == "local_filesystem" || sourceType == "manual_upload") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("source_type", sourceType, []any{"local_filesystem", "manual_upload"}))
 		}
 		if err != nil {
 			return nil, err
@@ -376,6 +376,141 @@ func BuildCaptureClaudePayload(skillsCaptureClaudeClaudeSessionID string, skills
 	v.ContentLength = contentLength
 
 	return v, nil
+}
+
+// BuildUploadManualPayload builds the payload for the skills uploadManual
+// endpoint from CLI flags.
+func BuildUploadManualPayload(skillsUploadManualBody string, skillsUploadManualSessionToken string, skillsUploadManualProjectSlugInput string, skillsUploadManualName string, skillsUploadManualScope string, skillsUploadManualDiscoveryRoot string, skillsUploadManualSourceType string, skillsUploadManualContentSha256 string, skillsUploadManualAssetFormat string, skillsUploadManualResolutionStatus string, skillsUploadManualSkillID string, skillsUploadManualSkillVersionID string, skillsUploadManualContentType string, skillsUploadManualContentLength string) (*skills.UploadManualPayload, error) {
+	var err error
+	var body []byte
+	{
+		body = []byte(skillsUploadManualBody)
+	}
+	var sessionToken *string
+	{
+		if skillsUploadManualSessionToken != "" {
+			sessionToken = &skillsUploadManualSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsUploadManualProjectSlugInput != "" {
+			projectSlugInput = &skillsUploadManualProjectSlugInput
+		}
+	}
+	var name string
+	{
+		name = skillsUploadManualName
+		if utf8.RuneCountInString(name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("name", name, utf8.RuneCountInString(name), 1, true))
+		}
+		if utf8.RuneCountInString(name) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("name", name, utf8.RuneCountInString(name), 100, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var scope string
+	{
+		scope = skillsUploadManualScope
+		if !(scope == "project" || scope == "user") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("scope", scope, []any{"project", "user"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var discoveryRoot string
+	{
+		discoveryRoot = skillsUploadManualDiscoveryRoot
+		if !(discoveryRoot == "project_agents" || discoveryRoot == "project_claude" || discoveryRoot == "project_cursor" || discoveryRoot == "user_agents" || discoveryRoot == "user_claude" || discoveryRoot == "user_cursor" || discoveryRoot == "manual_upload") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("discovery_root", discoveryRoot, []any{"project_agents", "project_claude", "project_cursor", "user_agents", "user_claude", "user_cursor", "manual_upload"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sourceType string
+	{
+		sourceType = skillsUploadManualSourceType
+		if !(sourceType == "local_filesystem" || sourceType == "manual_upload") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("source_type", sourceType, []any{"local_filesystem", "manual_upload"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var contentSha256 string
+	{
+		contentSha256 = skillsUploadManualContentSha256
+		err = goa.MergeErrors(err, goa.ValidatePattern("content_sha256", contentSha256, "^[a-fA-F0-9]{64}$"))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var assetFormat string
+	{
+		assetFormat = skillsUploadManualAssetFormat
+		if !(assetFormat == "zip") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("asset_format", assetFormat, []any{"zip"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var resolutionStatus string
+	{
+		resolutionStatus = skillsUploadManualResolutionStatus
+		if !(resolutionStatus == "resolved" || resolutionStatus == "unresolved_name_only" || resolutionStatus == "invalid_skill_root" || resolutionStatus == "skipped_by_author") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("resolution_status", resolutionStatus, []any{"resolved", "unresolved_name_only", "invalid_skill_root", "skipped_by_author"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var skillID *string
+	{
+		if skillsUploadManualSkillID != "" {
+			skillID = &skillsUploadManualSkillID
+		}
+	}
+	var skillVersionID *string
+	{
+		if skillsUploadManualSkillVersionID != "" {
+			skillVersionID = &skillsUploadManualSkillVersionID
+		}
+	}
+	var contentType string
+	{
+		contentType = skillsUploadManualContentType
+	}
+	var contentLength int64
+	{
+		contentLength, err = strconv.ParseInt(skillsUploadManualContentLength, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for contentLength, must be INT64")
+		}
+	}
+	v := body
+	res := &skills.UploadManualPayload{
+		RequestBody: v,
+	}
+	res.SessionToken = sessionToken
+	res.ProjectSlugInput = projectSlugInput
+	res.Name = name
+	res.Scope = scope
+	res.DiscoveryRoot = discoveryRoot
+	res.SourceType = sourceType
+	res.ContentSha256 = contentSha256
+	res.AssetFormat = assetFormat
+	res.ResolutionStatus = resolutionStatus
+	res.SkillID = skillID
+	res.SkillVersionID = skillVersionID
+	res.ContentType = contentType
+	res.ContentLength = contentLength
+
+	return res, nil
 }
 
 // BuildListVersionsPayload builds the payload for the skills listVersions
@@ -484,6 +619,79 @@ func BuildSupersedeVersionPayload(skillsSupersedeVersionBody string, skillsSuper
 	}
 	v := &skills.SupersedeVersionPayload{
 		VersionID: body.VersionID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRejectVersionPayload builds the payload for the skills rejectVersion
+// endpoint from CLI flags.
+func BuildRejectVersionPayload(skillsRejectVersionBody string, skillsRejectVersionSessionToken string, skillsRejectVersionProjectSlugInput string) (*skills.RejectVersionPayload, error) {
+	var err error
+	var body RejectVersionRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsRejectVersionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"reason\": \"aaa\",\n      \"version_id\": \"abc123\"\n   }'")
+		}
+		if body.Reason != nil {
+			if utf8.RuneCountInString(*body.Reason) > 2000 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 2000, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsRejectVersionSessionToken != "" {
+			sessionToken = &skillsRejectVersionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsRejectVersionProjectSlugInput != "" {
+			projectSlugInput = &skillsRejectVersionProjectSlugInput
+		}
+	}
+	v := &skills.RejectVersionPayload{
+		VersionID: body.VersionID,
+		Reason:    body.Reason,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildArchivePayload builds the payload for the skills archive endpoint from
+// CLI flags.
+func BuildArchivePayload(skillsArchiveBody string, skillsArchiveSessionToken string, skillsArchiveProjectSlugInput string) (*skills.ArchivePayload, error) {
+	var err error
+	var body ArchiveRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsArchiveBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"skill_id\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsArchiveSessionToken != "" {
+			sessionToken = &skillsArchiveSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsArchiveProjectSlugInput != "" {
+			projectSlugInput = &skillsArchiveProjectSlugInput
+		}
+	}
+	v := &skills.ArchivePayload{
+		SkillID: body.SkillID,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -3,6 +3,7 @@
  */
 
 import { skillsApproveVersion } from "../funcs/skillsApproveVersion.js";
+import { skillsArchive } from "../funcs/skillsArchive.js";
 import { skillsCapture } from "../funcs/skillsCapture.js";
 import { skillsCaptureClaude } from "../funcs/skillsCaptureClaude.js";
 import { skillsGetBySlug } from "../funcs/skillsGetBySlug.js";
@@ -10,8 +11,10 @@ import { skillsGetSettings } from "../funcs/skillsGetSettings.js";
 import { skillsList } from "../funcs/skillsList.js";
 import { skillsListPending } from "../funcs/skillsListPending.js";
 import { skillsListVersions } from "../funcs/skillsListVersions.js";
+import { skillsRejectVersion } from "../funcs/skillsRejectVersion.js";
 import { skillsSetSettings } from "../funcs/skillsSetSettings.js";
 import { skillsSupersedeVersion } from "../funcs/skillsSupersedeVersion.js";
+import { skillsUploadManual } from "../funcs/skillsUploadManual.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -30,6 +33,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.SkillVersion> {
     return unwrapAsync(skillsApproveVersion(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * archive skills
+   *
+   * @remarks
+   * Archive a skill lineage.
+   */
+  async archive(
+    request: operations.ArchiveSkillRequest,
+    security?: operations.ArchiveSkillSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Skill> {
+    return unwrapAsync(skillsArchive(
       this,
       request,
       security,
@@ -150,6 +172,25 @@ export class Skills extends ClientSDK {
   }
 
   /**
+   * rejectVersion skills
+   *
+   * @remarks
+   * Reject a captured skill version.
+   */
+  async rejectVersion(
+    request: operations.RejectSkillVersionRequest,
+    security?: operations.RejectSkillVersionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.SkillVersion> {
+    return unwrapAsync(skillsRejectVersion(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * setSettings skills
    *
    * @remarks
@@ -180,6 +221,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.SkillVersion> {
     return unwrapAsync(skillsSupersedeVersion(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * uploadManual skills
+   *
+   * @remarks
+   * Upload a skill artifact manually using session authentication. Always ingests as pending review.
+   */
+  async uploadManual(
+    request: operations.UploadManualSkillRequest,
+    security?: operations.UploadManualSkillSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.CaptureSkillResult> {
+    return unwrapAsync(skillsUploadManual(
       this,
       request,
       security,

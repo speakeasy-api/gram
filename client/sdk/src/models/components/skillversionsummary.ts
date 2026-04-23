@@ -13,6 +13,7 @@ export const SkillVersionSummaryState = {
   PendingReview: "pending_review",
   Active: "active",
   Superseded: "superseded",
+  Rejected: "rejected",
 } as const;
 export type SkillVersionSummaryState = ClosedEnum<
   typeof SkillVersionSummaryState

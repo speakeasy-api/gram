@@ -349,14 +349,17 @@ run();
 ### [Skills](docs/sdks/skills/README.md)
 
 * [approveVersion](docs/sdks/skills/README.md#approveversion) - approveVersion skills
+* [archive](docs/sdks/skills/README.md#archive) - archive skills
 * [capture](docs/sdks/skills/README.md#capture) - capture skills
 * [captureClaude](docs/sdks/skills/README.md#captureclaude) - captureClaude skills
 * [getBySlug](docs/sdks/skills/README.md#getbyslug) - get skills
 * [getSettings](docs/sdks/skills/README.md#getsettings) - getSettings skills
 * [list](docs/sdks/skills/README.md#list) - list skills
 * [listPending](docs/sdks/skills/README.md#listpending) - listPending skills
+* [rejectVersion](docs/sdks/skills/README.md#rejectversion) - rejectVersion skills
 * [setSettings](docs/sdks/skills/README.md#setsettings) - setSettings skills
 * [supersedeVersion](docs/sdks/skills/README.md#supersedeversion) - supersedeVersion skills
+* [uploadManual](docs/sdks/skills/README.md#uploadmanual) - uploadManual skills
 * [listVersions](docs/sdks/skills/README.md#listversions) - listVersions skills
 
 ### [Slack](docs/sdks/slack/README.md)
@@ -592,6 +595,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`skillsApproveVersion`](docs/sdks/skills/README.md#approveversion) - approveVersion skills
+- [`skillsArchive`](docs/sdks/skills/README.md#archive) - archive skills
 - [`skillsCapture`](docs/sdks/skills/README.md#capture) - capture skills
 - [`skillsCaptureClaude`](docs/sdks/skills/README.md#captureclaude) - captureClaude skills
 - [`skillsGetBySlug`](docs/sdks/skills/README.md#getbyslug) - get skills
@@ -599,8 +603,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`skillsList`](docs/sdks/skills/README.md#list) - list skills
 - [`skillsListPending`](docs/sdks/skills/README.md#listpending) - listPending skills
 - [`skillsListVersions`](docs/sdks/skills/README.md#listversions) - listVersions skills
+- [`skillsRejectVersion`](docs/sdks/skills/README.md#rejectversion) - rejectVersion skills
 - [`skillsSetSettings`](docs/sdks/skills/README.md#setsettings) - setSettings skills
 - [`skillsSupersedeVersion`](docs/sdks/skills/README.md#supersedeversion) - supersedeVersion skills
+- [`skillsUploadManual`](docs/sdks/skills/README.md#uploadmanual) - uploadManual skills
 - [`slackConfigureSlackApp`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
 - [`slackCreateSlackApp`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`slackDeleteSlackApp`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
@@ -846,12 +852,15 @@ To learn about this feature and how to get started, check
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`useSkill`](docs/sdks/skills/README.md#getbyslug) - get skills
 - [`useSkillsApproveVersionMutation`](docs/sdks/skills/README.md#approveversion) - approveVersion skills
+- [`useSkillsArchiveMutation`](docs/sdks/skills/README.md#archive) - archive skills
 - [`useSkillsCaptureClaudeMutation`](docs/sdks/skills/README.md#captureclaude) - captureClaude skills
 - [`useSkillsCaptureMutation`](docs/sdks/skills/README.md#capture) - capture skills
 - [`useSkillsListPending`](docs/sdks/skills/README.md#listpending) - listPending skills
 - [`useSkillsListVersions`](docs/sdks/skills/README.md#listversions) - listVersions skills
+- [`useSkillsRejectVersionMutation`](docs/sdks/skills/README.md#rejectversion) - rejectVersion skills
 - [`useSkillsSettings`](docs/sdks/skills/README.md#getsettings) - getSettings skills
 - [`useSkillsSupersedeVersionMutation`](docs/sdks/skills/README.md#supersedeversion) - supersedeVersion skills
+- [`useSkillsUploadManualMutation`](docs/sdks/skills/README.md#uploadmanual) - uploadManual skills
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates

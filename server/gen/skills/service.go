@@ -31,6 +31,9 @@ type Service interface {
 	// Capture a skill artifact and associated metadata via validated Claude
 	// session metadata.
 	CaptureClaude(context.Context, *CaptureClaudePayload, io.ReadCloser) (res *CaptureSkillResult, err error)
+	// Upload a skill artifact manually using session authentication. Always
+	// ingests as pending review.
+	UploadManual(context.Context, *UploadManualPayload) (res *CaptureSkillResult, err error)
 	// List captured versions for a skill.
 	ListVersions(context.Context, *ListVersionsPayload) (res *ListSkillVersionsResult, err error)
 	// List skills and versions that are pending review.
@@ -39,6 +42,10 @@ type Service interface {
 	ApproveVersion(context.Context, *ApproveVersionPayload) (res *SkillVersion, err error)
 	// Mark a captured skill version as superseded.
 	SupersedeVersion(context.Context, *SupersedeVersionPayload) (res *SkillVersion, err error)
+	// Reject a captured skill version.
+	RejectVersion(context.Context, *RejectVersionPayload) (res *SkillVersion, err error)
+	// Archive a skill lineage.
+	Archive(context.Context, *ArchivePayload) (res *Skill, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -61,12 +68,19 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"get", "list", "getSettings", "setSettings", "capture", "captureClaude", "listVersions", "listPending", "approveVersion", "supersedeVersion"}
+var MethodNames = [13]string{"get", "list", "getSettings", "setSettings", "capture", "captureClaude", "uploadManual", "listVersions", "listPending", "approveVersion", "supersedeVersion", "rejectVersion", "archive"}
 
 // ApproveVersionPayload is the payload type of the skills service
 // approveVersion method.
 type ApproveVersionPayload struct {
 	VersionID        string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ArchivePayload is the payload type of the skills service archive method.
+type ArchivePayload struct {
+	SkillID          string
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -179,6 +193,15 @@ type PendingSkillEntry struct {
 	Versions []*SkillVersion
 }
 
+// RejectVersionPayload is the payload type of the skills service rejectVersion
+// method.
+type RejectVersionPayload struct {
+	VersionID        string
+	Reason           *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // SetSettingsPayload is the payload type of the skills service setSettings
 // method.
 type SetSettingsPayload struct {
@@ -237,6 +260,9 @@ type SkillVersion struct {
 	State              string
 	CapturedByUserID   *string
 	AuthorName         *string
+	RejectedByUserID   *string
+	RejectedReason     *string
+	RejectedAt         *string
 	FirstSeenTraceID   *string
 	FirstSeenSessionID *string
 	FirstSeenAt        *string
@@ -261,6 +287,25 @@ type SupersedeVersionPayload struct {
 	VersionID        string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// UploadManualPayload is the payload type of the skills service uploadManual
+// method.
+type UploadManualPayload struct {
+	RequestBody      []byte
+	SessionToken     *string
+	ProjectSlugInput *string
+	Name             string
+	Scope            string
+	DiscoveryRoot    string
+	SourceType       string
+	ContentSha256    string
+	AssetFormat      string
+	ResolutionStatus string
+	SkillID          *string
+	SkillVersionID   *string
+	ContentType      string
+	ContentLength    int64
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

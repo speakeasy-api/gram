@@ -23,10 +23,13 @@ type Endpoints struct {
 	SetSettings      goa.Endpoint
 	Capture          goa.Endpoint
 	CaptureClaude    goa.Endpoint
+	UploadManual     goa.Endpoint
 	ListVersions     goa.Endpoint
 	ListPending      goa.Endpoint
 	ApproveVersion   goa.Endpoint
 	SupersedeVersion goa.Endpoint
+	RejectVersion    goa.Endpoint
+	Archive          goa.Endpoint
 }
 
 // CaptureRequestData holds both the payload and the HTTP request body reader
@@ -58,10 +61,13 @@ func NewEndpoints(s Service) *Endpoints {
 		SetSettings:      NewSetSettingsEndpoint(s, a.APIKeyAuth),
 		Capture:          NewCaptureEndpoint(s, a.APIKeyAuth),
 		CaptureClaude:    NewCaptureClaudeEndpoint(s),
+		UploadManual:     NewUploadManualEndpoint(s, a.APIKeyAuth),
 		ListVersions:     NewListVersionsEndpoint(s, a.APIKeyAuth),
 		ListPending:      NewListPendingEndpoint(s, a.APIKeyAuth),
 		ApproveVersion:   NewApproveVersionEndpoint(s, a.APIKeyAuth),
 		SupersedeVersion: NewSupersedeVersionEndpoint(s, a.APIKeyAuth),
+		RejectVersion:    NewRejectVersionEndpoint(s, a.APIKeyAuth),
+		Archive:          NewArchiveEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -73,10 +79,13 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SetSettings = m(e.SetSettings)
 	e.Capture = m(e.Capture)
 	e.CaptureClaude = m(e.CaptureClaude)
+	e.UploadManual = m(e.UploadManual)
 	e.ListVersions = m(e.ListVersions)
 	e.ListPending = m(e.ListPending)
 	e.ApproveVersion = m(e.ApproveVersion)
 	e.SupersedeVersion = m(e.SupersedeVersion)
+	e.RejectVersion = m(e.RejectVersion)
+	e.Archive = m(e.Archive)
 }
 
 // NewGetEndpoint returns an endpoint function that calls the method "get" of
@@ -263,6 +272,41 @@ func NewCaptureClaudeEndpoint(s Service) goa.Endpoint {
 	}
 }
 
+// NewUploadManualEndpoint returns an endpoint function that calls the method
+// "uploadManual" of service "skills".
+func NewUploadManualEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UploadManualPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UploadManual(ctx, p)
+	}
+}
+
 // NewListVersionsEndpoint returns an endpoint function that calls the method
 // "listVersions" of service "skills".
 func NewListVersionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -400,5 +444,75 @@ func NewSupersedeVersionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.SupersedeVersion(ctx, p)
+	}
+}
+
+// NewRejectVersionEndpoint returns an endpoint function that calls the method
+// "rejectVersion" of service "skills".
+func NewRejectVersionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RejectVersionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RejectVersion(ctx, p)
+	}
+}
+
+// NewArchiveEndpoint returns an endpoint function that calls the method
+// "archive" of service "skills".
+func NewArchiveEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ArchivePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.Archive(ctx, p)
 	}
 }
