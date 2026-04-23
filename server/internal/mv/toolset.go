@@ -604,43 +604,22 @@ func GetToolsetsSummary(
 	ctx context.Context,
 	logger *slog.Logger,
 	tx DBTX,
-	toolsets []tsr.Toolset,
+	toolsets []tsr.ListToolsetsWithVersionsByOrganizationRow,
 ) ([]*types.ToolsetSummary, error) {
 	if len(toolsets) == 0 {
 		return []*types.ToolsetSummary{}, nil
 	}
 
-	toolsetRepo := tsr.New(tx)
-
-	// Batch-fetch latest versions for all toolsets in one query.
-	toolsetIDs := make([]uuid.UUID, len(toolsets))
-	for i, ts := range toolsets {
-		toolsetIDs[i] = ts.ID
-	}
-
-	versions, err := toolsetRepo.GetLatestToolsetVersionsBatch(ctx, toolsetIDs)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to batch-fetch toolset versions").Log(ctx, logger)
-	}
-
-	versionsByToolsetID := make(map[uuid.UUID]tsr.ToolsetVersion, len(versions))
-	for _, v := range versions {
-		versionsByToolsetID[v.ToolsetID] = v
-	}
-
 	// Group tool URNs by project for batch fetching.
+	// Version data (tool_urns) is already inlined via LEFT JOIN LATERAL.
 	type projectToolsets struct {
 		toolUrns []string
 	}
 	projectMap := make(map[uuid.UUID]*projectToolsets)
 
 	for _, ts := range toolsets {
-		v, ok := versionsByToolsetID[ts.ID]
-		if !ok {
-			continue
-		}
-		urns := make([]string, len(v.ToolUrns))
-		for i, u := range v.ToolUrns {
+		urns := make([]string, len(ts.LatestToolUrns))
+		for i, u := range ts.LatestToolUrns {
 			urns[i] = u.String()
 		}
 
@@ -807,11 +786,10 @@ func GetToolsetsSummary(
 	// Assemble results.
 	result := make([]*types.ToolsetSummary, 0, len(toolsets))
 	for _, ts := range toolsets {
-		v, hasVersion := versionsByToolsetID[ts.ID]
 		var tools []*types.ToolEntry
-		if hasVersion {
+		if len(ts.LatestToolUrns) > 0 {
 			projectTools := toolsByProject[ts.ProjectID]
-			for _, u := range v.ToolUrns {
+			for _, u := range ts.LatestToolUrns {
 				if entry, ok := projectTools[u.String()]; ok {
 					tools = append(tools, entry)
 				}

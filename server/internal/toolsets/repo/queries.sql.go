@@ -1078,6 +1078,92 @@ func (q *Queries) ListToolsetsByProject(ctx context.Context, projectID uuid.UUID
 	return items, nil
 }
 
+const listToolsetsWithVersionsByOrganization = `-- name: ListToolsetsWithVersionsByOrganization :many
+SELECT
+  t.id,
+  t.organization_id,
+  t.project_id,
+  t.name,
+  t.slug,
+  t.description,
+  t.default_environment_slug,
+  t.mcp_slug,
+  t.mcp_is_public,
+  t.mcp_enabled,
+  t.tool_selection_mode,
+  t.created_at,
+  t.updated_at,
+  COALESCE(tv.tool_urns, ARRAY[]::TEXT[]) AS latest_tool_urns,
+  COALESCE(tv.resource_urns, ARRAY[]::TEXT[]) AS latest_resource_urns
+FROM toolsets t
+JOIN projects p ON t.project_id = p.id
+LEFT JOIN LATERAL (
+  SELECT tool_urns, resource_urns
+  FROM toolset_versions
+  WHERE toolset_id = t.id AND deleted IS FALSE
+  ORDER BY version DESC
+  LIMIT 1
+) tv ON TRUE
+WHERE p.organization_id = $1
+  AND t.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY t.created_at DESC
+`
+
+type ListToolsetsWithVersionsByOrganizationRow struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	Name                   string
+	Slug                   string
+	Description            pgtype.Text
+	DefaultEnvironmentSlug pgtype.Text
+	McpSlug                pgtype.Text
+	McpIsPublic            bool
+	McpEnabled             bool
+	ToolSelectionMode      string
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	LatestToolUrns         []urn.Tool
+	LatestResourceUrns     []urn.Resource
+}
+
+func (q *Queries) ListToolsetsWithVersionsByOrganization(ctx context.Context, organizationID string) ([]ListToolsetsWithVersionsByOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetsWithVersionsByOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetsWithVersionsByOrganizationRow
+	for rows.Next() {
+		var i ListToolsetsWithVersionsByOrganizationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.DefaultEnvironmentSlug,
+			&i.McpSlug,
+			&i.McpIsPublic,
+			&i.McpEnabled,
+			&i.ToolSelectionMode,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LatestToolUrns,
+			&i.LatestResourceUrns,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateToolset = `-- name: UpdateToolset :one
 UPDATE toolsets
 SET

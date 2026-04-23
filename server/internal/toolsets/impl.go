@@ -279,7 +279,7 @@ func (s *Service) ListToolsetsForOrg(ctx context.Context, payload *gen.ListTools
 		return nil, err
 	}
 
-	toolsets, err := s.repo.ListToolsetsByOrganization(ctx, authCtx.ActiveOrganizationID)
+	toolsets, err := s.repo.ListToolsetsWithVersionsByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets for organization").Log(ctx, s.logger)
 	}
