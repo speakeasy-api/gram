@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
-	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -18,7 +18,7 @@ func TestCreateRiskPolicy_Success(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
 	enabled := true
 	result, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
@@ -43,7 +43,7 @@ func TestCreateRiskPolicy_DefaultSources(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
 	result, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
 		Name: "No Sources",
@@ -58,7 +58,7 @@ func TestCreateRiskPolicy_EmptyName(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
 	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
 		Name: "",
@@ -71,7 +71,7 @@ func TestCreateRiskPolicy_NameTooLong(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
 	var longName strings.Builder
 	for range 101 {
@@ -104,7 +104,7 @@ func TestCreateRiskPolicy_DisabledDoesNotSignal(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
 
 	enabled := false
 	result, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{

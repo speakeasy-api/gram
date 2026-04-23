@@ -1,4 +1,4 @@
-package access
+package authz
 
 import (
 	"slices"
@@ -115,7 +115,6 @@ func TestGrantsHasAccess_wrongResourceNotSatisfied(t *testing.T) {
 func TestScopeExpansions_isDAG(t *testing.T) {
 	t.Parallel()
 
-	// DFS from every scope; assert no scope is reachable from itself.
 	for start := range scopeExpansions {
 		inStack := map[Scope]bool{}
 		visited := map[Scope]bool{}
@@ -158,7 +157,7 @@ func TestCalculateSubScopes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.scope, func(t *testing.T) {
 			t.Parallel()
-			got := calculateSubScopes(Scope(tt.scope))
+			got := CalculateSubScopes(Scope(tt.scope))
 			require.Equal(t, tt.want, got)
 		})
 	}
@@ -169,7 +168,7 @@ func TestCalculateSubScopes_inverseOfScopeExpansions(t *testing.T) {
 
 	for lower, highers := range scopeExpansions {
 		for _, h := range highers {
-			require.Contains(t, calculateSubScopes(h), string(lower),
+			require.Contains(t, CalculateSubScopes(h), string(lower),
 				"higher scope %q should imply lower scope %q", h, lower)
 		}
 	}

@@ -9,8 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
-	"github.com/speakeasy-api/gram/server/internal/access"
-	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -103,8 +103,8 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 
 	orgs := newMockOrganizationProvider(t)
 
-	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, thirdpartyworkos.NewStubClient(), cache.NoopCache)
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeatures{}, accessManager)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeatures{}, authzEngine)
 
 	return ctx, &testInstance{
 		service: svc,
@@ -149,8 +149,8 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 
 	orgs := newMockOrganizationProvider(t)
 
-	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, thirdpartyworkos.NewStubClient(), cache.NoopCache)
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeaturesEnabled{}, accessManager)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeaturesEnabled{}, authzEngine)
 
 	return ctx, &testInstance{
 		service: svc,

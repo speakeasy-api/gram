@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -91,7 +92,7 @@ func NewService(
 	telemLogger *tm.Logger,
 	featClient *productfeatures.Client,
 	serverURL *url.URL,
-	accessLoader auth.AccessLoader,
+	authzEngine *authz.Engine,
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
@@ -101,7 +102,7 @@ func NewService(
 		logger:           logger,
 		tracer:           tracer,
 		db:               db,
-		auth:             auth.New(logger, db, sessions, accessLoader),
+		auth:             auth.New(logger, db, sessions, authzEngine),
 		chatSessions:     chatSessions,
 		toolset:          toolsets.NewToolsets(db),
 		environmentsRepo: envRepo,

@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -48,14 +49,14 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
-	accessLoader auth.AccessLoader,
+	authzEngine *authz.Engine,
 	app *bgtriggers.App,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("triggers"))
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/triggers"),
 		logger: logger,
-		auth:   auth.New(logger, db, sessions, accessLoader),
+		auth:   auth.New(logger, db, sessions, authzEngine),
 		app:    app,
 	}
 }
