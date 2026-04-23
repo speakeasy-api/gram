@@ -1343,6 +1343,7 @@ jobs:
       - plog-build-lint
       - functions-build-host
       - functions-image
+      - assistant-runtime-image
       - ts-framework-test
       - elements-build-lint
       - elements-test

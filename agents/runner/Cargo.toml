@@ -2,7 +2,7 @@
 name = "gram-assistant-runner"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.91"
 
 [[bin]]
 name = "gram-assistant-runner"
