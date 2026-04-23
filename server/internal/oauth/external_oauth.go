@@ -101,7 +101,11 @@ func (s ExternalOAuthState) AdditionalCacheKeys() []string {
 }
 
 func (s ExternalOAuthState) TTL() time.Duration {
-	return time.Until(s.ExpiresAt)
+	ttl := time.Until(s.ExpiresAt)
+	if ttl < time.Minute {
+		return time.Minute
+	}
+	return ttl
 }
 
 // ExternalOAuthService handles OAuth flows where Gram acts as the OAuth client

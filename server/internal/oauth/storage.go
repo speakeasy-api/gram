@@ -45,7 +45,11 @@ func (g Grant) AdditionalCacheKeys() []string {
 }
 
 func (g Grant) TTL() time.Duration {
-	return time.Until(g.ExpiresAt)
+	ttl := time.Until(g.ExpiresAt)
+	if ttl < time.Minute {
+		return time.Minute
+	}
+	return ttl
 }
 
 var _ cache.CacheableObject[Token] = (*Token)(nil)
@@ -85,7 +89,14 @@ func (t Token) TTL() time.Duration {
 	// Add grace period so refresh token cache entry outlives the access token.
 	// Without this, the cache evicts the entry at the same time the access token
 	// expires, making the refresh token unusable.
-	return time.Until(t.ExpiresAt) + 24*time.Hour
+	ttl := time.Until(t.ExpiresAt) + 24*time.Hour
+	// Ensure minimum TTL to prevent immediate eviction when ExpiresAt is in the
+	// past (e.g., due to clock skew or stale data). A 1-minute floor gives
+	// clients a window to attempt refresh before the key disappears.
+	if ttl < time.Minute {
+		return time.Minute
+	}
+	return ttl
 }
 
 var _ cache.CacheableObject[OauthProxyClientInfo] = (*OauthProxyClientInfo)(nil)
@@ -120,7 +131,11 @@ func (o OauthProxyClientInfo) AdditionalCacheKeys() []string {
 
 func (o OauthProxyClientInfo) TTL() time.Duration {
 	// we double the client expiration time we send to MCP clients for safety
-	return time.Until(o.ClientSecretExpiresAt) * 2
+	ttl := time.Until(o.ClientSecretExpiresAt) * 2
+	if ttl < time.Minute {
+		return time.Minute
+	}
+	return ttl
 }
 
 var _ cache.CacheableObject[UpstreamPKCEVerifier] = (*UpstreamPKCEVerifier)(nil)
