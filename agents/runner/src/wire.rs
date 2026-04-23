@@ -12,6 +12,10 @@ pub struct RunnerConfig {
     pub chat_id: String,
     #[serde(default)]
     pub mcp_servers: Vec<McpServer>,
+    /// Prior transcript to prime the driver with at configure time. The loop
+    /// comes up already hydrated; /turn carries only new user input after that.
+    #[serde(default)]
+    pub history: Vec<RunnerMessage>,
     /// Target warm window in seconds. After the driver yields LoopStep::Finished
     /// and no further input arrives within warm_ttl_seconds + 60s of grace, the
     /// loop exits and the runtime marks itself not-running.
@@ -19,7 +23,7 @@ pub struct RunnerConfig {
     pub warm_ttl_seconds: Option<u64>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Hash)]
 pub struct McpServer {
     pub id: String,
     pub url: String,
@@ -29,17 +33,15 @@ pub struct McpServer {
 
 #[derive(Debug, Deserialize)]
 pub struct RunnerRequest {
-    #[serde(default)]
-    pub history: Vec<RunnerMessage>,
     pub input: String,
     #[serde(default)]
     pub auth_token: Option<String>,
 }
 
-// RunnerMessage is the wire shape used to rehydrate transcript items on cold
-// start. It mirrors server/internal/assistants/runtime.go's runtimeMessage one
-// field at a time — keep them in sync.
-#[derive(Debug, Deserialize)]
+// RunnerMessage is the wire shape used to rehydrate transcript items at
+// /configure. It mirrors server/internal/assistants/runtime.go's
+// runtimeMessage one field at a time — keep them in sync.
+#[derive(Debug, Deserialize, Serialize, Clone, Hash)]
 pub struct RunnerMessage {
     pub role: String,
     #[serde(default)]
@@ -50,7 +52,7 @@ pub struct RunnerMessage {
     pub tool_call_id: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone, Hash)]
 pub struct RunnerToolCall {
     pub id: String,
     pub name: String,
@@ -94,11 +96,9 @@ impl RunnerResponse {
 #[derive(Debug, Serialize)]
 pub struct RunnerStateResponse {
     pub configured: bool,
-    /// True while the background agent loop is live. Flips to false once the
-    /// loop exits (warm TTL expired, fatal error, shutdown).
-    pub running: bool,
     /// Seconds since the loop last made forward progress. Backend reapers read
-    /// this to refresh TTL instead of `/turn` return time.
+    /// this to refresh TTL instead of `/turn` return time. Absent when the
+    /// runner has never been /configured.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_active_seconds_ago: Option<u64>,
 }

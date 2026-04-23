@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use agentkit_core::{MetadataMap, ToolOutput, ToolResultPart};
@@ -15,6 +16,8 @@ use tokio::time::timeout;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
 const STDOUT_LIMIT: usize = 50_000;
 const STDERR_LIMIT: usize = 10_000;
+const SCRIPT_NAME: &str = "script.ts";
+const SANDBOX_ROOT: &str = "/tmp/bun-sandbox";
 
 pub fn registry() -> ToolRegistry {
     ToolRegistry::new().with(BunRunTool::default())
@@ -34,7 +37,8 @@ impl Default for BunRunTool {
 Working directory is a fresh per-call tempdir; `playwright-core` is preinstalled. \
 A headless Chromium-compatible browser (lightpanda) is available — prefer \
 `import { withContext } from './browser'` and run page work inside the callback \
-so each invocation gets a fresh, auto-disposed BrowserContext. \
+so each invocation gets a fresh, auto-disposed BrowserContext. The helper \
+module and its `node_modules` are symlinked into the tempdir for each call. \
 Use `getBrowser()` from the same module only when you need the raw Browser handle. \
 For LLM-friendly page reading, `import { markdown } from './browser'` and call \
 `markdown(page)` to get `{ title, byline, markdown }`; it runs Readability over \
@@ -45,7 +49,6 @@ pages (list/index pages) where Readability extraction is not helpful."
                     "type": "object",
                     "properties": {
                         "code": { "type": "string" },
-                        "filename": { "type": "string" },
                         "timeout_ms": { "type": "integer", "minimum": 1 }
                     },
                     "required": ["code"],
@@ -65,7 +68,6 @@ pages (list/index pages) where Readability extraction is not helpful."
 #[derive(Debug, Deserialize)]
 struct BunRunInput {
     code: String,
-    filename: Option<String>,
     timeout_ms: Option<u64>,
 }
 
@@ -86,10 +88,8 @@ impl Tool for BunRunTool {
         let workdir = TempDir::with_prefix("bun-sandbox-")
             .map_err(|e| ToolError::ExecutionFailed(format!("tempdir failed: {e}")))?;
 
-        let filename = input
-            .filename
-            .unwrap_or_else(|| format!("script-{}.ts", std::process::id()));
-        let file_path = workdir.path().join(&filename);
+        link_sandbox_assets(workdir.path())?;
+        let file_path = workdir.path().join(SCRIPT_NAME);
 
         tokio::fs::write(&file_path, &input.code)
             .await
@@ -103,7 +103,7 @@ impl Tool for BunRunTool {
         let start = Instant::now();
 
         let mut cmd = Command::new("/usr/local/bin/bun");
-        cmd.arg("run").arg(&file_path).current_dir(workdir.path());
+        cmd.arg("run").arg(SCRIPT_NAME).current_dir(workdir.path());
         cmd.env("NO_COLOR", "1");
         cmd.kill_on_drop(true);
 
@@ -136,5 +136,34 @@ impl Tool for BunRunTool {
             duration: Some(start.elapsed()),
             metadata: MetadataMap::new(),
         })
+    }
+}
+
+fn link_sandbox_assets(workdir: &Path) -> Result<(), ToolError> {
+    for name in ["browser.ts", "package.json", "node_modules"] {
+        let src = Path::new(SANDBOX_ROOT).join(name);
+        let dst = workdir.join(name);
+        symlink(&src, &dst).map_err(|e| {
+            ToolError::ExecutionFailed(format!(
+                "link sandbox asset {} -> {} failed: {e}",
+                src.display(),
+                dst.display()
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn symlink(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(src, dst)
+}
+
+#[cfg(windows)]
+fn symlink(src: &Path, dst: &Path) -> std::io::Result<()> {
+    if src.is_dir() {
+        std::fs::symlink_dir(src, dst)
+    } else {
+        std::fs::symlink_file(src, dst)
     }
 }

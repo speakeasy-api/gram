@@ -3,9 +3,13 @@ use std::sync::{Arc, RwLock};
 use agentkit_http::Http;
 use async_trait::async_trait;
 use reqwest_middleware::{ClientBuilder, Middleware, Next};
+use reqwest_retry::RetryTransientMiddleware;
+use reqwest_retry::policies::ExponentialBackoff;
 use thiserror::Error;
 
 use crate::errors::RunnerError;
+
+const HTTP_MAX_RETRIES: u32 = 3;
 
 #[derive(Debug, Error)]
 enum MiddlewareError {
@@ -85,7 +89,10 @@ impl Middleware for StaticHeaders {
 }
 
 pub fn build_http(client: reqwest::Client, registry: TokenRegistry) -> Http {
-    let client = ClientBuilder::new(client).with(registry).build();
+    let client = ClientBuilder::new(client)
+        .with(retry_middleware())
+        .with(registry)
+        .build();
     Http::new(client)
 }
 
@@ -95,8 +102,14 @@ pub fn build_http_with_static(
     static_headers: http::HeaderMap,
 ) -> Http {
     let client = ClientBuilder::new(client)
+        .with(retry_middleware())
         .with(StaticHeaders::new(static_headers))
         .with(registry)
         .build();
     Http::new(client)
+}
+
+fn retry_middleware() -> RetryTransientMiddleware<ExponentialBackoff> {
+    let policy = ExponentialBackoff::builder().build_with_max_retries(HTTP_MAX_RETRIES);
+    RetryTransientMiddleware::new_with_policy(policy).with_retry_log_level(tracing::Level::INFO)
 }

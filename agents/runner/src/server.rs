@@ -6,14 +6,19 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use tokio::net::TcpListener;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 
 use crate::idempotency;
-use crate::runtime::{build_runtime, AppState, RuntimeHost};
+use crate::runtime::{AppState, RuntimeHost, build_runtime};
 use crate::wire::{RunnerConfig, RunnerRequest, RunnerResponse, RunnerStateResponse};
 
 pub async fn serve(addr: SocketAddr) -> Result<(), std::io::Error> {
-    let state: AppState = Arc::new(Mutex::new(RuntimeHost::default()));
+    let shutdown = Arc::new(Notify::new());
+    let state: AppState = Arc::new(Mutex::new(RuntimeHost {
+        runtime: None,
+        seen: Default::default(),
+        shutdown: Arc::clone(&shutdown),
+    }));
 
     let app = Router::new()
         .route("/healthz", get(healthz))
@@ -23,7 +28,13 @@ pub async fn serve(addr: SocketAddr) -> Result<(), std::io::Error> {
         .with_state(state);
 
     let listener = TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    let shutdown_wait = shutdown.clone();
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            shutdown_wait.notified().await;
+            tracing::info!("graceful shutdown requested — draining in-flight requests");
+        })
+        .await?;
     Ok(())
 }
 
@@ -33,15 +44,13 @@ async fn healthz() -> &'static str {
 
 async fn state_handler(State(state): State<AppState>) -> Json<RunnerStateResponse> {
     let guard = state.lock().await;
-    let running = guard.runtime().is_some_and(|rt| rt.running());
-    let last_active_seconds_ago = guard
-        .runtime()
-        .and_then(|rt| rt.last_active_ago())
-        .map(|d| d.as_secs());
     Json(RunnerStateResponse {
-        configured: guard.configured,
-        running,
-        last_active_seconds_ago,
+        configured: guard.runtime.is_some(),
+        last_active_seconds_ago: guard
+            .runtime
+            .as_ref()
+            .and_then(|rt| rt.last_active_ago())
+            .map(|d| d.as_secs()),
     })
 }
 
@@ -49,12 +58,30 @@ async fn configure(
     State(state): State<AppState>,
     Json(config): Json<RunnerConfig>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let runtime = build_runtime(&config)
-        .await
-        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-
     let mut guard = state.lock().await;
-    guard.set_runtime(runtime);
+
+    // Idempotent re-entry: a matching config (ignoring auth_token) rotates the
+    // token and returns 204, mirroring /turn's token-rotate behavior so callers
+    // retrying after a refresh aren't stuck on the stale one. Different config
+    // on the same runtime is a real conflict — 409.
+    if let Some(ref runtime) = guard.runtime {
+        if !runtime.matches(&config) {
+            return Err((
+                StatusCode::CONFLICT,
+                "runner is already configured with a different config".to_string(),
+            ));
+        }
+        runtime
+            .rotate_token(&config.auth_token)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
+    let runtime = build_runtime(&config, Arc::clone(&guard.shutdown))
+        .await
+        .map_err(|e| (e.configure_status_code(), e.to_string()))?;
+
+    guard.runtime = Some(runtime);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -78,15 +105,9 @@ async fn turn(
     }
 
     let runtime = guard
-        .runtime()
+        .runtime
+        .as_ref()
         .ok_or_else(|| (StatusCode::CONFLICT, "runner is not configured".to_string()))?;
-
-    if !runtime.running() {
-        return Err((
-            StatusCode::CONFLICT,
-            "runner loop has exited (warm ttl elapsed or fatal error)".to_string(),
-        ));
-    }
 
     if let Some(token) = request.auth_token.as_deref()
         && !token.is_empty()
@@ -113,12 +134,15 @@ mod tests {
 
     #[tokio::test]
     async fn state_reports_unconfigured_before_configure() {
-        let state_value = Arc::new(Mutex::new(RuntimeHost::default()));
+        let state_value: AppState = Arc::new(Mutex::new(RuntimeHost {
+            runtime: None,
+            seen: Default::default(),
+            shutdown: Arc::new(Notify::new()),
+        }));
 
         let Json(response) = state_handler(State(state_value)).await;
 
         assert!(!response.configured);
-        assert!(!response.running);
         assert!(response.last_active_seconds_ago.is_none());
     }
 }

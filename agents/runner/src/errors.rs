@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use http::StatusCode;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -65,10 +66,37 @@ pub enum RunnerError {
 
     #[error("submit input: {0}")]
     SubmitInput(String),
+
+    #[error("config error for key: {key}")]
+    ConfigError { key: String },
 }
 
 impl From<agentkit_loop::LoopError> for RunnerError {
     fn from(err: agentkit_loop::LoopError) -> Self {
         RunnerError::Loop(err.to_string())
+    }
+}
+
+impl RunnerError {
+    pub fn configure_status_code(&self) -> StatusCode {
+        match self {
+            RunnerError::McpConnectTimeout(_) | RunnerError::AgentStartTimeout(_) => {
+                StatusCode::GATEWAY_TIMEOUT
+            }
+            RunnerError::McpConnect(_)
+            | RunnerError::AgentStart(_)
+            | RunnerError::HttpClient(_) => StatusCode::SERVICE_UNAVAILABLE,
+            RunnerError::McpHeaderName { .. }
+            | RunnerError::McpHeaderValue { .. }
+            | RunnerError::HeaderValue { .. }
+            | RunnerError::UnsupportedHistoryRole(_)
+            | RunnerError::MissingToolCallId
+            | RunnerError::ToolCallArguments { .. }
+            | RunnerError::ConfigError { .. } => StatusCode::BAD_REQUEST,
+            RunnerError::AgentBuild(_)
+            | RunnerError::Loop(_)
+            | RunnerError::McpAuthInterrupt
+            | RunnerError::SubmitInput(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
     }
 }
