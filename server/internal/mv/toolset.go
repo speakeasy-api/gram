@@ -654,12 +654,17 @@ func GetToolsetsSummary(
 
 	// Per unique project: batch-fetch tool entries and variations.
 	// This is O(projects) not O(toolsets).
-	toolsByURN := make(map[string]*types.ToolEntry)
+	// Keyed by projectID to avoid cross-project URN collisions (two projects
+	// deploying the same API produce identical tool URNs).
+	toolsByProject := make(map[uuid.UUID]map[string]*types.ToolEntry)
 
 	for projectID, pt := range projectMap {
 		if len(pt.toolUrns) == 0 {
 			continue
 		}
+
+		projectTools := make(map[string]*types.ToolEntry)
+		toolsByProject[projectID] = projectTools
 
 		toolsRepo := tr.New(tx)
 		variationsRepo := vr.New(tx)
@@ -714,7 +719,7 @@ func GetToolsetsSummary(
 			}
 			seen[toolURN] = true
 			name := conv.Default(urnToVariedName[toolURN], def.Name)
-			toolsByURN[toolURN] = &types.ToolEntry{
+			projectTools[toolURN] = &types.ToolEntry{
 				Type:        string(urn.ToolKindHTTP),
 				ID:          def.ID.String(),
 				Name:        name,
@@ -730,7 +735,7 @@ func GetToolsetsSummary(
 				continue
 			}
 			seen[toolURN] = true
-			toolsByURN[toolURN] = &types.ToolEntry{
+			projectTools[toolURN] = &types.ToolEntry{
 				Type:        string(urn.ToolKindFunction),
 				ID:          def.ID.String(),
 				Name:        def.Name,
@@ -746,7 +751,7 @@ func GetToolsetsSummary(
 				continue
 			}
 			seen[toolURN] = true
-			toolsByURN[toolURN] = &types.ToolEntry{
+			projectTools[toolURN] = &types.ToolEntry{
 				Type:        string(urn.ToolKindPrompt),
 				ID:          pt.ID.String(),
 				Name:        pt.Name,
@@ -759,7 +764,7 @@ func GetToolsetsSummary(
 		for _, entry := range platformtools.FindToolEntries(pt.toolUrns) {
 			if !seen[entry.ToolUrn] {
 				seen[entry.ToolUrn] = true
-				toolsByURN[entry.ToolUrn] = entry
+				projectTools[entry.ToolUrn] = entry
 			}
 		}
 
@@ -787,7 +792,7 @@ func GetToolsetsSummary(
 					continue
 				}
 				seen[def.ToolUrn] = true
-				toolsByURN[def.ToolUrn] = &types.ToolEntry{
+				projectTools[def.ToolUrn] = &types.ToolEntry{
 					Type:        string(urn.ToolKindExternalMCP),
 					ID:          def.ID.String(),
 					Name:        def.Slug + ":proxy",
@@ -805,8 +810,9 @@ func GetToolsetsSummary(
 		v, hasVersion := versionsByToolsetID[ts.ID]
 		var tools []*types.ToolEntry
 		if hasVersion {
+			projectTools := toolsByProject[ts.ProjectID]
 			for _, u := range v.ToolUrns {
-				if entry, ok := toolsByURN[u.String()]; ok {
+				if entry, ok := projectTools[u.String()]; ok {
 					tools = append(tools, entry)
 				}
 			}
