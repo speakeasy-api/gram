@@ -10,6 +10,10 @@ import (
 	"strings"
 	"sync"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -40,22 +44,34 @@ type presidioResult struct {
 type PresidioClient struct {
 	baseURL    string
 	httpClient *http.Client //nolint:forbidigo // Injected via guardian.Policy in the wiring layer.
+	tracer     trace.Tracer
 }
 
 // NewPresidioClient creates a client pointing at the given base URL.
 // The httpClient should be obtained from guardian.Policy.PooledClient().
-func NewPresidioClient(baseURL string, httpClient *http.Client) *PresidioClient { //nolint:forbidigo // Accepts guardian-provided client.
+func NewPresidioClient(baseURL string, httpClient *http.Client, tracerProvider trace.TracerProvider) *PresidioClient { //nolint:forbidigo // Accepts guardian-provided client.
 	return &PresidioClient{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		httpClient: httpClient,
+		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
 	}
 }
 
-func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string) ([][]Finding, error) {
+func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string) (_ [][]Finding, err error) {
 	n := len(texts)
 	if n == 0 {
 		return nil, nil
 	}
+
+	ctx, span := p.tracer.Start(ctx, "presidio.analyzeBatch", trace.WithAttributes(
+		attribute.Int("presidio.batch_size", n),
+	))
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
 
 	results := make([][]Finding, n)
 	workers := min(runtime.NumCPU(), n)
@@ -103,7 +119,15 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string) ([][]
 	return results, nil
 }
 
-func (p *PresidioClient) analyze(ctx context.Context, text string) ([]Finding, error) {
+func (p *PresidioClient) analyze(ctx context.Context, text string) (_ []Finding, err error) {
+	ctx, span := p.tracer.Start(ctx, "presidio.analyze")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	body, err := json.Marshal(presidioRequest{
 		Text:     text,
 		Language: "en",
@@ -160,6 +184,7 @@ func (p *PresidioClient) analyze(ctx context.Context, text string) ([]Finding, e
 			Confidence:  r.Score,
 		})
 	}
+	span.SetAttributes(attribute.Int("presidio.findings_count", len(findings)))
 	return findings, nil
 }
 
