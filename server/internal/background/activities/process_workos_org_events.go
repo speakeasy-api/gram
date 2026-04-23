@@ -35,13 +35,18 @@ type ProcessWorkOSOrganizationEventsResult struct {
 	HasMore      bool   `json:"has_more"`
 }
 
+// EventsLister is the subset of events.Client used by this activity.
+type EventsLister interface {
+	ListEvents(ctx context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error)
+}
+
 type ProcessWorkOSOrganizationEvents struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
-	eventsClient *events.Client
+	eventsClient EventsLister
 }
 
-func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, eventsClient *events.Client) *ProcessWorkOSOrganizationEvents {
+func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, eventsClient EventsLister) *ProcessWorkOSOrganizationEvents {
 	return &ProcessWorkOSOrganizationEvents{
 		db:           db,
 		logger:       logger,
