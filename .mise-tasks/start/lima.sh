@@ -5,7 +5,7 @@
 
 set -e
 
-INSTANCE="${GRAM_ASSISTANT_LIMA_INSTANCE:-gram-firecracker}"
+INSTANCE="${GRAM_ASSISTANT_RUNTIME_LIMA_INSTANCE:-${GRAM_ASSISTANT_LIMA_INSTANCE:-gram-firecracker}}"
 
 if ! command -v limactl >/dev/null 2>&1; then
   echo "limactl not found; skipping lima log tail" >&2
