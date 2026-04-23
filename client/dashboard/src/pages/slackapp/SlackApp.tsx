@@ -301,7 +301,7 @@ function SlackAppsInner() {
 
   return (
     <EnterpriseGate
-      icon="slack"
+      icon="bot"
       description="Assistants are available on the Enterprise plan. Book a time to get started."
     >
       <Page.Section>

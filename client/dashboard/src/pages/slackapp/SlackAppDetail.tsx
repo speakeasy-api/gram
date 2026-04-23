@@ -390,7 +390,7 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed px-6 py-10">
-            <Icon name="slack" className="text-muted-foreground mb-3 h-6 w-6" />
+            <Icon name="bot" className="text-muted-foreground mb-3 h-6 w-6" />
             <Type muted small className="mb-3 text-center">
               No installs yet. Share the invite link to get your first workspace
               connected.
