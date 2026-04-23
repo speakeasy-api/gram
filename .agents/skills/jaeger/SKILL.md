@@ -5,29 +5,32 @@ description: Use the local Jaeger instance to inspect OpenTelemetry traces emitt
 
 # Jaeger — Local Trace Inspection
 
-Gram runs a local Jaeger All-in-One instance that collects all OpenTelemetry traces from `gram-server` and `gram-worker`.
+Gram runs a local Jaeger All-in-One instance that collects all OpenTelemetry traces from `gram-server` and `gram-worker`. It starts automatically with `mise run infra:start`.
 
-## Starting Jaeger
+## Discovering Ports
+
+Jaeger ports are configured via environment variables in `mise.toml`. **Always resolve ports from env vars** — never hardcode them, as they may differ across worktrees or local overrides.
 
 ```bash
-mise run start:jaeger
+# Jaeger UI/API port
+echo $JAEGER_WEB_PORT
+
+# OTLP gRPC receiver port
+echo $OTLP_GRPC_PORT
 ```
 
-Or it starts automatically as part of `mprocs` (see `mprocs.yaml`).
-
-- **Web UI**: `http://localhost:16686`
-- **OTLP gRPC receiver**: `localhost:4317` (same endpoint the server already exports to)
-
-Jaeger is in the Docker Compose `tools` profile — it does not start with `mise run infra:start`. Use `mise run start:jaeger` explicitly.
+- **Web UI**: `http://localhost:$JAEGER_WEB_PORT`
+- **OTLP gRPC receiver**: `localhost:$OTLP_GRPC_PORT`
+- **REST API**: `http://localhost:$JAEGER_WEB_PORT/api/...`
 
 ## Jaeger REST API
 
-All endpoints are on `http://localhost:16686`. Use these to programmatically query traces after running seed data or hitting endpoints.
+Use these endpoints to programmatically query traces after running seed data or hitting endpoints. Replace `$JAEGER_WEB_PORT` with the resolved value.
 
 ### List services
 
 ```
-GET /api/services
+GET http://localhost:$JAEGER_WEB_PORT/api/services
 ```
 
 Returns all instrumented services (e.g., `gram-server`, `gram-worker`).
@@ -35,10 +38,9 @@ Returns all instrumented services (e.g., `gram-server`, `gram-worker`).
 ### Search traces
 
 ```
-GET /api/traces?service=gram-server&limit=20
-GET /api/traces?service=gram-server&operation=POST /v1/mcp/{mcpSlug}&limit=10
-GET /api/traces?service=gram-server&tags={"http.status_code":"500"}&limit=10
-GET /api/traces?service=gram-server&start=1700000000000000&end=1700003600000000
+GET http://localhost:$JAEGER_WEB_PORT/api/traces?service=gram-server&limit=20
+GET http://localhost:$JAEGER_WEB_PORT/api/traces?service=gram-server&operation=POST /v1/mcp/{mcpSlug}&limit=10
+GET http://localhost:$JAEGER_WEB_PORT/api/traces?service=gram-server&tags={"http.status_code":"500"}&limit=10
 ```
 
 Query parameters:
@@ -54,7 +56,7 @@ Query parameters:
 ### Get a specific trace
 
 ```
-GET /api/traces/{traceID}
+GET http://localhost:$JAEGER_WEB_PORT/api/traces/{traceID}
 ```
 
 Returns all spans for a trace, including cross-service spans between `gram-server` and `gram-worker`.
@@ -62,14 +64,14 @@ Returns all spans for a trace, including cross-service spans between `gram-serve
 ### List operations for a service
 
 ```
-GET /api/services/{service}/operations
+GET http://localhost:$JAEGER_WEB_PORT/api/services/{service}/operations
 ```
 
 Returns all known operation names (HTTP routes, gRPC methods, Temporal activities).
 
 ## Development Workflow
 
-1. **Start Jaeger** — `mise run start:jaeger`
+1. **Start infra** — `mise run infra:start` (Jaeger starts automatically)
 2. **Start server** — `mise start:server --dev-single-process`
 3. **Run seed data or hit endpoints** — exercise the code path you're working on
 4. **Query Jaeger** — use the API or UI to inspect the resulting traces

@@ -17,7 +17,3 @@ procs:
     cmd: ["mise", "run", "start:elements"]
     stop:
       send-keys: ["<C-c>"]
-  jaeger:
-    cmd: ["mise", "run", "start:jaeger"]
-    stop:
-      send-keys: ["<C-c>"]

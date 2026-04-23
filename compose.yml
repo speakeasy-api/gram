@@ -59,7 +59,6 @@ services:
   jaeger:
     image: jaegertracing/jaeger:2.17.0
     restart: unless-stopped
-    profiles: ["tools"]
     ports:
       - "${OTLP_GRPC_PORT}:4317"
       - "${JAEGER_WEB_PORT}:16686"
