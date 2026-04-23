@@ -72,7 +72,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/templates"
-	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -728,23 +727,15 @@ func newStartCommand() *cli.Command {
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
-			var pluginsGitHub *plugins.GitHubConfig
-			if appID := c.Int64("plugins-github-app-id"); appID != 0 {
-				privateKey := c.String("plugins-github-private-key")
-				org := c.String("plugins-github-org")
-				installationID := c.Int64("plugins-github-installation-id")
-				if privateKey == "" || org == "" || installationID == 0 {
-					return fmt.Errorf("plugins-github-app-id is set but plugins-github-private-key, plugins-github-org, and plugins-github-installation-id are all required")
-				}
-				ghClient, err := ghclient.NewClient(appID, []byte(privateKey), guardianPolicy.Client())
-				if err != nil {
-					return fmt.Errorf("create github client for plugins: %w", err)
-				}
-				pluginsGitHub = &plugins.GitHubConfig{
-					Client:         ghClient,
-					Org:            org,
-					InstallationID: installationID,
-				}
+			pluginsGitHub, err := plugins.NewGitHubConfig(plugins.GitHubConfigInput{
+				AppID:          c.Int64("plugins-github-app-id"),
+				PrivateKey:     c.String("plugins-github-private-key"),
+				Org:            c.String("plugins-github-org"),
+				InstallationID: c.Int64("plugins-github-installation-id"),
+				HTTPClient:     guardianPolicy.Client(),
+			})
+			if err != nil {
+				return fmt.Errorf("plugins github config: %w", err)
 			}
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")

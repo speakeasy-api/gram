@@ -34,12 +34,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -63,6 +65,67 @@ type GitHubConfig struct {
 	Client         GitHubPublisher
 	Org            string
 	InstallationID int64
+}
+
+// GitHubConfigInput is the raw deployment-time configuration for plugin
+// GitHub publishing. All fields must be set together (the feature is on)
+// or all must be unset (the feature is off). Pass to NewGitHubConfig.
+type GitHubConfigInput struct {
+	AppID          int64
+	PrivateKey     string
+	Org            string
+	InstallationID int64
+	HTTPClient     *guardian.HTTPClient
+}
+
+// NewGitHubConfig validates a GitHubConfigInput holistically and returns:
+//   - (nil, nil)        when no fields are set: feature is disabled
+//   - (config, nil)     when all fields are set: feature is enabled
+//   - (nil, error)      when only some fields are set: deployment is misconfigured
+//
+// The all-or-nothing check prevents the silent-disable footgun where setting
+// three of four env vars (e.g. forgetting GRAM_PLUGINS_GITHUB_APP_ID) leaves
+// the deployment running with publishing inexplicably off.
+func NewGitHubConfig(in GitHubConfigInput) (*GitHubConfig, error) {
+	set := 0
+	missing := []string{}
+	if in.AppID != 0 {
+		set++
+	} else {
+		missing = append(missing, "plugins-github-app-id")
+	}
+	if in.PrivateKey != "" {
+		set++
+	} else {
+		missing = append(missing, "plugins-github-private-key")
+	}
+	if in.Org != "" {
+		set++
+	} else {
+		missing = append(missing, "plugins-github-org")
+	}
+	if in.InstallationID != 0 {
+		set++
+	} else {
+		missing = append(missing, "plugins-github-installation-id")
+	}
+
+	switch set {
+	case 0:
+		return nil, nil
+	case 4:
+		client, err := ghclient.NewClient(in.AppID, []byte(in.PrivateKey), in.HTTPClient)
+		if err != nil {
+			return nil, fmt.Errorf("create github client: %w", err)
+		}
+		return &GitHubConfig{
+			Client:         client,
+			Org:            in.Org,
+			InstallationID: in.InstallationID,
+		}, nil
+	default:
+		return nil, fmt.Errorf("plugin github publishing requires all of plugins-github-app-id, plugins-github-private-key, plugins-github-org, plugins-github-installation-id; missing: %s", strings.Join(missing, ", "))
+	}
 }
 
 type Service struct {
