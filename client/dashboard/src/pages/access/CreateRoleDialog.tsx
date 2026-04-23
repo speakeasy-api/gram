@@ -674,10 +674,10 @@ export function CreateRoleDialog({
           <Button
             onClick={handleSubmit}
             disabled={
-              !name.trim() ||
-              !description.trim() ||
-              grantCount === 0 ||
-              isMutating
+              isMutating ||
+              (isSystemRole
+                ? selectedMembers.size === 0
+                : !name.trim() || !description.trim() || grantCount === 0)
             }
           >
             {isMutating && (
