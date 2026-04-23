@@ -2182,8 +2182,17 @@ async function seedObservabilityData(init: {
     },
     {
       name: "local",
-      tools: ["Skill"],
-      weight: 3,
+      tools: [
+        "Skill",
+        "Write",
+        "Read",
+        "Edit",
+        "Grep",
+        "ToolSearch",
+        "Web Search",
+        "Bash",
+      ],
+      weight: 8,
       failureRate: 0.05,
     },
     {
@@ -2274,6 +2283,34 @@ async function seedObservabilityData(init: {
   const USER_EMAIL_WEIGHTS = [25, 20, 18, 12, 10, 8, 5, 2, 3, 2, 1];
   const USER_EMAIL_TOTAL = USER_EMAIL_WEIGHTS.reduce((s, w) => s + w, 0);
 
+  const SKILL_NAMES = [
+    "datadog",
+    "frontend",
+    "golang",
+    "postgresql",
+    "clickhouse",
+    "pr",
+    "standup",
+    "mise-tasks",
+    "pdf",
+    "caveman",
+    "code-review",
+    "generate-tests",
+    "write-commit-msg",
+    "explain-error",
+    "summarize-pr",
+    "draft-docs",
+    "debug-issue",
+  ];
+  const SKILL_NAME_WEIGHTS = [
+    18, 16, 14, 12, 10, 9, 8, 6, 5, 4, 3, 3, 3, 2, 2, 2, 2,
+  ];
+  const SKILL_NAME_TOTAL = SKILL_NAME_WEIGHTS.reduce((s, w) => s + w, 0);
+
+  function sqlAttrs(attrs: Record<string, any>): string {
+    return JSON.stringify(attrs).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  }
+
   function weightedPick<T>(items: T[], weights: number[], total: number): T {
     const roll = Math.random() * total;
     let accum = 0;
@@ -2335,9 +2372,14 @@ async function seedObservabilityData(init: {
       if (userEmail) attrs["user.email"] = userEmail;
 
       chInserts.push(
-        `(${baseTimeNano}, ${baseTimeNano}, 'INFO', 'Hook: SessionStart', '${traceId}', '${JSON.stringify(attrs).replace(/'/g, "\\'")}', '{}', '${projectId}', 'SessionStart', '${hookSource}', '${sessionId}')`,
+        `(${baseTimeNano}, ${baseTimeNano}, 'INFO', 'Hook: SessionStart', '${traceId}', '${sqlAttrs(attrs)}', '{}', '${projectId}', 'SessionStart', '${hookSource}', '${sessionId}')`,
       );
     } else {
+      const skillName =
+        toolName === "Skill"
+          ? weightedPick(SKILL_NAMES, SKILL_NAME_WEIGHTS, SKILL_NAME_TOTAL)
+          : null;
+
       // 2. PreToolUse event
       const preToolAttrs: Record<string, any> = {
         "gram.event.source": "hook",
@@ -2349,10 +2391,15 @@ async function seedObservabilityData(init: {
         "gen_ai.tool_call.id": toolUseId,
       };
       if (userEmail) preToolAttrs["user.email"] = userEmail;
-      if (mcpServer) preToolAttrs["gram.tool_call.source"] = mcpServer;
+      if (mcpServer && toolName !== "Skill")
+        preToolAttrs["gram.tool_call.source"] = mcpServer;
+      if (skillName)
+        preToolAttrs["gen_ai.tool.call.arguments"] = JSON.stringify({
+          skill: skillName,
+        });
 
       chInserts.push(
-        `(${baseTimeNano}, ${baseTimeNano}, 'INFO', 'Tool: ${toolName}, Hook: PreToolUse', '${traceId}', '${JSON.stringify(preToolAttrs).replace(/'/g, "\\'")}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,
+        `(${baseTimeNano}, ${baseTimeNano}, 'INFO', 'Tool: ${toolName}, Hook: PreToolUse', '${traceId}', '${sqlAttrs(preToolAttrs)}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,
       );
 
       // 3. PostToolUse or PostToolUseFailure event
@@ -2370,11 +2417,16 @@ async function seedObservabilityData(init: {
         "gen_ai.tool_call.id": toolUseId,
       };
       if (userEmail) postToolAttrs["user.email"] = userEmail;
-      if (mcpServer) postToolAttrs["gram.tool_call.source"] = mcpServer;
+      if (mcpServer && toolName !== "Skill")
+        postToolAttrs["gram.tool_call.source"] = mcpServer;
+      if (skillName)
+        postToolAttrs["gen_ai.tool.call.arguments"] = JSON.stringify({
+          skill: skillName,
+        });
       if (isFailure) postToolAttrs["gram.hook.error"] = "Tool execution failed";
 
       chInserts.push(
-        `(${postTimeNano}, ${postTimeNano}, '${isFailure ? "ERROR" : "INFO"}', 'Tool: ${toolName}, Hook: ${postHookEvent}', '${traceId}', '${JSON.stringify(postToolAttrs).replace(/'/g, "\\'")}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,
+        `(${postTimeNano}, ${postTimeNano}, '${isFailure ? "ERROR" : "INFO"}', 'Tool: ${toolName}, Hook: ${postHookEvent}', '${traceId}', '${sqlAttrs(postToolAttrs)}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,
       );
     }
   }
