@@ -15,6 +15,7 @@ If you've just cloned this repository, then consider running `./zero --agent` to
   - `mise.local.toml`: Local environment variable overrides for development. This file is ignored by git and should not be committed.
   - `.mise-tasks/**/*.{mts,sh}`: Useful tasks for working with the project
   - `go.mod`: Go module definition for the entire project
+  - `mprocs.yaml`: Process manager config for `madprocs` — runs all local services (mock-idp, server, worker, dashboard, elements, jaeger) in a single terminal with a tabbed UI. Run `madprocs` to start the TUI, or use `madprocs status|logs|start|stop|restart <proc>` from the CLI. Use `/madprocs` slash command for agent-assisted process control.
   - `server/`: Main backend service codebase
   - `cli/`: Command-line interface for Gram that users use to interact with the Gram service
   - `functions/`: Serverless function runner powering the Gram Functions feature
@@ -111,6 +112,7 @@ Activate a skill when your task falls within its scope.
 | `gram-audit-logging`          | Recording or exposing audit events via the auditlogs management API        |
 | `gram-rbac`                   | Adding or enforcing authorization scopes, grants, or roles                 |
 | `mise-tasks`                  | Creating or editing mise task scripts in `.mise-tasks/`                    |
+| `jaeger`                      | Testing backend endpoints locally and inspecting traces via Jaeger API     |
 | `datadog`                     | Investigating errors, performance, incidents, or telemetry via Datadog     |
 | `datadog-insights`            | Running the full Gram production health digest and posting it to Slack     |
 
