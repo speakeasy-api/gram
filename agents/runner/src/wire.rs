@@ -12,6 +12,11 @@ pub struct RunnerConfig {
     pub chat_id: String,
     #[serde(default)]
     pub mcp_servers: Vec<McpServer>,
+    /// Target warm window in seconds. After the driver yields LoopStep::Finished
+    /// and no further input arrives within warm_ttl_seconds + 60s of grace, the
+    /// loop exits and the runtime marks itself not-running.
+    #[serde(default)]
+    pub warm_ttl_seconds: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -74,9 +79,26 @@ impl RunnerResponse {
             error: None,
         }
     }
+
+    pub fn accepted() -> Self {
+        Self {
+            finish_reason: "accepted".to_string(),
+            final_text: String::new(),
+            items: Vec::new(),
+            usage: None,
+            error: None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
 pub struct RunnerStateResponse {
     pub configured: bool,
+    /// True while the background agent loop is live. Flips to false once the
+    /// loop exits (warm TTL expired, fatal error, shutdown).
+    pub running: bool,
+    /// Seconds since the loop last made forward progress. Backend reapers read
+    /// this to refresh TTL instead of `/turn` return time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_active_seconds_ago: Option<u64>,
 }

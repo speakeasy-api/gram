@@ -9,14 +9,14 @@ name = "gram-assistant-runner"
 path = "src/main.rs"
 
 [dependencies]
-agentkit-adapter-completions = "0.3.0"
-agentkit-core = "0.3.0"
-agentkit-http = { version = "0.3.0", features = ["reqwest-middleware-client"] }
-agentkit-loop = "0.3.0"
-agentkit-mcp = "0.3.0"
-agentkit-provider-openrouter = "0.3.0"
-agentkit-reporting = { version = "0.3.0", features = ["tracing"] }
-agentkit-tools-core = "0.3.0"
+agentkit-adapter-completions = "0.4.0"
+agentkit-core = "0.4.0"
+agentkit-http = { version = "0.4.0", features = ["reqwest-middleware-client"] }
+agentkit-loop = "0.4.0"
+agentkit-mcp = "0.4.0"
+agentkit-provider-openrouter = "0.4.0"
+agentkit-reporting = { version = "0.4.0", features = ["tracing"] }
+agentkit-tools-core = "0.4.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 

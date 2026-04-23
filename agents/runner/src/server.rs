@@ -9,7 +9,7 @@ use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 
 use crate::idempotency;
-use crate::runtime::{build_runtime, handle_turn, AppState, RuntimeHost};
+use crate::runtime::{build_runtime, AppState, RuntimeHost};
 use crate::wire::{RunnerConfig, RunnerRequest, RunnerResponse, RunnerStateResponse};
 
 pub async fn serve(addr: SocketAddr) -> Result<(), std::io::Error> {
@@ -33,8 +33,15 @@ async fn healthz() -> &'static str {
 
 async fn state_handler(State(state): State<AppState>) -> Json<RunnerStateResponse> {
     let guard = state.lock().await;
+    let running = guard.runtime().is_some_and(|rt| rt.running());
+    let last_active_seconds_ago = guard
+        .runtime()
+        .and_then(|rt| rt.last_active_ago())
+        .map(|d| d.as_secs());
     Json(RunnerStateResponse {
         configured: guard.configured,
+        running,
+        last_active_seconds_ago,
     })
 }
 
@@ -66,23 +73,38 @@ async fn turn(
     if let Some(ref key) = idempotency_key
         && guard.seen.contains(key)
     {
-        tracing::info!(key = %key, "dedup: skipping already-processed turn");
+        tracing::info!(key = %key, "dedup: skipping already-queued turn");
         return Ok(Json(RunnerResponse::deduped()));
     }
 
     let runtime = guard
-        .runtime_mut()
+        .runtime()
         .ok_or_else(|| (StatusCode::CONFLICT, "runner is not configured".to_string()))?;
 
-    let response = handle_turn(runtime, request)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if !runtime.running() {
+        return Err((
+            StatusCode::CONFLICT,
+            "runner loop has exited (warm ttl elapsed or fatal error)".to_string(),
+        ));
+    }
+
+    if let Some(token) = request.auth_token.as_deref()
+        && !token.is_empty()
+    {
+        runtime
+            .rotate_token(token)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+
+    runtime
+        .enqueue(request)
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
 
     if let Some(key) = idempotency_key {
         guard.seen.insert(key);
     }
 
-    Ok(Json(response))
+    Ok(Json(RunnerResponse::accepted()))
 }
 
 #[cfg(test)]
@@ -96,5 +118,7 @@ mod tests {
         let Json(response) = state_handler(State(state_value)).await;
 
         assert!(!response.configured);
+        assert!(!response.running);
+        assert!(response.last_active_seconds_ago.is_none());
     }
 }
