@@ -70,9 +70,7 @@ func newTestAuditService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authz.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	return ctx, &testInstance{
-		service: audit.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, func(ctx context.Context, organizationID string) error {
-			return authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: organizationID})
-		}),
+		service:        audit.NewService(logger, tracerProvider, conn, sessionManager, authzEngine),
 		conn:           conn,
 		sessionManager: sessionManager,
 	}

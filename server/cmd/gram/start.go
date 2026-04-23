@@ -708,11 +708,7 @@ func newStartCommand() *cli.Command {
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient, authzEngine, productFeatures))
 			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}))
-			// access depends on audit for log writers, so inject the org-read check
-			// here instead of importing access from the audit package.
-			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager, authzEngine, func(ctx context.Context, organizationID string) error {
-				return authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: organizationID})
-			}))
+			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			auth.Attach(mux, auth.NewService(
 				logger,
 				tracerProvider,
@@ -725,22 +721,13 @@ func newStartCommand() *cli.Command {
 					Environment:            c.String("environment"),
 				},
 				authzEngine,
-				func(ctx context.Context, projectIDs []string) ([]string, error) {
-					return authzEngine.Filter(ctx, authz.ScopeBuildRead, projectIDs)
-				},
 			))
 			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, authzEngine))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
 			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("server-url")))
-			// access depends on productfeatures for the RBAC feature gate, so inject
-			// the concrete checks here instead of importing access in that package.
-			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, func(ctx context.Context, organizationID string) error {
-				return authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: organizationID})
-			}, func(ctx context.Context, organizationID string) error {
-				return authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: organizationID})
-			}))
+			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine))
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, authzEngine))
@@ -757,9 +744,7 @@ func newStartCommand() *cli.Command {
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)
-			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine, func(ctx context.Context, resourceID string) error {
-				return authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeBuildRead, ResourceID: resourceID})
-			}))
+			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine))
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, serverURL))
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, posthogClient, telemSvc, assetStorage, authzEngine))

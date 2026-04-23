@@ -72,9 +72,7 @@ func newTestExternalMCPService(t *testing.T) (context.Context, *testInstance) {
 	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
 
 	authzEngine := authz.NewEngine(logger, conn, authz.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
-	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, mcpRegistryClient, authzEngine, func(ctx context.Context, resourceID string) error {
-		return authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeBuildRead, ResourceID: resourceID})
-	})
+	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, mcpRegistryClient, authzEngine)
 
 	return ctx, &testInstance{
 		service:        svc,

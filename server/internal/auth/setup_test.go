@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -24,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -307,12 +309,13 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 		Environment:            "test",
 	}
 
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, nil, nil)
+	authzEngine := authz.NewEngine(logger, conn, authz.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine)
 
 	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
 }
 
-func newTestAuthServiceWithFilter(t *testing.T, userInfo *MockUserInfo, filterProjects auth.ProjectFilterFunc) (context.Context, *testInstance) {
+func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -346,7 +349,8 @@ func newTestAuthServiceWithFilter(t *testing.T, userInfo *MockUserInfo, filterPr
 		Environment:            "test",
 	}
 
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, nil, filterProjects)
+	authzEngine := authz.NewEngine(logger, conn, authz.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine)
 
 	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
 }

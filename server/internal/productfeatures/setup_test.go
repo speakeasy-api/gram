@@ -71,11 +71,7 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	authzEngine := authz.NewEngine(logger, conn, authz.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
-	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, authzEngine, func(ctx context.Context, organizationID string) error {
-		return authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: organizationID})
-	}, func(ctx context.Context, organizationID string) error {
-		return authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: organizationID})
-	})
+	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, authzEngine)
 
 	return ctx, &testInstance{
 		service:        svc,

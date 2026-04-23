@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -49,24 +50,18 @@ type AuthConfigurations struct {
 	Environment            string
 }
 
-// ProjectFilterFunc filters a list of project IDs down to those the current
-// user is allowed to see. It is injected to avoid an import cycle with the
-// access package. A nil value disables filtering (all projects are returned).
-type ProjectFilterFunc func(ctx context.Context, projectIDs []string) ([]string, error)
-
 // Service for gram dashboard authentication endpoints
 
 type Service struct {
-	tracer         trace.Tracer
-	logger         *slog.Logger
-	db             *pgxpool.Pool
-	sessions       *sessions.Manager
-	cfg            AuthConfigurations
-	accessLoader   AccessLoader
-	filterProjects ProjectFilterFunc
-	projectsRepo   *projectsRepo.Queries
-	envRepo        *envRepo.Queries
-	orgRepo        *orgRepo.Queries
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	sessions     *sessions.Manager
+	cfg          AuthConfigurations
+	authz        *authz.Engine
+	projectsRepo *projectsRepo.Queries
+	envRepo      *envRepo.Queries
+	orgRepo      *orgRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -77,22 +72,20 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	cfg AuthConfigurations,
-	accessLoader AccessLoader,
-	filterProjects ProjectFilterFunc,
+	authzEngine *authz.Engine,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
 	return &Service{
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
-		logger:         logger,
-		db:             db,
-		sessions:       sessions,
-		cfg:            cfg,
-		accessLoader:   accessLoader,
-		filterProjects: filterProjects,
-		projectsRepo:   projectsRepo.New(db),
-		envRepo:        envRepo.New(db),
-		orgRepo:        orgRepo.New(db),
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
+		logger:       logger,
+		db:           db,
+		sessions:     sessions,
+		cfg:          cfg,
+		authz:        authzEngine,
+		projectsRepo: projectsRepo.New(db),
+		envRepo:      envRepo.New(db),
+		orgRepo:      orgRepo.New(db),
 	}
 }
 
@@ -115,11 +108,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	if err != nil {
 		return ctx, err
 	}
-	if s.accessLoader != nil {
-		ctx, err = s.accessLoader.PrepareContext(ctx)
-		if err != nil {
-			return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").Log(ctx, s.logger)
-		}
+	ctx, err = s.authz.PrepareContext(ctx)
+	if err != nil {
+		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").Log(ctx, s.logger)
 	}
 	return ctx, nil
 }
@@ -384,8 +375,8 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		}
 
 		allowedIDs := projectIDs
-		if s.filterProjects != nil && len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
-			allowedIDs, err = s.filterProjects(ctx, projectIDs)
+		if len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
+			allowedIDs, err = s.authz.Filter(ctx, authz.ScopeBuildRead, projectIDs)
 			if err != nil {
 				return nil, err
 			}
