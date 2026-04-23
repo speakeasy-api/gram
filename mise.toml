@@ -170,6 +170,18 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 ## Default region for deploying fly.io apps
 # GRAM_FUNCTIONS_FLYIO_REGION = "sjc"
 
+########################################
+## Gram Assistant runtime settings ##
+########################################
+## Local Firecracker runtimes expose the runner HTTP API inside each guest on
+## this port. It is declared here so `mise work:init` remaps it for parallel
+## worktrees and re-declares dependent values in the generated local env.
+GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
+GRAM_ASSISTANT_RUNTIME_GUEST_PORT = "8081"
+GRAM_RUNNER_ADDR = "0.0.0.0:{{env.GRAM_ASSISTANT_RUNTIME_GUEST_PORT}}"
+GRAM_ASSISTANT_RUNTIME_WORKDIR = "{{config_root}}/local/assistant-runtimes"
+GRAM_ASSISTANT_RUNTIME_LIMA_INSTANCE = "gram-firecracker-{{env.GRAM_ASSISTANT_RUNTIME_GUEST_PORT}}"
+
 ##################
 ## MCP Registry ##
 ##################
