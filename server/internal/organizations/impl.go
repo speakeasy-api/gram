@@ -12,10 +12,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/organizations/server"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -66,7 +66,7 @@ type Service struct {
 	tracer   trace.Tracer
 	db       *pgxpool.Pool
 	auth     *auth.Auth
-	access   *access.Manager
+	authz    *authz.Engine
 	orgs     OrganizationProvider
 	features orgFeatureChecker
 }
@@ -75,15 +75,15 @@ var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, orgs OrganizationProvider, features orgFeatureChecker, accessManager *access.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, orgs OrganizationProvider, features orgFeatureChecker, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 
 	return &Service{
 		logger:   logger,
 		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
 		db:       db,
-		auth:     auth.New(logger, db, sessions, accessManager),
-		access:   accessManager,
+		auth:     auth.New(logger, db, sessions, authzEngine),
+		authz:    authzEngine,
 		orgs:     orgs,
 		features: features,
 	}
@@ -113,7 +113,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
 	)
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 	if err := s.requireWorkOSOrgAdminRole(ctx, logger, ac, workosOrgID); err != nil {
@@ -164,7 +164,7 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 		attr.SlogUserID(ac.UserID),
 		attr.SlogOrganizationInviteID(payload.InvitationID),
 	)
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return err
 	}
 	if err := s.requireWorkOSOrgAdminRole(ctx, logger, ac, workosOrgID); err != nil {
@@ -206,7 +206,7 @@ func (s *Service) ListInvites(ctx context.Context, _ *gen.ListInvitesPayload) (*
 		attr.SlogUserID(ac.UserID),
 	)
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 	if err := s.requireWorkOSOrgAdminRole(ctx, logger, ac, workosOrgID); err != nil {
@@ -286,7 +286,7 @@ func (s *Service) ListUsers(ctx context.Context, _ *gen.ListUsersPayload) (*gen.
 		workosOrgID = org.WorkosID.String
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 	if err := s.requireWorkOSOrgAdminRole(ctx, logger, ac, workosOrgID); err != nil {
@@ -320,7 +320,7 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
 	)
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return err
 	}
 	if err := s.requireWorkOSOrgAdminRole(ctx, logger, ac, workosOrgID); err != nil {
@@ -413,7 +413,7 @@ func (s *Service) orgContext(ctx context.Context) (*contextvalues.AuthContext, s
 
 // requireWorkOSOrgAdminRole checks that the current user holds the admin role in WorkOS.
 // It is a no-op for enterprise accounts with the RBAC feature enabled, since those orgs
-// are gated by s.access.Require instead.
+// are gated by s.authz.Require instead.
 func (s *Service) requireWorkOSOrgAdminRole(ctx context.Context, logger *slog.Logger, ac *contextvalues.AuthContext, workosOrgID string) error {
 	if s.features == nil {
 		return oops.E(oops.CodeUnexpected, errors.New("product features checker not configured"), "internal configuration error").Log(ctx, logger)

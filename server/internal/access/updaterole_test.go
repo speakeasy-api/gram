@@ -2,8 +2,9 @@ package access
 
 import (
 	"errors"
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
+
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -11,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -70,14 +72,14 @@ func TestService_UpdateRole(t *testing.T) {
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_3", "user3@test.com", "User 3", "user_3", "membership_3")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeProjectRead, "project-old")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-old")
 	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
 		ID:          "role_custom",
 		Name:        &name,
 		Description: &description,
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeProjectWrite), Resources: []string{"project-1", "project-2"}},
-			{Scope: string(ScopeMCPConnect), Resources: nil},
+			{Scope: string(authz.ScopeProjectWrite), Resources: []string{"project-1", "project-2"}},
+			{Scope: string(authz.ScopeMCPConnect), Resources: nil},
 		},
 		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
@@ -166,7 +168,7 @@ func TestService_UpdateRole_SystemRole_RejectsPropertyChanges(t *testing.T) {
 
 	_, err = ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
 		ID:     "role_member",
-		Grants: []*gen.RoleGrant{{Scope: string(ScopeProjectRead)}},
+		Grants: []*gen.RoleGrant{{Scope: string(authz.ScopeProjectRead)}},
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "system role properties cannot be updated")
@@ -280,14 +282,14 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeProjectRead, "project-old")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-old")
 
 	updated, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
 		ID:          "role_custom",
 		Name:        &name,
 		Description: &description,
 		Grants: []*gen.RoleGrant{{
-			Scope:     string(ScopeProjectWrite),
+			Scope:     string(authz.ScopeProjectWrite),
 			Resources: []string{"project-1"},
 		}},
 	})
@@ -315,7 +317,7 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 	require.Len(t, beforeGrants, 1)
 	beforeGrant, ok := beforeGrants[0].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, string(ScopeProjectRead), beforeGrant["Scope"])
+	require.Equal(t, string(authz.ScopeProjectRead), beforeGrant["Scope"])
 	beforeResources, ok := beforeGrant["Resources"].([]any)
 	require.True(t, ok)
 	require.Len(t, beforeResources, 1)
@@ -325,7 +327,7 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 	require.Len(t, afterGrants, 1)
 	afterGrant, ok := afterGrants[0].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, string(ScopeProjectWrite), afterGrant["Scope"])
+	require.Equal(t, string(authz.ScopeProjectWrite), afterGrant["Scope"])
 	afterResources, ok := afterGrant["Resources"].([]any)
 	require.True(t, ok)
 	require.Len(t, afterResources, 1)

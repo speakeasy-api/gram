@@ -14,37 +14,30 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type Auth struct {
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	sessions     *sessions.Manager
-	keys         *ByKey
-	repo         *repo.Queries
-	accessLoader AccessLoader
+	logger   *slog.Logger
+	db       *pgxpool.Pool
+	sessions *sessions.Manager
+	keys     *ByKey
+	repo     *repo.Queries
+	authz    *authz.Engine
 }
 
-type AccessLoader interface {
-	PrepareContext(ctx context.Context) (context.Context, error)
-}
-
-func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, accessLoader AccessLoader) *Auth {
-	if accessLoader == nil {
-		panic("auth access loader is required")
-	}
-
+func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Auth {
 	logger = logger.With(attr.SlogComponent("authorizer"))
 	return &Auth{
-		logger:       logger,
-		db:           db,
-		keys:         NewKeyAuth(db, logger, sessions.Billing()),
-		sessions:     sessions,
-		repo:         repo.New(db),
-		accessLoader: accessLoader,
+		logger:   logger,
+		db:       db,
+		keys:     NewKeyAuth(db, logger, sessions.Billing()),
+		sessions: sessions,
+		repo:     repo.New(db),
+		authz:    authzEngine,
 	}
 }
 
@@ -71,7 +64,7 @@ func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKe
 	if err != nil {
 		return ctx, err
 	}
-	ctx, err = s.accessLoader.PrepareContext(ctx)
+	ctx, err = s.authz.PrepareContext(ctx)
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").Log(ctx, s.logger)
 	}

@@ -2,6 +2,7 @@ package productfeatures
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -28,32 +30,15 @@ type OpenRouterKeyRefresher interface {
 	CancelOpenRouterKeyRefreshWorkflow(ctx context.Context, orgID string) error
 }
 
-type AccessContextPreparer interface {
-	PrepareContext(ctx context.Context) (context.Context, error)
-}
-
-// RequireOrgReadFn injects RBAC enforcement without importing access here,
-// which would create an import cycle because access depends on productfeatures.
-type RequireOrgReadFn func(ctx context.Context, organizationID string) error
-
-// RequireOrgAdminFn injects RBAC enforcement without importing access here,
-// which would create an import cycle because access depends on productfeatures.
-type RequireOrgAdminFn func(ctx context.Context, organizationID string) error
-
 // Service implements organization feature management operations.
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	repo   *repo.Queries
-	auth   *auth.Auth
-	// access already depends on productfeatures for the RBAC feature gate, so
-	// inject the concrete checks here to avoid an import cycle.
-	requireOrgRead RequireOrgReadFn
-	// access already depends on productfeatures for the RBAC feature gate, so
-	// inject the concrete checks here to avoid an import cycle.
-	requireOrgAdmin RequireOrgAdminFn
-	featureCache    cache.TypedCacheObject[FeatureCache]
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	repo         *repo.Queries
+	auth         *auth.Auth
+	authz        *authz.Engine
+	featureCache cache.TypedCacheObject[FeatureCache]
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -64,21 +49,18 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	redisClient *redis.Client,
-	accessLoader AccessContextPreparer,
-	requireOrgRead RequireOrgReadFn,
-	requireOrgAdmin RequireOrgAdminFn,
+	authzEngine *authz.Engine,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("product_features"))
 
 	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
-		logger:          logger,
-		db:              db,
-		repo:            repo.New(db),
-		auth:            auth.New(logger, db, sessions, accessLoader),
-		requireOrgRead:  requireOrgRead,
-		requireOrgAdmin: requireOrgAdmin,
-		featureCache:    cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
+		logger:       logger,
+		db:           db,
+		repo:         repo.New(db),
+		auth:         auth.New(logger, db, sessions, authzEngine),
+		authz:        authzEngine,
+		featureCache: cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 	}
 }
 
@@ -97,8 +79,8 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.requireOrgAdmin(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return err
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return fmt.Errorf("require org admin: %w", err)
 	}
 
 	var err error
@@ -145,8 +127,8 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.requireOrgRead(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return nil, err
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+		return nil, fmt.Errorf("require org read: %w", err)
 	}
 
 	orgID := authCtx.ActiveOrganizationID
