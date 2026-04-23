@@ -76,3 +76,32 @@ func TestService_ListRoles(t *testing.T) {
 	require.ElementsMatch(t, []string{"project-1", "project-2"}, grantsByScope[string(ScopeProjectRead)].Resources)
 	require.Nil(t, grantsByScope[string(ScopeMCPConnect)].Resources)
 }
+
+func TestService_ListRoles_ExcludesDisconnectedUsersFromMemberCounts(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// user_1 is connected to the org.
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
+	// user_2 exists locally with a workos_id but is NOT connected to this org
+	// (no organization_user_relationships row). Should not inflate member count.
+	seedDisconnectedUser(t, ctx, ti.conn, "local_user_2", "user2@test.com", "User 2", "user_2")
+
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
+		mockSystemRole("role_admin", "Admin", "admin"),
+	}, nil).Once()
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
+		// user_2 appears in WorkOS members but is disconnected locally.
+		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "admin"),
+	}, nil).Once()
+
+	result, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Roles, 1)
+	// Only user_1 should be counted — user_2 has a local account but no org connection.
+	require.Equal(t, 1, result.Roles[0].MemberCount)
+}
