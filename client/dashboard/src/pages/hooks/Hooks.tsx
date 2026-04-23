@@ -1454,6 +1454,7 @@ function StackedBarChart({
   labels,
   datasets,
   handleFilter,
+  tooltipLabelFn,
   expanded = false,
   maxRows,
   onShowAll,
@@ -1461,6 +1462,7 @@ function StackedBarChart({
   labels: string[];
   datasets: StackedBarDataset[];
   handleFilter?: (datasetLabel: string, rowLabel: string) => void;
+  tooltipLabelFn?: (item: TooltipItem<"bar">) => string;
   expanded?: boolean;
   maxRows?: number;
   onShowAll?: () => void;
@@ -1507,13 +1509,15 @@ function StackedBarChart({
         tooltip: {
           ...SHARED_TOOLTIP,
           callbacks: {
-            label: (item: TooltipItem<"bar">) =>
-              ` ${item.dataset.label}: ${item.parsed.x}`,
+            label:
+              tooltipLabelFn ??
+              ((item: TooltipItem<"bar">) =>
+                ` ${item.dataset.label}: ${item.parsed.x}`),
           },
         },
       },
     }),
-    [datasets, visibleLabels, handleFilter],
+    [datasets, visibleLabels, handleFilter, tooltipLabelFn],
   );
 
   if (visibleLabels.length === 0) return null;
@@ -2150,7 +2154,7 @@ function UsersPerSkillChart({
 }) {
   const chartId = "users-per-skill";
   const expanded = expandedChart === chartId;
-  const { labels, datasets } = useMemo(() => {
+  const { labels, datasets, uniqueUsersMap } = useMemo(() => {
     const sorted = [...skills].sort((a, b) => b.useCount - a.useCount);
     const color = USER_SOURCE_COLORS[0]!;
     return {
@@ -2164,8 +2168,17 @@ function UsersPerSkillChart({
           hoverBackgroundColor: color + "cc",
         },
       ] satisfies StackedBarDataset[],
+      uniqueUsersMap: new Map(skills.map((s) => [s.skillName, s.uniqueUsers])),
     };
   }, [skills]);
+  const tooltipLabelFn = useCallback(
+    (item: TooltipItem<"bar">) => {
+      const skillName = labels[item.dataIndex] ?? "";
+      const unique = uniqueUsersMap.get(skillName) ?? 0;
+      return ` Uses: ${item.parsed.x}  |  Unique users: ${unique}`;
+    },
+    [labels, uniqueUsersMap],
+  );
   return (
     <ChartCard
       title={title}
@@ -2180,6 +2193,7 @@ function UsersPerSkillChart({
         <StackedBarChart
           labels={labels}
           datasets={datasets}
+          tooltipLabelFn={tooltipLabelFn}
           expanded={expanded}
           maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
           onShowAll={() => onExpand(chartId)}
