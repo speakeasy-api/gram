@@ -27,14 +27,14 @@ interface ServerMeta {
           destructiveHint?: boolean;
         };
       }>;
-      auth?: {
+      authOptions?: {
         type?: string;
-      };
+      }[];
     };
   };
 }
 
-export type Server = ExternalMCPServer & {
+export type PulseMCPServer = Omit<ExternalMCPServer, "meta"> & {
   meta: ServerMeta;
 };
 
@@ -56,7 +56,10 @@ export function useInfiniteListMCPCatalog(
   }, [search]);
 
   const query = useInfiniteQuery({
-    queryKey: queryKeyListMCPCatalog({ search: debouncedSearch, registryId }),
+    queryKey: queryKeyListMCPCatalog({
+      search: debouncedSearch,
+      registryId,
+    }),
     queryFn: async ({ pageParam }) => {
       return client.mcpRegistries.listCatalog({
         search: debouncedSearch || undefined,
