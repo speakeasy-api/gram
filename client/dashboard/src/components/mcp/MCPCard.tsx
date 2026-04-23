@@ -7,16 +7,25 @@ import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
-import { ArrowRight, Link2, Network, Package } from "lucide-react";
+import { useToolset } from "@/hooks/toolTypes";
+import {
+  AlertTriangleIcon,
+  ArrowRight,
+  Link2,
+  Network,
+  Package,
+} from "lucide-react";
 import { useMemo } from "react";
-import { useCatalogIconMap } from "../sources/sources-hooks";
+import { useCatalogAuthMap, useCatalogIconMap } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
   const { installPageUrl } = useMcpUrl(toolset);
   const catalogIconMap = useCatalogIconMap();
+  const serverAuthMap = useCatalogAuthMap();
   const { data: deploymentResult } = useLatestDeployment();
+  const { data: fullToolset } = useToolset(toolset.slug);
 
   // Check if this toolset uses an external MCP and get its info
   const externalMcpInfo = useMemo(() => {
@@ -36,8 +45,26 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
       ? catalogIconMap.get(matchingMcp.registryServerSpecifier)
       : undefined;
 
-    return { slug, logoUrl };
-  }, [toolset.toolUrns, catalogIconMap, deploymentResult]);
+    let authStatus: "unconfigured" | "configured" | null = null;
+    const authType = matchingMcp?.registryServerSpecifier
+      ? serverAuthMap.get(matchingMcp.registryServerSpecifier)
+      : undefined;
+
+    if (authType === "oauth") {
+      authStatus =
+        fullToolset?.externalOauthServer || fullToolset?.oauthProxyServer
+          ? "configured"
+          : "unconfigured";
+    }
+
+    return { slug, logoUrl, authStatus };
+  }, [
+    toolset.toolUrns,
+    catalogIconMap,
+    deploymentResult,
+    serverAuthMap,
+    fullToolset,
+  ]);
 
   // Pulse indicator for status
   const getStatusConfig = () => {
@@ -111,6 +138,18 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
           {toolset.name}
         </Type>
         <div className="flex items-center gap-1">
+          {externalMcpInfo?.authStatus === "unconfigured" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="bg-warning"
+              tooltip="OAuth setup required. Click to configure."
+              href={routes.mcp.details.href(toolset.slug) + "#authentication"}
+            >
+              <AlertTriangleIcon className="text-warning-foreground h-3.5 w-3.5" />
+            </Button>
+          )}
           {installPageUrl && (
             <CopyButton
               text={installPageUrl}
