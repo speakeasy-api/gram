@@ -71,6 +71,12 @@ TEMPORAL_TASK_QUEUE = "main"
 ##     "<namespace>.<account>.tmprl.cloud:7233".
 TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
 
+##############################
+## Presidio configuration   ##
+##############################
+PRESIDIO_PORT = "5050"
+PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
+
 ###################################
 ## Gram server and worker config ##
 ###################################

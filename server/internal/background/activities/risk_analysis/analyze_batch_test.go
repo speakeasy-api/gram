@@ -12,7 +12,7 @@ import (
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	activity := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil)
+	activity := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{})
 	require.NotNil(t, activity)
 
 	result, err := activity.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{

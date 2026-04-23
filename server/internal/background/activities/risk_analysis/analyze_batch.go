@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -24,20 +25,22 @@ import (
 // AnalyzeBatch scans a batch of messages against enabled detection sources
 // and writes the results back to the database.
 type AnalyzeBatch struct {
-	logger  *slog.Logger
-	tracer  trace.Tracer
-	metrics *riskMetrics
-	db      *pgxpool.Pool
-	scanner *Scanner
+	logger     *slog.Logger
+	tracer     trace.Tracer
+	metrics    *riskMetrics
+	db         *pgxpool.Pool
+	scanner    *Scanner
+	piiScanner PIIScanner
 }
 
-func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool) *AnalyzeBatch {
+func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner) *AnalyzeBatch {
 	return &AnalyzeBatch{
-		logger:  logger,
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
-		metrics: newRiskMetrics(meterProvider, logger),
-		db:      db,
-		scanner: NewScanner(),
+		logger:     logger,
+		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
+		metrics:    newRiskMetrics(meterProvider, logger),
+		db:         db,
+		scanner:    NewScanner(),
+		piiScanner: piiScanner,
 	}
 }
 
@@ -104,20 +107,36 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		contents[i] = msg.Content
 	}
 
-	// Scan all messages in parallel using a goroutine worker pool.
-	var batchFindings [][]Finding
+	// Scan all messages with gitleaks (secrets) and presidio (PII) in parallel.
+	var gitleaksFindings, presidioFindings [][]Finding
 	{
 		ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 		activity.RecordHeartbeat(ctx, 0)
-		var scanErr error
-		batchFindings, scanErr = a.scanner.ScanBatchParallel(contents)
-		if scanErr != nil {
-			scanSpan.SetStatus(codes.Error, scanErr.Error())
+
+		var gitleaksErr, presidioErr error
+		gitleaksFindings, gitleaksErr = a.scanner.ScanBatchParallel(contents)
+		if gitleaksErr != nil {
+			scanSpan.SetStatus(codes.Error, gitleaksErr.Error())
+			scanSpan.End()
+			return nil, fmt.Errorf("gitleaks scan batch: %w", gitleaksErr)
+		}
+
+		presidioFindings, presidioErr = a.piiScanner.AnalyzeBatch(ctx, contents)
+		if presidioErr != nil {
+			// PII scan failure is non-fatal; log and continue with gitleaks results only.
+			a.logger.WarnContext(ctx, "presidio scan failed, continuing with gitleaks only", attr.SlogError(presidioErr))
+			presidioFindings = make([][]Finding, len(contents))
 		}
 		scanSpan.End()
-		if scanErr != nil {
-			return nil, fmt.Errorf("scan batch: %w", scanErr)
-		}
+	}
+
+	// Merge findings from both scanners.
+	batchFindings := make([][]Finding, len(contents))
+	for i := range contents {
+		merged := make([]Finding, 0, len(gitleaksFindings[i])+len(presidioFindings[i]))
+		merged = append(merged, gitleaksFindings[i]...)
+		merged = append(merged, presidioFindings[i]...)
+		batchFindings[i] = merged
 	}
 
 	// Convert scan results to DB rows.
@@ -138,7 +157,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 
 		for _, f := range findings {
 			findingsCount++
-			a.metrics.RecordFindingConfidence(ctx, args.OrganizationID, f.RuleID, 1.0)
+			a.metrics.RecordFindingConfidence(ctx, args.OrganizationID, f.RuleID, f.Confidence)
 			resultID, err := uuid.NewV7()
 			if err != nil {
 				return nil, fmt.Errorf("generate result id: %w", err)
@@ -150,14 +169,14 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 				RiskPolicyID:      args.RiskPolicyID,
 				RiskPolicyVersion: args.PolicyVersion,
 				ChatMessageID:     msg.ID,
-				Source:            "gitleaks",
+				Source:            f.Source,
 				Found:             true,
 				RuleID:            pgtype.Text{String: f.RuleID, Valid: true},
 				Description:       pgtype.Text{String: f.Description, Valid: true},
 				Match:             pgtype.Text{String: f.Match, Valid: true},
 				StartPos:          pgtype.Int4{Int32: conv.SafeInt32(f.StartPos), Valid: true},
 				EndPos:            pgtype.Int4{Int32: conv.SafeInt32(f.EndPos), Valid: true},
-				Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
+				Confidence:        pgtype.Float8{Float64: f.Confidence, Valid: true},
 				Tags:              f.Tags,
 			})
 		}

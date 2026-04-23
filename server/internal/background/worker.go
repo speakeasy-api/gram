@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -57,6 +58,7 @@ type WorkerOptions struct {
 	MCPRegistryClient   *externalmcp.RegistryClient
 	TelemetryLogger     *telemetry.Logger
 	TriggersApp         *bgtriggers.App
+	PIIScanner          risk_analysis.PIIScanner
 }
 
 func ForDeploymentProcessing(
@@ -90,6 +92,7 @@ func ForDeploymentProcessing(
 		TelemetryLogger:     nil,
 		TriggersApp:         nil,
 		CacheAdapter:        nil,
+		PIIScanner:          nil,
 	}
 }
 
@@ -122,6 +125,7 @@ func NewTemporalWorker(
 		TelemetryLogger:     nil,
 		TriggersApp:         nil,
 		CacheAdapter:        nil,
+		PIIScanner:          nil,
 	}
 
 	for _, o := range options {
@@ -147,6 +151,7 @@ func NewTemporalWorker(
 			TelemetryLogger:     conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
 			TriggersApp:         conv.Default(o.TriggersApp, opts.TriggersApp),
 			CacheAdapter:        conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			PIIScanner:          conv.Default(o.PIIScanner, opts.PIIScanner),
 		}
 	}
 
@@ -183,6 +188,7 @@ func NewTemporalWorker(
 		opts.TelemetryLogger,
 		opts.TriggersApp,
 		opts.CacheAdapter,
+		opts.PIIScanner,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)

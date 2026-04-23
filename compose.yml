@@ -85,6 +85,23 @@ services:
         soft: 262144
         hard: 262144
 
+  gram-presidio:
+    image: mcr.microsoft.com/presidio-analyzer:latest
+    restart: unless-stopped
+    ports:
+      - "${PRESIDIO_PORT}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:3000/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   mcp-registry-db:
     profiles: [local-registry]
     image: postgres:17
