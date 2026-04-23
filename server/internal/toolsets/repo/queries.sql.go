@@ -367,8 +367,8 @@ WHERE toolset_id = ANY($1::uuid[])
 ORDER BY toolset_id, version DESC
 `
 
-func (q *Queries) GetLatestToolsetVersionsBatch(ctx context.Context, toolsetIDs []uuid.UUID) ([]ToolsetVersion, error) {
-	rows, err := q.db.Query(ctx, getLatestToolsetVersionsBatch, toolsetIDs)
+func (q *Queries) GetLatestToolsetVersionsBatch(ctx context.Context, toolsetIds []uuid.UUID) ([]ToolsetVersion, error) {
+	rows, err := q.db.Query(ctx, getLatestToolsetVersionsBatch, toolsetIds)
 	if err != nil {
 		return nil, err
 	}
