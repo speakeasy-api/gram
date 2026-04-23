@@ -30,6 +30,9 @@ catalogs:
     ai:
       specifier: 5.0.66
       version: 5.0.66
+    lucide-react:
+      specifier: ^1.8.0
+      version: 1.8.0
     typescript:
       specifier: 5.9.3
       version: 5.9.3
@@ -249,7 +252,7 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0
       lucide-react:
-        specifier: ^1.8.0
+        specifier: 'catalog:'
         version: 1.8.0(react@19.2.3)
       monaco-editor:
         specifier: ^0.52.0
@@ -509,7 +512,7 @@ importers:
         specifier: ^4.17.0 || ^5.0.0
         version: 5.1.0
       lucide-react:
-        specifier: ^1.8.0
+        specifier: 'catalog:'
         version: 1.8.0(react@19.2.3)
       radix-ui:
         specifier: ^1.4.3
