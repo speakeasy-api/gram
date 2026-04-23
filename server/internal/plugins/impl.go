@@ -988,7 +988,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 						if headerName == nil {
 							s.logger.WarnContext(ctx, "skipping user env config with no header name",
 								attr.SlogToolsetID(r.ToolsetID.String()),
-								slog.String("variable_name", ec.VariableName),
+								attr.SlogEnvVarName(ec.VariableName),
 							)
 							continue
 						}

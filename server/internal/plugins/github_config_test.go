@@ -1,7 +1,6 @@
 package plugins_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -109,5 +108,5 @@ func TestNewGitHubConfig_InvalidPEMBubbles(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Nil(t, cfg)
-	require.True(t, strings.Contains(err.Error(), "create github client"), "expected client-creation error, got: %v", err)
+	require.Contains(t, err.Error(), "create github client", "expected client-creation error, got: %v", err)
 }
