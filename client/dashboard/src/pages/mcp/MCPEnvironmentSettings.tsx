@@ -902,7 +902,6 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   const availableOAuthAuthCode =
     toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
   const externalMcpOAuthStatus = useExternalMcpOAuthStatus(toolset.slug);
-  console.log({ externalMcpOAuthStatus });
   const externalMcpRequiresOAuth =
     externalMcpOAuthStatus === "required-unconfigured";
   const isOAuthEligible =
