@@ -97,7 +97,6 @@ export const useExternalMcpOAuthStatus = (
     const authType = matchingMcp?.registryServerSpecifier
       ? serverAuthMap.get(matchingMcp.registryServerSpecifier)
       : undefined;
-    console.log(matchingMcp?.registryServerSpecifier, authType);
 
     if (authType !== "oauth") return "not-required";
 
