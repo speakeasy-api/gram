@@ -89,11 +89,11 @@ type listResponse struct {
 }
 
 type serverEntry struct {
-	Server serverJSON `json:"server"`
-	Meta   serverMeta `json:"_meta"`
+	Server serverJSON         `json:"server"`
+	Meta   pulseMCPServerMeta `json:"_meta"`
 }
 
-type serverMeta struct {
+type pulseMCPServerMeta struct {
 	Server  serverMetaServer  `json:"com.pulsemcp/server"`
 	Version serverMetaVersion `json:"com.pulsemcp/server-version"`
 }
@@ -156,8 +156,8 @@ type serverRemoteMetaAuthOptions struct {
 
 // serverDetailsEntry represents the response from the server details endpoint
 type serverDetailsEntry struct {
-	Server serverDetailsJSON `json:"server"`
-	Meta   serverMeta        `json:"_meta"`
+	Server serverDetailsJSON  `json:"server"`
+	Meta   pulseMCPServerMeta `json:"_meta"`
 }
 
 type serverDetailsJSON struct {
@@ -279,13 +279,9 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			})
 		}
 
-		serverMetaAny, err := toCacheSafeAny(s.Meta.Server)
+		meta, err := toCacheSafeAny(&s.Meta)
 		if err != nil {
-			return nil, fmt.Errorf("convert server meta: %w", err)
-		}
-		versionMetaAny, err := toCacheSafeAny(s.Meta.Version)
-		if err != nil {
-			return nil, fmt.Errorf("convert version meta: %w", err)
+			return nil, fmt.Errorf("convert meta: %w", err)
 		}
 
 		server := &types.ExternalMCPServer{
@@ -297,12 +293,9 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			OrganizationMcpCollectionRegistryID: nil,
 			Title:                               s.Server.Title,
 			IconURL:                             iconURL,
-			Meta: &types.ExternalMCPMeta{
-				ComPulsemcpServer:        serverMetaAny,
-				ComPulsemcpServerVersion: versionMetaAny,
-			},
-			Tools:   tools,
-			Remotes: remotes,
+			Meta:                                meta,
+			Tools:                               tools,
+			Remotes:                             remotes,
 		}
 
 		servers = append(servers, server)

@@ -165,7 +165,7 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 	Attribute("icon_url", String, "URL to the server's icon", func() {
 		Format(FormatURI)
 	})
-	Attribute("meta", ExternalMCPMeta, "Opaque metadata from the registry")
+	Attribute("meta", Any, "Opaque metadata from the registry")
 	Attribute("tools", ArrayOf(ExternalMCPTool), "Tools available on the server")
 	Attribute("remotes", ArrayOf(ExternalMCPRemote), "Available remote endpoints for the server")
 
@@ -184,13 +184,6 @@ var MCPRegistry = Type("MCPRegistry", func() {
 	Attribute("url", String, "URL of the registry")
 
 	Required("id", "name", "url")
-})
-
-var ExternalMCPMeta = Type("ExternalMCPMeta", func() {
-	Meta("struct:pkg:path", "types")
-
-	Attribute("com.pulsemcp/server", Any, "Opaque server metadata from the registry")
-	Attribute("com.pulsemcp/server-version", Any, "Server version from the registry")
 })
 
 var ExternalMCPTool = Type("ExternalMCPTool", func() {

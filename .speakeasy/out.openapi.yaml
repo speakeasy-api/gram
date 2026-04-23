@@ -21215,13 +21215,6 @@ components:
         - header_name
         - required
         - secret
-    ExternalMCPMeta:
-      type: object
-      properties:
-        com.pulsemcp/server:
-          description: Opaque server metadata from the registry
-        com.pulsemcp/server-version:
-          description: Server version from the registry
     ExternalMCPRemote:
       type: object
       properties:
@@ -21250,7 +21243,7 @@ components:
           description: URL to the server's icon
           format: uri
         meta:
-          $ref: '#/components/schemas/ExternalMCPMeta'
+          description: Opaque metadata from the registry
         organization_mcp_collection_registry_id:
           type: string
           description: ID of the internal collection registry this server came from

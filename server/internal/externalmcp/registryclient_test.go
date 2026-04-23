@@ -46,7 +46,7 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 						Description: "An active server",
 						Version:     "1.0.0",
 					},
-					Meta: serverMeta{
+					Meta: pulseMCPServerMeta{
 						Version: serverMetaVersion{
 							Status: "active",
 						},
@@ -58,7 +58,7 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 						Description: "A deleted server",
 						Version:     "1.0.0",
 					},
-					Meta: serverMeta{
+					Meta: pulseMCPServerMeta{
 						Version: serverMetaVersion{
 							Status: "deleted",
 						},
@@ -70,7 +70,7 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 						Description: "Another active server",
 						Version:     "2.0.0",
 					},
-					Meta: serverMeta{
+					Meta: pulseMCPServerMeta{
 						Version: serverMetaVersion{
 							Status: "active",
 						},
