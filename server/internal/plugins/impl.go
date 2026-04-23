@@ -769,13 +769,18 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeUnauthorized, nil, "publish requires a session-authenticated context")
 	}
 
-	candidate, err := s.buildPluginAPIKeyCandidate()
+	mcpCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeConsumer, "mcp")
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build plugin api key").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build plugin mcp api key").Log(ctx, s.logger)
+	}
+	hooksCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").Log(ctx, s.logger)
 	}
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
-	cfg.APIKey = candidate.fullKey
+	cfg.APIKey = mcpCandidate.fullKey
+	cfg.HooksAPIKey = hooksCandidate.fullKey
 
 	files, err := GeneratePluginPackages(pluginInfos, cfg)
 	if err != nil {
@@ -814,13 +819,13 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		}
 	}
 
-	// Persist the API key, audit log, and github connection atomically only
+	// Persist the API keys, audit logs, and github connection atomically only
 	// after the GitHub publish has succeeded. This prevents leaking valid
-	// consumer credentials when GitHub fails. If this transaction itself
-	// fails, the published repo contains a key string with no DB record —
-	// re-publish overwrites it with a fresh valid key.
-	if err := s.persistPluginAPIKey(ctx, ac, candidate, repoOwner, repoName); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api key").Log(ctx, s.logger)
+	// credentials when GitHub fails. If this transaction itself fails, the
+	// published repo contains key strings with no DB records — re-publish
+	// overwrites them with fresh valid keys.
+	if err := s.persistPluginAPIKeys(ctx, ac, []pluginAPIKeyCandidate{mcpCandidate, hooksCandidate}, repoOwner, repoName); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api keys").Log(ctx, s.logger)
 	}
 
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
@@ -836,12 +841,14 @@ type pluginAPIKeyCandidate struct {
 	keyHash   string
 	keyPrefix string
 	keyName   string
+	scope     auth.APIKeyScope
 }
 
 // buildPluginAPIKeyCandidate generates an API key in memory without writing
-// to the database. The caller must subsequently call persistPluginAPIKey to
-// commit the key.
-func (s *Service) buildPluginAPIKeyCandidate() (pluginAPIKeyCandidate, error) {
+// to the database. The caller must subsequently call persistPluginAPIKeys to
+// commit the key. `purpose` is embedded in the key name so admins can tell
+// distinct keys apart in the dashboard (e.g., "mcp" vs "hooks").
+func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose string) (pluginAPIKeyCandidate, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return pluginAPIKeyCandidate{}, fmt.Errorf("generate token: %w", err)
@@ -858,19 +865,20 @@ func (s *Service) buildPluginAPIKeyCandidate() (pluginAPIKeyCandidate, error) {
 		fullKey:   fullKey,
 		keyHash:   keyHash,
 		keyPrefix: s.keyPrefix + token[:5],
-		keyName:   fmt.Sprintf("plugins-%s-%s", time.Now().UTC().Format("20060102-150405"), token[:6]),
+		keyName:   fmt.Sprintf("plugins-%s-%s-%s", purpose, time.Now().UTC().Format("20060102-150405"), token[:6]),
+		scope:     scope,
 	}, nil
 }
 
-// persistPluginAPIKey atomically writes the API key, its audit log entry, and
-// the GitHub connection record in one transaction.
-func (s *Service) persistPluginAPIKey(
+// persistPluginAPIKeys atomically writes one or more API keys, their audit
+// log entries, and the GitHub connection record in a single transaction.
+// All-or-nothing: if any candidate fails to insert, none are persisted.
+func (s *Service) persistPluginAPIKeys(
 	ctx context.Context,
 	ac *contextvalues.AuthContext,
-	candidate pluginAPIKeyCandidate,
+	candidates []pluginAPIKeyCandidate,
 	repoOwner, repoName string,
 ) error {
-	scopes := []string{auth.APIKeyScopeConsumer.String()}
 	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
 
 	tx, err := s.db.Begin(ctx)
@@ -879,30 +887,34 @@ func (s *Service) persistPluginAPIKey(
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	createdKey, err := keysrepo.New(tx).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
-		OrganizationID:  ac.ActiveOrganizationID,
-		Name:            candidate.keyName,
-		KeyHash:         candidate.keyHash,
-		KeyPrefix:       candidate.keyPrefix,
-		Scopes:          scopes,
-		CreatedByUserID: ac.UserID,
-		ProjectID:       projectID,
-	})
-	if err != nil {
-		return fmt.Errorf("create api key: %w", err)
-	}
+	keysQ := keysrepo.New(tx)
+	for _, candidate := range candidates {
+		scopes := []string{candidate.scope.String()}
+		createdKey, err := keysQ.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+			OrganizationID:  ac.ActiveOrganizationID,
+			Name:            candidate.keyName,
+			KeyHash:         candidate.keyHash,
+			KeyPrefix:       candidate.keyPrefix,
+			Scopes:          scopes,
+			CreatedByUserID: ac.UserID,
+			ProjectID:       projectID,
+		})
+		if err != nil {
+			return fmt.Errorf("create api key %s: %w", candidate.keyName, err)
+		}
 
-	if err := audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
-		OrganizationID:   ac.ActiveOrganizationID,
-		ProjectID:        projectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName: ac.Email,
-		ActorSlug:        nil,
-		KeyURN:           urn.NewAPIKey(createdKey.ID),
-		KeyName:          candidate.keyName,
-		Scopes:           scopes,
-	}); err != nil {
-		return fmt.Errorf("audit log key creation: %w", err)
+		if err := audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
+			OrganizationID:   ac.ActiveOrganizationID,
+			ProjectID:        projectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+			ActorDisplayName: ac.Email,
+			ActorSlug:        nil,
+			KeyURN:           urn.NewAPIKey(createdKey.ID),
+			KeyName:          candidate.keyName,
+			Scopes:           scopes,
+		}); err != nil {
+			return fmt.Errorf("audit log key creation %s: %w", candidate.keyName, err)
+		}
 	}
 
 	if _, err := s.repo.WithTx(tx).UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
