@@ -2,7 +2,10 @@ package openapi
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/openapi/jsonschema/oas3"
+	"github.com/speakeasy-api/openapi/sequencedmap"
 	"github.com/stretchr/testify/require"
 )
 
@@ -548,4 +553,194 @@ paths:
 			t.Errorf("unexpected error log about server: %s", r.Message)
 		}
 	}
+}
+
+// TestConcurrentSchemaCache_ReturnsIndependentSchemas guards the invariant
+// the extraction race fix depends on: concurrent readers of the same cache
+// entry must receive independent schema trees. The old cache handed out
+// aliased pointers, so one goroutine's `.Defs = nil` would be visible to
+// others and downstream marshalling would race on the shared core model.
+func TestConcurrentSchemaCache_ReturnsIndependentSchemas(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	cache := newConcurrentSchemaCache()
+
+	defs := sequencedmap.New[string, *oas3.JSONSchema[oas3.Referenceable]]()
+	defs.Set("Widget", oas3.NewJSONSchemaFromSchema[oas3.Referenceable](&oas3.Schema{
+		Type: oas3.NewTypeFromString("object"),
+	}))
+	original := oas3.NewJSONSchemaFromSchema[oas3.Referenceable](&oas3.Schema{
+		Type: oas3.NewTypeFromString("object"),
+		Defs: defs,
+	})
+
+	const key = "test-key"
+	require.NoError(t, cache.set(ctx, key, original))
+
+	workers := max(runtime.GOMAXPROCS(0)*4, 8)
+
+	gotPtrs := make([]*oas3.JSONSchema[oas3.Referenceable], workers)
+	defsIntactOnArrival := make([]bool, workers)
+	errs := make([]error, workers)
+
+	var wg sync.WaitGroup
+	for i := range workers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			got, ok, err := cache.get(ctx, key)
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			if !ok {
+				errs[i] = fmt.Errorf("cache miss for key %q", key)
+				return
+			}
+			if got.IsLeft() && got.GetLeft().Defs != nil && got.GetLeft().Defs.Len() == 1 {
+				defsIntactOnArrival[i] = true
+			}
+			// Simulate the real mutation that tripped the old cache:
+			// extractJSONSchemaSpeakeasy bubbles defs to the caller and
+			// nulls them on the returned schema. This must not be visible
+			// to sibling workers.
+			if got.IsLeft() {
+				got.GetLeft().Defs = nil
+			}
+			gotPtrs[i] = got
+		}(i)
+	}
+	wg.Wait()
+
+	require.NoError(t, errors.Join(errs...), "cache.get should not return errors")
+
+	seen := make(map[*oas3.JSONSchema[oas3.Referenceable]]struct{}, workers)
+	for i, got := range gotPtrs {
+		require.NotNilf(t, got, "worker %d received a nil schema", i)
+		require.NotSamef(t, original, got, "worker %d received the writer's pointer — cache must not alias its stored value", i)
+		_, dup := seen[got]
+		require.Falsef(t, dup, "worker %d received a pointer already seen by another worker — cache returned aliased schemas", i)
+		seen[got] = struct{}{}
+		require.Truef(t, defsIntactOnArrival[i], "worker %d observed missing Defs on arrival — cache handed out a mutated schema", i)
+	}
+
+	// The writer's original schema must remain untouched; the cache owns
+	// its copies by value (serialized bytes), not by pointer.
+	require.True(t, original.IsLeft())
+	require.NotNil(t, original.GetLeft().Defs, "writer's original Defs should remain populated")
+	require.Equal(t, 1, original.GetLeft().Defs.Len(), "writer's original Defs should still contain Widget")
+}
+
+// TestDoSpeakeasy_ConcurrentExtraction_CacheContention drives doSpeakeasy
+// on a spec with many operations that all share the same hashable body
+// schema shape. With GOMAXPROCS workers concurrently calling into
+// extractJSONSchemaSpeakeasy, every worker after the first hits the
+// shared cache entry — this is exactly the path that raced under the old
+// cache design (shared *JSONSchema pointer + subsequent Marshal mutation).
+// Run under `go test -race`. Uses inline YAML rather than a $ref-heavy
+// fixture to isolate the cache-sharing race from unrelated resolution
+// races in the openapi library.
+func TestDoSpeakeasy_ConcurrentExtraction_CacheContention(t *testing.T) {
+	t.Parallel()
+
+	// Build a spec with many operations that all carry an identical inline
+	// body schema. hashing.Hash is content-addressed, so each operation's
+	// schema hashes to the same cache key → N-1 cache hits per run, which
+	// is where the old pointer-sharing bug blew up.
+	const numOps = 16
+	var specBuilder strings.Builder
+	specBuilder.WriteString(`openapi: 3.0.0
+info:
+  title: Cache contention
+  version: 1.0.0
+paths:
+`)
+	for i := range numOps {
+		fmt.Fprintf(&specBuilder, `  /op%d:
+    post:
+      operationId: op%d
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                count:
+                  type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  count:
+                    type: integer
+`, i, i)
+	}
+
+	handler := newCapturingHandler()
+	logger := slog.New(handler)
+	tracer := testenv.NewTracerProvider(t).Tracer("github.com/speakeasy-api/gram/server/internal/openapi")
+
+	p := &ToolExtractor{
+		logger:       logger,
+		tracer:       tracer,
+		db:           nil,
+		feature:      nil,
+		assetStorage: nil,
+	}
+
+	mockedDBTX := &MockedDBTX{
+		recordedQueryRows: [][]any{},
+		recordedExec:      [][]any{},
+	}
+	tx := repo.New(mockedDBTX)
+
+	tet := ToolExtractorTask{
+		Parser: "speakeasy",
+		DocInfo: &types.OpenAPIv3DeploymentAsset{
+			Name:    "cache-contention",
+			Slug:    "cache-contention",
+			ID:      "a",
+			AssetID: "b",
+		},
+		ProjectID:          uuid.MustParse("12345678-1234-1234-1234-123456789012"),
+		DeploymentID:       uuid.MustParse("87654321-4321-4321-4321-210987654321"),
+		DocumentID:         uuid.MustParse("11111111-2222-3333-4444-555555555555"),
+		DocURL:             nil,
+		ProjectSlug:        "c",
+		OrgSlug:            "d",
+		OnOperationSkipped: nil,
+	}
+
+	result, err := p.doSpeakeasy(t.Context(), logger, tracer, tx, []byte(specBuilder.String()), tet)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Every operation should produce exactly one tool row written to the
+	// mock DB. If a race had corrupted a schema or panicked a worker, the
+	// count would be short.
+	require.Len(t, mockedDBTX.recordedQueryRows, numOps, "one tool row per operation")
+
+	// Verify the completion log reports full extraction. Looking for the
+	// full summary string avoids a false positive match between substrings
+	// like "0 tools created" and "10 tools created".
+	expectedSummary := fmt.Sprintf("%d tools created, 0 tools skipped", numOps)
+	var foundEndLog bool
+	for _, r := range handler.getRecords() {
+		if r.Level == slog.LevelInfo && strings.Contains(r.Message, "processed OpenAPI source") {
+			foundEndLog = true
+			require.Contains(t, r.Message, expectedSummary, "expected all operations extracted, none skipped")
+		}
+	}
+	require.True(t, foundEndLog, "expected processed-OpenAPI-source log")
 }
