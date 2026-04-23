@@ -147,7 +147,7 @@ func TestGetHooksSummary_AggregatesServersUsersAndBreakdown(t *testing.T) {
 	row := breakdownMap["user1@example.com|server-a|weather"]
 	require.NotNil(t, row)
 	require.Equal(t, int64(2), row.EventCount)
-	// trace_summaries aggregates hook_has_failure = 1 when any log in the trace is a failure
+	// trace_summaries aggregates has_error = 1 when any log in the trace sets gram.hook.error
 	require.GreaterOrEqual(t, row.FailureCount, int64(0))
 
 	// Time series: at least one point

@@ -1437,8 +1437,8 @@ func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams
 		"if(tool_source = '', 'local', tool_source) as server_name",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
-		"sumIf(hook_has_success, hook_has_success = 1) as success_count",
-		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
+		"sum(if(has_result = 1 AND has_error = 0, 1, 0)) as success_count",
+		"sumIf(has_error, has_error = 1) as failure_count",
 		"failure_count / greatest(success_count + failure_count, 1) as failure_rate",
 	).
 		From("trace_summaries").
@@ -1552,8 +1552,8 @@ func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSumma
 		"if(user_email = '', 'Unknown', user_email) as user_email",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
-		"sumIf(hook_has_success, hook_has_success = 1) as success_count",
-		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
+		"sum(if(has_result = 1 AND has_error = 0, 1, 0)) as success_count",
+		"sumIf(has_error, has_error = 1) as failure_count",
 		"failure_count / greatest(success_count + failure_count, 1) as failure_rate",
 	).
 		From("trace_summaries").
@@ -1688,7 +1688,7 @@ func (q *Queries) GetHooksBreakdown(ctx context.Context, arg GetHooksBreakdownPa
 		"hook_source",
 		"tool_name",
 		"count(*) as event_count",
-		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
+		"sumIf(has_error, has_error = 1) as failure_count",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -1758,7 +1758,7 @@ func (q *Queries) GetHooksTimeSeries(ctx context.Context, arg GetHooksTimeSeries
 		"if(tool_source = '', 'local', tool_source) as server_name",
 		"if(user_email = '', 'Unknown', user_email) as user_email",
 		"count(*) as event_count",
-		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
+		"sumIf(has_error, has_error = 1) as failure_count",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -1828,7 +1828,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		"user_email",
 		"hook_source",
 		"skill_name",
-		"multiIf(max(hook_has_failure) = 1, 'failure', max(hook_has_success) = 1, 'success', 'pending') as hook_status",
+		"multiIf(max(has_error) = 1, 'failure', max(has_result) = 1, 'success', 'pending') as hook_status",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).

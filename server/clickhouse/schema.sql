@@ -109,10 +109,14 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
 
     http_status_code AggregateFunction(anyIf, Nullable(Int32), UInt8),
 
-    -- Hook status tracking (0 = false, 1 = true)
-    -- Using max() ensures once we see a 1, it stays 1 across merges
-    hook_has_success SimpleAggregateFunction(max, UInt8),
-    hook_has_failure SimpleAggregateFunction(max, UInt8)
+    -- Trace status signals (0 = false, 1 = true). Using max() ensures once we
+    -- see a 1, it stays 1 across merges. Status is derived at query time as:
+    -- has_error → failure, has_result → success, otherwise pending. This keeps
+    -- the MV agnostic to specific hook event names: any future integration can
+    -- signal failure by setting the gram.hook.error attribute and success by
+    -- setting gen_ai.tool.call.result.
+    has_result SimpleAggregateFunction(max, UInt8),
+    has_error SimpleAggregateFunction(max, UInt8)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
@@ -138,8 +142,8 @@ SELECT
         toInt32OrNull(toString(attributes.http.response.status_code)),
         toString(attributes.http.response.status_code) != ''
     ) AS http_status_code,
-    max(if(toString(attributes.gram.hook.event) = 'PostToolUse', 1, 0)) AS hook_has_success,
-    max(if(toString(attributes.gram.hook.event) = 'PostToolUseFailure', 1, 0)) AS hook_has_failure
+    max(if(toString(attributes.gen_ai.tool.call.result) != '', 1, 0)) AS has_result,
+    max(if(toString(attributes.gram.hook.error) != '', 1, 0)) AS has_error
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
