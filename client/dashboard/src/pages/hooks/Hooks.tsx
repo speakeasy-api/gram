@@ -1970,6 +1970,12 @@ function MultiLineChart({
         ...SHARED_TOOLTIP,
         callbacks: {
           title: (items) => tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
+          label: (item) => {
+            if ((item.parsed.y ?? 0) === 0) return "";
+            return item.formattedValue
+              ? `${item.dataset.label}: ${item.formattedValue}`
+              : "";
+          },
           ...(tooltipAfterBody
             ? {
                 afterBody: (items) =>
