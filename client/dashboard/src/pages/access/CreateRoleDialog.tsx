@@ -99,7 +99,7 @@ function inferCustomTab(
   }
 
   // All tabs now use serverSlug:toolName, so we can't distinguish between
-  // "select", "http-method", and "collection" tabs from IDs alone.
+  // "select" and "collection" tabs from IDs alone.
   // Default to "select" — the user's tool selections are preserved correctly.
   return { tab: "select" };
 }

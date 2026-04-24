@@ -58,6 +58,7 @@
     "@tailwindcss/vite": "^4.1.17",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.23",
     "@tremor/react": "^3.18.7",
     "@xyflow/react": "^12.8.6",
     "ai": "catalog:",

@@ -12,8 +12,8 @@ export type AnnotationHint =
   | "idempotentHint"
   | "openWorldHint";
 
-/** The four tool-selection tabs in custom mode. */
-export type CustomTab = "select" | "auto-groups" | "http-method" | "collection";
+/** The three tool-selection tabs in custom mode. */
+export type CustomTab = "select" | "auto-groups" | "collection";
 
 /** A single grant within a role: a scope + optional resource allowlist. */
 export interface RoleGrant {
