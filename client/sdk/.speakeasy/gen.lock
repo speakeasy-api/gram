@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 149a4fb5d078c0411cc87d39cfe5ea17
+  docChecksum: 709cb7d1391cb50d74ff97fa889ec88d
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
-  releaseVersion: 0.33.2
-  configChecksum: e9c491bbc52142c7219b33a2b4bfdad6
+  releaseVersion: 0.33.5
+  configChecksum: 6a59128f56d836b845e7d286961c3758
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -265,7 +265,7 @@ trackedFiles:
   docs/models/components/gethookssummarypayload.md:
     last_write_checksum: sha1:304201edceca60e0da7f377e563c412674ca311e
   docs/models/components/gethookssummaryresult.md:
-    last_write_checksum: sha1:cebb15a07461d7d50a9160d203284acf9422c70e
+    last_write_checksum: sha1:1c2a1b1f2b7e40ededcb85dbf67f0cb156b6364d
   docs/models/components/getinstanceresult.md:
     last_write_checksum: sha1:bb61b209573a535441fd5265f48ee2ebeb156a0f
   docs/models/components/getintegrationresult.md:
@@ -664,8 +664,12 @@ trackedFiles:
     last_write_checksum: sha1:f70322cc0be8a3119e961c0a6c46035cbedd81fe
   docs/models/components/severitytext.md:
     last_write_checksum: sha1:15969d4a62e02ba012c6724258259371a0a81bbb
+  docs/models/components/skillbreakdownrow.md:
+    last_write_checksum: sha1:4a37e350016d376a6b095c115bb5c2a36c000ade
   docs/models/components/skillsummary.md:
     last_write_checksum: sha1:d2ce76fa76603a90e6af20e0940d9754c7cacf56
+  docs/models/components/skilltimeseriespoint.md:
+    last_write_checksum: sha1:198bda00ec5c6014e843db767ac84ff2bdccffde
   docs/models/components/slackappresult.md:
     last_write_checksum: sha1:62f9ec605a9bb2193261e13b1790eb9cf957c7c1
   docs/models/components/slug.md:
@@ -2070,11 +2074,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:05c473dd6f8fbfb43c0697af156d91e16ecc94e3
+    last_write_checksum: sha1:7df9576a756c2daad2f1bd42d9ce5c8c71f1a9ba
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:98737534006484873c5c0ac8e4b273d9200f0061
+    last_write_checksum: sha1:8bcf4bd7f109d53dd02b36b7ba8f53dfc3c9eb23
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2680,7 +2684,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:61a4632a4c278e9fa7d54adfc035c9502bdc8169
+    last_write_checksum: sha1:f53ae850c40bbdc9c6cfadb5c7434264491af976
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -3023,7 +3027,7 @@ trackedFiles:
   src/models/components/gethookssummarypayload.ts:
     last_write_checksum: sha1:69b331b52b5958d1a4276ae6c94d25631f4172c5
   src/models/components/gethookssummaryresult.ts:
-    last_write_checksum: sha1:29f768a978021f1fc5f34d8d4b3df0604d236656
+    last_write_checksum: sha1:8141b4d6f3b3a95bfdceb9fb6baf3e96459b4bf4
   src/models/components/getinstanceresult.ts:
     id: 1d161207cec2
     last_write_checksum: sha1:79261e8e88a9dd0f49e915c808b6c17ebd3e9c1d
@@ -3086,7 +3090,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:dd924c683f62f2be3cfb47d456ac0295cf1da3f9
+    last_write_checksum: sha1:4947b9a1f00602966561877db50ad55cc8a3c451
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3518,8 +3522,12 @@ trackedFiles:
     id: fdce1112a599
     last_write_checksum: sha1:d263fbc867d12c688e6cf05a8a69083ca43aece1
     pristine_git_object: df1eaccb023d9e93f54b641c8791f902963df99a
+  src/models/components/skillbreakdownrow.ts:
+    last_write_checksum: sha1:553768c909bc6d4953baff1dfbf71111768c1bb5
   src/models/components/skillsummary.ts:
     last_write_checksum: sha1:b067ed8898c071727485208bf96c39ba766b28a6
+  src/models/components/skilltimeseriespoint.ts:
+    last_write_checksum: sha1:59dc9151d38f9ce52fc1b4e7876d81fb29961dce
   src/models/components/slackappresult.ts:
     last_write_checksum: sha1:40a7531338243da78e0291b20196bc186fbdf282
   src/models/components/sourceenvironmentlink.ts:
@@ -6746,7 +6754,7 @@ examples:
         application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z", "types_to_include": ["mcp", "skill"]}
       responses:
         "200":
-          application/json: {"breakdown": [], "servers": [], "skills": [], "time_series": [], "total_events": 748850, "total_sessions": 583521, "users": []}
+          application/json: {"breakdown": [], "servers": [], "skill_breakdown": [], "skill_time_series": [], "skills": [], "time_series": [], "total_events": 748850, "total_sessions": 583521, "users": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
