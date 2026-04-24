@@ -17,9 +17,26 @@ import { useSearchParams } from "react-router";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useRiskListPolicies } from "@gram/client/react-query/index.js";
 import { useSdkClient } from "@/contexts/Sdk";
-import { RULE_CATEGORY_META } from "./policy-data";
+import {
+  DETECTION_RULES,
+  RULE_CATEGORY_META,
+  type RuleCategory,
+} from "./policy-data";
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
+
+// Build a ruleId -> category lookup from the detection rules registry.
+const RULE_ID_TO_CATEGORY = new Map<string, RuleCategory>();
+for (const [category, rules] of Object.entries(DETECTION_RULES)) {
+  for (const rule of rules) {
+    RULE_ID_TO_CATEGORY.set(rule.id, category as RuleCategory);
+  }
+}
+
+function getCategoryForRule(ruleId: string | undefined): RuleCategory {
+  if (!ruleId) return "secrets";
+  return RULE_ID_TO_CATEGORY.get(ruleId) ?? "secrets";
+}
 
 export default function SecurityOverview() {
   return (
@@ -251,7 +268,11 @@ function SecurityOverviewContent() {
                         >
                           <TableCell>
                             <Badge variant="secondary">
-                              {RULE_CATEGORY_META.secrets.label}
+                              {
+                                RULE_CATEGORY_META[
+                                  getCategoryForRule(result.ruleId)
+                                ].label
+                              }
                             </Badge>
                           </TableCell>
                           <TableCell className="font-mono text-xs">
