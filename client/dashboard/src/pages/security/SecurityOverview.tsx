@@ -70,8 +70,12 @@ function SecurityOverviewContent() {
 
   const resultsQuery = useInfiniteQuery({
     queryKey: ["risk", "results", "list"],
-    queryFn: async ({ pageParam }) => {
-      return client.risk.results.list({ cursor: pageParam });
+    queryFn: async ({ pageParam, queryKey: _qk, pageParams }) => {
+      const isFirstPage = pageParams.length <= 1;
+      return client.risk.results.list({
+        cursor: pageParam,
+        limit: isFirstPage ? 10 : 100,
+      });
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
@@ -79,8 +83,12 @@ function SecurityOverviewContent() {
 
   const chatSummaryQuery = useInfiniteQuery({
     queryKey: ["risk", "results", "byChat"],
-    queryFn: async ({ pageParam }) => {
-      return client.risk.results.byChat({ cursor: pageParam });
+    queryFn: async ({ pageParam, queryKey: _qk, pageParams }) => {
+      const isFirstPage = pageParams.length <= 1;
+      return client.risk.results.byChat({
+        cursor: pageParam,
+        limit: isFirstPage ? 10 : 100,
+      });
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,

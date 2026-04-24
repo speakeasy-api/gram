@@ -111,6 +111,7 @@ export function setRiskListResultsData(
       policyId?: string | undefined;
       chatId?: string | undefined;
       cursor?: string | undefined;
+      limit?: number | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -130,6 +131,7 @@ export function invalidateRiskListResults(
       policyId?: string | undefined;
       chatId?: string | undefined;
       cursor?: string | undefined;
+      limit?: number | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;

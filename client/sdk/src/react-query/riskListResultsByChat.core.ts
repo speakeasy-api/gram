@@ -48,6 +48,7 @@ export function buildRiskListResultsByChatQuery(
   return {
     queryKey: queryKeyRiskListResultsByChat({
       cursor: request?.cursor,
+      limit: request?.limit,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
@@ -79,6 +80,7 @@ export function buildRiskListResultsByChatQuery(
 export function queryKeyRiskListResultsByChat(
   parameters: {
     cursor?: string | undefined;
+    limit?: number | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

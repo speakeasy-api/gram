@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	risk "github.com/speakeasy-api/gram/server/gen/risk"
 	goa "goa.design/goa/v3/pkg"
@@ -233,7 +234,7 @@ func BuildDeleteRiskPolicyPayload(riskDeleteRiskPolicyID string, riskDeleteRiskP
 
 // BuildListRiskResultsPayload builds the payload for the risk listRiskResults
 // endpoint from CLI flags.
-func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCursor string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
+func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -261,6 +262,27 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 			cursor = &riskListRiskResultsCursor
 		}
 	}
+	var limit *int
+	{
+		if riskListRiskResultsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(riskListRiskResultsLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var apikeyToken *string
 	{
 		if riskListRiskResultsApikeyToken != "" {
@@ -283,6 +305,7 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	v.PolicyID = policyID
 	v.ChatID = chatID
 	v.Cursor = cursor
+	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -292,11 +315,33 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 
 // BuildListRiskResultsByChatPayload builds the payload for the risk
 // listRiskResultsByChat endpoint from CLI flags.
-func BuildListRiskResultsByChatPayload(riskListRiskResultsByChatCursor string, riskListRiskResultsByChatApikeyToken string, riskListRiskResultsByChatSessionToken string, riskListRiskResultsByChatProjectSlugInput string) (*risk.ListRiskResultsByChatPayload, error) {
+func BuildListRiskResultsByChatPayload(riskListRiskResultsByChatCursor string, riskListRiskResultsByChatLimit string, riskListRiskResultsByChatApikeyToken string, riskListRiskResultsByChatSessionToken string, riskListRiskResultsByChatProjectSlugInput string) (*risk.ListRiskResultsByChatPayload, error) {
+	var err error
 	var cursor *string
 	{
 		if riskListRiskResultsByChatCursor != "" {
 			cursor = &riskListRiskResultsByChatCursor
+		}
+	}
+	var limit *int
+	{
+		if riskListRiskResultsByChatLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(riskListRiskResultsByChatLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var apikeyToken *string
@@ -319,6 +364,7 @@ func BuildListRiskResultsByChatPayload(riskListRiskResultsByChatCursor string, r
 	}
 	v := &risk.ListRiskResultsByChatPayload{}
 	v.Cursor = cursor
+	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -3442,11 +3442,12 @@ func NewDeleteRiskPolicyPayload(id string, apikeyToken *string, sessionToken *st
 
 // NewListRiskResultsPayload builds a risk service listRiskResults endpoint
 // payload.
-func NewListRiskResultsPayload(policyID *string, chatID *string, cursor *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
+func NewListRiskResultsPayload(policyID *string, chatID *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
 	v := &risk.ListRiskResultsPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
 	v.Cursor = cursor
+	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3456,9 +3457,10 @@ func NewListRiskResultsPayload(policyID *string, chatID *string, cursor *string,
 
 // NewListRiskResultsByChatPayload builds a risk service listRiskResultsByChat
 // endpoint payload.
-func NewListRiskResultsByChatPayload(cursor *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsByChatPayload {
+func NewListRiskResultsByChatPayload(cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsByChatPayload {
 	v := &risk.ListRiskResultsByChatPayload{}
 	v.Cursor = cursor
+	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

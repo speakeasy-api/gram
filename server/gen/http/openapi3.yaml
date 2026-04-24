@@ -13126,6 +13126,16 @@ paths:
                     description: Cursor to fetch the next page of results.
                     type: string
                 - allowEmptyValue: true
+                  description: Maximum number of results to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of results to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
@@ -13247,6 +13257,16 @@ paths:
                   schema:
                     description: Cursor to fetch the next page of results.
                     type: string
+                - allowEmptyValue: true
+                  description: Maximum number of results to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of results to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
                 - allowEmptyValue: true
                   description: API Key header
                   in: header

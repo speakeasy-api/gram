@@ -171,6 +171,10 @@ var _ = Service("risk", func() {
 				Format(FormatUUID)
 			})
 			Attribute("cursor", String, "Cursor to fetch the next page of results.")
+			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
+				Minimum(1)
+				Maximum(200)
+			})
 		})
 
 		Result(ListRiskResultsResult)
@@ -183,6 +187,7 @@ var _ = Service("risk", func() {
 			Param("policy_id")
 			Param("chat_id")
 			Param("cursor")
+			Param("limit")
 			Response(StatusOK)
 		})
 
@@ -200,6 +205,10 @@ var _ = Service("risk", func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			Attribute("cursor", String, "Cursor to fetch the next page of results.")
+			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
+				Minimum(1)
+				Maximum(200)
+			})
 		})
 
 		Result(ListRiskResultsByChatResult)
@@ -210,6 +219,7 @@ var _ = Service("risk", func() {
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("cursor")
+			Param("limit")
 			Response(StatusOK)
 		})
 

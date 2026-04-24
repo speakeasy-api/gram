@@ -61,7 +61,7 @@ import {
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 
-/** Presidio-backed categories (not "Coming Soon") */
+/** Presidio-backed categories */
 const PRESIDIO_CATEGORIES: RuleCategory[] = [
   "financial",
   "pii",

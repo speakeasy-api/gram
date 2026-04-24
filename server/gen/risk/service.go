@@ -130,6 +130,8 @@ type ListRiskResultsByChatPayload struct {
 	ProjectSlugInput *string
 	// Cursor to fetch the next page of results.
 	Cursor *string
+	// Maximum number of results to return per page.
+	Limit *int
 }
 
 // ListRiskResultsByChatResult is the result type of the risk service
@@ -153,6 +155,8 @@ type ListRiskResultsPayload struct {
 	ChatID *string
 	// Cursor to fetch the next page of results.
 	Cursor *string
+	// Maximum number of results to return per page.
+	Limit *int
 }
 
 // ListRiskResultsResult is the result type of the risk service listRiskResults

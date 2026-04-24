@@ -405,7 +405,17 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 	return nil
 }
 
-const riskPageSize = 50
+const riskDefaultPageSize = 50
+
+func resolvePageSize(limit *int) int {
+	if limit == nil || *limit <= 0 {
+		return riskDefaultPageSize
+	}
+	if *limit > 200 {
+		return 200
+	}
+	return *limit
+}
 
 func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResultsPayload) (*gen.ListRiskResultsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -422,18 +432,20 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor").Log(ctx, s.logger)
 	}
 
+	pageSize := resolvePageSize(payload.Limit)
+
 	totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
 	if err != nil {
 		totalCount = 0
 	}
 
 	if payload.ChatID != nil && *payload.ChatID != "" {
-		return s.listResultsByChat(ctx, *authCtx.ProjectID, *payload.ChatID, cursor, totalCount)
+		return s.listResultsByChat(ctx, *authCtx.ProjectID, *payload.ChatID, cursor, pageSize, totalCount)
 	}
 	if payload.PolicyID != nil && *payload.PolicyID != "" {
-		return s.listResultsByPolicy(ctx, *authCtx.ProjectID, *payload.PolicyID, cursor, totalCount)
+		return s.listResultsByPolicy(ctx, *authCtx.ProjectID, *payload.PolicyID, cursor, pageSize, totalCount)
 	}
-	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, totalCount)
+	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount)
 }
 
 func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {
@@ -451,9 +463,12 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor").Log(ctx, s.logger)
 	}
 
+	pageSize := resolvePageSize(payload.Limit)
+
 	rows, err := s.repo.ListRiskResultsGroupedByChat(ctx, repo.ListRiskResultsGroupedByChatParams{
 		ProjectID: *authCtx.ProjectID,
 		Cursor:    cursor,
+		PageLimit: int32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").Log(ctx, s.logger)
@@ -471,24 +486,24 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 	}
 
 	var nextCursor *string
-	if len(chats) >= riskPageSize+1 {
-		nextCursor = &chats[riskPageSize].ChatID
-		chats = chats[:riskPageSize]
+	if len(chats) > pageSize {
+		nextCursor = &chats[pageSize].ChatID
+		chats = chats[:pageSize]
 	}
 
 	return &gen.ListRiskResultsByChatResult{Chats: chats, NextCursor: nextCursor}, nil
 }
 
-func (s *Service) paginateResults(results []*types.RiskResult, totalCount int64) *gen.ListRiskResultsResult {
+func (s *Service) paginateResults(results []*types.RiskResult, pageSize int, totalCount int64) *gen.ListRiskResultsResult {
 	var nextCursor *string
-	if len(results) >= riskPageSize+1 {
-		nextCursor = &results[riskPageSize].ID
-		results = results[:riskPageSize]
+	if len(results) > pageSize {
+		nextCursor = &results[pageSize].ID
+		results = results[:pageSize]
 	}
 	return &gen.ListRiskResultsResult{Results: results, TotalCount: totalCount, NextCursor: nextCursor}
 }
 
-func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, rawChatID string, cursor uuid.NullUUID, totalCount int64) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, rawChatID string, cursor uuid.NullUUID, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
 	chatID, err := uuid.Parse(rawChatID)
 	if err != nil {
 		return nil, oops.C(oops.CodeInvalid)
@@ -497,6 +512,7 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 		ChatID:    chatID,
 		ProjectID: projectID,
 		Cursor:    cursor,
+		PageLimit: int32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").Log(ctx, s.logger)
@@ -506,10 +522,10 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 		cid := row.ChatID.String()
 		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 	}
-	return s.paginateResults(results, totalCount), nil
+	return s.paginateResults(results, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, rawPolicyID string, cursor uuid.NullUUID, totalCount int64) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, rawPolicyID string, cursor uuid.NullUUID, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
 	policyID, err := uuid.Parse(rawPolicyID)
 	if err != nil {
 		return nil, oops.C(oops.CodeInvalid)
@@ -518,6 +534,7 @@ func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, 
 		ProjectID:    projectID,
 		RiskPolicyID: policyID,
 		Cursor:       cursor,
+		PageLimit:    int32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by policy").Log(ctx, s.logger)
@@ -527,13 +544,14 @@ func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, 
 		chatID := row.ChatID.String()
 		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 	}
-	return s.paginateResults(results, totalCount), nil
+	return s.paginateResults(results, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor uuid.NullUUID, totalCount int64) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor uuid.NullUUID, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
 	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
 		ProjectID: projectID,
 		Cursor:    cursor,
+		PageLimit: int32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results").Log(ctx, s.logger)
@@ -543,7 +561,7 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 		chatID := row.ChatID.String()
 		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 	}
-	return s.paginateResults(results, totalCount), nil
+	return s.paginateResults(results, pageSize, totalCount), nil
 }
 
 func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskPolicyStatusPayload) (*types.RiskPolicyStatus, error) {

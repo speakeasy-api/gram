@@ -176,7 +176,7 @@ WHERE rr.project_id = @project_id
   AND rr.found IS TRUE
   AND (sqlc.narg(cursor)::uuid IS NULL OR rr.id <= sqlc.narg(cursor)::uuid)
 ORDER BY rr.id DESC
-LIMIT 51;
+LIMIT @page_limit;
 
 -- name: ListRiskResultsByProjectAndPolicy :many
 SELECT rr.*, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
@@ -189,7 +189,7 @@ WHERE rr.project_id = @project_id
   AND rr.found IS TRUE
   AND (sqlc.narg(cursor)::uuid IS NULL OR rr.id <= sqlc.narg(cursor)::uuid)
 ORDER BY rr.id DESC
-LIMIT 51;
+LIMIT @page_limit;
 
 -- name: ListRiskResultsByChatFound :many
 SELECT rr.*, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
@@ -202,7 +202,7 @@ WHERE cm.chat_id = @chat_id
   AND rr.found IS TRUE
   AND (sqlc.narg(cursor)::uuid IS NULL OR rr.id <= sqlc.narg(cursor)::uuid)
 ORDER BY rr.id DESC
-LIMIT 51;
+LIMIT @page_limit;
 
 -- name: ListRiskResultsGroupedByChat :many
 SELECT
@@ -220,4 +220,4 @@ WHERE rr.project_id = @project_id
   AND (sqlc.narg(cursor)::uuid IS NULL OR cm.chat_id <= sqlc.narg(cursor)::uuid)
 GROUP BY cm.chat_id, c.title, c.external_user_id
 ORDER BY cm.chat_id DESC
-LIMIT 51;
+LIMIT @page_limit;
