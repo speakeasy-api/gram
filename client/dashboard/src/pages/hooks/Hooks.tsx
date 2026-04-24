@@ -33,7 +33,7 @@ import type {
   GetHooksSummaryResult,
   HooksBreakdownRow,
   HooksTimeSeriesPoint,
-  SkillSummary,
+  SkillBreakdownRow,
   SkillTimeSeriesPoint,
   HookTraceSummary as HookTrace,
   LogFilter,
@@ -1462,7 +1462,7 @@ function StackedBarChart({
   labels: string[];
   datasets: StackedBarDataset[];
   handleFilter?: (datasetLabel: string, rowLabel: string) => void;
-  tooltipLabelFn?: (item: TooltipItem<"bar">) => string;
+  tooltipLabelFn?: (item: TooltipItem<"bar">) => string | string[] | undefined;
   expanded?: boolean;
   maxRows?: number;
   onShowAll?: () => void;
@@ -2147,42 +2147,60 @@ function SkillUsageTimeSeries({
 
 function UsersPerSkillChart({
   title,
-  skills,
+  skillBreakdown,
   expandedChart,
   onExpand,
 }: {
   title: string;
-  skills: SkillSummary[];
+  skillBreakdown: SkillBreakdownRow[];
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
 }) {
   const chartId = "users-per-skill";
   const expanded = expandedChart === chartId;
-  const { labels, datasets, uniqueUsersMap } = useMemo(() => {
-    const sorted = [...skills].sort((a, b) => b.useCount - a.useCount);
-    const color = USER_SOURCE_COLORS[0]!;
-    return {
-      labels: sorted.map((s) => s.skillName),
-      datasets: [
-        {
-          label: "Uses",
-          barThickness: BAR_THICKNESS.collapsed,
-          data: sorted.map((s) => s.useCount),
-          backgroundColor: color,
-          hoverBackgroundColor: color + "cc",
-        },
-      ] satisfies StackedBarDataset[],
-      uniqueUsersMap: new Map(sorted.map((s) => [s.skillName, s.uniqueUsers])),
-    };
-  }, [skills]);
-  const tooltipLabelFn = useCallback(
-    (item: TooltipItem<"bar">) => {
-      const skillName = labels[item.dataIndex] ?? "";
-      const unique = uniqueUsersMap.get(skillName) ?? 0;
-      return ` Uses: ${item.parsed.x}  |  Unique users: ${unique}`;
-    },
-    [labels, uniqueUsersMap],
-  );
+  const { labels, datasets } = useMemo(() => {
+    const skillMap = new Map<string, Map<string, number>>();
+    const userSet = new Set<string>();
+    for (const row of skillBreakdown) {
+      const user = row.userEmail || "unknown";
+      userSet.add(user);
+      const inner = skillMap.get(row.skillName) ?? new Map<string, number>();
+      inner.set(user, (inner.get(user) ?? 0) + row.useCount);
+      skillMap.set(row.skillName, inner);
+    }
+
+    const sortedSkills = Array.from(skillMap.entries())
+      .map(([skill, userCounts]) => ({
+        skill,
+        total: Array.from(userCounts.values()).reduce((a, b) => a + b, 0),
+        userCounts,
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const userTotals = new Map<string, number>();
+    for (const user of userSet) {
+      userTotals.set(
+        user,
+        sortedSkills.reduce((s, sk) => s + (sk.userCounts.get(user) ?? 0), 0),
+      );
+    }
+    const sortedUsers = Array.from(userSet).sort(
+      (a, b) => (userTotals.get(b) ?? 0) - (userTotals.get(a) ?? 0),
+    );
+
+    const chartLabels = sortedSkills.map((s) => s.skill);
+    const chartDatasets = sortedUsers.map((user, i) => ({
+      label: user,
+      barThickness: BAR_THICKNESS.collapsed,
+      data: sortedSkills.map((s) => s.userCounts.get(user) ?? 0),
+      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
+      hoverBackgroundColor:
+        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "cc",
+    }));
+
+    return { labels: chartLabels, datasets: chartDatasets };
+  }, [skillBreakdown]);
+
   return (
     <ChartCard
       title={title}
@@ -2197,7 +2215,6 @@ function UsersPerSkillChart({
         <StackedBarChart
           labels={labels}
           datasets={datasets}
-          tooltipLabelFn={tooltipLabelFn}
           expanded={expanded}
           maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
           onShowAll={() => onExpand(chartId)}
@@ -2350,7 +2367,7 @@ function HooksAnalytics({
   const breakdown = summaryData?.breakdown ?? [];
   const timeSeries = summaryData?.timeSeries ?? [];
   const skillTimeSeries = summaryData?.skillTimeSeries ?? [];
-  const skills = summaryData?.skills ?? [];
+  const skillBreakdown = summaryData?.skillBreakdown ?? [];
 
   const kpis = useMemo(() => {
     if (!summaryData) return null;
@@ -2536,7 +2553,7 @@ function HooksAnalytics({
 
         <UsersPerSkillChart
           title="Users per Skill"
-          skills={skills}
+          skillBreakdown={skillBreakdown}
           expandedChart={expandedChart}
           onExpand={setExpandedChart}
         />
