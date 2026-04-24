@@ -1791,7 +1791,7 @@ ON principal_grants (organization_id, principal_urn, scope, selectors)
 WHERE selectors IS NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_unrestricted_key
-ON principal_grants (organization_id, principal_urn, scope)
+ON principal_grants (organization_id, principal_urn, scope, resource)
 WHERE selectors IS NULL;
 
 CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
