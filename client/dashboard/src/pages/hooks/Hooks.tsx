@@ -1971,7 +1971,7 @@ function MultiLineChart({
         callbacks: {
           title: (items) => tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
           label: (item) => {
-            if ((item.parsed.y ?? 0) === 0) return "";
+            if ((item.parsed.y ?? 0) === 0) return undefined;
             return item.formattedValue
               ? `${item.dataset.label}: ${item.formattedValue}`
               : "";
