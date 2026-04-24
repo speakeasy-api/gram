@@ -48,7 +48,7 @@ type GenerateConfig struct {
 }
 
 // GeneratePluginPackages produces the complete file map for a plugin distribution
-// repository containing both Claude Code and Cursor plugins. Used for GitHub push.
+// repository containing Claude Code, Cursor, and Codex plugins. Used for GitHub push.
 func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 
