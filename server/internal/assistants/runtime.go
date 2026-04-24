@@ -1151,13 +1151,12 @@ func (m *RuntimeManager) runHostCommandStdin(ctx context.Context, stdinBody, nam
 }
 
 func (m *RuntimeManager) disableTapRouting(ctx context.Context, tapName string) error {
-	script := fmt.Sprintf(`
-set -euo pipefail
+	script := fmt.Sprintf(`set -euo pipefail
 iptables -t nat -D POSTROUTING -s %[2]s ! -o %[1]s -j MASQUERADE 2>/dev/null || true
 iptables -D FORWARD -i %[1]s -j ACCEPT 2>/dev/null || true
 iptables -D FORWARD -o %[1]s -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
 `, shellEscape(tapName), shellEscape(m.config.NetworkBaseCIDR))
-	return m.runHostCommand(ctx, "bash", "-lc", script)
+	return m.runHostCommandStdin(ctx, script, "bash", "-s")
 }
 
 func slotAddresses(rawPrefix string, slot int) (netip.Addr, netip.Addr, error) {
