@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -45,12 +44,18 @@ type presidioResult struct {
 	RecognizerKey string  `json:"recognition_metadata,omitempty"`
 }
 
+// presidioMaxWorkers is the default concurrency limit for Presidio HTTP
+// requests. Presidio scanning is network-bound, not CPU-bound, so we use a
+// higher limit than runtime.NumCPU().
+const presidioMaxWorkers = 100
+
 // PresidioClient calls the Presidio Analyzer HTTP API.
 type PresidioClient struct {
 	baseURL         string
 	httpClient      *http.Client //nolint:forbidigo // Injected via guardian.Policy in the wiring layer.
 	tracer          trace.Tracer
 	logger          *slog.Logger
+	maxWorkers      int
 	requestDuration metric.Float64Histogram
 	requestFailures metric.Int64Counter
 }
@@ -78,9 +83,18 @@ func NewPresidioClient(baseURL string, httpClient *http.Client, tracerProvider t
 		httpClient:      httpClient,
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
 		logger:          logger,
+		maxWorkers:      presidioMaxWorkers,
 		requestDuration: requestDuration,
 		requestFailures: requestFailures,
 	}
+}
+
+// NewPresidioClientWithWorkers is like NewPresidioClient but allows overriding
+// the concurrency limit. Used for benchmarking.
+func NewPresidioClientWithWorkers(baseURL string, httpClient *http.Client, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger, maxWorkers int) *PresidioClient { //nolint:forbidigo // Accepts guardian-provided client.
+	c := NewPresidioClient(baseURL, httpClient, tracerProvider, meterProvider, logger)
+	c.maxWorkers = maxWorkers
+	return c
 }
 
 func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, onProgress func()) (_ [][]Finding, err error) {
@@ -100,8 +114,11 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	}()
 
 	results := make([][]Finding, n)
-	workers := min(runtime.NumCPU(), n)
+	workers := min(p.maxWorkers, n)
 
+	// Pre-fill a buffered channel with indices so workers can pull the next
+	// item without coordination. Closing it causes workers to exit when the
+	// channel drains.
 	ch := make(chan int, n)
 	for i := range n {
 		ch <- i
@@ -114,6 +131,8 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 		firstErr error
 	)
 
+	// Fan out workers that each drain items from ch until it's empty or an
+	// error is encountered.
 	for range workers {
 		wg.Go(func() {
 			for idx := range ch {
