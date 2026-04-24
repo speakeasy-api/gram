@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -142,7 +143,7 @@ VALUES ($1, 'Project', $2, 'org-test')
 		logger: logger,
 		auth:   nil,
 		authz:  authzEngine,
-		core:   NewServiceCore(logger, conn, testRuntimeBackend{backend: runtimeBackendLocal}, nil, nil, nil, nil),
+		core:   NewServiceCore(logger, conn, testRuntimeBackend{backend: runtimeBackendLocal, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger)),
 	}
 
 	sessionID := "session-test"
