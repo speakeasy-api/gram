@@ -167,13 +167,21 @@ func FromPGBool[T ~bool](t pgtype.Bool) *T {
 	return &val
 }
 
-// FromPGInt4 converts a pgtype.Int4 to *int. If not valid, returns nil.
-func FromPGInt4(t pgtype.Int4) *int {
+// FromPGInt4 converts a pgtype.Int4 to *int32. If not valid, returns nil.
+func FromPGInt4(t pgtype.Int4) *int32 {
 	if !t.Valid {
 		return nil
 	}
-	v := int(t.Int32)
-	return &v
+	return &t.Int32
+}
+
+// PtrInt32ToInt converts a *int32 to *int. If nil, returns nil.
+func PtrInt32ToInt(v *int32) *int {
+	if v == nil {
+		return nil
+	}
+	i := int(*v)
+	return &i
 }
 
 // FromPGFloat8 converts a pgtype.Float8 to *float64. If not valid, returns nil.
