@@ -226,18 +226,6 @@ export default function Plugins() {
                     <Button.Text>New Plugin</Button.Text>
                   </Button>
                 </Stack>
-                {publishStatus?.connected && publishStatus.repoUrl && (
-                  <a
-                    href={publishStatus.repoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
-                  >
-                    {publishStatus.repoOwner && publishStatus.repoName
-                      ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
-                      : publishStatus.repoUrl}
-                  </a>
-                )}
               </Stack>
             )}
           </Page.Section.CTA>
@@ -263,6 +251,21 @@ export default function Plugins() {
               </div>
             ) : (
               <>
+                {publishStatus?.connected && publishStatus.repoUrl && (
+                  <span>
+                    Plugin marketplace:{" "}
+                    <a
+                      href={publishStatus.repoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
+                    >
+                      {publishStatus.repoOwner && publishStatus.repoName
+                        ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
+                        : publishStatus.repoUrl}
+                    </a>
+                  </span>
+                )}
                 <Stack
                   direction="horizontal"
                   justify="space-between"
