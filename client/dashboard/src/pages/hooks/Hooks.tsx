@@ -842,7 +842,7 @@ function HooksInnerContent({
           {/* Filter and Search Row with Tabs */}
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             {/* Tabs */}
-            <div className="flex h-[42px] shrink-0 items-center gap-1 rounded-md border bg-muted/50 p-1">
+            <div className="bg-muted/50 flex h-[42px] shrink-0 items-center gap-1 rounded-md border p-1">
               <button
                 type="button"
                 onClick={() => setActiveTab("metrics")}
