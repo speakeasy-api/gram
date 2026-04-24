@@ -55,7 +55,7 @@ var ClaudeHookResult = Type("ClaudeHookResult", func() {
 var CursorHookPayload = Type("CursorHookPayload", func() {
 	Description("Payload for Cursor hook events")
 	Required("hook_event_name")
-	Attribute("hook_event_name", String, "The type of hook event (e.g. beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure)")
+	Attribute("hook_event_name", String, "The type of hook event (e.g. beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure, beforeMCPExecution, afterMCPExecution)")
 	Attribute("conversation_id", String, "The Cursor conversation ID")
 	Attribute("generation_id", String, "The Cursor generation ID")
 	Attribute("model", String, "The model being used")
@@ -76,21 +76,27 @@ var CursorHookPayload = Type("CursorHookPayload", func() {
 	// stop fields
 	Attribute("status", String, "Completion status, e.g. completed (stop only)")
 	Attribute("loop_count", Int, "Number of agentic loops executed (stop only)")
-	Attribute("input_tokens", Int, "Total input tokens used (stop only)")
-	Attribute("output_tokens", Int, "Total output tokens used (stop only)")
-	Attribute("cache_read_tokens", Int, "Tokens read from cache (stop only)")
-	Attribute("cache_write_tokens", Int, "Tokens written to cache (stop only)")
+	Attribute("input_tokens", Int, "Total input tokens used (stop, afterAgentResponse)")
+	Attribute("output_tokens", Int, "Total output tokens used (stop, afterAgentResponse)")
+	Attribute("cache_read_tokens", Int, "Tokens read from cache (stop, afterAgentResponse)")
+	Attribute("cache_write_tokens", Int, "Tokens written to cache (stop, afterAgentResponse)")
 	// afterAgentResponse / afterAgentThought fields
 	Attribute("text", String, "The assistant's response text (afterAgentResponse) or thinking text (afterAgentThought)")
 	Attribute("duration_ms", Int, "Duration in milliseconds for the thinking block (afterAgentThought only)")
+	// beforeMCPExecution / afterMCPExecution fields
+	Attribute("url", String, "URL of the MCP server (beforeMCPExecution / afterMCPExecution, URL-based servers only)")
+	Attribute("command", String, "Command string for command-based MCP servers (beforeMCPExecution / afterMCPExecution only)")
+	Attribute("result_json", String, "JSON-encoded string of the MCP tool response (afterMCPExecution only)")
+	Attribute("duration", Float64, "Execution duration in milliseconds, excluding approval wait time (afterMCPExecution only)")
 })
 
 // Cursor hook result
 var CursorHookResult = Type("CursorHookResult", func() {
 	Description("Result for Cursor hook events")
-	Attribute("permission", String, "Permission decision for preToolUse: allow or deny")
+	Attribute("permission", String, "Permission decision for preToolUse / beforeMCPExecution: allow, deny, or ask")
 	Attribute("user_message", String, "Message to display to the user")
 	Attribute("additional_context", String, "Additional context to inject into the conversation")
+	Attribute("agent_message", String, "Message sent back to the agent (beforeMCPExecution only)")
 })
 
 // Server name override types
@@ -118,7 +124,7 @@ var _ = Service("hooks", func() {
 	})
 
 	Method("cursor", func() {
-		Description("Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, and postToolUseFailure.")
+		Description("Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure, beforeMCPExecution, and afterMCPExecution.")
 
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("hooks")

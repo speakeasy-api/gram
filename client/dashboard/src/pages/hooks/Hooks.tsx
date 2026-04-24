@@ -62,7 +62,7 @@ import {
   type Scale,
 } from "chart.js";
 import { Bar, Line } from "react-chartjs-2";
-import { List, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { LogDetailSheet } from "../logs/LogDetailSheet";
@@ -810,7 +810,7 @@ function HooksInnerContent({
     () => customRange ?? getPresetRange(dateRange),
     [customRange, dateRange],
   );
-  const [isLogsVisible, setIsLogsVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState<"metrics" | "logs">("metrics");
   const { expandedChart, setExpandedChart } = useExpandedChart();
   useEffect(() => {
     if (summaryPending) setExpandedChart(null);
@@ -839,8 +839,36 @@ function HooksInnerContent({
             </div>
           </div>
 
-          {/* Filter and Search Row */}
+          {/* Filter and Search Row with Tabs */}
           <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {/* Tabs */}
+            <div className="bg-muted/50 flex h-[42px] shrink-0 items-center gap-1 rounded-md border p-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab("metrics")}
+                className={cn(
+                  "rounded-sm px-3 py-1.5 text-sm font-medium transition-colors",
+                  activeTab === "metrics"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Metrics
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("logs")}
+                className={cn(
+                  "rounded-sm px-3 py-1.5 text-sm font-medium transition-colors",
+                  activeTab === "logs"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Logs
+              </button>
+            </div>
+
             <MultiSearch
               value={serverInput}
               onChange={setServerInput}
@@ -878,70 +906,59 @@ function HooksInnerContent({
                 projectSlug={projectSlug}
               />
             </div>
-            <Button
-              variant={isLogsVisible ? "secondary" : "outline"}
-              size="sm"
-              className="h-[42px] shrink-0"
-              onClick={() => setIsLogsVisible((v) => !v)}
-            >
-              <List className="h-4 w-4" />
-              Logs
-            </Button>
           </div>
 
-          <div className="flex min-h-0 flex-1 gap-4 overflow-hidden">
-            {/* Content Column */}
-
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {error ? (
-                <ErrorAlert
-                  error={error}
-                  title="Error loading hook events"
-                  className="mx-auto w-full"
-                />
-              ) : isLoading ? (
-                <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-                  <Spinner className="mr-0 size-5" />
-                  <span>Loading hook events...</span>
-                </div>
-              ) : groupedTraces.length === 0 && activeFilters.length === 0 ? (
-                <HooksEmptyState />
-              ) : groupedTraces.length === 0 ? (
-                <div className="py-12 text-center">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-                      <Icon
-                        name="inbox"
-                        className="text-muted-foreground size-6"
-                      />
-                    </div>
-                    <span className="text-foreground font-medium">
-                      No matching hook events
-                    </span>
-                    <span className="text-muted-foreground max-w-sm text-sm">
-                      Try adjusting your search query or time range
-                    </span>
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            {/* Tab Content */}
+            {activeTab === "metrics" ? (
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {error ? (
+                  <ErrorAlert
+                    error={error}
+                    title="Error loading hook events"
+                    className="mx-auto w-full"
+                  />
+                ) : isLoading ? (
+                  <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
+                    <Spinner className="mr-0 size-5" />
+                    <span>Loading hook events...</span>
                   </div>
-                </div>
-              ) : (
-                <HooksAnalytics
-                  serverNameMappings={serverNameMappings}
-                  from={from}
-                  to={to}
-                  compact={isLogsVisible}
-                  addFilter={addFilter}
-                  onHookTypesChange={onHookTypesChange}
-                  summaryData={summaryData}
-                  summaryPending={summaryPending}
-                  summaryIsError={summaryIsError}
-                  expandedChart={expandedChart}
-                  onExpandedChartChange={setExpandedChart}
-                />
-              )}
-            </div>
-
-            {/* Logs Column */}
-            {isLogsVisible && (
+                ) : groupedTraces.length === 0 && activeFilters.length === 0 ? (
+                  <HooksEmptyState />
+                ) : groupedTraces.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="bg-muted flex size-12 items-center justify-center rounded-full">
+                        <Icon
+                          name="inbox"
+                          className="text-muted-foreground size-6"
+                        />
+                      </div>
+                      <span className="text-foreground font-medium">
+                        No matching hook events
+                      </span>
+                      <span className="text-muted-foreground max-w-sm text-sm">
+                        Try adjusting your search query or time range
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <HooksAnalytics
+                    serverNameMappings={serverNameMappings}
+                    from={from}
+                    to={to}
+                    compact={false}
+                    addFilter={addFilter}
+                    onHookTypesChange={onHookTypesChange}
+                    summaryData={summaryData}
+                    summaryPending={summaryPending}
+                    summaryIsError={summaryIsError}
+                    expandedChart={expandedChart}
+                    onExpandedChartChange={setExpandedChart}
+                  />
+                )}
+              </div>
+            ) : (
               <div className="min-h-0 flex-1 overflow-y-auto border">
                 <div className="bg-background flex h-full flex-col">
                   {isFetching && groupedTraces.length > 0 && (
