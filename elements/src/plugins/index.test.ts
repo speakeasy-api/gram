@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { recommended } from "./index";
+import { recommended, type Plugin } from "./index";
 import { chart } from "./chart";
 import { generativeUI } from "./generative-ui";
 
@@ -36,6 +36,21 @@ describe("recommended.except", () => {
   it("returns all plugins when called with no arguments", () => {
     const result = recommended.except();
     expect(result).toHaveLength(2);
+  });
+
+  it("is assignable to Plugin[] for backwards compatibility", () => {
+    // Consumers may have typed variables as Plugin[]
+    const plugins: Plugin[] = recommended.except("chart");
+    expect(plugins).toHaveLength(1);
+
+    // Spread into a plain array
+    const spread: Plugin[] = [...recommended];
+    expect(spread).toHaveLength(2);
+
+    // Nullish coalescing fallback (common pattern in ElementsProvider)
+    const config: { plugins?: Plugin[] } = {};
+    const resolved = config.plugins ?? recommended;
+    expect(resolved).toHaveLength(2);
   });
 
   it("does not match on language when id is set", () => {
