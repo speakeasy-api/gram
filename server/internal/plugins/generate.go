@@ -113,7 +113,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 
 	codexManifest, err := marshalJSON(codexMarketplaceManifest{
 		Name:      marketplaceName,
-		Interface: codexInterface{DisplayName: cfg.OrgName + " Plugins"},
+		Interface: codexInterface{DisplayName: cfg.OrgName + " Plugins", ShortDescription: ""},
 		Plugins:   codexPlugins,
 	})
 	if err != nil {
@@ -275,7 +275,12 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 
 	mcpServers := make(map[string]codexMCPServer)
 	for _, s := range p.Servers {
-		entry := codexMCPServer{URL: s.MCPURL}
+		entry := codexMCPServer{
+			URL:               s.MCPURL,
+			BearerTokenEnvVar: "",
+			HTTPHeaders:       nil,
+			EnvHTTPHeaders:    nil,
+		}
 
 		if s.IsPublic {
 			// User provides each variable in their shell env; Codex
