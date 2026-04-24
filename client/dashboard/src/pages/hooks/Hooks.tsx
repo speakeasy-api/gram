@@ -33,6 +33,8 @@ import type {
   GetHooksSummaryResult,
   HooksBreakdownRow,
   HooksTimeSeriesPoint,
+  SkillBreakdownRow,
+  SkillTimeSeriesPoint,
   HookTraceSummary as HookTrace,
   LogFilter,
   TelemetryLogRecord,
@@ -40,7 +42,7 @@ import type {
 } from "@gram/client/models/components";
 import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Badge, Icon } from "@speakeasy-api/moonshine";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { formatChartLabel } from "@/components/chart/chartUtils";
@@ -1452,6 +1454,7 @@ function StackedBarChart({
   labels,
   datasets,
   handleFilter,
+  tooltipLabelFn,
   expanded = false,
   maxRows,
   onShowAll,
@@ -1459,6 +1462,7 @@ function StackedBarChart({
   labels: string[];
   datasets: StackedBarDataset[];
   handleFilter?: (datasetLabel: string, rowLabel: string) => void;
+  tooltipLabelFn?: (item: TooltipItem<"bar">) => string | string[] | undefined;
   expanded?: boolean;
   maxRows?: number;
   onShowAll?: () => void;
@@ -1505,13 +1509,15 @@ function StackedBarChart({
         tooltip: {
           ...SHARED_TOOLTIP,
           callbacks: {
-            label: (item: TooltipItem<"bar">) =>
-              ` ${item.dataset.label}: ${item.parsed.x}`,
+            label:
+              tooltipLabelFn ??
+              ((item: TooltipItem<"bar">) =>
+                ` ${item.dataset.label}: ${item.parsed.x}`),
           },
         },
       },
     }),
-    [datasets, visibleLabels, handleFilter],
+    [datasets, visibleLabels, handleFilter, tooltipLabelFn],
   );
 
   if (visibleLabels.length === 0) return null;
@@ -1619,14 +1625,18 @@ function UsersPerServerChart({
       onExpand={onExpand}
       hasData={labels.length > 0}
     >
-      <StackedBarChart
-        labels={labels}
-        datasets={datasets}
-        handleFilter={handleFilter}
-        expanded={expanded}
-        maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
-        onShowAll={() => onExpand(chartId)}
-      />
+      {labels.length === 0 ? (
+        <ChartNoData />
+      ) : (
+        <StackedBarChart
+          labels={labels}
+          datasets={datasets}
+          handleFilter={handleFilter}
+          expanded={expanded}
+          maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
+          onShowAll={() => onExpand(chartId)}
+        />
+      )}
     </ChartCard>
   );
 }
@@ -1680,14 +1690,18 @@ function UserEventCountsChart({
       onExpand={onExpand}
       hasData={labels.length > 0}
     >
-      <StackedBarChart
-        labels={labels}
-        datasets={datasets}
-        handleFilter={handleFilter}
-        expanded={expanded}
-        maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
-        onShowAll={() => onExpand(chartId)}
-      />
+      {labels.length === 0 ? (
+        <ChartNoData />
+      ) : (
+        <StackedBarChart
+          labels={labels}
+          datasets={datasets}
+          handleFilter={handleFilter}
+          expanded={expanded}
+          maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
+          onShowAll={() => onExpand(chartId)}
+        />
+      )}
     </ChartCard>
   );
 }
@@ -1808,9 +1822,7 @@ function ServerErrorRateChart({
       hasData={labels.length > 0}
     >
       {labels.length === 0 ? (
-        <div className="text-muted-foreground flex h-16 items-center justify-center text-sm">
-          No errors in this period
-        </div>
+        <ChartNoData message="No errors in this period" />
       ) : (
         <>
           <div
@@ -1837,11 +1849,26 @@ function ServerErrorRateChart({
   );
 }
 
-function buildTimeSeriesFromSummary(
-  timeSeries: HooksTimeSeriesPoint[],
-  keyFn: (p: HooksTimeSeriesPoint) => string,
+type TimeSeriesDataset = {
+  label: string;
+  data: number[];
+  borderColor: string;
+  backgroundColor: string;
+  pointBackgroundColor: string;
+  fill: boolean;
+  tension: number;
+  borderWidth: number;
+  pointRadius: number;
+  pointHoverRadius: number;
+};
+
+function buildTimeSeriesFromSummary<
+  T extends { bucketStartNs: string; eventCount: number },
+>(
+  timeSeries: T[],
+  keyFn: (p: T) => string,
   timeRangeMs: number,
-  valueFn: (p: HooksTimeSeriesPoint) => number = (p) => p.eventCount,
+  valueFn: (p: T) => number = (p) => p.eventCount,
 ) {
   if (timeSeries.length === 0)
     return { labels: [], tooltipLabels: [], datasets: [] };
@@ -1878,23 +1905,42 @@ function buildTimeSeriesFromSummary(
     }),
   );
 
-  const datasets = Array.from(seriesMap.entries()).map(([key, series], i) => {
-    const color = USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length];
-    return {
-      label: key,
-      data: sortedTs.map((ts) => series.get(ts) ?? 0),
-      borderColor: color,
-      backgroundColor: color + "1a",
-      pointBackgroundColor: color,
-      fill: false,
-      tension: 0.45,
-      borderWidth: 1.5,
-      pointRadius: 0,
-      pointHoverRadius: 4,
-    };
-  });
+  const datasets: TimeSeriesDataset[] = Array.from(seriesMap.entries()).map(
+    ([key, series], i) => {
+      const color = USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length];
+      return {
+        label: key,
+        data: sortedTs.map((ts) => series.get(ts) ?? 0),
+        borderColor: color,
+        backgroundColor: color + "1a",
+        pointBackgroundColor: color,
+        fill: false,
+        tension: 0.45,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+      };
+    },
+  );
 
   return { labels, tooltipLabels, datasets };
+}
+
+function ChartNoData({
+  message = "No data in this period",
+}: {
+  message?: string;
+}) {
+  return (
+    <div className="flex h-24 items-center justify-center">
+      <Badge variant="neutral">
+        <Badge.LeftIcon>
+          <Icon name="chart-no-axes-column" size="small" />
+        </Badge.LeftIcon>
+        <Badge.Text>{message}</Badge.Text>
+      </Badge>
+    </div>
+  );
 }
 
 function MultiLineChart({
@@ -1906,16 +1952,12 @@ function MultiLineChart({
 }: {
   labels: string[];
   tooltipLabels: string[];
-  datasets: ReturnType<typeof buildTimeSeriesFromSummary>["datasets"];
+  datasets: TimeSeriesDataset[];
   tooltipAfterBody?: (dataIndex: number) => string[];
   height?: number;
 }) {
   if (labels.length === 0) {
-    return (
-      <div className="text-muted-foreground flex h-24 items-center justify-center text-sm">
-        No data
-      </div>
-    );
+    return <ChartNoData />;
   }
 
   const options: ChartOptions<"line"> = {
@@ -1928,6 +1970,12 @@ function MultiLineChart({
         ...SHARED_TOOLTIP,
         callbacks: {
           title: (items) => tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
+          label: (item) => {
+            if ((item.parsed.y ?? 0) === 0) return undefined;
+            return item.formattedValue
+              ? `${item.dataset.label}: ${item.formattedValue}`
+              : "";
+          },
           ...(tooltipAfterBody
             ? {
                 afterBody: (items) =>
@@ -2058,6 +2106,130 @@ function UserUsageTimeSeries({
   );
 }
 
+function SkillUsageTimeSeries({
+  skillTimeSeries,
+  from,
+  to,
+  expandedChart,
+  onExpand,
+}: {
+  skillTimeSeries: SkillTimeSeriesPoint[];
+  from: Date;
+  to: Date;
+  expandedChart: string | null;
+  onExpand: (id: string | null) => void;
+}) {
+  const chartId = "skill-usage";
+  const expanded = expandedChart === chartId;
+  const timeRangeMs = to.getTime() - from.getTime();
+  const { labels, tooltipLabels, datasets } = useMemo(
+    () =>
+      buildTimeSeriesFromSummary(
+        skillTimeSeries,
+        (pt) => pt.skillName,
+        timeRangeMs,
+      ),
+    [skillTimeSeries, timeRangeMs],
+  );
+  return (
+    <ChartCard
+      title="Skill Usage"
+      chartId={chartId}
+      expandedChart={expandedChart}
+      onExpand={onExpand}
+      hasData={labels.length > 0}
+    >
+      <MultiLineChart
+        labels={labels}
+        tooltipLabels={tooltipLabels}
+        datasets={datasets}
+        height={
+          expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
+        }
+      />
+    </ChartCard>
+  );
+}
+
+function UsersPerSkillChart({
+  title,
+  skillBreakdown,
+  expandedChart,
+  onExpand,
+}: {
+  title: string;
+  skillBreakdown: SkillBreakdownRow[];
+  expandedChart: string | null;
+  onExpand: (id: string | null) => void;
+}) {
+  const chartId = "users-per-skill";
+  const expanded = expandedChart === chartId;
+  const { labels, datasets } = useMemo(() => {
+    const skillMap = new Map<string, Map<string, number>>();
+    const userSet = new Set<string>();
+    for (const row of skillBreakdown) {
+      const user = row.userEmail || "unknown";
+      userSet.add(user);
+      const inner = skillMap.get(row.skillName) ?? new Map<string, number>();
+      inner.set(user, (inner.get(user) ?? 0) + row.useCount);
+      skillMap.set(row.skillName, inner);
+    }
+
+    const sortedSkills = Array.from(skillMap.entries())
+      .map(([skill, userCounts]) => ({
+        skill,
+        total: Array.from(userCounts.values()).reduce((a, b) => a + b, 0),
+        userCounts,
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const userTotals = new Map<string, number>();
+    for (const user of userSet) {
+      userTotals.set(
+        user,
+        sortedSkills.reduce((s, sk) => s + (sk.userCounts.get(user) ?? 0), 0),
+      );
+    }
+    const sortedUsers = Array.from(userSet).sort(
+      (a, b) => (userTotals.get(b) ?? 0) - (userTotals.get(a) ?? 0),
+    );
+
+    const chartLabels = sortedSkills.map((s) => s.skill);
+    const chartDatasets = sortedUsers.map((user, i) => ({
+      label: user,
+      barThickness: BAR_THICKNESS.collapsed,
+      data: sortedSkills.map((s) => s.userCounts.get(user) ?? 0),
+      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
+      hoverBackgroundColor:
+        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "cc",
+    }));
+
+    return { labels: chartLabels, datasets: chartDatasets };
+  }, [skillBreakdown]);
+
+  return (
+    <ChartCard
+      title={title}
+      chartId={chartId}
+      expandedChart={expandedChart}
+      onExpand={onExpand}
+      hasData={labels.length > 0}
+    >
+      {labels.length === 0 ? (
+        <ChartNoData />
+      ) : (
+        <StackedBarChart
+          labels={labels}
+          datasets={datasets}
+          expanded={expanded}
+          maxRows={COLLAPSED_BAR_CHART_MAX_ROWS}
+          onShowAll={() => onExpand(chartId)}
+        />
+      )}
+    </ChartCard>
+  );
+}
+
 function ErrorsOverTimeChart({
   timeSeries,
   from,
@@ -2153,9 +2325,7 @@ function ErrorsOverTimeChart({
       hasData={hasErrors}
     >
       {!hasErrors ? (
-        <div className="text-muted-foreground flex h-[200px] items-center justify-center text-sm">
-          No errors in this period
-        </div>
+        <ChartNoData message="No errors in this period" />
       ) : (
         <MultiLineChart
           labels={labels}
@@ -2202,6 +2372,8 @@ function HooksAnalytics({
 }) {
   const breakdown = summaryData?.breakdown ?? [];
   const timeSeries = summaryData?.timeSeries ?? [];
+  const skillTimeSeries = summaryData?.skillTimeSeries ?? [];
+  const skillBreakdown = summaryData?.skillBreakdown ?? [];
 
   const kpis = useMemo(() => {
     if (!summaryData) return null;
@@ -2227,8 +2399,6 @@ function HooksAnalytics({
       uniqueTools,
     };
   }, [summaryData]);
-
-  const hasServers = (summaryData?.servers.length ?? 0) > 0;
 
   type FilterAxisConfig = Partial<Record<"user" | "server", "dataset" | "row">>;
 
@@ -2332,81 +2502,85 @@ function HooksAnalytics({
         )}
       </div>
 
-      {(timeSeries.length > 0 || hasServers) && (
-        <div
-          className={cn(
-            "grid gap-4",
-            expandedChart
+      <div
+        className={cn(
+          "grid gap-4",
+          expandedChart
+            ? "grid-cols-1"
+            : compact
               ? "grid-cols-1"
-              : compact
-                ? "grid-cols-1"
-                : "grid-cols-1 lg:grid-cols-2",
-          )}
-        >
-          {timeSeries.length > 0 && (
-            <ServerUsageTimeSeries
-              timeSeries={timeSeries}
-              from={from}
-              to={to}
-              serverNameMappings={serverNameMappings}
-              expandedChart={expandedChart}
-              onExpand={setExpandedChart}
-            />
-          )}
-          {hasServers && (
-            <UsersPerServerChart
-              title="Users per Server"
-              breakdown={breakdown}
-              serverNameMappings={serverNameMappings}
-              handleFilter={makeFilterHandler({
-                server: "row",
-                user: "dataset",
-              })}
-              expandedChart={expandedChart}
-              onExpand={setExpandedChart}
-            />
-          )}
+              : "grid-cols-1 lg:grid-cols-2",
+        )}
+      >
+        <ServerUsageTimeSeries
+          timeSeries={timeSeries}
+          from={from}
+          to={to}
+          serverNameMappings={serverNameMappings}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
 
-          {timeSeries.length > 0 && (
-            <UserUsageTimeSeries
-              timeSeries={timeSeries}
-              from={from}
-              to={to}
-              expandedChart={expandedChart}
-              onExpand={setExpandedChart}
-            />
-          )}
-          {hasServers && (
-            <UserEventCountsChart
-              title="User Event Counts"
-              breakdown={breakdown}
-              handleFilter={makeFilterHandler({ user: "row" })}
-              expandedChart={expandedChart}
-              onExpand={setExpandedChart}
-            />
-          )}
+        <UsersPerServerChart
+          title="Users per Server"
+          breakdown={breakdown}
+          serverNameMappings={serverNameMappings}
+          handleFilter={makeFilterHandler({
+            server: "row",
+            user: "dataset",
+          })}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
 
-          {timeSeries.length > 0 && (
-            <ErrorsOverTimeChart
-              timeSeries={timeSeries}
-              from={from}
-              to={to}
-              serverNameMappings={serverNameMappings}
-              expandedChart={expandedChart}
-              onExpand={setExpandedChart}
-            />
-          )}
-          {hasServers && (
-            <ServerErrorRateChart
-              title="Errors per Server and Tool"
-              breakdown={breakdown}
-              serverNameMappings={serverNameMappings}
-              expandedChart={expandedChart}
-              onExpand={setExpandedChart}
-            />
-          )}
-        </div>
-      )}
+        <UserUsageTimeSeries
+          timeSeries={timeSeries}
+          from={from}
+          to={to}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
+
+        <UserEventCountsChart
+          title="User Event Counts"
+          breakdown={breakdown}
+          handleFilter={makeFilterHandler({ user: "row" })}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
+
+        <SkillUsageTimeSeries
+          skillTimeSeries={skillTimeSeries}
+          from={from}
+          to={to}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
+
+        <UsersPerSkillChart
+          title="Users per Skill"
+          skillBreakdown={skillBreakdown}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
+
+        <ErrorsOverTimeChart
+          timeSeries={timeSeries}
+          from={from}
+          to={to}
+          serverNameMappings={serverNameMappings}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
+
+        <ServerErrorRateChart
+          title="Errors per Server and Tool"
+          breakdown={breakdown}
+          serverNameMappings={serverNameMappings}
+          expandedChart={expandedChart}
+          onExpand={setExpandedChart}
+        />
+      </div>
     </div>
   );
 }
