@@ -217,6 +217,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 	temporalWorker.RegisterActivity(activities.FallbackModelUsageTracking)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
+	temporalWorker.RegisterActivity(activities.GetAllWorkOSLinkedOrganizations)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
 	temporalWorker.RegisterActivity(activities.DeleteChatResolutions)
@@ -241,6 +242,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(DelayedChatResolutionAnalysisWorkflow)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflowDebounced)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflow)
+	temporalWorker.RegisterWorkflow(ReconcileWorkOSOrganizationsWorkflow)
 	// Trigger workflows
 	temporalWorker.RegisterWorkflow(TriggerCronWorkflow)
 	temporalWorker.RegisterWorkflow(TriggerDispatchWorkflow)
@@ -254,6 +256,12 @@ func NewTemporalWorker(
 	if err := AddRefreshBillingUsageSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add refresh billing usage schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddReconcileWorkOSOrganizationsSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add reconcile workos organizations schedule", attr.SlogError(err))
 		}
 	}
 

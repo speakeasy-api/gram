@@ -77,7 +77,7 @@ func (p *ProcessWorkOSOrganizationEvents) do(ctx context.Context, params Process
 		}
 	}
 
-	const pageSize = 100
+	pageSize := 100
 
 	options := events.ListEventsOpts{
 		Events: stringifyEventKinds(
@@ -278,15 +278,20 @@ func handleOrganizationDeleted(ctx context.Context, logger *slog.Logger, dbtx da
 	return nil
 }
 
+type workosMembershipRole struct {
+	Slug string `json:"slug"`
+}
+
 type workosMembershipEvent struct {
-	ID             string    `json:"id"`
-	Object         string    `json:"object"`
-	OrganizationID string    `json:"organization_id"`
-	UserID         string    `json:"user_id"`
-	RoleSlug       string    `json:"role_slug"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             string                 `json:"id"`
+	Object         string                 `json:"object"`
+	OrganizationID string                 `json:"organization_id"`
+	UserID         string                 `json:"user_id"`
+	Role           workosMembershipRole   `json:"role"`
+	Roles          []workosMembershipRole `json:"roles"`
+	Status         string                 `json:"status"`
+	CreatedAt      time.Time              `json:"created_at"`
+	UpdatedAt      time.Time              `json:"updated_at"`
 }
 
 func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
@@ -321,6 +326,24 @@ func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger
 	})
 	if err != nil {
 		return fmt.Errorf("upsert organization membership %q: %w", payload.ID, err)
+	}
+
+	roleSlugs := make([]string, 0, len(payload.Roles))
+	for _, r := range payload.Roles {
+		if r.Slug != "" {
+			roleSlugs = append(roleSlugs, r.Slug)
+		}
+	}
+	if len(roleSlugs) == 0 && payload.Role.Slug != "" {
+		roleSlugs = append(roleSlugs, payload.Role.Slug)
+	}
+
+	if err := orgrepo.New(dbtx).SyncUserOrganizationRoles(ctx, orgrepo.SyncUserOrganizationRolesParams{
+		OrganizationID:  organizationID,
+		UserID:          userID,
+		WorkosRoleSlugs: roleSlugs,
+	}); err != nil {
+		return fmt.Errorf("sync organization user roles for membership %q: %w", payload.ID, err)
 	}
 
 	return nil

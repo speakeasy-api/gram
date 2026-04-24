@@ -679,6 +679,15 @@ type OrganizationUserRelationship struct {
 	Deleted            bool
 }
 
+type OrganizationUserRole struct {
+	ID             uuid.UUID
+	OrganizationID string
+	UserID         string
+	WorkosRoleSlug string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type Package struct {
 	ID              uuid.UUID
 	Name            string

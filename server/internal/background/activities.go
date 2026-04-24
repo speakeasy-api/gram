@@ -62,6 +62,7 @@ type Activities struct {
 	analyzeSegment                  *resolution_activities.AnalyzeSegment
 	getUserFeedbackForChat          *resolution_activities.GetUserFeedbackForChat
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
+	getAllWorkOSLinkedOrganizations *activities.GetAllWorkOSLinkedOrganizations
 }
 
 func NewActivities(
@@ -122,6 +123,7 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(db),
 		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient),
+		getAllWorkOSLinkedOrganizations: activities.NewGetAllWorkOSLinkedOrganizations(logger, db),
 	}
 }
 
@@ -245,4 +247,8 @@ func (a *Activities) ProcessScheduledTrigger(ctx context.Context, input activiti
 
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
 	return a.processWorkOSOrganizationEvents.Do(ctx, params)
+}
+
+func (a *Activities) GetAllWorkOSLinkedOrganizations(ctx context.Context) ([]string, error) {
+	return a.getAllWorkOSLinkedOrganizations.Do(ctx)
 }

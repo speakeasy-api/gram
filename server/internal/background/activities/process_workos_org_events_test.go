@@ -370,7 +370,15 @@ func newMockEventsLister(t *testing.T) *MockEventsLister {
 
 func (m *MockEventsLister) ListEvents(ctx context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error) {
 	args := m.Called(ctx, opts)
-	return args.Get(0).(events.ListEventsResponse), args.Error(1)
+	resp, _ := args.Get(0).(events.ListEventsResponse)
+	return resp, mockErr(args, 1)
+}
+
+func mockErr(args mock.Arguments, index int) error {
+	if err := args.Error(index); err != nil {
+		return fmt.Errorf("mock return error: %w", err)
+	}
+	return nil
 }
 
 func newWorkOSOrgEvent(t *testing.T, kind, eventID, workosOrgID, name, externalID string) events.Event {

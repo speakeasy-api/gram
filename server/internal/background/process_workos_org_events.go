@@ -21,32 +21,63 @@ type ProcessWorkOSEventsResult struct {
 	HasMore bool `json:"has_more,omitempty"`
 }
 
-// func AddProcessWorkOSEventsSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
-// 	scheduleID := "v1:process-workos-events-schedule"
-// 	workflowID := "v1:process-workos-events/scheduled"
+func ReconcileWorkOSOrganizationsWorkflow(ctx workflow.Context) error {
+	var a *Activities
 
-// 	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
-// 		ID: scheduleID,
-// 		Spec: client.ScheduleSpec{
-// 			Intervals: []client.ScheduleIntervalSpec{
-// 				{
-// 					Every: 30 * time.Minute,
-// 				},
-// 			},
-// 		},
-// 		Action: &client.ScheduleWorkflowAction{
-// 			ID:                 workflowID,
-// 			Workflow:           ProcessWorkOSEventsWorkflow,
-// 			TaskQueue:          string(temporalEnv.Queue()),
-// 			WorkflowRunTimeout: 15 * time.Minute,
-// 		},
-// 	})
-// 	if err != nil {
-// 		return fmt.Errorf("failed to refresh billing usage schedule: %w", err)
-// 	}
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 1 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 3,
+		},
+	})
 
-// 	return nil
-// }
+	var workosOrgIDs []string
+	if err := workflow.ExecuteActivity(ctx, a.GetAllWorkOSLinkedOrganizations).Get(ctx, &workosOrgIDs); err != nil {
+		return fmt.Errorf("get workos linked organizations: %w", err)
+	}
+
+	for _, workosOrgID := range workosOrgIDs {
+		params := ProcessWorkOSEventsParams{WorkOSOrganizationID: workosOrgID}
+		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			WorkflowID:            processWorkOSOrganizationEventsWorkflowID(params),
+			WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			ParentClosePolicy:     enums.PARENT_CLOSE_POLICY_ABANDON,
+		})
+		// Wait only for dispatch, not completion. Ignore errors from orgs already syncing.
+		var childExec workflow.Execution
+		if err := workflow.ExecuteChildWorkflow(childCtx, ProcessWorkOSOrganizationEventsWorkflowDebounced, params).
+			GetChildWorkflowExecution().Get(ctx, &childExec); err != nil {
+			workflow.GetLogger(ctx).Warn("skipping workos org sync", "workos_org_id", workosOrgID, "error", err)
+		}
+	}
+
+	return nil
+}
+
+func AddReconcileWorkOSOrganizationsSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
+	scheduleID := "v1:reconcile-workos-organizations-schedule"
+	workflowID := "v1:reconcile-workos-organizations/scheduled"
+
+	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
+		ID: scheduleID,
+		Spec: client.ScheduleSpec{
+			Intervals: []client.ScheduleIntervalSpec{
+				{Every: 30 * time.Minute},
+			},
+		},
+		Action: &client.ScheduleWorkflowAction{
+			ID:                 workflowID,
+			Workflow:           ReconcileWorkOSOrganizationsWorkflow,
+			TaskQueue:          string(temporalEnv.Queue()),
+			WorkflowRunTimeout: 15 * time.Minute,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("create reconcile workos organizations schedule: %w", err)
+	}
+
+	return nil
+}
 
 func processWorkOSOrganizationEventsWorkflowID(params ProcessWorkOSEventsParams) string {
 	return fmt.Sprintf("v1:process-workos-org-events:%s", params.WorkOSOrganizationID)
@@ -60,7 +91,7 @@ func ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx context.Context
 	id := processWorkOSOrganizationEventsWorkflowID(params)
 	sig := processWorkOSOrganizationEventsDebounceSignal(params)
 
-	return temporalEnv.Client().SignalWithStartWorkflow(
+	run, err := temporalEnv.Client().SignalWithStartWorkflow(
 		ctx,
 		id,
 		sig,
@@ -76,6 +107,10 @@ func ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx context.Context
 		ProcessWorkOSOrganizationEventsWorkflowDebounced,
 		params,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("signal with start workflow: %w", err)
+	}
+	return run, nil
 }
 
 func ProcessWorkOSOrganizationEventsWorkflowDebounced(ctx workflow.Context, params ProcessWorkOSEventsParams) (*ProcessWorkOSEventsResult, error) {
@@ -112,7 +147,9 @@ func ProcessWorkOSOrganizationEventsWorkflow(ctx workflow.Context, params Proces
 		return nil, fmt.Errorf("failed to process WorkOS events: %w", err)
 	}
 
-	return &ProcessWorkOSEventsResult{
-		HasMore: processRes.HasMore,
-	}, nil
+	result := &ProcessWorkOSEventsResult{HasMore: processRes.HasMore}
+	if processRes.HasMore {
+		return result, workflow.NewContinueAsNewError(ctx, ProcessWorkOSOrganizationEventsWorkflow, params)
+	}
+	return result, nil
 }
