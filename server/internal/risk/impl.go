@@ -285,7 +285,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	}
 
 	sources := current.Sources
-	if len(payload.Sources) > 0 {
+	if payload.Sources != nil {
 		sources = payload.Sources
 	}
 
