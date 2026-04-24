@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -25,8 +26,8 @@ type LogMcpSlugCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	McpSlugID uuid.UUID
-	Slug      string
+	McpSlugURN urn.McpSlug
+	Slug       string
 }
 
 func LogMcpSlugCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpSlugCreateEvent) error {
@@ -42,7 +43,7 @@ func LogMcpSlugCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpSlugCreat
 
 		Action: string(action),
 
-		SubjectID:          event.McpSlugID.String(),
+		SubjectID:          event.McpSlugURN.ID.String(),
 		SubjectType:        string(subjectTypeMcpSlug),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.Slug),
 		SubjectSlug:        conv.ToPGTextEmpty(event.Slug),
@@ -67,21 +68,21 @@ type LogMcpSlugUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	McpSlugID      uuid.UUID
-	Slug           string
-	SnapshotBefore any
-	SnapshotAfter  any
+	McpSlugURN            urn.McpSlug
+	Slug                  string
+	McpSlugSnapshotBefore *types.McpSlug
+	McpSlugSnapshotAfter  *types.McpSlug
 }
 
 func LogMcpSlugUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpSlugUpdateEvent) error {
 	action := ActionMcpSlugUpdate
 
-	beforeSnapshot, err := marshalAuditPayload(event.SnapshotBefore)
+	beforeSnapshot, err := marshalAuditPayload(event.McpSlugSnapshotBefore)
 	if err != nil {
 		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
 	}
 
-	afterSnapshot, err := marshalAuditPayload(event.SnapshotAfter)
+	afterSnapshot, err := marshalAuditPayload(event.McpSlugSnapshotAfter)
 	if err != nil {
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
@@ -97,7 +98,7 @@ func LogMcpSlugUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpSlugUpdat
 
 		Action: string(action),
 
-		SubjectID:          event.McpSlugID.String(),
+		SubjectID:          event.McpSlugURN.ID.String(),
 		SubjectType:        string(subjectTypeMcpSlug),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.Slug),
 		SubjectSlug:        conv.ToPGTextEmpty(event.Slug),
@@ -122,8 +123,8 @@ type LogMcpSlugDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	McpSlugID uuid.UUID
-	Slug      string
+	McpSlugURN urn.McpSlug
+	Slug       string
 }
 
 func LogMcpSlugDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpSlugDeleteEvent) error {
@@ -139,7 +140,7 @@ func LogMcpSlugDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpSlugDelet
 
 		Action: string(action),
 
-		SubjectID:          event.McpSlugID.String(),
+		SubjectID:          event.McpSlugURN.ID.String(),
 		SubjectType:        string(subjectTypeMcpSlug),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.Slug),
 		SubjectSlug:        conv.ToPGTextEmpty(event.Slug),

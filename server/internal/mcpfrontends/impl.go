@@ -134,7 +134,7 @@ func (s *Service) CreateMcpFrontend(ctx context.Context, payload *gen.CreateMcpF
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
-		McpFrontendID:    frontend.ID,
+		McpFrontendURN:   urn.NewMcpFrontend(frontend.ID),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp frontend creation").Log(ctx, logger)
 	}
@@ -272,14 +272,14 @@ func (s *Service) UpdateMcpFrontend(ctx context.Context, payload *gen.UpdateMcpF
 	afterView := mv.BuildMcpFrontendView(updated)
 
 	if err := audit.LogMcpFrontendUpdate(ctx, dbtx, audit.LogMcpFrontendUpdateEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        *authCtx.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		McpFrontendID:    updated.ID,
-		SnapshotBefore:   beforeView,
-		SnapshotAfter:    afterView,
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		Actor:                     urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:          authCtx.Email,
+		ActorSlug:                 nil,
+		McpFrontendURN:            urn.NewMcpFrontend(updated.ID),
+		McpFrontendSnapshotBefore: beforeView,
+		McpFrontendSnapshotAfter:  afterView,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp frontend update").Log(ctx, logger)
 	}
@@ -343,7 +343,7 @@ func (s *Service) DeleteMcpFrontend(ctx context.Context, payload *gen.DeleteMcpF
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
-		McpFrontendID:    deleted.ID,
+		McpFrontendURN:   urn.NewMcpFrontend(deleted.ID),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log mcp frontend deletion").Log(ctx, logger)
 	}

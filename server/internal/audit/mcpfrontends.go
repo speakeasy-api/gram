@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -25,7 +26,7 @@ type LogMcpFrontendCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	McpFrontendID uuid.UUID
+	McpFrontendURN urn.McpFrontend
 }
 
 func LogMcpFrontendCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpFrontendCreateEvent) error {
@@ -41,7 +42,7 @@ func LogMcpFrontendCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpFront
 
 		Action: string(action),
 
-		SubjectID:          event.McpFrontendID.String(),
+		SubjectID:          event.McpFrontendURN.ID.String(),
 		SubjectType:        string(subjectTypeMcpFrontend),
 		SubjectDisplayName: conv.ToPGTextEmpty(""),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
@@ -66,20 +67,20 @@ type LogMcpFrontendUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	McpFrontendID  uuid.UUID
-	SnapshotBefore any
-	SnapshotAfter  any
+	McpFrontendURN            urn.McpFrontend
+	McpFrontendSnapshotBefore *types.McpFrontend
+	McpFrontendSnapshotAfter  *types.McpFrontend
 }
 
 func LogMcpFrontendUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpFrontendUpdateEvent) error {
 	action := ActionMcpFrontendUpdate
 
-	beforeSnapshot, err := marshalAuditPayload(event.SnapshotBefore)
+	beforeSnapshot, err := marshalAuditPayload(event.McpFrontendSnapshotBefore)
 	if err != nil {
 		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
 	}
 
-	afterSnapshot, err := marshalAuditPayload(event.SnapshotAfter)
+	afterSnapshot, err := marshalAuditPayload(event.McpFrontendSnapshotAfter)
 	if err != nil {
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
@@ -95,7 +96,7 @@ func LogMcpFrontendUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpFront
 
 		Action: string(action),
 
-		SubjectID:          event.McpFrontendID.String(),
+		SubjectID:          event.McpFrontendURN.ID.String(),
 		SubjectType:        string(subjectTypeMcpFrontend),
 		SubjectDisplayName: conv.ToPGTextEmpty(""),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
@@ -120,7 +121,7 @@ type LogMcpFrontendDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	McpFrontendID uuid.UUID
+	McpFrontendURN urn.McpFrontend
 }
 
 func LogMcpFrontendDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpFrontendDeleteEvent) error {
@@ -136,7 +137,7 @@ func LogMcpFrontendDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpFront
 
 		Action: string(action),
 
-		SubjectID:          event.McpFrontendID.String(),
+		SubjectID:          event.McpFrontendURN.ID.String(),
 		SubjectType:        string(subjectTypeMcpFrontend),
 		SubjectDisplayName: conv.ToPGTextEmpty(""),
 		SubjectSlug:        conv.ToPGTextEmpty(""),

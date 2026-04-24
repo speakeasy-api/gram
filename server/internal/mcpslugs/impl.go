@@ -133,7 +133,7 @@ func (s *Service) CreateMcpSlug(ctx context.Context, payload *gen.CreateMcpSlugP
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
-		McpSlugID:        created.ID,
+		McpSlugURN:       urn.NewMcpSlug(created.ID),
 		Slug:             created.Slug,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp slug creation").Log(ctx, logger)
@@ -324,15 +324,15 @@ func (s *Service) UpdateMcpSlug(ctx context.Context, payload *gen.UpdateMcpSlugP
 	afterView := mv.BuildMcpSlugView(updated)
 
 	if err := audit.LogMcpSlugUpdate(ctx, dbtx, audit.LogMcpSlugUpdateEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        *authCtx.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		McpSlugID:        updated.ID,
-		Slug:             updated.Slug,
-		SnapshotBefore:   beforeView,
-		SnapshotAfter:    afterView,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		ProjectID:             *authCtx.ProjectID,
+		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:      authCtx.Email,
+		ActorSlug:             nil,
+		McpSlugURN:            urn.NewMcpSlug(updated.ID),
+		Slug:                  updated.Slug,
+		McpSlugSnapshotBefore: beforeView,
+		McpSlugSnapshotAfter:  afterView,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp slug update").Log(ctx, logger)
 	}
@@ -386,7 +386,7 @@ func (s *Service) DeleteMcpSlug(ctx context.Context, payload *gen.DeleteMcpSlugP
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
-		McpSlugID:        deleted.ID,
+		McpSlugURN:       urn.NewMcpSlug(deleted.ID),
 		Slug:             deleted.Slug,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log mcp slug deletion").Log(ctx, logger)
@@ -438,16 +438,18 @@ func verifySlugReferenceOwnership(
 		return fmt.Errorf("check mcp frontend ownership: %w", err)
 	}
 
-	if customDomainID.Valid {
-		if _, err := customdomainsrepo.New(dbtx).GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
-			ID:             customDomainID.UUID,
-			OrganizationID: organizationID,
-		}); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("custom_domain_id does not reference a resource in this organization")
-			}
-			return fmt.Errorf("check custom domain ownership: %w", err)
+	if !customDomainID.Valid {
+		return nil
+	}
+
+	if _, err := customdomainsrepo.New(dbtx).GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
+		ID:             customDomainID.UUID,
+		OrganizationID: organizationID,
+	}); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("custom_domain_id does not reference a resource in this organization")
 		}
+		return fmt.Errorf("check custom domain ownership: %w", err)
 	}
 
 	return nil
