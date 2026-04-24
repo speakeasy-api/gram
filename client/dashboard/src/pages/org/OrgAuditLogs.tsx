@@ -19,7 +19,7 @@ import { Type } from "@/components/ui/type";
 import { Switch } from "@/components/ui/switch";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
-import { useRBAC, Scope } from "@/hooks/useRBAC";
+import { useRBAC } from "@/hooks/useRBAC";
 import type { AuditLog } from "@gram/client/models/components";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import {
@@ -615,8 +615,7 @@ export default function OrgAuditLogs() {
   const organization = useOrganization();
   // Only wrap with InsightsProvider when user has org:read and at least
   // one project exists (needed for Elements session auth).
-  const showInsights =
-    hasScope("org:read" as Scope) && organization.projects.length > 0;
+  const showInsights = hasScope("org:read") && organization.projects.length > 0;
 
   const page = (
     <Page>
