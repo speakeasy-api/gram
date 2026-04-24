@@ -162,7 +162,9 @@ func (a *AnalyzeBatch) scan(ctx context.Context, sources []string, presidioEntit
 
 	if slices.Contains(sources, "presidio") {
 		wg.Go(func() {
-			results, err := a.piiScanner.AnalyzeBatch(ctx, contents, presidioEntities)
+			results, err := a.piiScanner.AnalyzeBatch(ctx, contents, presidioEntities, func() {
+				activity.RecordHeartbeat(ctx, "presidio")
+			})
 			if err != nil {
 				a.logger.WarnContext(ctx, "presidio scan failed, continuing with gitleaks only", attr.SlogError(err))
 				return

@@ -25,7 +25,7 @@ type PIIScanner interface {
 	// AnalyzeBatch sends multiple texts to the PII analyzer and returns
 	// findings for each. The outer slice is indexed by input position.
 	// When entities is non-empty, only those entity types are detected.
-	AnalyzeBatch(ctx context.Context, texts []string, entities []string) ([][]Finding, error)
+	AnalyzeBatch(ctx context.Context, texts []string, entities []string, onProgress func()) ([][]Finding, error)
 }
 
 // presidioRequest is the payload sent to POST /analyze.
@@ -83,7 +83,7 @@ func NewPresidioClient(baseURL string, httpClient *http.Client, tracerProvider t
 	}
 }
 
-func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string) (_ [][]Finding, err error) {
+func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, onProgress func()) (_ [][]Finding, err error) {
 	n := len(texts)
 	if n == 0 {
 		return nil, nil
@@ -134,6 +134,9 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 					return
 				}
 				results[idx] = findings
+				if onProgress != nil {
+					onProgress()
+				}
 			}
 		})
 	}
@@ -227,7 +230,7 @@ func (p *PresidioClient) analyze(ctx context.Context, text string, entities []st
 // StubPIIScanner is a no-op implementation for environments without Presidio.
 type StubPIIScanner struct{}
 
-func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string) ([][]Finding, error) {
+func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ func()) ([][]Finding, error) {
 	results := make([][]Finding, len(texts))
 	for i := range texts {
 		results[i] = nil
