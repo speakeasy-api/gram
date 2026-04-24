@@ -287,7 +287,6 @@ type hookEventParams struct {
 	result         string // gen_ai.tool.call.result; non-empty marks the trace as has_result=1
 	errorMsg       string // gram.hook.error; non-empty marks the trace as has_error=1
 	skillName      string // non-empty when toolName = "Skill"
-	hookEvent      string // "PostToolUse" or "PostToolUseFailure"
 	conversationID string // genai.conversation.id for session counting
 }
 
@@ -368,7 +367,6 @@ func TestGetHooksSummary_SkillTimeSeriesGroupsBySkill(t *testing.T) {
 			toolSource:     "",
 			toolName:       "Skill",
 			skillName:      skillName,
-			hookEvent:      "PostToolUse",
 			conversationID: "conv-1",
 		})
 	}
@@ -411,7 +409,6 @@ func TestGetHooksSummary_SkillTimeSeriesEmptyWhenNoSkillEvents(t *testing.T) {
 		hookSource:     "mcp",
 		toolSource:     "server-a",
 		toolName:       "fetch",
-		hookEvent:      "PostToolUse",
 		conversationID: "conv-1",
 	})
 
@@ -447,7 +444,6 @@ func TestGetHooksSummary_SkillTimeSeriesExcludesNonSkillEvents(t *testing.T) {
 		toolSource:     "",
 		toolName:       "Skill",
 		skillName:      "golang",
-		hookEvent:      "PostToolUse",
 		conversationID: "conv-1",
 	})
 	insertHookEvent(t, ctx, hookEventParams{
@@ -459,7 +455,6 @@ func TestGetHooksSummary_SkillTimeSeriesExcludesNonSkillEvents(t *testing.T) {
 		hookSource:     "mcp",
 		toolSource:     "server-a",
 		toolName:       "fetch",
-		hookEvent:      "PostToolUse",
 		conversationID: "conv-2",
 	})
 
@@ -584,7 +579,6 @@ func TestGetHooksSummary_SkillTimeSeriesWithSkillTypeFilter(t *testing.T) {
 		toolSource:     "",
 		toolName:       "Skill",
 		skillName:      "golang",
-		hookEvent:      "PostToolUse",
 		conversationID: "conv-1",
 	})
 	insertHookEvent(t, ctx, hookEventParams{
@@ -596,7 +590,6 @@ func TestGetHooksSummary_SkillTimeSeriesWithSkillTypeFilter(t *testing.T) {
 		hookSource:     "mcp",
 		toolSource:     "server-a",
 		toolName:       "fetch",
-		hookEvent:      "PostToolUse",
 		conversationID: "conv-2",
 	})
 
