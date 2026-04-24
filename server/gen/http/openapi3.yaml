@@ -21846,6 +21846,16 @@ components:
                     items:
                         $ref: '#/components/schemas/HooksServerSummary'
                     description: Aggregated metrics grouped by server
+                skill_breakdown:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillBreakdownRow'
+                    description: Per-user skill breakdown
+                skill_time_series:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillTimeSeriesPoint'
+                    description: Time-bucketed event counts by skill
                 skills:
                     type: array
                     items:
@@ -21878,6 +21888,8 @@ components:
                 - total_sessions
                 - breakdown
                 - time_series
+                - skill_time_series
+                - skill_breakdown
         GetInstanceForm:
             type: object
             properties:
@@ -26115,6 +26127,24 @@ components:
             required:
                 - toolset_id
                 - environment_id
+        SkillBreakdownRow:
+            type: object
+            properties:
+                skill_name:
+                    type: string
+                    description: Skill name
+                use_count:
+                    type: integer
+                    description: Use count for this skill/user combination
+                    format: int64
+                user_email:
+                    type: string
+                    description: User email address
+            description: Per-(skill, user) aggregated counts
+            required:
+                - skill_name
+                - user_email
+                - use_count
         SkillSummary:
             type: object
             properties:
@@ -26134,6 +26164,24 @@ components:
                 - skill_name
                 - use_count
                 - unique_users
+        SkillTimeSeriesPoint:
+            type: object
+            properties:
+                bucket_start_ns:
+                    type: string
+                    description: Bucket start time in Unix nanoseconds (string for JS int64 precision)
+                event_count:
+                    type: integer
+                    description: Number of skill use events in this bucket
+                    format: int64
+                skill_name:
+                    type: string
+                    description: Skill name
+            description: A single time-series bucket for skill usage activity
+            required:
+                - bucket_start_ns
+                - skill_name
+                - event_count
         SlackAppResult:
             type: object
             properties:

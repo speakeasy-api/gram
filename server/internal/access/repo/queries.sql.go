@@ -125,6 +125,8 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 const insertPrincipalGrant = `-- name: InsertPrincipalGrant :one
 INSERT INTO principal_grants (organization_id, principal_urn, scope, resource)
 VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, principal_urn, scope, resource) WHERE selectors IS NULL
+DO UPDATE SET updated_at = principal_grants.updated_at
 RETURNING id, organization_id, principal_urn, principal_type, scope, resource, created_at, updated_at
 `
 
@@ -146,8 +148,8 @@ type InsertPrincipalGrantRow struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
-// Inserts a single grant row. Callers (SyncGrants) delete-then-insert
-// within a transaction, so duplicates should not occur.
+// Inserts a single grant row. On conflict (same org/principal/scope/resource
+// with no selectors), returns the existing row unchanged.
 func (q *Queries) InsertPrincipalGrant(ctx context.Context, arg InsertPrincipalGrantParams) (InsertPrincipalGrantRow, error) {
 	row := q.db.QueryRow(ctx, insertPrincipalGrant,
 		arg.OrganizationID,

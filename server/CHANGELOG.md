@@ -1,5 +1,19 @@
 # server
 
+## 0.42.0
+
+### Minor Changes
+
+- ea3e1aa: Add GitHub publishing for plugins. Admins can publish generated plugin
+  packages to a GitHub repository via a configured GitHub App, enabling
+  distribution through Claude Code and Cursor team marketplaces.
+
+### Patch Changes
+
+- 672795f: Updated fly app reaping to target all apps used by old deployments, leaving only the most recent deployment's app(s) untouched. This is a more aggressive strategy that is coming ahead of support for scaling up fly apps to multiple machines per deployment.
+- f03a7d2: Fix a data race in concurrent OpenAPI tool extraction that could corrupt schemas or crash deployments when the same schema was referenced by multiple operations.
+- 00a8f2a: Cursor hooks native MCP support. Token use tracking support for Cursor sessions
+
 ## 0.41.0
 
 ### Minor Changes

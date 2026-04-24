@@ -1786,6 +1786,14 @@ COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "buil
 COMMENT ON COLUMN principal_grants.resource IS '''*'' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.';
 COMMENT ON COLUMN principal_grants.selectors IS 'Optional JSON selector constraints refining when the grant applies. NULL means the grant has no selector constraints.';
 
+CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_selector_key
+ON principal_grants (organization_id, principal_urn, scope, selectors)
+WHERE selectors IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_unrestricted_key
+ON principal_grants (organization_id, principal_urn, scope, resource)
+WHERE selectors IS NULL;
+
 CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
 ON principal_grants
 USING GIN (selectors)
