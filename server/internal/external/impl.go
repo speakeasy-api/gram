@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/workos/workos-go/v6/pkg/webhooks"
@@ -49,14 +50,29 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	}
 }
 
+// rawWorkOSSignatureKey stores the WorkOS-Signature header value in context before
+// Goa's APIKey Bearer-stripping mangles it.
+type rawWorkOSSignatureKey struct{}
+
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+
+	goaServer := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+
+	// WorkOS sends "t=<ts>, v1=<sig>" with a space after the comma. Goa's APIKey
+	// Bearer-stripping removes everything before the first space, leaving "v1=<sig>"
+	// which fails parseSignatureHeader. Capture the raw header in context before Goa
+	// processes it so ReceiveWorkOSWebhook can use it directly.
+	orig := goaServer.ReceiveWorkOSWebhook
+	goaServer.ReceiveWorkOSWebhook = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sig := r.Header.Get(constants.WorkOSSignatureHeader)
+		r = r.WithContext(context.WithValue(r.Context(), rawWorkOSSignatureKey{}, sig))
+		orig.ServeHTTP(w, r)
+	})
+
+	srv.Mount(mux, goaServer)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
@@ -77,7 +93,7 @@ func (s *Service) ReceiveWorkOSWebhook(ctx context.Context, payload *gen.Receive
 	logger := s.logger
 	defer o11y.NoLogDefer(func() error { return body.Close() })
 
-	signature := conv.PtrValOrEmpty(payload.WorkosSignature, "")
+	signature, _ := ctx.Value(rawWorkOSSignatureKey{}).(string)
 	if signature == "" {
 		return oops.C(oops.CodeUnauthorized)
 	}
