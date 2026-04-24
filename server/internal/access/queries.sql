@@ -18,10 +18,12 @@ WHERE organization_id = @organization_id
   AND principal_urn = ANY(@principal_urns::text[]);
 
 -- name: InsertPrincipalGrant :one
--- Inserts a single grant row. Callers (SyncGrants) delete-then-insert
--- within a transaction, so duplicates should not occur.
+-- Inserts a single grant row. On conflict (same org/principal/scope/resource
+-- with no selectors), returns the existing row unchanged.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, resource)
 VALUES (@organization_id, @principal_urn, @scope, @resource)
+ON CONFLICT (organization_id, principal_urn, scope, resource) WHERE selectors IS NULL
+DO UPDATE SET updated_at = principal_grants.updated_at
 RETURNING id, organization_id, principal_urn, principal_type, scope, resource, created_at, updated_at;
 
 -- name: DeletePrincipalGrant :execrows
