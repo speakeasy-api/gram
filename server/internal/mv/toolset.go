@@ -33,6 +33,7 @@ import (
 	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	vr "github.com/speakeasy-api/gram/server/internal/variations/repo"
+	"golang.org/x/sync/errgroup"
 )
 
 // functionManifestVariable represents a variable definition from a function manifest.
@@ -594,12 +595,11 @@ func DescribeToolset(
 }
 
 // GetToolsetsSummary builds ToolsetSummary results for a set of toolsets
-// using bulk queries grouped by project. This avoids the N+1 query pattern of
-// calling DescribeToolsetEntry per toolset.
-//
-// Returns a lightweight summary per toolset: identity fields (ID, ProjectID,
-// OrganizationID, Name, Slug), MCP config, and tool entries (Type, ID, Name,
-// ToolUrn, Annotations, HTTPMethod). Variation name overrides are applied.
+// using batch queries across all projects. Instead of running per-project
+// queries (which incur ~18ms query planning overhead each × N projects),
+// it fires 5 batch queries in parallel — one per tool type — resolving all
+// projects' deployments in a single CTE. Results are filtered in Go against
+// each toolset's URN set.
 func GetToolsetsSummary(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -610,189 +610,217 @@ func GetToolsetsSummary(
 		return []*types.ToolsetSummary{}, nil
 	}
 
-	// Group tool URNs by project for batch fetching.
-	// Version data (tool_urns) is already inlined via LEFT JOIN LATERAL.
-	type projectToolsets struct {
-		toolUrns []string
-	}
-	projectMap := make(map[uuid.UUID]*projectToolsets)
-
+	// Collect unique project IDs and per-project URN sets for Go-side filtering.
+	projectIDSet := make(map[uuid.UUID]struct{})
+	urnsByProject := make(map[uuid.UUID]map[string]struct{})
 	for _, ts := range toolsets {
-		urns := make([]string, len(ts.LatestToolUrns))
-		for i, u := range ts.LatestToolUrns {
-			urns[i] = u.String()
+		projectIDSet[ts.ProjectID] = struct{}{}
+		urnSet, ok := urnsByProject[ts.ProjectID]
+		if !ok {
+			urnSet = make(map[string]struct{})
+			urnsByProject[ts.ProjectID] = urnSet
 		}
-
-		pt, exists := projectMap[ts.ProjectID]
-		if !exists {
-			pt = &projectToolsets{toolUrns: nil}
-			projectMap[ts.ProjectID] = pt
+		for _, u := range ts.LatestToolUrns {
+			urnSet[u.String()] = struct{}{}
 		}
-		pt.toolUrns = append(pt.toolUrns, urns...)
+	}
+	projectIDs := make([]uuid.UUID, 0, len(projectIDSet))
+	for pid := range projectIDSet {
+		projectIDs = append(projectIDs, pid)
 	}
 
-	// Per unique project: batch-fetch tool entries and variations.
-	// This is O(projects) not O(toolsets).
-	// Keyed by projectID to avoid cross-project URN collisions (two projects
-	// deploying the same API produce identical tool URNs).
-	toolsByProject := make(map[uuid.UUID]map[string]*types.ToolEntry)
+	// 5 batch queries in parallel — one round-trip each, no per-project overhead.
+	toolsRepo := tr.New(tx)
+	tplRepo := templatesR.New(tx)
+	variationsRepo := vr.New(tx)
+	extMCPRepo := externalmcpR.New(tx)
 
-	for projectID, pt := range projectMap {
-		if len(pt.toolUrns) == 0 {
+	httpToolsCh := make(chan []tr.FindHttpToolEntriesForProjectsRow, 1)
+	funcToolsCh := make(chan []tr.FindFunctionToolEntriesForProjectsRow, 1)
+	promptToolsCh := make(chan []templatesR.PeekTemplatesForProjectsRow, 1)
+	variationsCh := make(chan []vr.FindGlobalVariationsForProjectsRow, 1)
+	externalMCPToolsCh := make(chan []externalmcpR.FindExternalMCPToolEntriesForProjectsRow, 1)
+
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		rows, err := toolsRepo.FindHttpToolEntriesForProjects(egCtx, projectIDs)
+		if err != nil {
+			return fmt.Errorf("batch http tools: %w", err)
+		}
+		httpToolsCh <- rows
+		close(httpToolsCh)
+		return nil
+	})
+	eg.Go(func() error {
+		rows, err := toolsRepo.FindFunctionToolEntriesForProjects(egCtx, projectIDs)
+		if err != nil {
+			return fmt.Errorf("batch function tools: %w", err)
+		}
+		funcToolsCh <- rows
+		close(funcToolsCh)
+		return nil
+	})
+	eg.Go(func() error {
+		rows, err := tplRepo.PeekTemplatesForProjects(egCtx, projectIDs)
+		if err != nil {
+			return fmt.Errorf("batch prompt tools: %w", err)
+		}
+		promptToolsCh <- rows
+		close(promptToolsCh)
+		return nil
+	})
+	eg.Go(func() error {
+		rows, err := variationsRepo.FindGlobalVariationsForProjects(egCtx, projectIDs)
+		if err != nil {
+			return fmt.Errorf("batch variations: %w", err)
+		}
+		variationsCh <- rows
+		close(variationsCh)
+		return nil
+	})
+	eg.Go(func() error {
+		rows, err := extMCPRepo.FindExternalMCPToolEntriesForProjects(egCtx, projectIDs)
+		if err != nil {
+			return fmt.Errorf("batch external mcp tools: %w", err)
+		}
+		externalMCPToolsCh <- rows
+		close(externalMCPToolsCh)
+		return nil
+	})
+	if err := eg.Wait(); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "batch fetch tool entries").Log(ctx, logger)
+	}
+
+	httpTools := <-httpToolsCh
+	funcTools := <-funcToolsCh
+	promptTools := <-promptToolsCh
+	variations := <-variationsCh
+	externalMCPTools := <-externalMCPToolsCh
+
+	// Build variation name overrides: projectID → toolURN → name.
+	variationNames := make(map[uuid.UUID]map[string]string)
+	for _, v := range variations {
+		n := conv.FromPGText[string](v.Name)
+		if n == nil || *n == "" {
 			continue
 		}
-
-		projectTools := make(map[string]*types.ToolEntry)
-		toolsByProject[projectID] = projectTools
-
-		toolsRepo := tr.New(tx)
-		variationsRepo := vr.New(tx)
-		tplRepo := templatesR.New(tx)
-
-		httpTools, err := toolsRepo.FindHttpToolEntriesByUrn(ctx, tr.FindHttpToolEntriesByUrnParams{
-			ProjectID: projectID,
-			Urns:      pt.toolUrns,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to batch-fetch http tools").Log(ctx, logger)
+		m, ok := variationNames[v.ProjectID]
+		if !ok {
+			m = make(map[string]string)
+			variationNames[v.ProjectID] = m
 		}
+		m[v.SrcToolUrn.String()] = *n
+	}
 
-		funcTools, err := toolsRepo.FindFunctionToolEntriesByUrn(ctx, tr.FindFunctionToolEntriesByUrnParams{
-			ProjectID: projectID,
-			Urns:      pt.toolUrns,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to batch-fetch function tools").Log(ctx, logger)
+	// Build tool index: projectID → toolURN → ToolEntry.
+	toolsByProject := make(map[uuid.UUID]map[string]*types.ToolEntry, len(projectIDSet))
+	for pid := range projectIDSet {
+		toolsByProject[pid] = make(map[string]*types.ToolEntry)
+	}
+	for _, def := range httpTools {
+		toolURN := def.ToolUrn.String()
+		projTools := toolsByProject[def.ProjectID]
+		if projTools == nil {
+			continue
 		}
+		if _, exists := projTools[toolURN]; exists {
+			continue
+		}
+		name := def.Name
+		if variedName, ok := variationNames[def.ProjectID][toolURN]; ok {
+			name = variedName
+		}
+		projTools[toolURN] = &types.ToolEntry{
+			Type:        string(urn.ToolKindHTTP),
+			ID:          def.ID.String(),
+			Name:        name,
+			ToolUrn:     toolURN,
+			Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
+			HTTPMethod:  &def.HttpMethod,
+		}
+	}
 
-		promptTools, err := tplRepo.PeekTemplatesByUrns(ctx, templatesR.PeekTemplatesByUrnsParams{
-			ProjectID: projectID,
-			Urns:      pt.toolUrns,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to batch-fetch prompt tools").Log(ctx, logger)
+	for _, def := range funcTools {
+		toolURN := def.ToolUrn.String()
+		projTools := toolsByProject[def.ProjectID]
+		if projTools == nil {
+			continue
 		}
+		if _, exists := projTools[toolURN]; exists {
+			continue
+		}
+		projTools[toolURN] = &types.ToolEntry{
+			Type:        string(urn.ToolKindFunction),
+			ID:          def.ID.String(),
+			Name:        def.Name,
+			ToolUrn:     toolURN,
+			Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
+			HTTPMethod:  nil,
+		}
+	}
 
-		allVariations, err := variationsRepo.FindGlobalVariationsByToolURNs(ctx, vr.FindGlobalVariationsByToolURNsParams{
-			ProjectID: projectID,
-			ToolUrns:  pt.toolUrns,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to batch-fetch variations").Log(ctx, logger)
+	for _, pt := range promptTools {
+		toolURN := pt.ToolUrn.String()
+		projTools := toolsByProject[pt.ProjectID]
+		if projTools == nil {
+			continue
 		}
+		if _, exists := projTools[toolURN]; exists {
+			continue
+		}
+		projTools[toolURN] = &types.ToolEntry{
+			Type:        string(urn.ToolKindPrompt),
+			ID:          pt.ID.String(),
+			Name:        pt.Name,
+			ToolUrn:     toolURN,
+			Annotations: nil,
+			HTTPMethod:  nil,
+		}
+	}
 
-		urnToVariedName := make(map[string]string, len(allVariations))
-		for _, variation := range allVariations {
-			n := conv.FromPGText[string](variation.Name)
-			if n == nil || *n == "" {
-				continue
-			}
-			urnToVariedName[variation.SrcToolUrn.String()] = *n
-		}
-
-		seen := make(map[string]bool)
-		for _, def := range httpTools {
-			toolURN := def.ToolUrn.String()
-			if seen[toolURN] {
-				continue
-			}
-			seen[toolURN] = true
-			name := conv.Default(urnToVariedName[toolURN], def.Name)
-			projectTools[toolURN] = &types.ToolEntry{
-				Type:        string(urn.ToolKindHTTP),
-				ID:          def.ID.String(),
-				Name:        name,
-				ToolUrn:     toolURN,
-				Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
-				HTTPMethod:  &def.HttpMethod,
-			}
-		}
-
-		for _, def := range funcTools {
-			toolURN := def.ToolUrn.String()
-			if seen[toolURN] {
-				continue
-			}
-			seen[toolURN] = true
-			projectTools[toolURN] = &types.ToolEntry{
-				Type:        string(urn.ToolKindFunction),
-				ID:          def.ID.String(),
-				Name:        def.Name,
-				ToolUrn:     toolURN,
-				Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
-				HTTPMethod:  nil,
-			}
-		}
-
-		for _, pt := range promptTools {
-			toolURN := pt.ToolUrn.String()
-			if seen[toolURN] {
-				continue
-			}
-			seen[toolURN] = true
-			projectTools[toolURN] = &types.ToolEntry{
-				Type:        string(urn.ToolKindPrompt),
-				ID:          pt.ID.String(),
-				Name:        pt.Name,
-				ToolUrn:     toolURN,
-				Annotations: nil,
-				HTTPMethod:  nil,
-			}
-		}
-
-		for _, entry := range platformtools.FindToolEntries(pt.toolUrns) {
-			if !seen[entry.ToolUrn] {
-				seen[entry.ToolUrn] = true
-				projectTools[entry.ToolUrn] = entry
-			}
-		}
-
-		// Batch-fetch external MCP tool entries.
-		externalMCPUrns := make([]string, 0)
-		for _, toolUrn := range pt.toolUrns {
-			var parsedUrn urn.Tool
-			if err := parsedUrn.UnmarshalText([]byte(toolUrn)); err == nil {
-				if parsedUrn.Kind == urn.ToolKindExternalMCP && !seen[toolUrn] {
-					externalMCPUrns = append(externalMCPUrns, toolUrn)
-				}
-			}
-		}
-		if len(externalMCPUrns) > 0 {
-			externalmcpRepo := externalmcpR.New(tx)
-			externalTools, err := externalmcpRepo.GetExternalMCPToolDefinitionsByURNs(ctx, externalmcpR.GetExternalMCPToolDefinitionsByURNsParams{
-				ProjectID: projectID,
-				ToolUrns:  externalMCPUrns,
-			})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to batch-fetch external mcp tools").Log(ctx, logger)
-			}
-			for _, def := range externalTools {
-				if seen[def.ToolUrn] {
-					continue
-				}
-				seen[def.ToolUrn] = true
-				projectTools[def.ToolUrn] = &types.ToolEntry{
-					Type:        string(urn.ToolKindExternalMCP),
-					ID:          def.ID.String(),
-					Name:        def.Slug + ":proxy",
-					ToolUrn:     def.ToolUrn,
-					Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
-					HTTPMethod:  nil,
+	// Build platform tool index from the static registry (11 tools), not from 17k URNs.
+	platformIndex := make(map[string]*types.ToolEntry)
+	for _, desc := range platformtools.ListPlatformTools() {
+		entry := desc.ToToolEntry()
+		platformIndex[entry.ToolUrn] = entry
+	}
+	for pid, urnSet := range urnsByProject {
+		projTools := toolsByProject[pid]
+		for u := range urnSet {
+			if _, exists := projTools[u]; !exists {
+				if entry, ok := platformIndex[u]; ok {
+					projTools[u] = entry
 				}
 			}
 		}
 	}
 
-	// Assemble results.
+	for _, def := range externalMCPTools {
+		projTools := toolsByProject[def.ProjectID]
+		if projTools == nil {
+			continue
+		}
+		if _, exists := projTools[def.ToolUrn]; exists {
+			continue
+		}
+		projTools[def.ToolUrn] = &types.ToolEntry{
+			Type:        string(urn.ToolKindExternalMCP),
+			ID:          def.ID.String(),
+			Name:        def.Slug + ":proxy",
+			ToolUrn:     def.ToolUrn,
+			Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
+			HTTPMethod:  nil,
+		}
+	}
+
+	// Assemble results — look up each toolset's tools from the index.
 	result := make([]*types.ToolsetSummary, 0, len(toolsets))
 	for _, ts := range toolsets {
 		tools := []*types.ToolEntry{}
-		if len(ts.LatestToolUrns) > 0 {
-			projectTools := toolsByProject[ts.ProjectID]
-			for _, u := range ts.LatestToolUrns {
-				if entry, ok := projectTools[u.String()]; ok {
-					tools = append(tools, entry)
-				}
+		projTools := toolsByProject[ts.ProjectID]
+		for _, u := range ts.LatestToolUrns {
+			if entry, ok := projTools[u.String()]; ok {
+				tools = append(tools, entry)
 			}
 		}
 

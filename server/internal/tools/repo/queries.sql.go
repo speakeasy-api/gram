@@ -84,6 +84,70 @@ func (q *Queries) FindFunctionToolEntriesByUrn(ctx context.Context, arg FindFunc
 	return items, nil
 }
 
+const findFunctionToolEntriesForProjects = `-- name: FindFunctionToolEntriesForProjects :many
+WITH project_deployments AS (
+    SELECT DISTINCT ON (d.project_id) d.project_id, d.id as deployment_id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = ANY($1::uuid[])
+      AND ds.status = 'completed'
+    ORDER BY d.project_id, d.seq DESC
+)
+SELECT
+  pd.project_id,
+  ftd.id,
+  ftd.tool_urn,
+  ftd.name,
+  ftd.read_only_hint,
+  ftd.destructive_hint,
+  ftd.idempotent_hint,
+  ftd.open_world_hint
+FROM function_tool_definitions ftd
+INNER JOIN project_deployments pd ON ftd.deployment_id = pd.deployment_id
+WHERE ftd.deleted IS FALSE
+`
+
+type FindFunctionToolEntriesForProjectsRow struct {
+	ProjectID       uuid.UUID
+	ID              uuid.UUID
+	ToolUrn         urn.Tool
+	Name            string
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+}
+
+// Batch-resolves function tool entries across multiple projects in a single query.
+func (q *Queries) FindFunctionToolEntriesForProjects(ctx context.Context, projectIds []uuid.UUID) ([]FindFunctionToolEntriesForProjectsRow, error) {
+	rows, err := q.db.Query(ctx, findFunctionToolEntriesForProjects, projectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindFunctionToolEntriesForProjectsRow
+	for rows.Next() {
+		var i FindFunctionToolEntriesForProjectsRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.ID,
+			&i.ToolUrn,
+			&i.Name,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findFunctionToolsByUrn = `-- name: FindFunctionToolsByUrn :many
 WITH deployment AS (
     SELECT d.id
@@ -224,6 +288,83 @@ func (q *Queries) FindHttpToolEntriesByUrn(ctx context.Context, arg FindHttpTool
 			&i.Name,
 			&i.Security,
 			&i.ServerEnvVar,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+			&i.HttpMethod,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const findHttpToolEntriesForProjects = `-- name: FindHttpToolEntriesForProjects :many
+WITH project_deployments AS (
+    SELECT DISTINCT ON (d.project_id) d.project_id, d.id as deployment_id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = ANY($1::uuid[])
+      AND ds.status = 'completed'
+    ORDER BY d.project_id, d.seq DESC
+),
+all_deployment_ids AS (
+    SELECT project_id, deployment_id as id FROM project_deployments
+    UNION
+    SELECT pd.project_id, pv.deployment_id as id
+    FROM project_deployments pd
+    JOIN deployments_packages dp ON dp.deployment_id = pd.deployment_id
+    JOIN package_versions pv ON dp.version_id = pv.id
+)
+SELECT
+  adi.project_id,
+  htd.id,
+  htd.tool_urn,
+  htd.name,
+  htd.read_only_hint,
+  htd.destructive_hint,
+  htd.idempotent_hint,
+  htd.open_world_hint,
+  htd.http_method
+FROM http_tool_definitions htd
+INNER JOIN all_deployment_ids adi ON htd.deployment_id = adi.id
+WHERE htd.deleted IS FALSE
+`
+
+type FindHttpToolEntriesForProjectsRow struct {
+	ProjectID       uuid.UUID
+	ID              uuid.UUID
+	ToolUrn         urn.Tool
+	Name            string
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+	HttpMethod      string
+}
+
+// Batch-resolves HTTP tool entries across multiple projects in a single query.
+// Resolves each project's latest completed deployment once, including package deployments.
+// No URN filter — caller filters in Go against toolset version URN sets.
+func (q *Queries) FindHttpToolEntriesForProjects(ctx context.Context, projectIds []uuid.UUID) ([]FindHttpToolEntriesForProjectsRow, error) {
+	rows, err := q.db.Query(ctx, findHttpToolEntriesForProjects, projectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindHttpToolEntriesForProjectsRow
+	for rows.Next() {
+		var i FindHttpToolEntriesForProjectsRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.ID,
+			&i.ToolUrn,
+			&i.Name,
 			&i.ReadOnlyHint,
 			&i.DestructiveHint,
 			&i.IdempotentHint,
