@@ -238,6 +238,32 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 	return items, nil
 }
 
+const listOrganizationsWithWorkosID = `-- name: ListOrganizationsWithWorkosID :many
+SELECT workos_id::text AS workos_id
+FROM organization_metadata
+WHERE workos_id IS NOT NULL
+`
+
+func (q *Queries) ListOrganizationsWithWorkosID(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithWorkosID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var workos_id string
+		if err := rows.Scan(&workos_id); err != nil {
+			return nil, err
+		}
+		items = append(items, workos_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setAccountType = `-- name: SetAccountType :exec
 UPDATE organization_metadata
 SET gram_account_type = $1,
@@ -334,6 +360,37 @@ type SetUserWorkOSMembershipsParams struct {
 // workos_id are unaffected. Other users' memberships are never modified.
 func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkOSMembershipsParams) error {
 	_, err := q.db.Exec(ctx, setUserWorkOSMemberships, arg.UserID, arg.WorkosOrgIds, arg.WorkosMembershipIds)
+	return err
+}
+
+const syncUserOrganizationRoles = `-- name: SyncUserOrganizationRoles :exec
+WITH input_roles AS (
+    SELECT unnest($3::text[]) AS workos_role_slug
+),
+upserted AS (
+    INSERT INTO organization_user_roles (organization_id, user_id, workos_role_slug)
+    SELECT $1, $2, workos_role_slug
+    FROM input_roles
+    ON CONFLICT (organization_id, user_id, workos_role_slug) DO UPDATE SET
+        updated_at = clock_timestamp()
+    RETURNING workos_role_slug
+)
+DELETE FROM organization_user_roles
+WHERE organization_id = $1::text
+  AND user_id = $2::text
+  AND workos_role_slug NOT IN (SELECT workos_role_slug FROM input_roles)
+`
+
+type SyncUserOrganizationRolesParams struct {
+	OrganizationID  string
+	UserID          string
+	WorkosRoleSlugs []string
+}
+
+// Declaratively set all WorkOS roles for a user in an organization. Inserts new
+// roles and removes roles not in the provided list.
+func (q *Queries) SyncUserOrganizationRoles(ctx context.Context, arg SyncUserOrganizationRolesParams) error {
+	_, err := q.db.Exec(ctx, syncUserOrganizationRoles, arg.OrganizationID, arg.UserID, arg.WorkosRoleSlugs)
 	return err
 }
 
