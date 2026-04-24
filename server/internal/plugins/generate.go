@@ -202,6 +202,10 @@ func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform
 		if err := generateCursorPluginFlat(files, plugin, cfg); err != nil {
 			return nil, fmt.Errorf("generate cursor plugin: %w", err)
 		}
+	case "codex":
+		if err := generateCodexPluginFlat(files, plugin, cfg); err != nil {
+			return nil, fmt.Errorf("generate codex plugin: %w", err)
+		}
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
@@ -217,6 +221,10 @@ func generateCursorPluginFlat(files map[string][]byte, p PluginInfo, cfg Generat
 	return generateCursorPluginInDir(files, "", p.Slug, p, cfg)
 }
 
+func generateCodexPluginFlat(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
+	return generateCodexPluginInDir(files, "", p.Slug, p, cfg)
+}
+
 func generateClaudePlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
 	return generateClaudePluginInDir(files, p.Slug, p, cfg)
 }
@@ -226,10 +234,13 @@ func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 }
 
 func generateCodexPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
-	subdir := p.Slug + "-codex"
+	name := p.Slug + "-codex"
+	return generateCodexPluginInDir(files, name, name, p, cfg)
+}
 
+func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p PluginInfo, cfg GenerateConfig) error {
 	pluginJSON, err := marshalJSON(codexPluginMeta{
-		Name:        subdir,
+		Name:        name,
 		Version:     "0.1.0",
 		Description: p.Description,
 		MCPServers:  "./.mcp.json",

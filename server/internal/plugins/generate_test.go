@@ -201,6 +201,27 @@ func TestGenerateCodexMCPConfigUsesEnvHTTPHeadersForPublicServers(t *testing.T) 
 	require.Empty(t, server.HTTPHeaders, "public servers should not bake Authorization")
 }
 
+func TestGenerateSinglePluginPackageCodex(t *testing.T) {
+	t.Parallel()
+	plugin := PluginInfo{
+		Name:    "Test",
+		Slug:    "test",
+		Servers: []PluginServerInfo{{DisplayName: "gram-server", MCPURL: "https://app.getgram.ai/mcp/test"}},
+	}
+
+	files, err := GenerateSinglePluginPackage(plugin, GenerateConfig{OrgName: "Test Org", ServerURL: "https://app.getgram.ai"}, "codex")
+	require.NoError(t, err)
+
+	for p := range files {
+		require.False(t, strings.HasPrefix(p, "test-codex/"), "flat package must not include the marketplace subdir prefix: %s", p)
+	}
+
+	var meta codexPluginMeta
+	err = json.Unmarshal(files[".codex-plugin/plugin.json"], &meta)
+	require.NoError(t, err)
+	require.Equal(t, "test", meta.Name, "flat package should use the raw slug, not slug-codex")
+}
+
 func TestGenerateReadmeEscapesMarkdownInTableCells(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
