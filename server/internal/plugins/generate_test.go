@@ -201,6 +201,58 @@ func TestGenerateCodexMCPConfigUsesEnvHTTPHeadersForPublicServers(t *testing.T) 
 	require.Empty(t, server.HTTPHeaders, "public servers should not bake Authorization")
 }
 
+// TestCodexJSONKeysMatchPinnedSchema asserts the literal JSON key casing in
+// Codex output against the openai/codex source pinned in generate.go. Keys
+// are inspected on the raw JSON bytes (not a round-trip through our own
+// structs) so a struct-tag change — e.g. flipping mcpServers to mcp_servers
+// or bearer_token_env_var to bearerTokenEnvVar — fails this test even if
+// the roundtrip-based tests still pass.
+func TestCodexJSONKeysMatchPinnedSchema(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{{
+		Name: "Test",
+		Slug: "test",
+		Servers: []PluginServerInfo{
+			{DisplayName: "private-no-key", MCPURL: "https://x"},
+			{DisplayName: "private-with-key", MCPURL: "https://x"},
+			{
+				DisplayName: "public-with-env",
+				MCPURL:      "https://x",
+				IsPublic:    true,
+				EnvConfigs:  []ServerEnvConfig{{VariableName: "FOO", DisplayName: "X-Foo"}},
+			},
+		},
+	}}
+
+	filesNoKey, err := GeneratePluginPackages(plugins, GenerateConfig{OrgName: "Test Org", ServerURL: "https://x"})
+	require.NoError(t, err)
+	filesWithKey, err := GeneratePluginPackages(plugins, GenerateConfig{OrgName: "Test Org", ServerURL: "https://x", APIKey: "k"})
+	require.NoError(t, err)
+
+	// Plugin manifest: rename_all = "camelCase" in codex-rs/core-plugins/src/manifest.rs.
+	manifest := string(filesNoKey["test-codex/.codex-plugin/plugin.json"])
+	require.Contains(t, manifest, `"mcpServers"`, "plugin.json should use camelCase mcpServers (manifest.rs rename_all)")
+	require.NotContains(t, manifest, `"mcp_servers"`, "plugin.json must not use snake_case")
+
+	// .mcp.json wrapper: PluginMcpFile.mcp_servers_object_format in loader.rs
+	// accepts "mcpServers" (camelCase). Server entry fields are snake_case per
+	// mcp_types.rs (rename_all = "snake_case" on the untagged transport enum).
+	mcpNoKey := string(filesNoKey["test-codex/.mcp.json"])
+	mcpWithKey := string(filesWithKey["test-codex/.mcp.json"])
+
+	require.Contains(t, mcpNoKey, `"mcpServers"`, ".mcp.json wrapper should use camelCase mcpServers")
+	require.Contains(t, mcpNoKey, `"bearer_token_env_var"`, "private+no-key branch must emit snake_case bearer_token_env_var")
+	require.Contains(t, mcpNoKey, `"env_http_headers"`, "public+env branch must emit snake_case env_http_headers")
+	require.Contains(t, mcpWithKey, `"http_headers"`, "private+key branch must emit snake_case http_headers")
+
+	// Catch a casing regression in any direction.
+	for _, raw := range []string{mcpNoKey, mcpWithKey} {
+		require.NotContains(t, raw, `"bearerTokenEnvVar"`)
+		require.NotContains(t, raw, `"httpHeaders"`)
+		require.NotContains(t, raw, `"envHttpHeaders"`)
+	}
+}
+
 func TestCodexAuthPolicy(t *testing.T) {
 	t.Parallel()
 	private := PluginServerInfo{DisplayName: "priv", MCPURL: "https://x"}
