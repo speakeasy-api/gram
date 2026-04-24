@@ -91,17 +91,10 @@ function policyToCategories(
 ): Set<RuleCategory> {
   const cats = new Set<RuleCategory>();
   if (sources.includes("gitleaks")) cats.add("secrets");
-  if (!presidioEntities?.length && sources.includes("presidio")) {
-    // Legacy: presidio enabled without entity filter = all presidio categories
-    for (const cat of PRESIDIO_CATEGORIES) cats.add(cat);
-    return cats;
-  }
-  if (presidioEntities?.length) {
-    for (const cat of PRESIDIO_CATEGORIES) {
-      const catEntityIds = DETECTION_RULES[cat].map((r) => r.id);
-      if (catEntityIds.some((id) => presidioEntities.includes(id))) {
-        cats.add(cat);
-      }
+  for (const cat of PRESIDIO_CATEGORIES) {
+    const catEntityIds = DETECTION_RULES[cat].map((r) => r.id);
+    if (catEntityIds.some((id) => presidioEntities?.includes(id))) {
+      cats.add(cat);
     }
   }
   return cats;
