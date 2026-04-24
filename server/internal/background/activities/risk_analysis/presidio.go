@@ -125,32 +125,21 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	}
 	close(ch)
 
-	var (
-		wg       sync.WaitGroup
-		mu       sync.Mutex
-		firstErr error
-	)
+	var wg sync.WaitGroup
 
-	// Fan out workers that each drain items from ch until it's empty or an
-	// error is encountered.
+	// Fan out workers that each drain items from ch until it's empty.
+	// Individual failures are logged and skipped; results[idx] stays nil
+	// for that text, which the caller treats as "no findings".
 	for range workers {
 		wg.Go(func() {
 			for idx := range ch {
-				mu.Lock()
-				failed := firstErr != nil
-				mu.Unlock()
-				if failed {
-					return
-				}
-
 				findings, err := p.analyze(ctx, texts[idx], entities)
 				if err != nil {
-					mu.Lock()
-					if firstErr == nil {
-						firstErr = fmt.Errorf("presidio analyze text %d: %w", idx, err)
-					}
-					mu.Unlock()
-					return
+					p.logger.WarnContext(ctx, "presidio analyze failed for text, skipping",
+						slog.Int("index", idx),
+						slog.String("error", err.Error()),
+					)
+					continue
 				}
 				results[idx] = findings
 				if onProgress != nil {
@@ -161,9 +150,6 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	}
 
 	wg.Wait()
-	if firstErr != nil {
-		return nil, firstErr
-	}
 	return results, nil
 }
 
