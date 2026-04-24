@@ -2375,6 +2375,478 @@ func DecodeDownloadPluginPackageResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildGetPublishStatusRequest instantiates a HTTP request object with method
+// and path set to call the "plugins" service "getPublishStatus" endpoint
+func (c *Client) BuildGetPublishStatusRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetPublishStatusPluginsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("plugins", "getPublishStatus", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetPublishStatusRequest returns an encoder for requests sent to the
+// plugins getPublishStatus server.
+func EncodeGetPublishStatusRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*plugins.GetPublishStatusPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("plugins", "getPublishStatus", "*plugins.GetPublishStatusPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetPublishStatusResponse returns a decoder for responses returned by
+// the plugins getPublishStatus endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetPublishStatusResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetPublishStatusResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetPublishStatusResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPublishStatus", err)
+			}
+			err = ValidateGetPublishStatusResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPublishStatus", err)
+			}
+			res := NewGetPublishStatusPublishStatusResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetPublishStatusUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPublishStatus", err)
+			}
+			err = ValidateGetPublishStatusUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPublishStatus", err)
+			}
+			return nil, NewGetPublishStatusUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetPublishStatusForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPublishStatus", err)
+			}
+			err = ValidateGetPublishStatusForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPublishStatus", err)
+			}
+			return nil, NewGetPublishStatusForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetPublishStatusBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPublishStatus", err)
+			}
+			err = ValidateGetPublishStatusBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPublishStatus", err)
+			}
+			return nil, NewGetPublishStatusBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetPublishStatusNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPublishStatus", err)
+			}
+			err = ValidateGetPublishStatusNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPublishStatus", err)
+			}
+			return nil, NewGetPublishStatusNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetPublishStatusConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPublishStatus", err)
+			}
+			err = ValidateGetPublishStatusConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPublishStatus", err)
+			}
+			return nil, NewGetPublishStatusConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetPublishStatusUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPublishStatus", err)
+			}
+			err = ValidateGetPublishStatusUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPublishStatus", err)
+			}
+			return nil, NewGetPublishStatusUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetPublishStatusInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPublishStatus", err)
+			}
+			err = ValidateGetPublishStatusInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPublishStatus", err)
+			}
+			return nil, NewGetPublishStatusInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetPublishStatusInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "getPublishStatus", err)
+				}
+				err = ValidateGetPublishStatusInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "getPublishStatus", err)
+				}
+				return nil, NewGetPublishStatusInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetPublishStatusUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "getPublishStatus", err)
+				}
+				err = ValidateGetPublishStatusUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "getPublishStatus", err)
+				}
+				return nil, NewGetPublishStatusUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("plugins", "getPublishStatus", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetPublishStatusGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPublishStatus", err)
+			}
+			err = ValidateGetPublishStatusGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPublishStatus", err)
+			}
+			return nil, NewGetPublishStatusGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("plugins", "getPublishStatus", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildPublishPluginsRequest instantiates a HTTP request object with method
+// and path set to call the "plugins" service "publishPlugins" endpoint
+func (c *Client) BuildPublishPluginsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PublishPluginsPluginsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("plugins", "publishPlugins", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodePublishPluginsRequest returns an encoder for requests sent to the
+// plugins publishPlugins server.
+func EncodePublishPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*plugins.PublishPluginsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("plugins", "publishPlugins", "*plugins.PublishPluginsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewPublishPluginsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("plugins", "publishPlugins", err)
+		}
+		return nil
+	}
+}
+
+// DecodePublishPluginsResponse returns a decoder for responses returned by the
+// plugins publishPlugins endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodePublishPluginsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodePublishPluginsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body PublishPluginsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "publishPlugins", err)
+			}
+			err = ValidatePublishPluginsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "publishPlugins", err)
+			}
+			res := NewPublishPluginsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body PublishPluginsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "publishPlugins", err)
+			}
+			err = ValidatePublishPluginsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "publishPlugins", err)
+			}
+			return nil, NewPublishPluginsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body PublishPluginsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "publishPlugins", err)
+			}
+			err = ValidatePublishPluginsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "publishPlugins", err)
+			}
+			return nil, NewPublishPluginsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body PublishPluginsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "publishPlugins", err)
+			}
+			err = ValidatePublishPluginsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "publishPlugins", err)
+			}
+			return nil, NewPublishPluginsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body PublishPluginsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "publishPlugins", err)
+			}
+			err = ValidatePublishPluginsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "publishPlugins", err)
+			}
+			return nil, NewPublishPluginsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body PublishPluginsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "publishPlugins", err)
+			}
+			err = ValidatePublishPluginsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "publishPlugins", err)
+			}
+			return nil, NewPublishPluginsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body PublishPluginsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "publishPlugins", err)
+			}
+			err = ValidatePublishPluginsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "publishPlugins", err)
+			}
+			return nil, NewPublishPluginsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body PublishPluginsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "publishPlugins", err)
+			}
+			err = ValidatePublishPluginsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "publishPlugins", err)
+			}
+			return nil, NewPublishPluginsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body PublishPluginsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "publishPlugins", err)
+				}
+				err = ValidatePublishPluginsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "publishPlugins", err)
+				}
+				return nil, NewPublishPluginsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body PublishPluginsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "publishPlugins", err)
+				}
+				err = ValidatePublishPluginsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "publishPlugins", err)
+				}
+				return nil, NewPublishPluginsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("plugins", "publishPlugins", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body PublishPluginsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "publishPlugins", err)
+			}
+			err = ValidatePublishPluginsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "publishPlugins", err)
+			}
+			return nil, NewPublishPluginsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("plugins", "publishPlugins", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalPluginResponseBodyToPluginsPlugin builds a value of type
 // *plugins.Plugin from a value of type *PluginResponseBody.
 func unmarshalPluginResponseBodyToPluginsPlugin(v *PluginResponseBody) *plugins.Plugin {

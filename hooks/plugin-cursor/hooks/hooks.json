@@ -1,4 +1,5 @@
 {
+  "version": 1,
   "hooks": {
     "beforeSubmitPrompt": [
       {
@@ -21,16 +22,31 @@
     "preToolUse": [
       {
         "command": "./hooks/send_hook.sh",
+        "matcher": "^(?!MCP:)",
         "timeout": 10
       }
     ],
     "postToolUse": [
       {
         "command": "./hooks/send_hook.sh",
+        "matcher": "^(?!MCP:)",
         "timeout": 10
       }
     ],
     "postToolUseFailure": [
+      {
+        "command": "./hooks/send_hook.sh",
+        "matcher": "^(?!MCP:)",
+        "timeout": 10
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "./hooks/send_hook.sh",
+        "timeout": 10
+      }
+    ],
+    "afterMCPExecution": [
       {
         "command": "./hooks/send_hook.sh",
         "timeout": 10

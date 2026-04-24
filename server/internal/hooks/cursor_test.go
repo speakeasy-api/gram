@@ -144,6 +144,183 @@ func TestBuildCursorTelemetryAttributes_MCPToolParsing(t *testing.T) {
 	assert.Equal(t, "linear", attrs[attr.ToolCallSourceKey])
 }
 
+func TestCursor_BeforeMCPExecution_ReturnsAllow(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	toolName := "list_issues"
+	toolUseID := "toolu_mcp_123"
+	conversationID := "conv-mcp-abc"
+	serverURL := "https://mcp.linear.app/sse"
+
+	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
+		HookEventName:  "beforeMCPExecution",
+		ToolName:       &toolName,
+		ToolUseID:      &toolUseID,
+		ConversationID: &conversationID,
+		URL:            &serverURL,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Permission)
+	assert.Equal(t, "allow", *result.Permission)
+}
+
+func TestBuildCursorTelemetryAttributes_BeforeMCPExecution_ToolSourceFromURL(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolName := "list_issues"
+	serverURL := "https://mcp.linear.app/sse"
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "beforeMCPExecution",
+		ToolName:      &toolName,
+		URL:           &serverURL,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	assert.Equal(t, "BeforeMCPExecution", attrs[attr.HookEventKey])
+	assert.Equal(t, "list_issues", attrs[attr.ToolNameKey])
+	assert.Equal(t, "mcp.linear.app", attrs[attr.ToolCallSourceKey])
+}
+
+func TestBuildCursorTelemetryAttributes_BeforeMCPExecution_StripsMCPPrefix(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolName := "MCP:list_issues"
+	cmd := "npx -y @linear/mcp"
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "beforeMCPExecution",
+		ToolName:      &toolName,
+		Command:       &cmd,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	assert.Equal(t, "list_issues", attrs[attr.ToolNameKey])
+	assert.Equal(t, cmd, attrs[attr.ToolCallSourceKey])
+}
+
+func TestBuildCursorTelemetryAttributes_MCPBeforeAfter_ShareTraceID(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	conversationID := "conv-trace-1"
+	generationID := "gen-trace-1"
+	toolName := "list_issues"
+	serverURL := "https://mcp.linear.app/sse"
+	toolInput := map[string]any{"assignee": "me", "state": "started", "limit": 100}
+	resultJSON := `{"content":[],"isError":false}`
+
+	before := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName:  "beforeMCPExecution",
+		ConversationID: &conversationID,
+		GenerationID:   &generationID,
+		ToolName:       &toolName,
+		ToolInput:      toolInput,
+		URL:            &serverURL,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	after := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName:  "afterMCPExecution",
+		ConversationID: &conversationID,
+		GenerationID:   &generationID,
+		ToolName:       &toolName,
+		ToolInput:      toolInput,
+		URL:            &serverURL,
+		ResultJSON:     &resultJSON,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	beforeTrace, ok := before[attr.TraceIDKey].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, beforeTrace)
+	afterTrace, ok := after[attr.TraceIDKey].(string)
+	require.True(t, ok)
+	assert.Equal(t, beforeTrace, afterTrace, "before/after MCP events should share a trace_id")
+
+	beforeCallID, ok := before[attr.GenAIToolCallIDKey].(string)
+	require.True(t, ok)
+	afterCallID, ok := after[attr.GenAIToolCallIDKey].(string)
+	require.True(t, ok)
+	assert.Equal(t, beforeCallID, afterCallID, "before/after MCP events should share a synthetic tool_call_id")
+	assert.NotEmpty(t, beforeCallID)
+}
+
+func TestBuildCursorTelemetryAttributes_AfterMCPExecution_ResultJSON(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolName := "list_issues"
+	serverURL := "https://mcp.linear.app/sse"
+	resultJSON := `{"issues":[{"id":"ABC-1"}]}`
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "afterMCPExecution",
+		ToolName:      &toolName,
+		URL:           &serverURL,
+		ResultJSON:    &resultJSON,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	assert.Equal(t, "AfterMCPExecution", attrs[attr.HookEventKey])
+	assert.Equal(t, "mcp.linear.app", attrs[attr.ToolCallSourceKey])
+	got, ok := attrs[attr.GenAIToolCallResultKey].(string)
+	require.True(t, ok, "tool call result should be a string")
+	assert.JSONEq(t, resultJSON, got)
+}
+
+func TestBuildCursorTelemetryAttributes_AfterMCPExecution_IsErrorSetsHookError(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolName := "list_issues"
+	resultJSON := `{"content":[{"type":"text","text":"oops"}],"isError":true}`
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "afterMCPExecution",
+		ToolName:      &toolName,
+		ResultJSON:    &resultJSON,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	got, ok := attrs[attr.HookErrorKey].(string)
+	require.True(t, ok, "gram.hook.error should be set when isError=true")
+	assert.JSONEq(t, resultJSON, got)
+}
+
+func TestBuildCursorTelemetryAttributes_AfterMCPExecution_IsErrorFalseNoHookError(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolName := "list_issues"
+	resultJSON := `{"content":[],"isError":false}`
+
+	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
+		HookEventName: "afterMCPExecution",
+		ToolName:      &toolName,
+		ResultJSON:    &resultJSON,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	_, ok = attrs[attr.HookErrorKey]
+	assert.False(t, ok, "gram.hook.error should not be set when isError=false")
+}
+
 func TestBuildCursorTelemetryAttributes_NilUserEmail(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -199,6 +376,34 @@ func TestCursor_Stop_ReturnsEmpty(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Nil(t, result.Permission)
+}
+
+func TestCursor_AfterAgentResponse_WithTokens_DoesNotError(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	conversationID := "conv-aar-tokens"
+	userEmail := "dev@example.com"
+	text := "here is my response"
+	model := "claude-sonnet-4-5"
+	inputTokens := 182306
+	outputTokens := 981
+	cacheReadTokens := 143523
+	cacheWriteTokens := 38773
+
+	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
+		HookEventName:    "afterAgentResponse",
+		ConversationID:   &conversationID,
+		UserEmail:        &userEmail,
+		Text:             &text,
+		Model:            &model,
+		InputTokens:      &inputTokens,
+		OutputTokens:     &outputTokens,
+		CacheReadTokens:  &cacheReadTokens,
+		CacheWriteTokens: &cacheWriteTokens,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
 }
 
 func TestCursor_PersistEventRouting_AllEventTypes(t *testing.T) {

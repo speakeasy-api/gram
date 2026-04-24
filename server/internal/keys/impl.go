@@ -36,7 +36,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const keyPrefix = "gram"
 
 type Service struct {
 	tracer      trace.Tracer
@@ -55,18 +54,7 @@ var _ gen.Service = (*Service)(nil)
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, env string, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("keys"))
 
-	var keyEnv string
-	switch env {
-	case "local":
-		keyEnv = "local"
-	case "dev":
-		keyEnv = "test"
-	case "prod":
-		keyEnv = "live"
-	default:
-		keyEnv = "local"
-	}
-	fullKeyPrefix := fmt.Sprintf("%s_%s_", keyPrefix, keyEnv)
+	fullKeyPrefix := auth.APIKeyPrefix(env)
 	return &Service{
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/keys"),
 		logger:      logger,

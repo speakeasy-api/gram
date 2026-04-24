@@ -12,11 +12,18 @@ import {
   usePluginsSuspense,
 } from "@gram/client/react-query/plugins";
 import { useDeletePluginMutation } from "@gram/client/react-query/deletePlugin";
+import {
+  invalidateAllPublishStatus,
+  usePublishStatusSuspense,
+} from "@gram/client/react-query/publishStatus";
+import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
 import { Plus, Puzzle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, Outlet, useNavigate } from "react-router";
+import { toast } from "sonner";
+import { PublishDialog } from "./PublishDialog";
 
 export function PluginsRoot() {
   return <Outlet />;
@@ -24,6 +31,7 @@ export function PluginsRoot() {
 
 export default function Plugins() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [pluginToDelete, setPluginToDelete] = useState<Plugin | null>(null);
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
@@ -31,6 +39,20 @@ export default function Plugins() {
   const navigate = useNavigate();
 
   const { data } = usePluginsSuspense();
+  const { data: publishStatus } = usePublishStatusSuspense();
+
+  const publishMutation = usePublishPluginsMutation({
+    onSuccess: () => {
+      setIsPublishDialogOpen(false);
+      invalidateAllPublishStatus(queryClient);
+      toast.success("Plugins published to GitHub");
+    },
+    onError: () => {
+      toast.error("Failed to publish plugins to GitHub");
+    },
+  });
+
+  const hasPlugins = (data?.plugins ?? []).length > 0;
 
   const filteredPlugins = useMemo(() => {
     const plugins = data?.plugins ?? [];
@@ -81,6 +103,23 @@ export default function Plugins() {
       request: { id: pluginToDelete.id },
     });
   };
+
+  // Destructure mutate so the dep array references the stable function
+  // directly (TanStack Query keeps mutate referentially stable, but the
+  // wrapper object is fresh per render). Keeps memo() on PublishDialog
+  // effective and satisfies react-hooks/exhaustive-deps.
+  const { mutate: publishMutate } = publishMutation;
+  const handlePublish = useCallback(
+    (githubUsername?: string) => {
+      publishMutate({
+        security: { sessionHeaderGramSession: "" },
+        request: {
+          publishPluginsRequestBody: { githubUsername },
+        },
+      });
+    },
+    [publishMutate],
+  );
 
   const columns: Column<Plugin>[] = [
     {
@@ -141,23 +180,46 @@ export default function Plugins() {
       <Page.Body>
         <Page.Section>
           <Page.Section.Title>Plugins</Page.Section.Title>
-          <Page.Section.Description>
+          <Page.Section.Description className={hasPlugins ? "w-3/4" : ""}>
             Create distributable plugin bundles that package MCP servers and
             hooks together. Assign plugins to roles and publish them to Claude
             Code and Cursor marketplaces via GitHub.
           </Page.Section.Description>
           <Page.Section.CTA>
-            {(data?.plugins ?? []).length > 0 && (
-              <Button onClick={() => setIsCreateDialogOpen(true)}>
-                <Button.LeftIcon>
-                  <Plus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>New Plugin</Button.Text>
-              </Button>
+            {hasPlugins && (
+              <Stack direction="horizontal" gap={2}>
+                {publishStatus?.configured && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => setIsPublishDialogOpen(true)}
+                    disabled={publishMutation.isPending}
+                  >
+                    <Button.LeftIcon>
+                      <Icon
+                        name={publishStatus.connected ? "refresh-cw" : "upload"}
+                        className="h-4 w-4"
+                      />
+                    </Button.LeftIcon>
+                    <Button.Text>
+                      {publishMutation.isPending
+                        ? "Publishing..."
+                        : publishStatus.connected
+                          ? "Re-publish"
+                          : "Publish to GitHub"}
+                    </Button.Text>
+                  </Button>
+                )}
+                <Button onClick={() => setIsCreateDialogOpen(true)}>
+                  <Button.LeftIcon>
+                    <Plus className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>New Plugin</Button.Text>
+                </Button>
+              </Stack>
             )}
           </Page.Section.CTA>
           <Page.Section.Body>
-            {(data?.plugins ?? []).length === 0 ? (
+            {!hasPlugins ? (
               <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
                 <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
                   <Puzzle className="text-muted-foreground h-6 w-6" />
@@ -260,6 +322,12 @@ export default function Plugins() {
             </Dialog.Footer>
           </Dialog.Content>
         </Dialog>
+        <PublishDialog
+          open={isPublishDialogOpen}
+          onOpenChange={setIsPublishDialogOpen}
+          onPublish={handlePublish}
+          isPending={publishMutation.isPending}
+        />
       </Page.Body>
     </Page>
   );
