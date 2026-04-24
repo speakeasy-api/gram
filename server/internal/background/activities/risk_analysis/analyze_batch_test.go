@@ -69,7 +69,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		RiskPolicyID:   td.policyID,
 		PolicyVersion:  td.policyVersion,
 		MessageIDs:     []uuid.UUID{msgID},
-		Sources:        []string{"gitleaks"},
+		Sources:        []string{"gitleaks", "presidio"},
 	})
 	require.NoError(t, err, "should not fail when presidio is down")
 
