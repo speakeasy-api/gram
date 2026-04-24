@@ -4,7 +4,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
-import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
+import {
+  PulseMCPServer,
+  useInfiniteListMCPCatalog,
+} from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment, useListToolsets } from "@gram/client/react-query";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
@@ -52,7 +55,9 @@ export default function CatalogDetail() {
 
   const server = useMemo(() => {
     if (!data?.pages || !serverSpecifier) return null;
-    const allServers = data.pages.flatMap((page) => page.servers as Server[]);
+    const allServers = data.pages.flatMap(
+      (page) => page.servers as PulseMCPServer[],
+    );
     // The specifier is URL encoded, so we need to decode it
     const decodedSpecifier = decodeURIComponent(serverSpecifier);
     return (
@@ -90,8 +95,8 @@ export default function CatalogDetail() {
     },
   });
 
-  const meta = server?.meta["com.pulsemcp/server"];
-  const versionMeta = server?.meta["com.pulsemcp/server-version"];
+  const meta = server?.meta?.["com.pulsemcp/server"];
+  const versionMeta = server?.meta?.["com.pulsemcp/server-version"];
   const isOfficial = meta?.isOfficial;
   const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
   const decodedSpecifier = serverSpecifier

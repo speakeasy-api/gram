@@ -1,15 +1,17 @@
 ---
 name: gram-rbac
-description: Concepts, external interfaces, and conventions for Gram's role-based access control (RBAC) subsystem — scopes, grants, principals, system roles, and the `access.Manager.Require` enforcement path used inside handlers. Activate whenever the task involves authorization (adding or modifying a scope or resource type, declaring a new role or grant, gating a handler, changing scope inheritance, exposing RBAC state through the dashboard).
+description: Concepts, external interfaces, and conventions for Gram's role-based access control (RBAC) subsystem — scopes, grants, principals, system roles, and the `authz.Engine.Require` enforcement path used inside handlers. Activate whenever the task involves authorization (adding or modifying a scope or resource type, declaring a new role or grant, gating a handler, changing scope inheritance, exposing RBAC state through the dashboard).
 metadata:
   relevant_files:
+    - "server/internal/authz/**/*.go"
+    - "server/internal/authztest/**/*.go"
     - "server/internal/access/**/*.go"
     - "server/internal/access/**/*.sql"
     - "server/design/access/**"
     - "client/dashboard/src/pages/access/**"
 ---
 
-Gram's RBAC is a scope-and-grant model. The server ships with a fixed set of **scopes** grouped into **system roles** (admin, member). A **grant** binds a scope to an optional resource id for a given **principal** (user or custom role). Handlers enforce scopes by calling `access.Manager.Require(ctx, access.Check{Scope, ResourceID})`; the dashboard renders the same scope vocabulary through a matching TypeScript union that is hand-maintained in lockstep with the server.
+Gram's RBAC is a scope-and-grant model. The server ships with a fixed set of **scopes** grouped into **system roles** (admin, member). A **grant** binds a scope to an optional resource id for a given **principal** (user or custom role). Handlers enforce scopes by calling `authz.Engine.Require(ctx, authz.Check{Scope, ResourceID})`; the dashboard renders the same scope vocabulary through a matching TypeScript union that is hand-maintained in lockstep with the server.
 
 ## Concepts and terminology
 
@@ -19,55 +21,70 @@ Gram's RBAC is a scope-and-grant model. The server ships with a fixed set of **s
 
 **Scope expansion.** Higher-privilege scopes satisfy lower-privilege ones, so a handler that needs `mcp:read` is also reachable by callers who hold `mcp:write` or `mcp:connect`. For a typical read/write/connect triple the wiring is: write satisfies read; connect satisfies both read and write.
 
-**Grant.** A tuple of `{Scope, Resource}` held by a principal. `Resource` is either a specific id or the wildcard `"*"` (unrestricted). The API-visible forms are `RoleGrant` and `ListRoleGrant` (which also carries the transitively-implied `sub_scopes`).
+**Grant.** A tuple of `{Scope, Resource}` held by a principal. `Resource` is either a specific id or the wildcard `"*"` (`authz.WildcardResource`). The API-visible forms are `RoleGrant` and `ListRoleGrant` (which also carries the transitively-implied `sub_scopes`).
 
 **Principal.** Who holds a grant — a `urn.Principal` with a type (user, role, service account) and an id.
 
-**System role.** A built-in role shipped with the server. Gram defines two: **admin** (every scope) and **member** (the read-and-connect subset).
+**System role.** A built-in role shipped with the server. Gram defines two: **admin** (every scope) and **member** (the read-and-connect subset). Constants `authz.SystemRoleAdmin` and `authz.SystemRoleMember`.
 
-**Enforcement.** Inside a handler, authorization is an explicit one-line check: the handler names the scope (and resource, if project-scoped) it needs, and the RBAC manager either allows the call or returns a forbidden error.
+**Enforcement.** Inside a handler, authorization is an explicit one-line check: the handler names the scope (and resource, if project-scoped) it needs, and the RBAC engine either allows the call or returns a forbidden error.
 
 **Auth context invariant.** By the time a handler runs, the auth context's `ActiveOrganizationID` is always populated — RBAC does not defensively check for an empty org id.
 
 ## Server
 
-The server-side RBAC implementation lives in `server/internal/access/` and the `access` Goa service design lives in `server/design/access/`.
+RBAC is split across two Go packages: `server/internal/authz/` holds the enforcement primitives, and `server/internal/access/` implements the Goa management service that exposes them over HTTP. When adding new authorization primitives (scopes, checks, enforcement logic) edit `authz`; when adding or changing the management API (role/member endpoints) edit `access`.
 
-### Conventions
+### `authz` package — the enforcer
 
-**Scope declarations.** `Scope` type and every `Scope*` constant live in `server/internal/access/scopes.go`. Constants follow the `Scope<Name>` pattern; string values follow `<resource>:<verb>` (e.g. `mcp:read`, `org:admin`). `root` is reserved for service-internal superadmin overrides. The file also holds the `scopeExpansions` map and computes the inverse `scopeSubScopes` in `init()`.
+Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s imports are deliberately minimal (DB, logger, cache, WorkOS, urn) so any package that gates on RBAC can depend on it without import cycles — never add an import to `authz` from a package that transitively depends on `authz`, since the split exists specifically to prevent the cycles that motivated it.
 
-**System role grants.** `SystemRoleGrants` in `server/internal/access/grants.go` — admin and member defaults. Adding a scope usually means adding it to admin, and optionally to member if end users should get it by default.
+**Scope declarations.** `Scope` type and every `Scope*` constant live in `server/internal/authz/scopes.go`. Constants follow the `Scope<Name>` pattern; string values follow `<resource>:<verb>` (e.g. `mcp:read`, `org:admin`). `ScopeRoot` is reserved for service-internal superadmin overrides. The file also holds the `scopeExpansions` map and computes the inverse `scopeSubScopes` in `init()`. `CalculateSubScopes(scope)` exposes the inverse to callers.
+
+**System role grants.** `SystemRoleGrants` in `server/internal/authz/grants.go` — admin and member defaults. Adding a scope usually means adding it to admin, and optionally to member if end users should get it by default. `SeedSystemRoleGrants` upserts the full set; `SyncGrants` upserts grants for a single role slug.
+
+**`authz.Engine`.** The central enforcer. Methods: `PrepareContext`, `Require(ctx, checks...)`, `RequireAny(ctx, checks...)`, `Filter(ctx, scope, ids)`, `ShouldEnforce`, `InvalidateRoleCache`, `InvalidateAllRoleCaches`, `GetScopeOverrides`. Constructed in `server/cmd/gram/start.go` via `authz.NewEngine(logger, db, isEnabled, membership, roleCache, opts...)` and injected into every service that gates on RBAC. The `IsRBACEnabled` callback lets the engine short-circuit when the product feature flag is off for the org; the `MembershipFetcher` is the WorkOS client used for role-slug lookups.
+
+**`authz.Check`.** `{Scope, ResourceID}` — the thing a handler asks `Require` to enforce. `ResourceID` is typically `authCtx.ProjectID.String()` for project-scoped scopes. Defined in `server/internal/authz/access.go`.
+
+**`authz.Filter` for list endpoints.** When a handler lists resources the caller might only partially own, `s.authz.Filter(ctx, scope, candidateIDs) ([]string, error)` returns the subset of IDs the caller holds the scope for. The standard pattern is: gather candidate IDs from the repo, call `Filter`, then rebuild the response from the allowed IDs. Prefer this over a post-hoc per-item `Require` loop. Canonical call sites: `server/internal/projects/impl.go` (projects list) and `server/internal/toolsets/impl.go` (toolsets list).
+
+**Auth context accessor.** `contextvalues.GetAuthContext(ctx)` returns the current `*AuthContext`. RBAC-relevant fields: `ActiveOrganizationID`, `ProjectID`, `UserID`, `Email`, `AccountType`, `IsAdmin`, `APIKeyID`, `SessionID`.
+
+**Scope overrides.** A local-dev/superadmin header can inject a restricted grant set for the request, parsed in `override.go` and surfaced via `Engine.GetScopeOverrides`. `access.ListGrants` returns the override set verbatim when active so the dashboard reflects what the engine will enforce.
+
+**Error model.** `errors.go` defines sentinel errors (`ErrDenied`, `ErrMissingGrants`, `ErrNoChecks`, `ErrInvalidCheck`) and typed errors (`DeniedError`, `InvalidCheckError`). The engine maps these to `oops` codes — `ErrDenied` → `oops.CodeForbidden`, everything else → `oops.CodeUnexpected` with a logged message.
+
+**Grant loading.** `LoadGrants(ctx, db, orgID, principals)` reads the principal URN set and returns the flattened `[]Grant`. Called by both `Engine.PrepareContext` (middleware path) and `access.ListGrants` (user-facing).
+
+### `access` package — the management API
+
+`server/internal/access/` implements the Goa `access` service on top of `authz`. Every handler calls `s.authz.Require(...)` with the appropriate scope before doing work. The package also owns `queries.sql` and the generated `server/internal/access/repo/` SQLc package that both `access` and `authz` use to read and write grant rows.
 
 **Scope metadata.** `ListScopes` in `server/internal/access/impl.go` returns one `{Slug, Description, ResourceType}` entry per scope; this is what the dashboard consumes to render the scope picker.
 
-**`fullAccessGrantPayloads` helper.** A helper at the bottom of `server/internal/access/impl.go` that returns every admin-equivalent grant payload. Consumed by `listUserGrants`, so it must grow whenever a new scope is added or an admin-equivalent user would be missing it.
+**Full-access grant list.** `ListGrants` returns a hard-coded full-access scope list when RBAC is disabled or the caller has no grants loaded. That inline list in `server/internal/access/impl.go` must grow whenever a new scope is added. The parallel test expectation is `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go`.
 
-**`access.Manager`.** The central enforcer. Methods: `PrepareContext`, `Require(ctx, checks...)`, `RequireAny(ctx, checks...)`, `Filter(ctx, scope, ids)`, `InvalidateRoleCache`. Constructed in `server/cmd/gram/start.go` and injected into every service that gates on RBAC.
+**System role gating.** `isSystemRole(slug)` in `impl.go` checks against `authz.SystemRoleAdmin` and `authz.SystemRoleMember`. System roles cannot be renamed, deleted, or have their grant set edited; only member assignment is allowed.
 
-**`access.Check`.** `{Scope, ResourceID}` — the thing a handler asks `Require` to enforce. `ResourceID` is typically `authCtx.ProjectID.String()` for project-scoped scopes.
-
-**`access.Filter` for list endpoints.** When a handler lists resources the caller might only partially own, `s.access.Filter(ctx, scope, candidateIDs) ([]string, error)` returns the subset of IDs the caller holds the scope for. The standard pattern is: gather candidate IDs from the repo, call `Filter`, then rebuild the response from the allowed IDs. Prefer this over a post-hoc per-item `Require` loop. Canonical call sites: `server/internal/projects/impl.go` (projects list) and `server/internal/toolsets/impl.go` (toolsets list).
-
-**Auth context accessor.** `contextvalues.GetAuthContext(ctx)` returns the current `*AuthContext`. RBAC-relevant fields: `ActiveOrganizationID`, `ProjectID`, `UserID`, `Email`, `AccountType`, `IsAdmin`.
+**Feature flag endpoints.** `enableRBAC` / `disableRBAC` / `getRBACStatus` are superadmin-only. Enabling seeds `SystemRoleGrants` into the org's `principal_grants` table.
 
 ### Non-generated files
 
-| File                                 | Purpose                                                                                                                                                      |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `server/design/access/design.go`     | Goa design for the `access` service. Regenerates `server/gen/access/` and `server/gen/http/access/` via `mise run gen:goa-server`.                           |
-| `server/internal/access/*_test.go`   | Black-box tests for the service (`listscopes_test.go`, `rbac_test.go`, `listusergrants_test.go`, `manager_test.go`, `expand_test.go`, and per-method tests). |
-| `server/internal/access/access.go`   | The `Check` type and its expansion logic.                                                                                                                    |
-| `server/internal/access/accesstest/` | Test helpers other packages reuse for RBAC setup.                                                                                                            |
-| `server/internal/access/context.go`  | Request-context helpers for grants.                                                                                                                          |
-| `server/internal/access/errors.go`   | The package's sentinel errors.                                                                                                                               |
-| `server/internal/access/grants.go`   | System role defaults.                                                                                                                                        |
-| `server/internal/access/impl.go`     | Implementation of the `/rpc/access.*` Goa service.                                                                                                           |
-| `server/internal/access/load.go`     | Principal grant loading from the database.                                                                                                                   |
-| `server/internal/access/manager.go`  | The central RBAC enforcer.                                                                                                                                   |
-| `server/internal/access/override.go` | Scope override plumbing.                                                                                                                                     |
-| `server/internal/access/queries.sql` | SQLc queries for principals, grants, roles, and members. Regenerates `server/internal/access/repo/` via `mise run gen:sqlc-server`.                          |
-| `server/internal/access/scopes.go`   | Scope type, constants, and expansion rules.                                                                                                                  |
+| File                                   | Purpose                                                                                                                               |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/design/access/design.go`       | Goa design for the `access` service. Regenerates `server/gen/access/` and `server/gen/http/access/` via `mise run gen:goa-server`.    |
+| `server/internal/authz/access.go`      | The `Check` type and its expansion logic.                                                                                             |
+| `server/internal/authz/context.go`     | Request-context helpers for grants (`GrantsToContext`, `GrantsFromContext`).                                                          |
+| `server/internal/authz/engine.go`      | The `Engine` type — central RBAC enforcer, role-slug caching, and override resolution.                                                |
+| `server/internal/authz/errors.go`      | Package sentinel errors and typed errors.                                                                                             |
+| `server/internal/authz/grants.go`      | `Grant`/`RoleGrant`/`ScopedGrant` types, `SystemRoleGrants`, `SyncGrants`, `SeedSystemRoleGrants`, `GrantsForRole`, `GrantsFromRows`. |
+| `server/internal/authz/load.go`        | Principal grant loading from the database.                                                                                            |
+| `server/internal/authz/override.go`    | Scope override plumbing (header parsing, override-to-grants conversion).                                                              |
+| `server/internal/authz/scopes.go`      | Scope type, constants, and expansion rules.                                                                                           |
+| `server/internal/authztest/helpers.go` | Test helpers other packages reuse for RBAC setup (`WithExactGrants`, `RBACAlwaysEnabled`, `RBACAlwaysDisabled`).                      |
+| `server/internal/access/impl.go`       | Implementation of the `/rpc/access.*` Goa service.                                                                                    |
+| `server/internal/access/queries.sql`   | SQLc queries for principals, grants, roles, and members. Regenerates `server/internal/access/repo/` via `mise run gen:sqlc-server`.   |
 
 ### Generated files
 
@@ -86,9 +103,9 @@ Scope and resource-type changes on the server must be accompanied by a matching 
 - `/rpc/access.listRoles`, `getRole`, `createRole`, `updateRole`, `deleteRole` — custom role CRUD.
 - `/rpc/access.listMembers`, `updateMemberRole` — org membership and role assignment.
 - `/rpc/access.listUserGrants` — the caller's effective grants.
-- `/rpc/access.disableRBAC` — feature flag hook.
+- `/rpc/access.getRBACStatus`, `enableRBAC`, `disableRBAC` — feature-flag hooks (superadmin-only).
 
-**Three-place enum lockstep.** `server/design/access/design.go` repeats the scope slug enum in three places — `RoleGrantModel.scope`, `ListRoleGrantModel.scope`, and its `sub_scopes` element — plus `ScopeModel.slug` for the listing endpoint. All three must stay synchronized with `scopes.go`, and `ScopeModel.resource_type` must contain every resource type in use.
+**Three-place enum lockstep.** `server/design/access/design.go` repeats the scope slug enum in three places — `RoleGrantModel.scope`, `ListRoleGrantModel.scope`, and its `sub_scopes` element — plus `ScopeModel.slug` for the listing endpoint. All three must stay synchronized with `authz/scopes.go`, and `ScopeModel.resource_type` must contain every resource type in use.
 
 **Generated SDK types.** `client/sdk/src/models/components/scopedefinition.ts`, `rolegrant.ts`, `listrolegrant.ts`, etc. Regenerated by `mise run gen:sdk` after every design change.
 
@@ -126,24 +143,24 @@ The dashboard pages under `client/dashboard/src/pages/access/` render membership
 
 ### How to gate a handler with an existing scope
 
-1. Inject `*access.Manager` into the service struct (if it isn't already) and keep it on `s.access`.
-2. At the top of the handler — before any database work — call `s.access.Require(ctx, access.Check{Scope: access.Scope<Name>, ResourceID: authCtx.ProjectID.String()})` and return the error as-is.
+1. Inject `*authz.Engine` into the service struct (if it isn't already) and keep it on `s.authz`.
+2. At the top of the handler — before any database work — call `s.authz.Require(ctx, authz.Check{Scope: authz.Scope<Name>, ResourceID: authCtx.ProjectID.String()})` and return the error as-is.
 3. Choose the narrowest scope for the operation: `*:read` for GET/list, `*:write` for mutations, `*:connect` for runtime usage. Scope expansions mean write callers are still permitted to read.
 4. Use `RequireAny` instead of `Require` when a single handler legitimately satisfies multiple equivalent scopes.
-5. In the handler's test, add one case that builds the context without the scope and asserts an `oops.CodeForbidden` response, and one case that builds the context with the scope via `withExactAccessGrants`.
+5. In the handler's test, add one case that builds the context without the scope and asserts an `oops.CodeForbidden` response, and one case that builds the context with the scope via `authztest.WithExactGrants`.
 
 ### How to add a new scope to an existing resource type
 
 Use this when the resource type is already represented (e.g. adding a new verb on `mcp`).
 
-1. Add the `Scope<Name>` constant in `server/internal/access/scopes.go`.
+1. Add the `Scope<Name>` constant in `server/internal/authz/scopes.go`.
 2. Add the new scope to `scopeExpansions` in the same file. Usually: the new scope is the upper or lower end of an existing read/write/connect triple.
-3. Extend `SystemRoleGrants` in `grants.go`: admin always receives the new scope. Member receives it if and only if end users should have it by default (read and connect, yes; write, no).
-4. Add a `{Slug, Description, ResourceType}` entry to `ListScopes` in `impl.go`.
-5. Extend `fullAccessGrantPayloads` at the bottom of `impl.go`.
+3. Extend `SystemRoleGrants` in `server/internal/authz/grants.go`: admin always receives the new scope. Member receives it if and only if end users should have it by default (read and connect, yes; write, no).
+4. Add a `{Slug, Description, ResourceType}` entry to `ListScopes` in `server/internal/access/impl.go`.
+5. Extend the hard-coded full-access scope list in `ListGrants` (same `impl.go`) so callers without grants loaded still see the complete catalogue.
 6. Update the three enums in `server/design/access/design.go` that have to stay in lockstep.
 7. Add the new slug to the `Scope` union in `client/dashboard/src/pages/access/types.ts`.
-8. Bump the `require.Len(t, result.Scopes, N)` assertions in both `listscopes_test.go` and `rbac_test.go`.
+8. Bump `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go` and the `require.Len(t, result.Scopes, N)` assertion in `server/internal/access/listscopes_test.go`.
 9. Run `mise run gen:goa-server`, then `mise run gen:sdk`.
 10. Run `mise run lint:server` and `mise run test:server`.
 
@@ -159,9 +176,9 @@ Use this when introducing a resource type that doesn't exist yet (e.g. the first
 
 Use this when adjusting what `admin` or `member` gets out of the box. Prefer additive changes — removing a grant from a shipped role is an observable permissions change for existing users.
 
-1. Edit `SystemRoleGrants` in `grants.go`.
-2. Update `listusergrants_test.go` — its `expectedFullAccessScopes` list captures the admin set.
-3. Consider whether existing orgs' grant tables need a migration to reflect the new defaults; new orgs pick up defaults automatically via seeding.
+1. Edit `SystemRoleGrants` in `server/internal/authz/grants.go`.
+2. Update `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go` if the admin set changed.
+3. Consider whether existing orgs' grant tables need a migration to reflect the new defaults; new orgs pick up defaults automatically via `SeedSystemRoleGrants` when RBAC is enabled.
 4. Run `mise run lint:server` and `mise run test:server`.
 
 ### How to filter a list handler to the caller's accessible resources
@@ -170,7 +187,7 @@ Use this whenever a `list*` handler would otherwise return resources the caller 
 
 1. Query the repo for the full candidate set the org/project contains.
 2. Collect the candidate IDs into `[]string`.
-3. Call `allowedIDs, err := s.access.Filter(ctx, access.Scope<Name>, candidateIDs)`. Return the error as-is.
+3. Call `allowedIDs, err := s.authz.Filter(ctx, authz.Scope<Name>, candidateIDs)`. Return the error as-is.
 4. Build a set from `allowedIDs` and rebuild the response by walking the original rows, keeping only the ones whose ID is in the set. Preserves repo ordering without a second query.
 5. Do not fall back to a per-item `Require` loop — `Filter` exists specifically to avoid N authorization round-trips.
 
@@ -205,25 +222,25 @@ Dashboard code should never hand-roll scope checks — use the shared primitives
 ### How to inspect the caller's grants
 
 - **In the dashboard**: `const { grants } = useRBAC();` returns the raw `RoleGrant[]`. Prefer `hasScope` for gating; reach for `grants` only when you need to render them (the access page itself, diagnostics, dev overlays).
-- **In Go handlers**: `access.GrantsFromContext(ctx)` returns the grants on the request context after the access middleware has run.
+- **In Go handlers**: `authz.GrantsFromContext(ctx)` returns the grants on the request context after the engine's `PrepareContext` middleware has run.
 - **Over the API**: `GET /rpc/access.listUserGrants` returns the caller's effective grants.
 
 ## Role hierarchy at a glance
 
 - `admin` — every scope. Write implies read via `scopeExpansions`, so admins can exercise every read operation transitively.
 - `member` — the read-and-connect subset.
-- Resource scoping — a grant's `Resource` either names a specific id or is the wildcard `"*"`. Checks against the wildcard always succeed for their scope.
-- `root` — held only by service-internal overrides; satisfies every check.
+- Resource scoping — a grant's `Resource` either names a specific id or is the wildcard `authz.WildcardResource` (`"*"`). Checks against the wildcard always succeed for their scope.
+- `root` (`authz.ScopeRoot`) — held only by service-internal overrides; satisfies every check.
 
 ## Relevant mise tasks
 
-| Task                       | Purpose                                                                                             |
-| -------------------------- | --------------------------------------------------------------------------------------------------- |
-| `mise run gen:goa-server`  | Regenerate `server/gen/access/**` after editing `server/design/access/design.go`.                   |
-| `mise run gen:sdk`         | Regenerate the SDK and OpenAPI so dashboard/CLI consumers see the new scope vocabulary.             |
-| `mise run gen:sqlc-server` | Regenerate `server/internal/access/repo/` when `queries.sql` changes.                               |
-| `mise run lint:server`     | Catches `exhaustruct` violations in the scope/grant structs.                                        |
-| `mise run test:server`     | Runs the scope-count assertions and RBAC tests. Filter with `./internal/access/...` when iterating. |
+| Task                       | Purpose                                                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `mise run gen:goa-server`  | Regenerate `server/gen/access/**` after editing `server/design/access/design.go`.                                        |
+| `mise run gen:sdk`         | Regenerate the SDK and OpenAPI so dashboard/CLI consumers see the new scope vocabulary.                                  |
+| `mise run gen:sqlc-server` | Regenerate `server/internal/access/repo/` when `queries.sql` changes.                                                    |
+| `mise run lint:server`     | Catches `exhaustruct` violations in the scope/grant structs.                                                             |
+| `mise run test:server`     | Runs the scope-count assertions and RBAC tests. Filter with `./internal/authz/... ./internal/access/...` when iterating. |
 
 ## Maintaining this skill
 
@@ -231,19 +248,21 @@ This file documents conventions that evolve over time. Adding a new scope, resou
 
 - Changing the `<resource>:<verb>` scope naming convention.
 - Adding or removing a system role beyond `admin` and `member`.
-- Replacing `access.Manager` as the central enforcer, or changing its method set (`Require`, `RequireAny`, `Filter`, etc.).
+- Replacing `authz.Engine` as the central enforcer, or changing its method set (`Require`, `RequireAny`, `Filter`, `PrepareContext`, `ShouldEnforce`, etc.) or constructor signature.
+- Moving authorization primitives back into `access` or into a new package — the `authz` / `access` split is deliberate and load-bearing for import-cycle reasons.
 - Changing scope-expansion semantics (e.g. how `scopeSubScopes` is computed from `scopeExpansions`, or introducing transitive expansion).
-- Changing how `fullAccessGrantPayloads` or `ListScopes` is populated (e.g. moving the scope catalogue out of `impl.go`).
+- Changing where the full-access scope catalogue lives (currently inline in `access.ListGrants` and mirrored by `expectedFullAccessScopes` in tests), or where `ListScopes` is populated.
 - Moving the hand-maintained client scope vocabulary out of `client/dashboard/src/pages/access/types.ts`, or changing the three-place-enum-lockstep count in the design file.
 - Changing the auth context invariant — e.g. if `ActiveOrganizationID` becomes optional, or a new invariant field is added.
 - Changing or replacing the dashboard's RBAC primitives — `useRBAC` return shape, `<RequireScope>` levels/props, or the SDK hook the dashboard reads grants from.
 - Adding a new RBAC-relevant mise task that belongs on the cheat sheet.
+- Changing the test-helper surface in `authztest` (e.g. renaming `WithExactGrants` or adding a new canonical helper tests should use).
 
 ## Cross-references
 
-- `gram-management-api` — the `access` service itself, and every service that gates handlers with `access.Require`, follows that skill's flow.
+- `gram-management-api` — the `access` service itself, and every service that gates handlers with `authz.Require`, follows that skill's flow.
 - `gram-audit-logging` — role and member mutations emit audit events via `server/internal/audit/access.go`; subjects are `access_role` and `access_member`.
 - `golang` — error handling through `oops`, the no-defensive-checks rule for `ActiveOrganizationID`, the `setup_test.go` / black-box test conventions used by RBAC tests.
 - `frontend` — everything under `client/dashboard/src/pages/access/` (component structure, `cn()`/Moonshine styling, React Query usage).
-- `postgresql` — the `principal_grants`, `roles`, and related tables backing `accessrepo`.
+- `postgresql` — the `principal_grants`, `roles`, and related tables backing the `access/repo` SQLc package.
 - `mise-tasks` — when modifying the `.mise-tasks/gen/*.sh` scripts referenced above.

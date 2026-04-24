@@ -100,6 +100,20 @@ WHERE
   AND src_tool_urn = ANY(@tool_urns::text[])
   AND deleted IS FALSE;
 
+-- name: FindGlobalVariationsForProjects :many
+-- Batch-resolves variation name overrides across multiple projects.
+WITH global_groups AS (
+  SELECT DISTINCT ON (ptv.project_id) ptv.project_id, tvg.id as group_id
+  FROM tool_variations_groups tvg
+  INNER JOIN project_tool_variations ptv ON tvg.id = ptv.group_id
+  WHERE ptv.project_id = ANY(@project_ids::uuid[])
+  ORDER BY ptv.project_id, ptv.id DESC
+)
+SELECT gg.project_id, tv.src_tool_urn, tv.name
+FROM tool_variations tv
+INNER JOIN global_groups gg ON tv.group_id = gg.group_id
+WHERE tv.deleted IS FALSE;
+
 -- name: DeleteGlobalToolVariation :one
 UPDATE tool_variations SET deleted_at = clock_timestamp()
 WHERE tool_variations.id = @id

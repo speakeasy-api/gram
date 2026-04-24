@@ -33,7 +33,7 @@ export class Hooks extends ClientSDK {
    * cursor hooks
    *
    * @remarks
-   * Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, and postToolUseFailure.
+   * Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure, beforeMCPExecution, and afterMCPExecution.
    */
   async hooksNumberCursor(
     request: operations.HooksNumberCursorRequest,

@@ -6891,7 +6891,7 @@ paths:
             tags:
                 - hooks
             summary: cursor hooks
-            description: Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, and postToolUseFailure.
+            description: Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure, beforeMCPExecution, and afterMCPExecution.
             operationId: hooks#cursor
             parameters:
                 - name: Gram-Key
@@ -20408,12 +20408,15 @@ components:
                     additionalProperties: true
                 cache_read_tokens:
                     type: integer
-                    description: Tokens read from cache (stop only)
+                    description: Tokens read from cache (stop, afterAgentResponse)
                     format: int64
                 cache_write_tokens:
                     type: integer
-                    description: Tokens written to cache (stop only)
+                    description: Tokens written to cache (stop, afterAgentResponse)
                     format: int64
+                command:
+                    type: string
+                    description: Command string for command-based MCP servers (beforeMCPExecution / afterMCPExecution only)
                 composer_mode:
                     type: string
                     description: The composer mode, e.g. agent (beforeSubmitPrompt only)
@@ -20423,6 +20426,10 @@ components:
                 cursor_version:
                     type: string
                     description: The Cursor IDE version
+                duration:
+                    type: number
+                    description: Execution duration in milliseconds, excluding approval wait time (afterMCPExecution only)
+                    format: double
                 duration_ms:
                     type: integer
                     description: Duration in milliseconds for the thinking block (afterAgentThought only)
@@ -20434,10 +20441,10 @@ components:
                     description: The Cursor generation ID
                 hook_event_name:
                     type: string
-                    description: The type of hook event (e.g. beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure)
+                    description: The type of hook event (e.g. beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure, beforeMCPExecution, afterMCPExecution)
                 input_tokens:
                     type: integer
-                    description: Total input tokens used (stop only)
+                    description: Total input tokens used (stop, afterAgentResponse)
                     format: int64
                 is_interrupt:
                     type: boolean
@@ -20451,11 +20458,14 @@ components:
                     description: The model being used
                 output_tokens:
                     type: integer
-                    description: Total output tokens used (stop only)
+                    description: Total output tokens used (stop, afterAgentResponse)
                     format: int64
                 prompt:
                     type: string
                     description: The user's prompt text (beforeSubmitPrompt only)
+                result_json:
+                    type: string
+                    description: JSON-encoded string of the MCP tool response (afterMCPExecution only)
                 session_id:
                     type: string
                     description: The session ID from Cursor
@@ -20478,6 +20488,9 @@ components:
                 transcript_path:
                     type: string
                     description: Path to the conversation transcript JSONL file
+                url:
+                    type: string
+                    description: URL of the MCP server (beforeMCPExecution / afterMCPExecution, URL-based servers only)
                 user_email:
                     type: string
                     description: Email of the authenticated Cursor user, if available
@@ -20490,9 +20503,12 @@ components:
                 additional_context:
                     type: string
                     description: Additional context to inject into the conversation
+                agent_message:
+                    type: string
+                    description: Message sent back to the agent (beforeMCPExecution only)
                 permission:
                     type: string
-                    description: 'Permission decision for preToolUse: allow or deny'
+                    description: 'Permission decision for preToolUse / beforeMCPExecution: allow, deny, or ask'
                 user_message:
                     type: string
                     description: Message to display to the user

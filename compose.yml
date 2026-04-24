@@ -56,13 +56,12 @@ services:
       timeout: 30s
       retries: 5
 
-  oteltui:
-    image: ymtdzzz/otel-tui@sha256:67010920b012ee998888cf39a794f32e97ca4b01cd02681f25e8f47c261e305b
-    stdin_open: true
-    tty: true
-    profiles: ["tools"]
+  jaeger:
+    image: jaegertracing/jaeger:2.17.0
+    restart: unless-stopped
     ports:
       - "${OTLP_GRPC_PORT}:4317"
+      - "${JAEGER_WEB_PORT}:16686"
 
   clickhouse:
     build:
