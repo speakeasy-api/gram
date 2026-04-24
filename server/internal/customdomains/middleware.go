@@ -9,10 +9,12 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/wide"
 )
 
 func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *url.URL) func(next http.Handler) http.Handler {
@@ -64,6 +66,13 @@ func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *ur
 				}
 
 				return
+			}
+
+			if domain.ID != uuid.Nil {
+				wide.Push(ctx, attr.SlogRequestCustomDomainID(domain.ID.String()))
+			}
+			if domain.Domain != "" {
+				wide.Push(ctx, attr.SlogRequestCustomDomainName(domain.Domain))
 			}
 
 			if !domain.Activated || !domain.Verified {

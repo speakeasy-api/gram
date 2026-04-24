@@ -86,18 +86,6 @@ const (
 	TemporalWorkflowIDKey    = attribute.Key("temporal.workflow.id")
 	TemporalRunIDKey         = attribute.Key("temporal.run.id")
 
-	AuthAccountTypeKey      = attribute.Key("gram.auth.account_type")
-	AuthAPIKeyIDKey         = attribute.Key("gram.auth.api_key.id")
-	AuthOrganizationIDKey   = attribute.Key("gram.auth.organization_id")
-	AuthOrganizationSlugKey = attribute.Key("gram.auth.organization_slug")
-	AuthProjectIDKey        = attribute.Key("gram.auth.project_id")
-	AuthProjectSlugKey      = attribute.Key("gram.auth.project_slug")
-	AuthSchemeKey           = attribute.Key("gram.auth.scheme")
-	AuthSessionIDKey        = attribute.Key("gram.auth.session_id")
-	AuthUserEmailKey        = attribute.Key("gram.auth.user_email")
-	AuthUserIDKey           = attribute.Key("gram.auth.user_id")
-	AuthUserExternalIDKey   = attribute.Key("gram.auth.external_user_id")
-
 	AssetIDKey                     = attribute.Key("gram.asset.id")
 	AssetURLKey                    = attribute.Key("gram.asset.url")
 	ChatIDKey                      = attribute.Key("gram.chat.id")
@@ -491,41 +479,6 @@ func SlogGoaService(v string) slog.Attr      { return slog.String(string(GoaServ
 
 func GoaMethod(v string) attribute.KeyValue { return GoaMethodKey.String(v) }
 func SlogGoaMethod(v string) slog.Attr      { return slog.String(string(GoaMethodKey), v) }
-
-func AuthAccountType(v string) attribute.KeyValue { return AuthAccountTypeKey.String(v) }
-func SlogAuthAccountType(v string) slog.Attr      { return slog.String(string(AuthAccountTypeKey), v) }
-
-func AuthAPIKeyID(v string) attribute.KeyValue { return AuthAPIKeyIDKey.String(v) }
-func SlogAuthAPIKeyID(v string) slog.Attr      { return slog.String(string(AuthAPIKeyIDKey), v) }
-
-func AuthOrganizationID(v string) attribute.KeyValue { return AuthOrganizationIDKey.String(v) }
-func SlogAuthOrganizationID(v string) slog.Attr      { return slog.String(string(AuthOrganizationIDKey), v) }
-
-func AuthOrganizationSlug(v string) attribute.KeyValue { return AuthOrganizationSlugKey.String(v) }
-func SlogAuthOrganizationSlug(v string) slog.Attr {
-	return slog.String(string(AuthOrganizationSlugKey), v)
-}
-
-func AuthProjectID(v string) attribute.KeyValue { return AuthProjectIDKey.String(v) }
-func SlogAuthProjectID(v string) slog.Attr      { return slog.String(string(AuthProjectIDKey), v) }
-
-func AuthProjectSlug(v string) attribute.KeyValue { return AuthProjectSlugKey.String(v) }
-func SlogAuthProjectSlug(v string) slog.Attr      { return slog.String(string(AuthProjectSlugKey), v) }
-
-func AuthScheme(v string) attribute.KeyValue { return AuthSchemeKey.String(v) }
-func SlogAuthScheme(v string) slog.Attr      { return slog.String(string(AuthSchemeKey), v) }
-
-func AuthSessionID(v string) attribute.KeyValue { return AuthSessionIDKey.String(v) }
-func SlogAuthSessionID(v string) slog.Attr      { return slog.String(string(AuthSessionIDKey), v) }
-
-func AuthUserEmail(v string) attribute.KeyValue { return AuthUserEmailKey.String(v) }
-func SlogAuthUserEmail(v string) slog.Attr      { return slog.String(string(AuthUserEmailKey), v) }
-
-func AuthUserID(v string) attribute.KeyValue { return AuthUserIDKey.String(v) }
-func SlogAuthUserID(v string) slog.Attr      { return slog.String(string(AuthUserIDKey), v) }
-
-func AuthUserExternalID(v string) attribute.KeyValue { return AuthUserExternalIDKey.String(v) }
-func SlogAuthUserExternalID(v string) slog.Attr      { return slog.String(string(AuthUserExternalIDKey), v) }
 
 func AssetID(v string) attribute.KeyValue { return AssetIDKey.String(v) }
 func SlogAssetID(v string) slog.Attr      { return slog.String(string(AssetIDKey), v) }

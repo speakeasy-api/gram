@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/wide"
 )
 
 type Auth struct {
@@ -47,17 +48,17 @@ func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKe
 	}
 
 	var err error
-	defer func() {
-		s.logAuthContext(ctx, err, scheme.Name)
-	}()
 
 	switch scheme.Name {
 	case constants.KeySecurityScheme:
 		ctx, err = s.keys.KeyBasedAuth(ctx, key, scheme.RequiredScopes)
+		s.logAuthContext(ctx, err, scheme.Name, attr.SlogRequestAuthAPIKeyScheme, attr.SlogRequestAuthSchemeAPIKeyError)
 	case constants.SessionSecurityScheme:
 		ctx, err = s.sessions.Authenticate(ctx, key)
+		s.logAuthContext(ctx, err, scheme.Name, attr.SlogRequestAuthSessionScheme, attr.SlogRequestAuthSchemeSessionError)
 	case constants.ProjectSlugSecuritySchema:
 		ctx, err = s.checkProjectAccess(ctx, s.logger, key)
+		s.logAuthContext(ctx, err, scheme.Name, attr.SlogRequestAuthProjectScheme, attr.SlogRequestAuthSchemeProjectSlugError)
 	default:
 		err = oops.E(oops.CodeUnauthorized, nil, "unsupported security scheme")
 	}
@@ -139,46 +140,54 @@ func (s *Auth) CheckProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	return nil
 }
 
-func (s *Auth) logAuthContext(ctx context.Context, err error, scheme string) {
+func (s *Auth) logAuthContext(
+	ctx context.Context,
+	err error,
+	scheme string,
+	schemeAttr func(matched bool) slog.Attr,
+	errAttr func(v string) slog.Attr,
+) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok {
 		return
 	}
 
-	attrs := []any{
-		attr.SlogAuthScheme(scheme),
-		attr.SlogAuthOrganizationID(authCtx.ActiveOrganizationID),
-		attr.SlogAuthOrganizationSlug(authCtx.OrganizationSlug),
-		attr.SlogAuthAccountType(authCtx.AccountType),
+	attrs := []slog.Attr{
+		schemeAttr(err == nil),
+		attr.SlogRequestAuthOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogRequestAuthOrganizationSlug(authCtx.OrganizationSlug),
+		attr.SlogRequestAuthAccountType(authCtx.AccountType),
 	}
 	if err != nil {
-		attrs = append(attrs, attr.SlogError(err))
+		attrs = append(attrs, errAttr(err.Error()))
 	}
 	if authCtx.UserID != "" {
-		attrs = append(attrs, attr.SlogAuthUserID(authCtx.UserID))
+		attrs = append(attrs, attr.SlogRequestAuthUserID(authCtx.UserID))
 	}
 	if authCtx.ExternalUserID != "" {
-		attrs = append(attrs, attr.SlogAuthUserExternalID(authCtx.ExternalUserID))
+		attrs = append(attrs, attr.SlogRequestAuthUserExternalID(authCtx.ExternalUserID))
 	}
 	if authCtx.Email != nil {
-		attrs = append(attrs, attr.SlogAuthUserEmail(*authCtx.Email))
+		attrs = append(attrs, attr.SlogRequestAuthUserEmail(*authCtx.Email))
 	}
 	if authCtx.APIKeyID != "" {
-		attrs = append(attrs, attr.SlogAuthAPIKeyID(authCtx.APIKeyID))
+		attrs = append(attrs, attr.SlogRequestAuthAPIKeyID(authCtx.APIKeyID))
 	}
 	if authCtx.SessionID != nil {
-		attrs = append(attrs, attr.SlogAuthSessionID(*authCtx.SessionID))
+		attrs = append(attrs, attr.SlogRequestAuthSessionID(*authCtx.SessionID))
 	}
 	if authCtx.ProjectID != nil {
-		attrs = append(attrs, attr.SlogAuthProjectID(authCtx.ProjectID.String()))
+		attrs = append(attrs, attr.SlogRequestAuthProjectID(authCtx.ProjectID.String()))
 	}
 	if authCtx.ProjectSlug != nil {
-		attrs = append(attrs, attr.SlogAuthProjectSlug(*authCtx.ProjectSlug))
+		attrs = append(attrs, attr.SlogRequestAuthProjectSlug(*authCtx.ProjectSlug))
 	}
 
+	wide.Push(ctx, attrs...)
+
 	if err != nil {
-		s.logger.ErrorContext(ctx, fmt.Sprintf("auth scheme check failed (%s)", scheme), attrs...)
+		s.logger.LogAttrs(ctx, slog.LevelError, fmt.Sprintf("auth scheme check failed (%s)", scheme), attrs...)
 	} else {
-		s.logger.InfoContext(ctx, fmt.Sprintf("auth scheme check passed (%s)", scheme), attrs...)
+		s.logger.LogAttrs(ctx, slog.LevelInfo, fmt.Sprintf("auth scheme check passed (%s)", scheme), attrs...)
 	}
 }

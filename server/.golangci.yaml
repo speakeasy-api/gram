@@ -89,7 +89,7 @@ linters:
           - forbidigo
         text: GG002
       # This is the only sanctioned place to use slog attribute builders to establish conventions.
-      - path: internal/attr/conventions\.go
+      - path: internal/attr/
         linters:
           - glint
         text: enforceo11yconventions
