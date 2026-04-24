@@ -7,16 +7,21 @@ import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
-import { Link2, Network, Package } from "lucide-react";
+import { AlertTriangleIcon, Link2, Network, Package } from "lucide-react";
 import { useMemo } from "react";
-import { useCatalogIconMap } from "../sources/sources-hooks";
+import {
+  useCatalogIconMap,
+  useExternalMcpOAuthConfigStatus,
+} from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
+import { Badge } from "../ui/badge";
 
 export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
   const { url: mcpUrl } = useMcpUrl(toolset);
   const catalogIconMap = useCatalogIconMap();
   const { data: deploymentResult } = useLatestDeployment();
+  const oauthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
 
   const externalMcpInfo = useMemo(() => {
     const externalMcpUrn = toolset.toolUrns?.find((urn) =>
@@ -71,14 +76,25 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
     >
       {/* Name */}
       <td className="px-3 py-3">
-        <Type
-          variant="subheading"
-          as="div"
-          className="group-hover:text-primary truncate text-sm transition-colors"
-          title={toolset.name}
-        >
-          {toolset.name}
-        </Type>
+        <div className="flex items-center gap-2">
+          <Type
+            variant="subheading"
+            as="div"
+            className="group-hover:text-primary truncate text-sm transition-colors"
+            title={toolset.name}
+          >
+            {toolset.name}
+          </Type>
+          {oauthStatus === "required-unconfigured" && (
+            <Badge
+              variant="outline"
+              className="border-warning-foreground bg-warning text-warning-foreground text-xs backdrop-blur-sm"
+            >
+              <AlertTriangleIcon />
+              OAuth Required
+            </Badge>
+          )}
+        </div>
       </td>
 
       {/* Status */}

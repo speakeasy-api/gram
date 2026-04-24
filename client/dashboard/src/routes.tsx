@@ -297,6 +297,14 @@ const ROUTE_STRUCTURE = {
         url: ":toolsetSlug",
         component: MCPDetailsRoot,
         indexComponent: MCPDetailPage,
+        subPages: {
+          authentication: {
+            title: "Authentication Tab",
+            url: "#authentication",
+            component: MCPDetailsRoot,
+            indexComponent: MCPDetailPage,
+          },
+        },
       },
     },
   },

@@ -20,6 +20,7 @@ import {
   useExternalMcpOAuthConfigStatus,
 } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
+import { Badge } from "../ui/badge";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
@@ -42,6 +43,14 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
       ? catalogIconMap.get(matchingMcp.registryServerSpecifier)
       : undefined;
   }, [toolset.toolUrns, catalogIconMap, deploymentResult]);
+
+  const handleClick = () => {
+    if (oauthStatus === "required-unconfigured") {
+      routes.mcp.details.authentication.goTo(toolset.slug);
+    } else {
+      routes.mcp.details.goTo(toolset.slug);
+    }
+  };
 
   // Pulse indicator for status
   const getStatusConfig = () => {
@@ -91,7 +100,20 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   return (
     <DotCard
       className="cursor-pointer"
-      onClick={() => routes.mcp.details.goTo(toolset.slug)}
+      onClick={handleClick}
+      overlay={
+        oauthStatus === "required-unconfigured" && (
+          <div className="absolute bottom-3.5 left-1/2 z-10 -translate-x-1/2">
+            <Badge
+              variant="outline"
+              className="border-warning-foreground bg-warning text-warning-foreground text-xs backdrop-blur-sm"
+            >
+              <AlertTriangleIcon />
+              OAuth Required
+            </Badge>
+          </div>
+        )
+      }
       icon={
         externalMcpLogoUrl ? (
           <img
@@ -115,18 +137,6 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
           {toolset.name}
         </Type>
         <div className="flex items-center gap-1">
-          {oauthStatus === "required-unconfigured" && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="bg-warning"
-              tooltip="OAuth setup required. Click to configure."
-              href={routes.mcp.details.href(toolset.slug) + "#authentication"}
-            >
-              <AlertTriangleIcon className="text-warning-foreground h-3.5 w-3.5" />
-            </Button>
-          )}
           {installPageUrl && (
             <CopyButton
               text={installPageUrl}
@@ -154,10 +164,17 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
       {/* Footer row with status indicator and open link */}
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
         {statusIndicator}
-        <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
-          <span>Open</span>
-          <ArrowRight className="h-3.5 w-3.5" />
-        </div>
+        {oauthStatus == "required-unconfigured" ? (
+          <div className="text-warning flex items-center gap-1 text-sm">
+            <span>Set up</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </div>
+        ) : (
+          <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
+            <span>Open</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </div>
+        )}
       </div>
     </DotCard>
   );
