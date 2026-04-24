@@ -1208,8 +1208,7 @@ CREATE TABLE IF NOT EXISTS organization_roles (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_roles_organization_id_workos_slug_key
-ON organization_roles (organization_id, workos_slug)
-WHERE deleted IS FALSE;
+ON organization_roles (organization_id, workos_slug);
 
 CREATE TABLE IF NOT EXISTS deployment_tags (
   -- Column order optimized for alignment (PG110)
@@ -1264,6 +1263,22 @@ CREATE TABLE IF NOT EXISTS organization_user_relationships (
 CREATE UNIQUE INDEX IF NOT EXISTS organization_user_relationships_workos_membership_id_key
 ON organization_user_relationships (workos_membership_id)
 WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS organization_user_roles (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  role_id UUID NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT organization_user_roles_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_user_roles_organization_id_user_id_role_id_key UNIQUE (organization_id, user_id, role_id),
+  CONSTRAINT organization_user_roles_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT organization_user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT organization_user_roles_role_id_fkey FOREIGN KEY (role_id) REFERENCES organization_roles (id) ON DELETE SET NULL
+);
 
 
 CREATE TABLE IF NOT EXISTS oauth_proxy_client_info (
