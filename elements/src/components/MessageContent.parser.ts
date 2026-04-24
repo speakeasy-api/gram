@@ -1,13 +1,4 @@
-/**
- * Splits chat message content into a sequence of plain-text segments and
- * recognised widget code-fence blocks (`chart`, `ui`). Unsupported
- * languages are preserved verbatim as text so they remain visible.
- *
- * Lives in its own module so React Fast Refresh works for `<MessageContent>`
- * (component files must export only components).
- *
- * @internal
- */
+/** @internal Sibling of MessageContent.tsx so component file can stay component-only (Fast Refresh). */
 
 /** @internal */
 export type Segment =
@@ -36,8 +27,7 @@ export function parseSegments(content: string): Segment[] {
     if (SUPPORTED_FENCE_LANGS.has(lang)) {
       segments.push({ type: "block", lang, code });
     } else {
-      // Unsupported language: keep original block as text so it's still
-      // visible (renders as a normal fenced code block in plain text).
+      // Unrecognised language: keep the original fence verbatim as text.
       segments.push({ type: "text", text: match[0] });
     }
     lastIndex = match.index + match[0].length;

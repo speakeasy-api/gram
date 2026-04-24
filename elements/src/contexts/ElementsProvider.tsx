@@ -191,20 +191,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     toolsWithCustomComponents,
   );
 
-  // Optimization: hold systemPrompt in a ref so changing it doesn't churn the
-  // transport useMemo identity (which would otherwise force `useChatRuntime`'s
-  // dynamic-transport proxy to swap its underlying reference more than
-  // necessary). Aligns with the existing ensureValidHeadersRef and
-  // approvalHelpersRef patterns in this file.
-  //
-  // NOTE: The same `sendMessages` closure already captures other
-  // config-bound values (`config.api?.headers`, `config.gramEnvironment`,
-  // and the `mcpHeaders` mutable shared object) without re-deriving them
-  // when config changes. Today no consumer mutates those at runtime, but
-  // before extending the ref pattern to additional fields, verify the
-  // staleness implications for non-Insights consumers — the AI Insights
-  // sidebar happens to remount the whole provider via `sessionKey` so it
-  // never depends on this closure being current.
+  // Read inside `sendMessages` via ref so prompt changes don't churn the
+  // transport useMemo identity. Same pattern as ensureValidHeadersRef /
+  // approvalHelpersRef below.
   const systemPromptRef = useRef(systemPrompt);
   systemPromptRef.current = systemPrompt;
 

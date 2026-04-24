@@ -157,16 +157,11 @@ export function InsightsProvider({
     text: string;
     nonce: number;
   } | null>(null);
-  // Bumped every time a new chart-specific override is installed. Used as a
-  // React `key` on <GramElementsProvider> so each "Explore with AI" click
-  // unmounts the previous assistant runtime entirely and mounts a fresh one.
-  // This avoids the internal assistant-ui race where `instances` (the hook
-  // manager's per-thread Map) and `threadData` (OptimisticState) get out of
-  // sync across rapid thread switches, which surfaces during render of
-  // `_InnerActiveThreadProvider` as:
-  //   `tapLookupResources: Resource not found for lookup: {"key":"__LOCALID_…"}`
-  // Matches the intended UX: each chart's Explore click is a fresh focused
-  // conversation, not a branch off the last one.
+  // Used as React `key` on <GramElementsProvider>; bumped from
+  // handleSendPrompt so each "Explore with AI" click gets a fresh assistant
+  // runtime. Avoids an assistant-ui race where rapid switchToNewThread()
+  // calls in a long-lived runtime throw `tapLookupResources: Resource not
+  // found for lookup: __LOCALID_…` during render.
   const [sessionKey, setSessionKey] = useState(0);
   const { theme } = useMoonshineConfig();
 
@@ -203,14 +198,6 @@ ${contextInfo}
 When the user asks about "current period", "selected period", "this timeframe", or similar, use the date range from the context above. Do not ask the user to specify a date range if it's already provided in the context.`
     : baseInstructions;
 
-  // elementsConfig identity changes on every override (new systemPrompt /
-  // welcome copy / suggestions). That's fine for presentation: GramElementsProvider
-  // holds systemPrompt behind a ref, so the underlying transport + runtime
-  // stay stable across override churn. Each "Explore with AI" click still
-  // gets a fresh focused conversation via PendingPromptBridge's
-  // switchToNewThread() — we just no longer tear down the runtime mid-flight,
-  // which previously raced with append() and threw
-  // `tapLookupResources: Resource not found for lookup: __LOCALID_…`.
   const elementsConfig = useMemo<ElementsConfig>(
     () => ({
       ...mcpConfig,
@@ -252,13 +239,9 @@ When the user asks about "current period", "selected period", "this timeframe", 
     [mcpConfig, title, subtitle, suggestions, theme, systemPrompt],
   );
 
-  // Page-level overrides only swap welcome copy / suggestions / contextInfo —
-  // they must NOT remount the runtime. <InsightsConfig> mounts on every page
-  // (ChatLogs, Logs, ObservabilityOverview, Hooks…) and re-fires its effect
-  // both on parent re-renders (fresh inline props identity) and on
-  // page-to-page navigation (new options content). Bumping `sessionKey` on
-  // any non-null override would destroy in-flight conversations across
-  // those transitions.
+  // Page-level <InsightsConfig> calls this on every parent re-render and on
+  // page navigation; deliberately does NOT bump sessionKey, so navigating
+  // between pages preserves any in-flight chat.
   const handleSetOverride = useCallback(
     (next: InsightsConfigOptions | null) => {
       setOverride(next);
@@ -266,19 +249,11 @@ When the user asks about "current period", "selected period", "this timeframe", 
     [],
   );
 
+  // Only "Explore with AI" clicks call this — bump sessionKey here (not in
+  // setOverride) so a fresh runtime is mounted before the prompt lands.
+  // Nonce defeats reference-equality skipping when the same chart is clicked
+  // twice in a row.
   const handleSendPrompt = useCallback((text: string) => {
-    // Each sendPrompt represents an "Explore with AI" click — a new focused
-    // conversation tied to a specific chart's contextInfo. Bumping
-    // sessionKey here remounts <GramElementsProvider> so the prompt lands in
-    // a clean assistant runtime; this is the load-bearing fix for the
-    // `tapLookupResources: Resource not found for lookup: __LOCALID_…`
-    // crash that was caused by overlapping switchToNewThread() calls in a
-    // long-lived runtime. <InsightsConfig> deliberately does not call
-    // sendPrompt, so page-level config changes never bump the session.
-    //
-    // Nonce lets the bridge detect repeat clicks on the same prompt (same
-    // chart twice in a row); reference-equal objects would otherwise be
-    // skipped by the bridge's useEffect.
     setSessionKey((k) => k + 1);
     setPendingPrompt({ text, nonce: Date.now() });
   }, []);
@@ -403,13 +378,8 @@ function PendingPromptBridge({
     firedNonceRef.current = pending.nonce;
 
     const { text } = pending;
-    // InsightsProvider keys <GramElementsProvider> on `sessionKey`, so every
-    // Explore-with-AI click already mounts a fresh runtime with a single
-    // initial thread. We just append the prompt to that fresh main thread —
-    // no need to call switchToNewThread() here. Doing so previously raced
-    // with assistant-ui's internal `_InnerActiveThreadProvider` mounting and
-    // surfaced as `tapLookupResources: Resource not found for lookup:
-    // __LOCALID_…` during render.
+    // The fresh runtime (mounted by sessionKey bump in handleSendPrompt)
+    // already starts on a new thread, so just append.
     try {
       assistantRuntime.thread.append(text);
     } catch (err) {

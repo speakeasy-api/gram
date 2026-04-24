@@ -355,11 +355,6 @@ function MessageItem({
                 {message.role === "tool" ? (
                   <CodeBlock content={message.content ?? ""} maxHeight={300} />
                 ) : (
-                  // MessageContent recognizes ```chart and ```ui fenced code
-                  // blocks and renders them as the same widgets the live AI
-                  // Insights sidebar displays. For everything else (plain
-                  // text, prose, unrecognized code blocks) it falls back to
-                  // preformatted text.
                   <MessageContent
                     content={
                       typeof message.content === "string"
