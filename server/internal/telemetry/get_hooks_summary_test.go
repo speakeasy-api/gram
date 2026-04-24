@@ -596,8 +596,8 @@ func TestGetHooksSummary_SkillTimeSeriesWithSkillTypeFilter(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// TypesToInclude=["skill"] scopes the overall summary to skill events,
-	// but GetSkillTimeSeries hardcodes tool_name='Skill' so SkillTimeSeries
-	// should still return the skill point regardless of what TypesToInclude is.
+	// but skill_time_series and skill_breakdown hardcode tool_name='Skill' so they
+	// return skill data regardless of TypesToInclude.
 	result, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
 		From:           now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:             now.Add(1 * time.Hour).Format(time.RFC3339),
@@ -608,4 +608,60 @@ func TestGetHooksSummary_SkillTimeSeriesWithSkillTypeFilter(t *testing.T) {
 	require.Equal(t, int64(1), result.TotalEvents)
 	require.Len(t, result.SkillTimeSeries, 1)
 	require.Equal(t, "golang", result.SkillTimeSeries[0].SkillName)
+	require.Len(t, result.SkillBreakdown, 1)
+	require.Equal(t, "golang", result.SkillBreakdown[0].SkillName)
+}
+
+func TestGetHooksSummary_SkillFieldsIgnoreTypesToInclude(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	now := time.Now().UTC()
+
+	// One skill event and one MCP event.
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   deploymentID,
+		timestamp:      now.Add(-10 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "user@example.com",
+		hookSource:     "local",
+		toolSource:     "",
+		toolName:       "Skill",
+		skillName:      "golang",
+		conversationID: "conv-1",
+	})
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   deploymentID,
+		timestamp:      now.Add(-8 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "user@example.com",
+		hookSource:     "mcp",
+		toolSource:     "server-a",
+		toolName:       "fetch",
+		conversationID: "conv-2",
+	})
+
+	time.Sleep(200 * time.Millisecond)
+
+	// TypesToInclude=["mcp"] scopes TotalEvents/Servers/Users to MCP events only,
+	// but skill_time_series and skill_breakdown hardcode tool_name='Skill' so they
+	// must always return skill data regardless of TypesToInclude.
+	result, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From:           now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:             now.Add(1 * time.Hour).Format(time.RFC3339),
+		TypesToInclude: []string{"mcp"},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(1), result.TotalEvents) // only MCP event counted
+	require.Len(t, result.SkillTimeSeries, 1)
+	require.Equal(t, "golang", result.SkillTimeSeries[0].SkillName)
+	require.Len(t, result.SkillBreakdown, 1)
+	require.Equal(t, "golang", result.SkillBreakdown[0].SkillName)
 }
