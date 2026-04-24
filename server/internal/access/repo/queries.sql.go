@@ -122,6 +122,53 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	return items, nil
 }
 
+const insertPrincipalGrant = `-- name: InsertPrincipalGrant :one
+INSERT INTO principal_grants (organization_id, principal_urn, scope, resource)
+VALUES ($1, $2, $3, $4)
+RETURNING id, organization_id, principal_urn, principal_type, scope, resource, created_at, updated_at
+`
+
+type InsertPrincipalGrantParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Resource       string
+}
+
+type InsertPrincipalGrantRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	PrincipalType  string
+	Scope          string
+	Resource       string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+// Inserts a single grant row. Callers (SyncGrants) delete-then-insert
+// within a transaction, so duplicates should not occur.
+func (q *Queries) InsertPrincipalGrant(ctx context.Context, arg InsertPrincipalGrantParams) (InsertPrincipalGrantRow, error) {
+	row := q.db.QueryRow(ctx, insertPrincipalGrant,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Resource,
+	)
+	var i InsertPrincipalGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.PrincipalUrn,
+		&i.PrincipalType,
+		&i.Scope,
+		&i.Resource,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listPrincipalGrantsByOrg = `-- name: ListPrincipalGrantsByOrg :many
 
 SELECT id, organization_id, principal_urn, principal_type, scope, resource, created_at, updated_at
@@ -198,53 +245,4 @@ func (q *Queries) RemoveResourceFromGrants(ctx context.Context, arg RemoveResour
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one
-INSERT INTO principal_grants (organization_id, principal_urn, scope, resource)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (organization_id, principal_urn, scope, resource)
-DO UPDATE SET updated_at = clock_timestamp()
-RETURNING id, organization_id, principal_urn, principal_type, scope, resource, created_at, updated_at
-`
-
-type UpsertPrincipalGrantParams struct {
-	OrganizationID string
-	PrincipalUrn   urn.Principal
-	Scope          string
-	Resource       string
-}
-
-type UpsertPrincipalGrantRow struct {
-	ID             uuid.UUID
-	OrganizationID string
-	PrincipalUrn   urn.Principal
-	PrincipalType  string
-	Scope          string
-	Resource       string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-}
-
-// Creates or updates a single grant row. On conflict (same org/principal/scope/resource),
-// the updated_at timestamp is refreshed. Returns the full row.
-func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (UpsertPrincipalGrantRow, error) {
-	row := q.db.QueryRow(ctx, upsertPrincipalGrant,
-		arg.OrganizationID,
-		arg.PrincipalUrn,
-		arg.Scope,
-		arg.Resource,
-	)
-	var i UpsertPrincipalGrantRow
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.PrincipalUrn,
-		&i.PrincipalType,
-		&i.Scope,
-		&i.Resource,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
