@@ -37,11 +37,10 @@ type presidioRequest struct {
 
 // presidioResult is a single entity returned by the analyzer.
 type presidioResult struct {
-	EntityType    string  `json:"entity_type"`
-	Start         int     `json:"start"`
-	End           int     `json:"end"`
-	Score         float64 `json:"score"`
-	RecognizerKey string  `json:"recognition_metadata,omitempty"`
+	EntityType string  `json:"entity_type"`
+	Start      int     `json:"start"`
+	End        int     `json:"end"`
+	Score      float64 `json:"score"`
 }
 
 // presidioMaxWorkers is the default concurrency limit for Presidio HTTP
