@@ -253,38 +253,72 @@ func TestCodexJSONKeysMatchPinnedSchema(t *testing.T) {
 	}
 }
 
-func TestCodexAuthPolicy(t *testing.T) {
-	t.Parallel()
-	private := PluginServerInfo{DisplayName: "priv", MCPURL: "https://x"}
-	publicNoEnv := PluginServerInfo{DisplayName: "pub", MCPURL: "https://x", IsPublic: true}
-	publicWithEnv := PluginServerInfo{
+func codexPrivateServer() PluginServerInfo {
+	return PluginServerInfo{DisplayName: "priv", MCPURL: "https://x"}
+}
+
+func codexPublicServerNoEnv() PluginServerInfo {
+	return PluginServerInfo{DisplayName: "pub", MCPURL: "https://x", IsPublic: true}
+}
+
+func codexPublicServerWithEnv() PluginServerInfo {
+	return PluginServerInfo{
 		DisplayName: "pub-env",
 		MCPURL:      "https://x",
 		IsPublic:    true,
 		EnvConfigs:  []ServerEnvConfig{{VariableName: "FOO", DisplayName: "X-Foo"}},
 	}
+}
 
-	tests := []struct {
-		name    string
-		servers []PluginServerInfo
-		apiKey  string
-		want    string
-	}{
-		{"private with baked key is silent", []PluginServerInfo{private}, "k", "ON_USE"},
-		{"private without key needs GRAM_API_KEY prompt", []PluginServerInfo{private}, "", "ON_INSTALL"},
-		{"public with env configs needs prompt", []PluginServerInfo{publicWithEnv}, "", "ON_INSTALL"},
-		{"fully public with no env configs is silent", []PluginServerInfo{publicNoEnv}, "", "ON_USE"},
-		{"mixed: any prompting server forces ON_INSTALL", []PluginServerInfo{publicNoEnv, publicWithEnv}, "k", "ON_INSTALL"},
-		{"no servers is silent", nil, "", "ON_USE"},
-	}
+func TestCodexAuthPolicyPrivateWithBakedKeyIsSilent(t *testing.T) {
+	t.Parallel()
+	got := codexAuthPolicy(
+		PluginInfo{Servers: []PluginServerInfo{codexPrivateServer()}},
+		GenerateConfig{APIKey: "k"},
+	)
+	require.Equal(t, "ON_USE", got)
+}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got := codexAuthPolicy(PluginInfo{Servers: tc.servers}, GenerateConfig{APIKey: tc.apiKey})
-			require.Equal(t, tc.want, got)
-		})
-	}
+func TestCodexAuthPolicyPrivateWithoutKeyPrompts(t *testing.T) {
+	t.Parallel()
+	got := codexAuthPolicy(
+		PluginInfo{Servers: []PluginServerInfo{codexPrivateServer()}},
+		GenerateConfig{},
+	)
+	require.Equal(t, "ON_INSTALL", got)
+}
+
+func TestCodexAuthPolicyPublicWithEnvConfigsPrompts(t *testing.T) {
+	t.Parallel()
+	got := codexAuthPolicy(
+		PluginInfo{Servers: []PluginServerInfo{codexPublicServerWithEnv()}},
+		GenerateConfig{},
+	)
+	require.Equal(t, "ON_INSTALL", got)
+}
+
+func TestCodexAuthPolicyFullyPublicNoEnvIsSilent(t *testing.T) {
+	t.Parallel()
+	got := codexAuthPolicy(
+		PluginInfo{Servers: []PluginServerInfo{codexPublicServerNoEnv()}},
+		GenerateConfig{},
+	)
+	require.Equal(t, "ON_USE", got)
+}
+
+func TestCodexAuthPolicyMixedForcesPrompt(t *testing.T) {
+	t.Parallel()
+	got := codexAuthPolicy(
+		PluginInfo{Servers: []PluginServerInfo{codexPublicServerNoEnv(), codexPublicServerWithEnv()}},
+		GenerateConfig{APIKey: "k"},
+	)
+	require.Equal(t, "ON_INSTALL", got)
+}
+
+func TestCodexAuthPolicyNoServersIsSilent(t *testing.T) {
+	t.Parallel()
+	got := codexAuthPolicy(PluginInfo{}, GenerateConfig{})
+	require.Equal(t, "ON_USE", got)
 }
 
 func TestGenerateSinglePluginPackageCodex(t *testing.T) {
