@@ -106,6 +106,47 @@ func (q *Queries) FindGlobalVariationsByToolURNs(ctx context.Context, arg FindGl
 	return items, nil
 }
 
+const findGlobalVariationsForProjects = `-- name: FindGlobalVariationsForProjects :many
+WITH global_groups AS (
+  SELECT DISTINCT ON (ptv.project_id) ptv.project_id, tvg.id as group_id
+  FROM tool_variations_groups tvg
+  INNER JOIN project_tool_variations ptv ON tvg.id = ptv.group_id
+  WHERE ptv.project_id = ANY($1::uuid[])
+  ORDER BY ptv.project_id, ptv.id DESC
+)
+SELECT gg.project_id, tv.src_tool_urn, tv.name
+FROM tool_variations tv
+INNER JOIN global_groups gg ON tv.group_id = gg.group_id
+WHERE tv.deleted IS FALSE
+`
+
+type FindGlobalVariationsForProjectsRow struct {
+	ProjectID  uuid.UUID
+	SrcToolUrn urn.Tool
+	Name       pgtype.Text
+}
+
+// Batch-resolves variation name overrides across multiple projects.
+func (q *Queries) FindGlobalVariationsForProjects(ctx context.Context, projectIds []uuid.UUID) ([]FindGlobalVariationsForProjectsRow, error) {
+	rows, err := q.db.Query(ctx, findGlobalVariationsForProjects, projectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindGlobalVariationsForProjectsRow
+	for rows.Next() {
+		var i FindGlobalVariationsForProjectsRow
+		if err := rows.Scan(&i.ProjectID, &i.SrcToolUrn, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const initGlobalToolVariationsGroup = `-- name: InitGlobalToolVariationsGroup :one
 WITH created AS (
   INSERT INTO tool_variations_groups (

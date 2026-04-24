@@ -269,6 +269,63 @@ LEFT JOIN functions_access access
 ORDER BY access.seq DESC NULLS LAST
 LIMIT 1;
 
+-- name: FindHttpToolEntriesForProjects :many
+-- Batch-resolves HTTP tool entries across multiple projects in a single query.
+-- Resolves each project's latest completed deployment once, including package deployments.
+-- No URN filter — caller filters in Go against toolset version URN sets.
+WITH project_deployments AS (
+    SELECT DISTINCT ON (d.project_id) d.project_id, d.id as deployment_id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = ANY(@project_ids::uuid[])
+      AND ds.status = 'completed'
+    ORDER BY d.project_id, d.seq DESC
+),
+all_deployment_ids AS (
+    SELECT project_id, deployment_id as id FROM project_deployments
+    UNION
+    SELECT pd.project_id, pv.deployment_id as id
+    FROM project_deployments pd
+    JOIN deployments_packages dp ON dp.deployment_id = pd.deployment_id
+    JOIN package_versions pv ON dp.version_id = pv.id
+)
+SELECT
+  adi.project_id,
+  htd.id,
+  htd.tool_urn,
+  htd.name,
+  htd.read_only_hint,
+  htd.destructive_hint,
+  htd.idempotent_hint,
+  htd.open_world_hint,
+  htd.http_method
+FROM http_tool_definitions htd
+INNER JOIN all_deployment_ids adi ON htd.deployment_id = adi.id
+WHERE htd.deleted IS FALSE;
+
+-- name: FindFunctionToolEntriesForProjects :many
+-- Batch-resolves function tool entries across multiple projects in a single query.
+WITH project_deployments AS (
+    SELECT DISTINCT ON (d.project_id) d.project_id, d.id as deployment_id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = ANY(@project_ids::uuid[])
+      AND ds.status = 'completed'
+    ORDER BY d.project_id, d.seq DESC
+)
+SELECT
+  pd.project_id,
+  ftd.id,
+  ftd.tool_urn,
+  ftd.name,
+  ftd.read_only_hint,
+  ftd.destructive_hint,
+  ftd.idempotent_hint,
+  ftd.open_world_hint
+FROM function_tool_definitions ftd
+INNER JOIN project_deployments pd ON ftd.deployment_id = pd.deployment_id
+WHERE ftd.deleted IS FALSE;
+
 -- name: PokeToolDefinitionByUrn :one
 WITH first_party AS (
   SELECT id

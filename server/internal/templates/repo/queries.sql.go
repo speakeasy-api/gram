@@ -460,6 +460,47 @@ func (q *Queries) PeekTemplatesByUrns(ctx context.Context, arg PeekTemplatesByUr
 	return items, nil
 }
 
+const peekTemplatesForProjects = `-- name: PeekTemplatesForProjects :many
+SELECT DISTINCT ON (pt.project_id, pt.tool_urn) pt.project_id, pt.id, pt.tool_urn, pt.name
+FROM prompt_templates pt
+WHERE pt.project_id = ANY($1::uuid[])
+  AND pt.deleted IS FALSE
+ORDER BY pt.project_id, pt.tool_urn, pt.id DESC
+`
+
+type PeekTemplatesForProjectsRow struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+	ToolUrn   urn.Tool
+	Name      string
+}
+
+// Batch-resolves prompt template entries across multiple projects.
+func (q *Queries) PeekTemplatesForProjects(ctx context.Context, projectIds []uuid.UUID) ([]PeekTemplatesForProjectsRow, error) {
+	rows, err := q.db.Query(ctx, peekTemplatesForProjects, projectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PeekTemplatesForProjectsRow
+	for rows.Next() {
+		var i PeekTemplatesForProjectsRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.ID,
+			&i.ToolUrn,
+			&i.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateTemplate = `-- name: UpdateTemplate :one
 INSERT INTO prompt_templates (
   project_id,

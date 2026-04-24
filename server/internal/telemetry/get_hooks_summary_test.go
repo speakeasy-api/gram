@@ -72,7 +72,7 @@ func TestGetHooksSummary_AggregatesServersUsersAndBreakdown(t *testing.T) {
 		hookSource:     "mcp",
 		toolSource:     "server-a",
 		toolName:       "weather",
-		hookEvent:      "PostToolUse",
+		result:         `{"temp":72}`,
 		conversationID: "conv-1",
 	})
 	traceID1b := uuid.New().String()
@@ -85,7 +85,7 @@ func TestGetHooksSummary_AggregatesServersUsersAndBreakdown(t *testing.T) {
 		hookSource:     "mcp",
 		toolSource:     "server-a",
 		toolName:       "weather",
-		hookEvent:      "PostToolUseFailure",
+		errorMsg:       "upstream timeout",
 		conversationID: "conv-1",
 	})
 
@@ -100,7 +100,7 @@ func TestGetHooksSummary_AggregatesServersUsersAndBreakdown(t *testing.T) {
 		hookSource:     "local",
 		toolSource:     "server-b",
 		toolName:       "fetch",
-		hookEvent:      "PostToolUse",
+		result:         `"ok"`,
 		conversationID: "conv-2",
 	})
 
@@ -125,7 +125,11 @@ func TestGetHooksSummary_AggregatesServersUsersAndBreakdown(t *testing.T) {
 	}
 	require.Len(t, serversByName, 2)
 	require.Equal(t, int64(2), serversByName["server-a"].EventCount)
+	require.Equal(t, int64(1), serversByName["server-a"].SuccessCount)
+	require.Equal(t, int64(1), serversByName["server-a"].FailureCount)
 	require.Equal(t, int64(1), serversByName["server-b"].EventCount)
+	require.Equal(t, int64(1), serversByName["server-b"].SuccessCount)
+	require.Equal(t, int64(0), serversByName["server-b"].FailureCount)
 
 	// User aggregation: 2 users
 	usersByEmail := make(map[string]*gen.HooksUserSummary)
@@ -134,9 +138,14 @@ func TestGetHooksSummary_AggregatesServersUsersAndBreakdown(t *testing.T) {
 	}
 	require.Len(t, usersByEmail, 2)
 	require.Equal(t, int64(2), usersByEmail["user1@example.com"].EventCount)
+	require.Equal(t, int64(1), usersByEmail["user1@example.com"].SuccessCount)
+	require.Equal(t, int64(1), usersByEmail["user1@example.com"].FailureCount)
 	require.Equal(t, int64(1), usersByEmail["user2@example.com"].EventCount)
+	require.Equal(t, int64(1), usersByEmail["user2@example.com"].SuccessCount)
+	require.Equal(t, int64(0), usersByEmail["user2@example.com"].FailureCount)
 
-	// Breakdown: at least one entry for user1/server-a/weather
+	// Breakdown: one entry for user1/server-a/weather covering both traces.
+	// trace_summaries aggregates has_error=1 for the failure trace via gram.hook.error.
 	breakdownKey := func(b *gen.HooksBreakdownRow) string {
 		return b.UserEmail + "|" + b.ServerName + "|" + b.ToolName
 	}
@@ -147,8 +156,7 @@ func TestGetHooksSummary_AggregatesServersUsersAndBreakdown(t *testing.T) {
 	row := breakdownMap["user1@example.com|server-a|weather"]
 	require.NotNil(t, row)
 	require.Equal(t, int64(2), row.EventCount)
-	// trace_summaries aggregates hook_has_failure = 1 when any log in the trace is a failure
-	require.GreaterOrEqual(t, row.FailureCount, int64(0))
+	require.Equal(t, int64(1), row.FailureCount)
 
 	// Time series: at least one point
 	require.NotEmpty(t, result.TimeSeries)
@@ -178,7 +186,7 @@ func TestGetHooksSummary_FilterByHookType(t *testing.T) {
 		hookSource:     "mcp",
 		toolSource:     "remote-server",
 		toolName:       "tool-a",
-		hookEvent:      "PostToolUse",
+		result:         `"ok"`,
 		conversationID: "conv-1",
 	})
 
@@ -192,7 +200,7 @@ func TestGetHooksSummary_FilterByHookType(t *testing.T) {
 		hookSource:     "local",
 		toolSource:     "", // empty tool_source = local
 		toolName:       "tool-b",
-		hookEvent:      "PostToolUse",
+		result:         `"ok"`,
 		conversationID: "conv-2",
 	})
 
@@ -231,7 +239,7 @@ func TestGetHooksSummary_AttributeFilter(t *testing.T) {
 		hookSource:     "mcp",
 		toolSource:     "server-x",
 		toolName:       "tool",
-		hookEvent:      "PostToolUse",
+		result:         `"ok"`,
 		conversationID: "conv-1",
 	})
 
@@ -245,7 +253,7 @@ func TestGetHooksSummary_AttributeFilter(t *testing.T) {
 		hookSource:     "mcp",
 		toolSource:     "server-x",
 		toolName:       "tool",
-		hookEvent:      "PostToolUse",
+		result:         `"ok"`,
 		conversationID: "conv-2",
 	})
 
@@ -276,7 +284,8 @@ type hookEventParams struct {
 	hookSource     string // "mcp", "local", etc.
 	toolSource     string // server/host name (gram.tool_call.source)
 	toolName       string
-	hookEvent      string // "PostToolUse" or "PostToolUseFailure"
+	result         string // gen_ai.tool.call.result; non-empty marks the trace as has_result=1
+	errorMsg       string // gram.hook.error; non-empty marks the trace as has_error=1
 	conversationID string // genai.conversation.id for session counting
 }
 
@@ -296,12 +305,17 @@ func insertHookEvent(t *testing.T, ctx context.Context, p hookEventParams) {
 		"gram.event.source":     "hook",
 		"gram.hook.source":      p.hookSource,
 		"gram.tool.name":        p.toolName,
-		"gram.hook.event":       p.hookEvent,
 		"user.email":            p.userEmail,
 		"genai.conversation.id": p.conversationID,
 	}
 	if p.toolSource != "" {
 		attrs["gram.tool_call.source"] = p.toolSource
+	}
+	if p.result != "" {
+		attrs["gen_ai.tool.call.result"] = p.result
+	}
+	if p.errorMsg != "" {
+		attrs["gram.hook.error"] = p.errorMsg
 	}
 
 	attrsJSON, err := json.Marshal(attrs)

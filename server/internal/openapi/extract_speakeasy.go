@@ -59,30 +59,50 @@ func parseSpeakeasy(ctx context.Context, tracer trace.Tracer, reader io.Reader) 
 	return doc, nil
 }
 
-// concurrentSchemaCache is a concurrent-safe cache for JSON schemas.
+// concurrentSchemaCache is a concurrent-safe cache for JSON schemas. It
+// stores schemas as serialized bytes so that every lookup returns a fresh,
+// independently-mutable schema tree. Sharing the same *JSONSchema pointer
+// across goroutines is unsafe: downstream marshalling mutates internal core
+// model state, which races when multiple extraction workers touch the same
+// cached schema concurrently.
 type concurrentSchemaCache struct {
 	mu    sync.RWMutex
-	cache map[string]*oas3.JSONSchema[oas3.Referenceable]
+	cache map[string][]byte
 }
 
 func newConcurrentSchemaCache() *concurrentSchemaCache {
 	return &concurrentSchemaCache{
 		mu:    sync.RWMutex{},
-		cache: make(map[string]*oas3.JSONSchema[oas3.Referenceable]),
+		cache: make(map[string][]byte),
 	}
 }
 
-func (c *concurrentSchemaCache) get(key string) (*oas3.JSONSchema[oas3.Referenceable], bool) {
+func (c *concurrentSchemaCache) get(ctx context.Context, key string) (*oas3.JSONSchema[oas3.Referenceable], bool, error) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-	val, exists := c.cache[key]
-	return val, exists
+	data, exists := c.cache[key]
+	c.mu.RUnlock()
+	if !exists {
+		return nil, false, nil
+	}
+
+	var schema oas3.JSONSchema[oas3.Referenceable]
+	if _, err := marshaller.Unmarshal(ctx, bytes.NewReader(data), &schema); err != nil {
+		return nil, false, fmt.Errorf("unmarshal cached schema: %w", err)
+	}
+	return &schema, true, nil
 }
 
-func (c *concurrentSchemaCache) set(key string, val *oas3.JSONSchema[oas3.Referenceable]) {
+func (c *concurrentSchemaCache) set(ctx context.Context, key string, val *oas3.JSONSchema[oas3.Referenceable]) error {
+	var buf bytes.Buffer
+	ctx = yml.ContextWithConfig(ctx, &yml.Config{OutputFormat: yml.OutputFormatJSON})
+	if err := marshaller.Marshal(ctx, val, &buf); err != nil {
+		return fmt.Errorf("marshal schema for cache: %w", err)
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.cache[key] = val
+	c.cache[key] = buf.Bytes()
+	return nil
 }
 
 // operationWorkItem represents a single operation to process
@@ -853,37 +873,44 @@ func extractJSONSchemaSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schem
 	line, col := js.GetRootNodeLine(), js.GetRootNodeColumn()
 
 	cacheKey := generateSchemaKey(js)
-	if cached, exists := schemaCache.get(cacheKey); exists {
-		var defs *sequencedmap.Map[string, *oas3.JSONSchema[oas3.Referenceable]]
-		if cached.IsLeft() {
-			defs = cached.GetLeft().Defs
-		}
-		return cached, defs, nil
-	}
-
-	// Not in cache, perform inlining
-	inlined, err := oas3.Inline(ctx, js, oas3.InlineOptions{
-		ResolveOptions: oas3.ResolveOptions{
-			TargetLocation:      "/",
-			RootDocument:        doc,
-			DisableExternalRefs: true,
-		},
-		RemoveUnusedDefs: true,
-	})
+	cached, exists, err := schemaCache.get(ctx, cacheKey)
 	if err != nil {
-		return nil, nil, tagError("inline-error", "%s (%d:%d): error inlining schema: %w", name, line, col, err)
+		return nil, nil, tagError("cache-error", "%s (%d:%d): error loading cached schema: %w", name, line, col, err)
 	}
 
-	schemaCache.set(cacheKey, inlined)
+	var schema *oas3.JSONSchema[oas3.Referenceable]
+	if exists {
+		schema = cached
+	} else {
+		// Not in cache, perform inlining
+		inlined, err := oas3.Inline(ctx, js, oas3.InlineOptions{
+			ResolveOptions: oas3.ResolveOptions{
+				TargetLocation:      "/",
+				RootDocument:        doc,
+				DisableExternalRefs: true,
+			},
+			RemoveUnusedDefs: true,
+		})
+		if err != nil {
+			return nil, nil, tagError("inline-error", "%s (%d:%d): error inlining schema: %w", name, line, col, err)
+		}
 
-	// Extract definitions from inlined schema as we need to bubble them up to the top-level schema
+		if err := schemaCache.set(ctx, cacheKey, inlined); err != nil {
+			return nil, nil, tagError("cache-error", "%s (%d:%d): error caching schema: %w", name, line, col, err)
+		}
+		schema = inlined
+	}
+
+	// Extract definitions from the schema so they can be bubbled up to the
+	// top-level schema. `schema` is a fresh copy owned by this caller, so
+	// mutating it is safe.
 	var defs *sequencedmap.Map[string, *oas3.JSONSchema[oas3.Referenceable]]
-	if inlined.IsLeft() {
-		defs = inlined.GetLeft().Defs
-		inlined.GetLeft().Defs = nil
+	if schema.IsLeft() {
+		defs = schema.GetLeft().Defs
+		schema.GetLeft().Defs = nil
 	}
 
-	return inlined, defs, nil
+	return schema, defs, nil
 }
 
 func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, params []*openapi.Parameter) (*oas3.JSONSchema[oas3.Referenceable], []byte, Defs, error) {

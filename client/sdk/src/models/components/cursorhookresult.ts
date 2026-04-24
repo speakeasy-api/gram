@@ -17,7 +17,11 @@ export type CursorHookResult = {
    */
   additionalContext?: string | undefined;
   /**
-   * Permission decision for preToolUse: allow or deny
+   * Message sent back to the agent (beforeMCPExecution only)
+   */
+  agentMessage?: string | undefined;
+  /**
+   * Permission decision for preToolUse / beforeMCPExecution: allow, deny, or ask
    */
   permission?: string | undefined;
   /**
@@ -33,12 +37,14 @@ export const CursorHookResult$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     additional_context: z.optional(z.string()),
+    agent_message: z.optional(z.string()),
     permission: z.optional(z.string()),
     user_message: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "additional_context": "additionalContext",
+      "agent_message": "agentMessage",
       "user_message": "userMessage",
     });
   }),

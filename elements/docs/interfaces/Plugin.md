@@ -17,6 +17,15 @@ The general flow of a plugin is:
 
 ## Properties
 
+### id?
+
+> `optional` **id**: `string`
+
+Unique identifier for the plugin. Used by `recommended.except()` to
+selectively exclude plugins. Defaults to `language` if not set.
+
+***
+
 ### prompt
 
 > **prompt**: `string`
