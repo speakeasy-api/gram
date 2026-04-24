@@ -53,4 +53,18 @@ CREATE TABLE "organization_roles" (
   CONSTRAINT "organization_roles_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Create index "organization_roles_organization_id_workos_slug_key" to table: "organization_roles"
-CREATE UNIQUE INDEX "organization_roles_organization_id_workos_slug_key" ON "organization_roles" ("organization_id", "workos_slug") WHERE (deleted IS FALSE);
+CREATE UNIQUE INDEX "organization_roles_organization_id_workos_slug_key" ON "organization_roles" ("organization_id", "workos_slug");
+-- Create "organization_user_roles" table
+CREATE TABLE "organization_user_roles" (
+  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
+  "organization_id" text NOT NULL,
+  "user_id" text NOT NULL,
+  "role_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY ("id"),
+  CONSTRAINT "organization_user_roles_organization_id_user_id_role_id_key" UNIQUE ("organization_id", "user_id", "role_id"),
+  CONSTRAINT "organization_user_roles_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "organization_user_roles_role_id_fkey" FOREIGN KEY ("role_id") REFERENCES "organization_roles" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "organization_user_roles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE SET NULL
+);
