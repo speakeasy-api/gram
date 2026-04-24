@@ -58,6 +58,14 @@ type Client struct {
 	// downloadPluginPackage endpoint.
 	DownloadPluginPackageDoer goahttp.Doer
 
+	// GetPublishStatus Doer is the HTTP client used to make requests to the
+	// getPublishStatus endpoint.
+	GetPublishStatusDoer goahttp.Doer
+
+	// PublishPlugins Doer is the HTTP client used to make requests to the
+	// publishPlugins endpoint.
+	PublishPluginsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -88,6 +96,8 @@ func NewClient(
 		RemovePluginServerDoer:    doer,
 		SetPluginAssignmentsDoer:  doer,
 		DownloadPluginPackageDoer: doer,
+		GetPublishStatusDoer:      doer,
+		PublishPluginsDoer:        doer,
 		RestoreResponseBody:       restoreBody,
 		scheme:                    scheme,
 		host:                      host,
@@ -338,5 +348,53 @@ func (c *Client) DownloadPluginPackage() goa.Endpoint {
 			return nil, err
 		}
 		return &plugins.DownloadPluginPackageResponseData{Result: res.(*plugins.DownloadPluginPackageResult), Body: resp.Body}, nil
+	}
+}
+
+// GetPublishStatus returns an endpoint that makes HTTP requests to the plugins
+// service getPublishStatus server.
+func (c *Client) GetPublishStatus() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetPublishStatusRequest(c.encoder)
+		decodeResponse = DecodeGetPublishStatusResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetPublishStatusRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetPublishStatusDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "getPublishStatus", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// PublishPlugins returns an endpoint that makes HTTP requests to the plugins
+// service publishPlugins server.
+func (c *Client) PublishPlugins() goa.Endpoint {
+	var (
+		encodeRequest  = EncodePublishPluginsRequest(c.encoder)
+		decodeResponse = DecodePublishPluginsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildPublishPluginsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.PublishPluginsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "publishPlugins", err)
+		}
+		return decodeResponse(resp)
 	}
 }

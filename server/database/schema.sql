@@ -2068,7 +2068,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_project_id_key
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_installation_repo_key
   ON plugin_github_connections (installation_id, LOWER(repo_owner), LOWER(repo_name));
 
-
 -- Risk analysis policies for scanning chat messages against configurable rules.
 -- One workflow per policy drains unanalyzed messages and produces risk_results.
 CREATE TABLE IF NOT EXISTS risk_policies (
