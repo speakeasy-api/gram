@@ -228,7 +228,7 @@ export function ProjectDashboard() {
 
                 <DashboardCard
                   title="Top Servers"
-                  tooltip="MCP servers ranked by the number of tool calls they served in the selected period, based on hook telemetry."
+                  tooltip="Servers ranked by the number of tool calls they served in the selected period, based on logs captured in hook telemetry in addition to MCP servers hosted on Gram."
                   action={
                     <CardActions>
                       <ExploreWithAIButton
@@ -243,7 +243,7 @@ export function ProjectDashboard() {
                                 title: "Top servers & hot tools",
                                 label: "Last 7 days",
                                 prompt:
-                                  "Which MCP servers received the most tool calls in the last 7 days, and which specific tools on each server are driving that volume?",
+                                  "Servers ranked by the number of tool calls they served in the selected period, based on logs captured in hook telemetry in addition to MCP servers hosted on Gram.",
                               },
                             ],
                           })
