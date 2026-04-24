@@ -70,11 +70,10 @@ function SecurityOverviewContent() {
 
   const resultsQuery = useInfiniteQuery({
     queryKey: ["risk", "results", "list"],
-    queryFn: async ({ pageParam, queryKey: _qk, pageParams }) => {
-      const isFirstPage = pageParams.length <= 1;
+    queryFn: async ({ pageParam }) => {
       return client.risk.results.list({
         cursor: pageParam,
-        limit: isFirstPage ? 10 : 100,
+        limit: pageParam ? 100 : 10,
       });
     },
     initialPageParam: undefined as string | undefined,
@@ -83,11 +82,10 @@ function SecurityOverviewContent() {
 
   const chatSummaryQuery = useInfiniteQuery({
     queryKey: ["risk", "results", "byChat"],
-    queryFn: async ({ pageParam, queryKey: _qk, pageParams }) => {
-      const isFirstPage = pageParams.length <= 1;
+    queryFn: async ({ pageParam }) => {
       return client.risk.results.byChat({
         cursor: pageParam,
-        limit: isFirstPage ? 10 : 100,
+        limit: pageParam ? 100 : 10,
       });
     },
     initialPageParam: undefined as string | undefined,
