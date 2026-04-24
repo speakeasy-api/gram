@@ -611,11 +611,12 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
 }
 
 export default function OrgAuditLogs() {
-  const { hasScope } = useRBAC();
+  const { hasAnyScope } = useRBAC();
   const organization = useOrganization();
-  // Only wrap with InsightsProvider when user has org:read and at least
-  // one project exists (needed for Elements session auth).
-  const showInsights = hasScope("org:read") && organization.projects.length > 0;
+  // Only wrap with InsightsProvider when user has org:read or org:admin
+  // and at least one project exists (needed for Elements session auth).
+  const showInsights =
+    hasAnyScope(["org:read", "org:admin"]) && organization.projects.length > 0;
 
   const page = (
     <Page>
