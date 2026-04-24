@@ -52,6 +52,8 @@ export default function Plugins() {
     },
   });
 
+  const hasPlugins = (data?.plugins ?? []).length > 0;
+
   const filteredPlugins = useMemo(() => {
     const plugins = data?.plugins ?? [];
     const q = search.trim().toLowerCase();
@@ -178,13 +180,13 @@ export default function Plugins() {
       <Page.Body>
         <Page.Section>
           <Page.Section.Title>Plugins</Page.Section.Title>
-          <Page.Section.Description>
+          <Page.Section.Description className={hasPlugins ? "w-3/4" : ""}>
             Create distributable plugin bundles that package MCP servers and
             hooks together. Assign plugins to roles and publish them to Claude
             Code and Cursor marketplaces via GitHub.
           </Page.Section.Description>
           <Page.Section.CTA>
-            {(data?.plugins ?? []).length > 0 && (
+            {hasPlugins && (
               <Stack direction="horizontal" gap={2}>
                 {publishStatus?.configured && (
                   <Button
@@ -217,7 +219,7 @@ export default function Plugins() {
             )}
           </Page.Section.CTA>
           <Page.Section.Body>
-            {(data?.plugins ?? []).length === 0 ? (
+            {!hasPlugins ? (
               <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
                 <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
                   <Puzzle className="text-muted-foreground h-6 w-6" />
