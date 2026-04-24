@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreateRiskPolicyRequestBody = {
   /**
@@ -14,6 +15,10 @@ export type CreateRiskPolicyRequestBody = {
    */
   name: string;
   /**
+   * Presidio entity types to detect.
+   */
+  presidioEntities?: Array<string> | undefined;
+  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -23,6 +28,7 @@ export type CreateRiskPolicyRequestBody = {
 export type CreateRiskPolicyRequestBody$Outbound = {
   enabled?: boolean | undefined;
   name: string;
+  presidio_entities?: Array<string> | undefined;
   sources?: Array<string> | undefined;
 };
 
@@ -30,11 +36,19 @@ export type CreateRiskPolicyRequestBody$Outbound = {
 export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   CreateRiskPolicyRequestBody$Outbound,
   CreateRiskPolicyRequestBody
-> = z.object({
-  enabled: z.optional(z.boolean()),
-  name: z.string(),
-  sources: z.optional(z.array(z.string())),
-});
+> = z.pipe(
+  z.object({
+    enabled: z.optional(z.boolean()),
+    name: z.string(),
+    presidioEntities: z.optional(z.array(z.string())),
+    sources: z.optional(z.array(z.string())),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      presidioEntities: "presidio_entities",
+    });
+  }),
+);
 
 export function createRiskPolicyRequestBodyToJSON(
   createRiskPolicyRequestBody: CreateRiskPolicyRequestBody,

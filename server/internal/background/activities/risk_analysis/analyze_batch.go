@@ -50,12 +50,13 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 }
 
 type AnalyzeBatchArgs struct {
-	ProjectID      uuid.UUID
-	OrganizationID string
-	RiskPolicyID   uuid.UUID
-	PolicyVersion  int64
-	MessageIDs     []uuid.UUID
-	Sources        []string
+	ProjectID        uuid.UUID
+	OrganizationID   string
+	RiskPolicyID     uuid.UUID
+	PolicyVersion    int64
+	MessageIDs       []uuid.UUID
+	Sources          []string
+	PresidioEntities []string
 }
 
 type AnalyzeBatchResult struct {
@@ -96,7 +97,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		contents[i] = msg.Content
 	}
 
-	findings, err := a.scan(ctx, args.Sources, contents)
+	findings, err := a.scan(ctx, args.Sources, args.PresidioEntities, contents)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +137,7 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 
 // scan runs enabled scanners concurrently. Gitleaks is CPU-bound, presidio is
 // IO-bound, so they parallelize well and avoid exceeding the heartbeat timeout.
-func (a *AnalyzeBatch) scan(ctx context.Context, sources []string, contents []string) ([][]Finding, error) {
+func (a *AnalyzeBatch) scan(ctx context.Context, sources []string, presidioEntities []string, contents []string) ([][]Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
@@ -161,7 +162,7 @@ func (a *AnalyzeBatch) scan(ctx context.Context, sources []string, contents []st
 
 	if slices.Contains(sources, "presidio") {
 		wg.Go(func() {
-			results, err := a.piiScanner.AnalyzeBatch(ctx, contents)
+			results, err := a.piiScanner.AnalyzeBatch(ctx, contents, presidioEntities)
 			if err != nil {
 				a.logger.WarnContext(ctx, "presidio scan failed, continuing with gitleaks only", attr.SlogError(err))
 				return

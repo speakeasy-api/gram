@@ -21,14 +21,16 @@ import (
 type PIIScanner interface {
 	// AnalyzeBatch sends multiple texts to the PII analyzer and returns
 	// findings for each. The outer slice is indexed by input position.
-	AnalyzeBatch(ctx context.Context, texts []string) ([][]Finding, error)
+	// When entities is non-empty, only those entity types are detected.
+	AnalyzeBatch(ctx context.Context, texts []string, entities []string) ([][]Finding, error)
 }
 
 // presidioRequest is the payload sent to POST /analyze.
 type presidioRequest struct {
-	Text     string  `json:"text"`
-	Language string  `json:"language"`
-	ScoreMin float64 `json:"score_threshold"`
+	Text     string   `json:"text"`
+	Language string   `json:"language"`
+	ScoreMin float64  `json:"score_threshold"`
+	Entities []string `json:"entities,omitempty"`
 }
 
 // presidioResult is a single entity returned by the analyzer.
@@ -57,7 +59,7 @@ func NewPresidioClient(baseURL string, httpClient *http.Client, tracerProvider t
 	}
 }
 
-func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string) (_ [][]Finding, err error) {
+func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string) (_ [][]Finding, err error) {
 	n := len(texts)
 	if n == 0 {
 		return nil, nil
@@ -98,7 +100,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string) (_ []
 					return
 				}
 
-				findings, err := p.analyze(ctx, texts[idx])
+				findings, err := p.analyze(ctx, texts[idx], entities)
 				if err != nil {
 					mu.Lock()
 					if firstErr == nil {
@@ -119,7 +121,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string) (_ []
 	return results, nil
 }
 
-func (p *PresidioClient) analyze(ctx context.Context, text string) (_ []Finding, err error) {
+func (p *PresidioClient) analyze(ctx context.Context, text string, entities []string) (_ []Finding, err error) {
 	ctx, span := p.tracer.Start(ctx, "presidio.analyze")
 	defer func() {
 		if err != nil {
@@ -132,6 +134,7 @@ func (p *PresidioClient) analyze(ctx context.Context, text string) (_ []Finding,
 		Text:     text,
 		Language: "en",
 		ScoreMin: 0.5,
+		Entities: entities,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal presidio request: %w", err)
@@ -192,7 +195,7 @@ func (p *PresidioClient) analyze(ctx context.Context, text string) (_ []Finding,
 // StubPIIScanner is a no-op implementation for environments without Presidio.
 type StubPIIScanner struct{}
 
-func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string) ([][]Finding, error) {
+func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string) ([][]Finding, error) {
 	results := make([][]Finding, len(texts))
 	for i := range texts {
 		results[i] = nil

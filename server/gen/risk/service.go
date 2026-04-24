@@ -71,6 +71,8 @@ type CreateRiskPolicyPayload struct {
 	Name string
 	// Detection sources to enable.
 	Sources []string
+	// Presidio entity types to detect.
+	PresidioEntities []string
 	// Whether the policy is active.
 	Enabled *bool
 }
@@ -186,6 +188,8 @@ type UpdateRiskPolicyPayload struct {
 	Name string
 	// Detection sources to enable.
 	Sources []string
+	// Presidio entity types to detect.
+	PresidioEntities []string
 	// Whether the policy is active.
 	Enabled *bool
 }

@@ -2110,6 +2110,12 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 	} else {
 		res.Sources = []string{}
 	}
+	if v.PresidioEntities != nil {
+		res.PresidioEntities = make([]string, len(v.PresidioEntities))
+		for i, val := range v.PresidioEntities {
+			res.PresidioEntities[i] = val
+		}
+	}
 
 	return res
 }

@@ -2191,6 +2191,12 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 	for i, val := range v.Sources {
 		res.Sources[i] = val
 	}
+	if v.PresidioEntities != nil {
+		res.PresidioEntities = make([]string, len(v.PresidioEntities))
+		for i, val := range v.PresidioEntities {
+			res.PresidioEntities[i] = val
+		}
+	}
 
 	return res
 }

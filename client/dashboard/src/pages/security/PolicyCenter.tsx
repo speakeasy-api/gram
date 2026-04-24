@@ -61,31 +61,75 @@ import {
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 
-/** Map API source names to rule categories */
-function sourcesToCategories(sources: string[]): RuleCategory[] {
-  const mapping: Record<string, RuleCategory> = {
-    gitleaks: "secrets",
-    presidio: "pii",
-  };
-  return sources
-    .map((s) => mapping[s] ?? ("secrets" as RuleCategory))
-    .filter((v, i, a) => a.indexOf(v) === i);
-}
-
-/** All rule categories in display order */
-const ALL_CATEGORIES: RuleCategory[] = [
-  "secrets",
+/** Presidio-backed categories (not "Coming Soon") */
+const PRESIDIO_CATEGORIES: RuleCategory[] = [
   "financial",
   "pii",
   "government_ids",
   "healthcare",
+];
+
+/** Categories that are currently available */
+const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
+  "secrets",
+  ...PRESIDIO_CATEGORIES,
+]);
+
+/** All rule categories in display order */
+const ALL_CATEGORIES: RuleCategory[] = [
+  "secrets",
+  ...PRESIDIO_CATEGORIES,
   "prompt_attacks",
   "prompt_injection",
   "off_policy",
 ];
 
-/** Categories that are currently available (not "Coming Soon") */
-const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set(["secrets"]);
+/** Derive selected categories from a policy's sources + presidioEntities. */
+function policyToCategories(
+  sources: string[],
+  presidioEntities?: string[],
+): Set<RuleCategory> {
+  const cats = new Set<RuleCategory>();
+  if (sources.includes("gitleaks")) cats.add("secrets");
+  if (!presidioEntities?.length && sources.includes("presidio")) {
+    // Legacy: presidio enabled without entity filter = all presidio categories
+    for (const cat of PRESIDIO_CATEGORIES) cats.add(cat);
+    return cats;
+  }
+  if (presidioEntities?.length) {
+    for (const cat of PRESIDIO_CATEGORIES) {
+      const catEntityIds = DETECTION_RULES[cat].map((r) => r.id);
+      if (catEntityIds.some((id) => presidioEntities.includes(id))) {
+        cats.add(cat);
+      }
+    }
+  }
+  return cats;
+}
+
+/** Derive sources + presidioEntities from selected categories. */
+function categoriesToPayload(cats: Set<RuleCategory>) {
+  const sources: string[] = [];
+  const presidioEntities: string[] = [];
+  if (cats.has("secrets")) sources.push("gitleaks");
+  for (const cat of PRESIDIO_CATEGORIES) {
+    if (cats.has(cat)) {
+      for (const rule of DETECTION_RULES[cat]) {
+        presidioEntities.push(rule.id);
+      }
+    }
+  }
+  if (presidioEntities.length > 0) sources.push("presidio");
+  return { sources, presidioEntities };
+}
+
+/** Map sources to display categories for the table row badges. */
+function sourcesToCategories(
+  sources: string[],
+  presidioEntities?: string[],
+): RuleCategory[] {
+  return [...policyToCategories(sources, presidioEntities)];
+}
 
 export default function PolicyCenter() {
   return (
@@ -104,6 +148,9 @@ function PolicyCenterContent() {
   const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
   const [formName, setFormName] = useState("");
   const [formEnabled, setFormEnabled] = useState(true);
+  const [selectedCategories, setSelectedCategories] = useState<
+    Set<RuleCategory>
+  >(new Set(["secrets"]));
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -138,6 +185,7 @@ function PolicyCenterContent() {
     setEditingPolicy(null);
     setFormName("");
     setFormEnabled(true);
+    setSelectedCategories(new Set(["secrets"]));
     setSheetOpen(true);
   };
 
@@ -145,10 +193,15 @@ function PolicyCenterContent() {
     setEditingPolicy(policy);
     setFormName(policy.name);
     setFormEnabled(policy.enabled);
+    setSelectedCategories(
+      policyToCategories(policy.sources, policy.presidioEntities),
+    );
     setSheetOpen(true);
   };
 
   const handleSave = () => {
+    const { sources, presidioEntities } =
+      categoriesToPayload(selectedCategories);
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
@@ -156,6 +209,8 @@ function PolicyCenterContent() {
             id: editingPolicy.id,
             name: formName,
             enabled: formEnabled,
+            sources,
+            presidioEntities,
           },
         },
       });
@@ -165,6 +220,8 @@ function PolicyCenterContent() {
           createRiskPolicyRequestBody: {
             name: formName,
             enabled: formEnabled,
+            sources,
+            presidioEntities,
           },
         },
       });
@@ -294,7 +351,10 @@ function PolicyCenterContent() {
           </TableHeader>
           <TableBody>
             {policies.map((policy) => {
-              const categories = sourcesToCategories(policy.sources);
+              const categories = sourcesToCategories(
+                policy.sources,
+                policy.presidioEntities,
+              );
               return (
                 <TableRow
                   key={policy.id}
@@ -383,6 +443,8 @@ function PolicyCenterContent() {
                 setFormName={setFormName}
                 formEnabled={formEnabled}
                 setFormEnabled={setFormEnabled}
+                selectedCategories={selectedCategories}
+                setSelectedCategories={setSelectedCategories}
               />
             </div>
             <SheetFooter className="px-6 pb-6">
@@ -440,11 +502,15 @@ function PolicySheetBody({
   setFormName,
   formEnabled,
   setFormEnabled,
+  selectedCategories,
+  setSelectedCategories,
 }: {
   formName: string;
   setFormName: (v: string) => void;
   formEnabled: boolean;
   setFormEnabled: (v: boolean) => void;
+  selectedCategories: Set<RuleCategory>;
+  setSelectedCategories: (v: Set<RuleCategory>) => void;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
@@ -520,10 +586,16 @@ function PolicySheetBody({
 
                   {/* Category checkbox */}
                   <Checkbox
-                    checked={isAvailable && cat === "secrets"}
+                    checked={selectedCategories.has(cat)}
                     disabled={!isAvailable}
-                    onCheckedChange={() => {
-                      // Currently only secrets is togglable; future: per-category toggle
+                    onCheckedChange={(checked) => {
+                      const next = new Set(selectedCategories);
+                      if (checked) {
+                        next.add(cat);
+                      } else {
+                        next.delete(cat);
+                      }
+                      setSelectedCategories(next);
                     }}
                     onClick={(e) => e.stopPropagation()}
                   />
@@ -540,7 +612,7 @@ function PolicySheetBody({
                         >
                           <Checkbox
                             id={rule.id}
-                            checked={true}
+                            checked={selectedCategories.has(cat)}
                             disabled={true}
                           />
                           <label

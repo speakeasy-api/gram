@@ -23,7 +23,7 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 	{
 		err = json.Unmarshal([]byte(riskCreateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -52,6 +52,12 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 		v.Sources = make([]string, len(body.Sources))
 		for i, val := range body.Sources {
 			v.Sources[i] = val
+		}
+	}
+	if body.PresidioEntities != nil {
+		v.PresidioEntities = make([]string, len(body.PresidioEntities))
+		for i, val := range body.PresidioEntities {
+			v.PresidioEntities[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -137,7 +143,7 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 	{
 		err = json.Unmarshal([]byte(riskUpdateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
@@ -171,6 +177,12 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 		v.Sources = make([]string, len(body.Sources))
 		for i, val := range body.Sources {
 			v.Sources[i] = val
+		}
+	}
+	if body.PresidioEntities != nil {
+		v.PresidioEntities = make([]string, len(body.PresidioEntities))
+		for i, val := range body.PresidioEntities {
+			v.PresidioEntities[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken

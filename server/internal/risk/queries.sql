@@ -5,6 +5,7 @@ INSERT INTO risk_policies (
   , organization_id
   , name
   , sources
+  , presidio_entities
   , enabled
   , version
 )
@@ -14,6 +15,7 @@ VALUES (
   , @organization_id
   , @name
   , @sources
+  , @presidio_entities
   , @enabled
   , 1
 )
@@ -44,9 +46,12 @@ WHERE project_id = @project_id
 UPDATE risk_policies
 SET name = @name
   , sources = @sources
+  , presidio_entities = @presidio_entities
   , enabled = @enabled
   , version = CASE
-      WHEN sources IS DISTINCT FROM @sources OR enabled IS DISTINCT FROM @enabled
+      WHEN sources IS DISTINCT FROM @sources
+        OR presidio_entities IS DISTINCT FROM @presidio_entities
+        OR enabled IS DISTINCT FROM @enabled
       THEN version + 1
       ELSE version
     END

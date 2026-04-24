@@ -20152,6 +20152,11 @@ components:
                 name:
                     type: string
                     description: The policy name.
+                presidio_entities:
+                    type: array
+                    items:
+                        type: string
+                    description: Presidio entity types to detect.
                 sources:
                     type: array
                     items:
@@ -24965,6 +24970,11 @@ components:
                     type: integer
                     description: Number of messages not yet analyzed at the current policy version.
                     format: int64
+                presidio_entities:
+                    type: array
+                    items:
+                        type: string
+                    description: Presidio entity types to scan for. When empty, scans all entities.
                 project_id:
                     type: string
                     description: The project ID.
@@ -27172,6 +27182,11 @@ components:
                 name:
                     type: string
                     description: The policy name.
+                presidio_entities:
+                    type: array
+                    items:
+                        type: string
+                    description: Presidio entity types to detect.
                 sources:
                     type: array
                     items:

@@ -19,7 +19,7 @@ SET version = version + 1
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, version, created_at, updated_at, deleted_at, deleted
 `
 
 type BumpRiskPolicyVersionParams struct {
@@ -37,6 +37,7 @@ func (q *Queries) BumpRiskPolicyVersion(ctx context.Context, arg BumpRiskPolicyV
 		&i.Enabled,
 		&i.Name,
 		&i.Sources,
+		&i.PresidioEntities,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -124,6 +125,7 @@ INSERT INTO risk_policies (
   , organization_id
   , name
   , sources
+  , presidio_entities
   , enabled
   , version
 )
@@ -134,18 +136,20 @@ VALUES (
   , $4
   , $5
   , $6
+  , $7
   , 1
 )
-RETURNING id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, version, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRiskPolicyParams struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	Name           string
-	Sources        []string
-	Enabled        bool
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	OrganizationID   string
+	Name             string
+	Sources          []string
+	PresidioEntities []string
+	Enabled          bool
 }
 
 func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyParams) (RiskPolicy, error) {
@@ -155,6 +159,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.OrganizationID,
 		arg.Name,
 		arg.Sources,
+		arg.PresidioEntities,
 		arg.Enabled,
 	)
 	var i RiskPolicy
@@ -165,6 +170,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		&i.Enabled,
 		&i.Name,
 		&i.Sources,
+		&i.PresidioEntities,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -295,7 +301,7 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 }
 
 const getRiskPolicy = `-- name: GetRiskPolicy :one
-SELECT id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE id = $1
   AND project_id = $2
@@ -317,6 +323,7 @@ func (q *Queries) GetRiskPolicy(ctx context.Context, arg GetRiskPolicyParams) (R
 		&i.Enabled,
 		&i.Name,
 		&i.Sources,
+		&i.PresidioEntities,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -345,7 +352,7 @@ type InsertRiskResultsParams struct {
 }
 
 const listEnabledRiskPoliciesByProject = `-- name: ListEnabledRiskPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -368,6 +375,7 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 			&i.Enabled,
 			&i.Name,
 			&i.Sources,
+			&i.PresidioEntities,
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -385,7 +393,7 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 }
 
 const listRiskPolicies = `-- name: ListRiskPolicies :many
-SELECT id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -408,6 +416,7 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 			&i.Enabled,
 			&i.Name,
 			&i.Sources,
+			&i.PresidioEntities,
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -730,31 +739,36 @@ const updateRiskPolicy = `-- name: UpdateRiskPolicy :one
 UPDATE risk_policies
 SET name = $1
   , sources = $2
-  , enabled = $3
+  , presidio_entities = $3
+  , enabled = $4
   , version = CASE
-      WHEN sources IS DISTINCT FROM $2 OR enabled IS DISTINCT FROM $3
+      WHEN sources IS DISTINCT FROM $2
+        OR presidio_entities IS DISTINCT FROM $3
+        OR enabled IS DISTINCT FROM $4
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $4
-  AND project_id = $5
+WHERE id = $5
+  AND project_id = $6
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, enabled, name, sources, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, version, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRiskPolicyParams struct {
-	Name      string
-	Sources   []string
-	Enabled   bool
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	Name             string
+	Sources          []string
+	PresidioEntities []string
+	Enabled          bool
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
 }
 
 func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyParams) (RiskPolicy, error) {
 	row := q.db.QueryRow(ctx, updateRiskPolicy,
 		arg.Name,
 		arg.Sources,
+		arg.PresidioEntities,
 		arg.Enabled,
 		arg.ID,
 		arg.ProjectID,
@@ -767,6 +781,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		&i.Enabled,
 		&i.Name,
 		&i.Sources,
+		&i.PresidioEntities,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,

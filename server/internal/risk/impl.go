@@ -164,12 +164,13 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).CreateRiskPolicy(ctx, repo.CreateRiskPolicyParams{
-		ID:             id,
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Name:           payload.Name,
-		Sources:        sources,
-		Enabled:        enabled,
+		ID:               id,
+		ProjectID:        *authCtx.ProjectID,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Name:             payload.Name,
+		Sources:          sources,
+		PresidioEntities: payload.PresidioEntities,
+		Enabled:          enabled,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
@@ -288,6 +289,11 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		sources = payload.Sources
 	}
 
+	presidioEntities := current.PresidioEntities
+	if payload.PresidioEntities != nil {
+		presidioEntities = payload.PresidioEntities
+	}
+
 	enabled := current.Enabled
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
@@ -302,11 +308,12 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).UpdateRiskPolicy(ctx, repo.UpdateRiskPolicyParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
-		Name:      payload.Name,
-		Sources:   sources,
-		Enabled:   enabled,
+		ID:               id,
+		ProjectID:        *authCtx.ProjectID,
+		Name:             payload.Name,
+		Sources:          sources,
+		PresidioEntities: presidioEntities,
+		Enabled:          enabled,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
@@ -669,16 +676,17 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	pendingMessages := max(totalMessages-analyzedMessages, 0)
 
 	return &types.RiskPolicy{
-		ID:              row.ID.String(),
-		ProjectID:       row.ProjectID.String(),
-		Name:            row.Name,
-		Sources:         row.Sources,
-		Enabled:         row.Enabled,
-		Version:         row.Version,
-		CreatedAt:       row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:       row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages: pendingMessages,
-		TotalMessages:   totalMessages,
+		ID:               row.ID.String(),
+		ProjectID:        row.ProjectID.String(),
+		Name:             row.Name,
+		Sources:          row.Sources,
+		PresidioEntities: row.PresidioEntities,
+		Enabled:          row.Enabled,
+		Version:          row.Version,
+		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:  pendingMessages,
+		TotalMessages:    totalMessages,
 	}, nil
 }
 
@@ -688,16 +696,17 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 // they were not computed.
 func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 	return &types.RiskPolicy{
-		ID:              row.ID.String(),
-		ProjectID:       row.ProjectID.String(),
-		Name:            row.Name,
-		Sources:         row.Sources,
-		Enabled:         row.Enabled,
-		Version:         row.Version,
-		CreatedAt:       row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:       row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages: -1,
-		TotalMessages:   -1,
+		ID:               row.ID.String(),
+		ProjectID:        row.ProjectID.String(),
+		Name:             row.Name,
+		Sources:          row.Sources,
+		PresidioEntities: row.PresidioEntities,
+		Enabled:          row.Enabled,
+		Version:          row.Version,
+		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:  -1,
+		TotalMessages:    -1,
 	}
 }
 
