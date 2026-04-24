@@ -26,15 +26,18 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 	err := authz.SyncGrants(ctx, svc.logger, conn, organizationID, roleSlug, []*authz.RoleGrant{
 		{
 			Scope:     string(authz.ScopeProjectRead),
-			Resources: nil,
+			Selectors: nil,
 		},
 		{
-			Scope:     string(authz.ScopeMCPConnect),
-			Resources: []string{"tool:payments", "tool:analytics"},
+			Scope: string(authz.ScopeMCPConnect),
+			Selectors: []authz.Selector{
+				{"resource_kind": "mcp", "resource_id": "tool:payments"},
+				{"resource_kind": "mcp", "resource_id": "tool:analytics"},
+			},
 		},
 		{
 			Scope:     string(authz.ScopeProjectWrite),
-			Resources: []string{},
+			Selectors: nil,
 		},
 	})
 	require.NoError(t, err)
@@ -44,7 +47,7 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 		PrincipalUrn:   rolePrincipal.String(),
 	})
 	require.NoError(t, err)
-	require.Len(t, rows, 3)
+	require.Len(t, rows, 4)
 
 	got := make([]string, 0, len(rows))
 	for _, row := range rows {
@@ -54,6 +57,7 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 	}
 	require.ElementsMatch(t, []string{
 		string(authz.ScopeProjectRead) + "|" + authz.WildcardResource,
+		string(authz.ScopeProjectWrite) + "|" + authz.WildcardResource,
 		string(authz.ScopeMCPConnect) + "|tool:analytics",
 		string(authz.ScopeMCPConnect) + "|tool:payments",
 	}, got)

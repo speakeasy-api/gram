@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -85,7 +86,7 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	ctx = withAccessGrants(t, ctx, conn,
+	ctx = authztest.WithExactGrants(t, ctx,
 		access.NewGrant(access.ScopeOrgRead, authCtx.ActiveOrganizationID),
 		access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
 	)

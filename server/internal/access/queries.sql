@@ -12,7 +12,7 @@ ORDER BY principal_urn, scope, resource;
 -- name: GetPrincipalGrants :many
 -- Returns all grant rows matching a set of principal URNs within an org.
 -- Used by the access resolver to load grants for a user+role in a single query.
-SELECT scope, selectors
+SELECT scope, resource, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = ANY(@principal_urns::text[]);

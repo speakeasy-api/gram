@@ -48,22 +48,22 @@ func TestGrantsHasAccess_orgReadDoesNotSatisfyOrgAdmin(t *testing.T) {
 func TestGrantsHasAccess_buildWriteSatisfiesBuildRead(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{NewGrant(ScopeBuildWrite, "proj_123")}
-	require.True(t, grantsSatisfy(g, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"}.expand()))
+	g := []Grant{NewGrant(ScopeProjectWrite, "proj_123")}
+	require.True(t, grantsSatisfy(g, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand()))
 }
 
 func TestGrantsHasAccess_buildReadDoesNotSatisfyBuildWrite(t *testing.T) {
 	t.Parallel()
 
-	g := []Grant{NewGrant(ScopeBuildRead, "proj_123")}
-	require.False(t, grantsSatisfy(g, Check{Scope: ScopeBuildWrite, ResourceID: "proj_123"}.expand()))
+	g := []Grant{NewGrant(ScopeProjectRead, "proj_123")}
+	require.False(t, grantsSatisfy(g, Check{Scope: ScopeProjectWrite, ResourceID: "proj_123"}.expand()))
 }
 
 func TestGrantsHasAccess_orgAdminDoesNotSatisfyBuildRead(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
-	require.False(t, grantsSatisfy(g, Check{Scope: ScopeBuildRead, ResourceID: "org_123"}.expand()))
+	require.False(t, grantsSatisfy(g, Check{Scope: ScopeProjectRead, ResourceID: "org_123"}.expand()))
 }
 
 func TestGrantsHasAccess_mcpConnectDoesNotSatisfyMCPRead(t *testing.T) {
@@ -98,7 +98,7 @@ func TestGrantsHasAccess_rootWildcardSatisfiesAnyScope(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeRoot, WildcardResource)}
-	require.True(t, grantsSatisfy(g, Check{Scope: ScopeBuildRead, ResourceID: "proj_123"}.expand()))
+	require.True(t, grantsSatisfy(g, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand()))
 	require.True(t, grantsSatisfy(g, Check{Scope: ScopeOrgAdmin, ResourceID: "org_456"}.expand()))
 	require.True(t, grantsSatisfy(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand()))
 }

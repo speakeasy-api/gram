@@ -418,7 +418,7 @@ func TestService_Info_ProjectFiltering(t *testing.T) {
 		p2, err := instance.createTestProject(ctx, orgID, "ProjectB", "project-b")
 		require.NoError(t, err)
 
-		ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: p1.ID.String()})
+		ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, p1.ID.String()))
 
 		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
 		require.NoError(t, err)
@@ -444,7 +444,7 @@ func TestService_Info_ProjectFiltering(t *testing.T) {
 		_, err = instance.createTestProject(ctx, orgID, "ProjY", "proj-y")
 		require.NoError(t, err)
 
-		ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: authz.WildcardResource})
+		ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, authz.WildcardResource))
 
 		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
 		require.NoError(t, err)

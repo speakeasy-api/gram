@@ -56,8 +56,10 @@ func TestService_GetRole(t *testing.T) {
 	for _, grant := range role.Grants {
 		grantsByScope[grant.Scope] = grant
 	}
-	require.ElementsMatch(t, []string{"project-1"}, grantsByScope[string(authz.ScopeProjectRead)].Resources)
-	require.Nil(t, grantsByScope[string(authz.ScopeMCPConnect)].Resources)
+	sels := grantsByScope[string(authz.ScopeProjectRead)].Selectors
+	require.Len(t, sels, 1)
+	require.Equal(t, "project-1", sels[0]["resource_id"])
+	require.Nil(t, grantsByScope[string(authz.ScopeMCPConnect)].Selectors)
 }
 
 func TestService_GetRole_NotFound(t *testing.T) {

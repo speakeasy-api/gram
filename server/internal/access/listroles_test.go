@@ -60,7 +60,7 @@ func TestService_ListRoles(t *testing.T) {
 	require.Equal(t, mockRoleTimestamp, adminRole.UpdatedAt)
 	require.Len(t, adminRole.Grants, 1)
 	require.Equal(t, string(authz.ScopeOrgAdmin), adminRole.Grants[0].Scope)
-	require.Nil(t, adminRole.Grants[0].Resources)
+	require.Nil(t, adminRole.Grants[0].Selectors)
 
 	customRole := rolesByID["role_custom"]
 	require.NotNil(t, customRole)
@@ -74,8 +74,13 @@ func TestService_ListRoles(t *testing.T) {
 	for _, grant := range customRole.Grants {
 		grantsByScope[grant.Scope] = grant
 	}
-	require.ElementsMatch(t, []string{"project-1", "project-2"}, grantsByScope[string(authz.ScopeProjectRead)].Resources)
-	require.Nil(t, grantsByScope[string(authz.ScopeMCPConnect)].Resources)
+	sels := grantsByScope[string(authz.ScopeProjectRead)].Selectors
+	ids := make([]string, len(sels))
+	for i, s := range sels {
+		ids[i] = s["resource_id"]
+	}
+	require.ElementsMatch(t, []string{"project-1", "project-2"}, ids)
+	require.Nil(t, grantsByScope[string(authz.ScopeMCPConnect)].Selectors)
 }
 
 func TestService_ListRoles_ExcludesDisconnectedUsersFromMemberCounts(t *testing.T) {

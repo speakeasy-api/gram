@@ -107,8 +107,8 @@ func TestSelector_UnmarshalJSON(t *testing.T) {
 func TestResourceKindForScope_buildScopes(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "project", ResourceKindForScope(ScopeBuildRead))
-	require.Equal(t, "project", ResourceKindForScope(ScopeBuildWrite))
+	require.Equal(t, "project", ResourceKindForScope(ScopeProjectRead))
+	require.Equal(t, "project", ResourceKindForScope(ScopeProjectWrite))
 }
 
 func TestResourceKindForScope_mcpScopes(t *testing.T) {
@@ -122,9 +122,9 @@ func TestResourceKindForScope_mcpScopes(t *testing.T) {
 func TestResourceKindForScope_remoteMCPScopes(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeRemoteMCPRead))
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeRemoteMCPWrite))
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeRemoteMCPConnect))
+	require.Equal(t, "mcp", ResourceKindForScope(Scope("remote-mcp:read")))
+	require.Equal(t, "mcp", ResourceKindForScope(Scope("remote-mcp:write")))
+	require.Equal(t, "mcp", ResourceKindForScope(Scope("remote-mcp:connect")))
 }
 
 func TestResourceKindForScope_orgScopes(t *testing.T) {
@@ -143,7 +143,7 @@ func TestResourceKindForScope_rootScope(t *testing.T) {
 func TestNewSelector_includesResourceKind(t *testing.T) {
 	t.Parallel()
 
-	s := NewSelector(ScopeBuildRead, "proj_123")
+	s := NewSelector(ScopeProjectRead, "proj_123")
 	require.Equal(t, Selector{"resource_kind": "project", "resource_id": "proj_123"}, s)
 }
 

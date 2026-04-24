@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/domains"
-	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -34,7 +34,7 @@ func TestCustomDomainsService_GetDomain_AllowsOrgReadGrant(t *testing.T) {
 	_, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: authCtx.ActiveOrganizationID, Domain: "docs.example.com"})
 	require.NoError(t, err)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgRead, authCtx.ActiveOrganizationID))
+	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeOrgRead, authCtx.ActiveOrganizationID))
 
 	domain, err := ti.service.GetDomain(ctx, &gen.GetDomainPayload{})
 	require.NoError(t, err)
@@ -49,7 +49,7 @@ func TestCustomDomainsService_GetDomain_AllowsOrgAdminGrantViaScopeHierarchy(t *
 	_, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: authCtx.ActiveOrganizationID, Domain: "hierarchy.example.com"})
 	require.NoError(t, err)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	domain, err := ti.service.GetDomain(ctx, &gen.GetDomainPayload{})
 	require.NoError(t, err)
@@ -64,7 +64,7 @@ func TestCustomDomainsService_GetDomain_ForbiddenWithGrantForDifferentOrganizati
 	_, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: authCtx.ActiveOrganizationID, Domain: "docs.example.com"})
 	require.NoError(t, err)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, "org_other"))
+	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, "org_other"))
 
 	_, err = ti.service.GetDomain(ctx, &gen.GetDomainPayload{})
 	var oopsErr *oops.ShareableError
@@ -89,7 +89,7 @@ func TestCustomDomainsService_CreateDomain_AllowsOrgAdminGrant(t *testing.T) {
 
 	ctx, ti := newTestCustomDomainsService(t)
 	authCtx := testAuthContext(t, ctx)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	err := ti.service.CreateDomain(ctx, &gen.CreateDomainPayload{Domain: "create.example.com"})
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestCustomDomainsService_CreateDomain_ForbiddenWithGrantForDifferentOrganiz
 	t.Parallel()
 
 	ctx, ti := newTestCustomDomainsService(t)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, "org_other"))
+	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, "org_other"))
 
 	err := ti.service.CreateDomain(ctx, &gen.CreateDomainPayload{Domain: "create.example.com"})
 	var oopsErr *oops.ShareableError
@@ -132,7 +132,7 @@ func TestCustomDomainsService_DeleteDomain_AllowsOrgAdminGrant(t *testing.T) {
 	_, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: authCtx.ActiveOrganizationID, Domain: "delete.example.com"})
 	require.NoError(t, err)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 	err = ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{})
 	require.NoError(t, err)
 }
@@ -145,7 +145,7 @@ func TestCustomDomainsService_DeleteDomain_ForbiddenWithGrantForDifferentOrganiz
 	_, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: authCtx.ActiveOrganizationID, Domain: "delete.example.com"})
 	require.NoError(t, err)
 
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, "org_other"))
+	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, "org_other"))
 	err = ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)

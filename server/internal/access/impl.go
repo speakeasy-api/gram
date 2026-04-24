@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"regexp"
 	"strings"
 	"time"
@@ -657,13 +658,13 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	}
 	if !enforce {
 		return &gen.ListUserGrantsResult{Grants: []*gen.ListRoleGrant{
-			{Scope: string(authz.ScopeOrgRead), Resources: nil},
-			{Scope: string(authz.ScopeOrgAdmin), Resources: nil},
-			{Scope: string(authz.ScopeProjectRead), Resources: nil},
-			{Scope: string(authz.ScopeProjectWrite), Resources: nil},
-			{Scope: string(authz.ScopeMCPRead), Resources: nil},
-			{Scope: string(authz.ScopeMCPWrite), Resources: nil},
-			{Scope: string(authz.ScopeMCPConnect), Resources: nil},
+			{Scope: string(authz.ScopeOrgRead), Selectors: nil},
+			{Scope: string(authz.ScopeOrgAdmin), Selectors: nil},
+			{Scope: string(authz.ScopeProjectRead), Selectors: nil},
+			{Scope: string(authz.ScopeProjectWrite), Selectors: nil},
+			{Scope: string(authz.ScopeMCPRead), Selectors: nil},
+			{Scope: string(authz.ScopeMCPWrite), Selectors: nil},
+			{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
 		}}, nil
 	}
 
@@ -879,14 +880,20 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {
 		if grant == nil {
 			continue
 		}
-		var resources []string
-		if grant.Resources != nil {
-			resources = append([]string{}, grant.Resources...)
+
+		var selectors []authz.Selector
+		for _, s := range grant.Selectors {
+			if s == nil {
+				continue
+			}
+			sel := make(authz.Selector, len(s))
+			maps.Copy(sel, s)
+			selectors = append(selectors, sel)
 		}
 
 		out = append(out, &authz.RoleGrant{
 			Scope:     grant.Scope,
-			Resources: resources,
+			Selectors: selectors,
 		})
 	}
 
@@ -1009,7 +1016,7 @@ func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organ
 	}
 	genGrants := make([]*gen.RoleGrant, 0, len(grants))
 	for _, g := range grants {
-		genGrants = append(genGrants, &gen.RoleGrant{Scope: g.Scope, Resources: g.Resources})
+		genGrants = append(genGrants, scopedGrantToGenRoleGrant(g))
 	}
 
 	return &gen.Role{
@@ -1024,11 +1031,23 @@ func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organ
 	}, nil
 }
 
+func scopedGrantToGenRoleGrant(g *authz.ScopedGrant) *gen.RoleGrant {
+	var selectors []map[string]string
+	for _, sel := range g.Selectors {
+		selectors = append(selectors, map[string]string(sel))
+	}
+	return &gen.RoleGrant{Scope: g.Scope, Selectors: selectors}
+}
+
 func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
-	scoped := authz.GrantsFromRows(grants)
+	scoped := authz.GrantsToScopedGrants(grants)
 	out := make([]*gen.ListRoleGrant, 0, len(scoped))
 	for _, g := range scoped {
-		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Resources: g.Resources})
+		var selectors []map[string]string
+		for _, sel := range g.Selectors {
+			selectors = append(selectors, map[string]string(sel))
+		}
+		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors})
 	}
 	return out
 }

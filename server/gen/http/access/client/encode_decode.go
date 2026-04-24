@@ -2823,10 +2823,15 @@ func unmarshalRoleGrantResponseBodyToAccessRoleGrant(v *RoleGrantResponseBody) *
 	res := &access.RoleGrant{
 		Scope: *v.Scope,
 	}
-	if v.Resources != nil {
-		res.Resources = make([]string, len(v.Resources))
-		for i, val := range v.Resources {
-			res.Resources[i] = val
+	if v.Selectors != nil {
+		res.Selectors = make([]map[string]string, len(v.Selectors))
+		for i, val := range v.Selectors {
+			res.Selectors[i] = make(map[string]string, len(val))
+			for key, val := range val {
+				tk := key
+				tv := val
+				res.Selectors[i][tk] = tv
+			}
 		}
 	}
 
@@ -2839,10 +2844,15 @@ func marshalAccessRoleGrantToRoleGrantRequestBody(v *access.RoleGrant) *RoleGran
 	res := &RoleGrantRequestBody{
 		Scope: v.Scope,
 	}
-	if v.Resources != nil {
-		res.Resources = make([]string, len(v.Resources))
-		for i, val := range v.Resources {
-			res.Resources[i] = val
+	if v.Selectors != nil {
+		res.Selectors = make([]map[string]string, len(v.Selectors))
+		for i, val := range v.Selectors {
+			res.Selectors[i] = make(map[string]string, len(val))
+			for key, val := range val {
+				tk := key
+				tv := val
+				res.Selectors[i][tk] = tv
+			}
 		}
 	}
 
@@ -2855,10 +2865,15 @@ func marshalRoleGrantRequestBodyToAccessRoleGrant(v *RoleGrantRequestBody) *acce
 	res := &access.RoleGrant{
 		Scope: v.Scope,
 	}
-	if v.Resources != nil {
-		res.Resources = make([]string, len(v.Resources))
-		for i, val := range v.Resources {
-			res.Resources[i] = val
+	if v.Selectors != nil {
+		res.Selectors = make([]map[string]string, len(v.Selectors))
+		for i, val := range v.Selectors {
+			res.Selectors[i] = make(map[string]string, len(val))
+			for key, val := range val {
+				tk := key
+				tv := val
+				res.Selectors[i][tk] = tv
+			}
 		}
 	}
 
@@ -2905,10 +2920,15 @@ func unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(v *ListRoleGrantRes
 			res.SubScopes[i] = val
 		}
 	}
-	if v.Resources != nil {
-		res.Resources = make([]string, len(v.Resources))
-		for i, val := range v.Resources {
-			res.Resources[i] = val
+	if v.Selectors != nil {
+		res.Selectors = make([]map[string]string, len(v.Selectors))
+		for i, val := range v.Selectors {
+			res.Selectors[i] = make(map[string]string, len(val))
+			for key, val := range val {
+				tk := key
+				tv := val
+				res.Selectors[i][tk] = tv
+			}
 		}
 	}
 

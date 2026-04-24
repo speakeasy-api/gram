@@ -2347,18 +2347,18 @@ type RoleResponseBody struct {
 type RoleGrantResponseBody struct {
 	// The scope slug this grant applies to.
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Resource allowlist. Null means unrestricted access. An array means only the
-	// listed resource IDs.
-	Resources []string `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
+	// Selector constraints. Null means unrestricted. Each selector is a set of
+	// key-value conditions (e.g. resource_kind, resource_id, disposition, tool).
+	Selectors []map[string]string `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
 
 // RoleGrantRequestBody is used to define fields on request body types.
 type RoleGrantRequestBody struct {
 	// The scope slug this grant applies to.
 	Scope string `form:"scope" json:"scope" xml:"scope"`
-	// Resource allowlist. Null means unrestricted access. An array means only the
-	// listed resource IDs.
-	Resources []string `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
+	// Selector constraints. Null means unrestricted. Each selector is a set of
+	// key-value conditions (e.g. resource_kind, resource_id, disposition, tool).
+	Selectors []map[string]string `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
 
 // ScopeDefinitionResponseBody is used to define fields on response body types.
@@ -2393,9 +2393,9 @@ type ListRoleGrantResponseBody struct {
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// The inherited scopes the primary scope grants.
 	SubScopes []string `form:"sub_scopes,omitempty" json:"sub_scopes,omitempty" xml:"sub_scopes,omitempty"`
-	// Resource allowlist. Null means unrestricted access. An array means only the
-	// listed resource IDs.
-	Resources []string `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
+	// Selector constraints. Null means unrestricted. Each selector is a set of
+	// key-value conditions.
+	Selectors []map[string]string `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
 
 // NewCreateRoleRequestBody builds the HTTP request body from the payload of

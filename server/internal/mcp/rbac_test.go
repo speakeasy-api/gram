@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -40,8 +41,8 @@ func TestServePublic_RBAC_PrivateMCP_DeniedWithUnrelatedGrant(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-unrelated-"+uuid.NewString()[:8])
 
-	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeMCPConnect, uuid.NewString()))
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeMCPConnect, uuid.NewString()))
 
 	err := authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
 	var oopsErr *oops.ShareableError
@@ -55,8 +56,8 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithWriteGrant(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-write-implies-connect-"+uuid.NewString()[:8])
 
-	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeMCPWrite, toolset.ID.String()))
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeMCPWrite, toolset.ID.String()))
 
 	err := authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
 	require.NoError(t, err)
@@ -68,8 +69,8 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithConnectGrant(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-allowed-"+uuid.NewString()[:8])
 
-	accessManager := access.NewManager(ti.logger, ti.conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
-	ctx = rbactest.WithExactAccessGrants(t, ctx, access.NewGrant(access.ScopeMCPConnect, toolset.ID.String()))
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeMCPConnect, toolset.ID.String()))
 
 	err := authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
 	require.NoError(t, err)

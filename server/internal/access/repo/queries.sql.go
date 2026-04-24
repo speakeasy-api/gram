@@ -83,7 +83,7 @@ func (q *Queries) DeletePrincipalGrantsByPrincipal(ctx context.Context, arg Dele
 }
 
 const getPrincipalGrants = `-- name: GetPrincipalGrants :many
-SELECT scope, selectors
+SELECT scope, resource, selectors
 FROM principal_grants
 WHERE organization_id = $1
   AND principal_urn = ANY($2::text[])
@@ -96,6 +96,7 @@ type GetPrincipalGrantsParams struct {
 
 type GetPrincipalGrantsRow struct {
 	Scope     string
+	Resource  string
 	Selectors []byte
 }
 
@@ -110,7 +111,7 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	var items []GetPrincipalGrantsRow
 	for rows.Next() {
 		var i GetPrincipalGrantsRow
-		if err := rows.Scan(&i.Scope, &i.Selectors); err != nil {
+		if err := rows.Scan(&i.Scope, &i.Resource, &i.Selectors); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

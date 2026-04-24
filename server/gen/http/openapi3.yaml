@@ -22940,11 +22940,6 @@ components:
         ListRoleGrant:
             type: object
             properties:
-                resources:
-                    type: array
-                    items:
-                        type: string
-                    description: Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
                 scope:
                     type: string
                     description: The scope slug this grant applies to.
@@ -22956,6 +22951,13 @@ components:
                         - mcp:read
                         - mcp:write
                         - mcp:connect
+                selectors:
+                    type: array
+                    items:
+                        type: object
+                        additionalProperties:
+                            type: string
+                    description: Selector constraints. Null means unrestricted. Each selector is a set of key-value conditions.
                 sub_scopes:
                     type: array
                     items:
@@ -25150,11 +25152,6 @@ components:
         RoleGrant:
             type: object
             properties:
-                resources:
-                    type: array
-                    items:
-                        type: string
-                    description: Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
                 scope:
                     type: string
                     description: The scope slug this grant applies to.
@@ -25166,6 +25163,13 @@ components:
                         - mcp:read
                         - mcp:write
                         - mcp:connect
+                selectors:
+                    type: array
+                    items:
+                        type: object
+                        additionalProperties:
+                            type: string
+                    description: Selector constraints. Null means unrestricted. Each selector is a set of key-value conditions (e.g. resource_kind, resource_id, disposition, tool).
             required:
                 - scope
         ScopeDefinition:

@@ -322,8 +322,8 @@ var RoleGrantModel = Type("RoleGrant", func() {
 		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect")
 	})
 
-	Attribute("resources", ArrayOf(String), func() {
-		Description("Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.")
+	Attribute("selectors", ArrayOf(MapOf(String, String)), func() {
+		Description("Selector constraints. Null means unrestricted. Each selector is a set of key-value conditions (e.g. resource_kind, resource_id, disposition, tool).")
 	})
 })
 
@@ -342,7 +342,7 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 		})
 	})
 
-	Attribute("resources", ArrayOf(String), "Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.")
+	Attribute("selectors", ArrayOf(MapOf(String, String)), "Selector constraints. Null means unrestricted. Each selector is a set of key-value conditions.")
 })
 
 var RoleModel = Type("Role", func() {
