@@ -1379,7 +1379,7 @@ async function upsertToolset(init: {
   return toolset;
 }
 
-// The Gram API + platform tools that compose the built-in MCP Logs server.
+// The Gram API tools that compose the built-in MCP Logs server.
 // These match the production `speakeasy-team-mcp-logs` toolset.
 const MCP_LOGS_TOOL_URNS = new Set([
   "tools:http:gram:gram_list_tools",
