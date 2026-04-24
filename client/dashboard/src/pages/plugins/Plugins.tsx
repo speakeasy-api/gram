@@ -42,10 +42,17 @@ export default function Plugins() {
   const { data: publishStatus } = usePublishStatusSuspense();
 
   const publishMutation = usePublishPluginsMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       setIsPublishDialogOpen(false);
       invalidateAllPublishStatus(queryClient);
-      toast.success("Plugins published to GitHub");
+      toast.success("Plugins published to GitHub", {
+        description: data.repoUrl,
+        action: {
+          label: "Open",
+          onClick: () =>
+            window.open(data.repoUrl, "_blank", "noopener,noreferrer"),
+        },
+      });
     },
     onError: () => {
       toast.error("Failed to publish plugins to GitHub");
@@ -187,34 +194,50 @@ export default function Plugins() {
           </Page.Section.Description>
           <Page.Section.CTA>
             {hasPlugins && (
-              <Stack direction="horizontal" gap={2}>
-                {publishStatus?.configured && (
-                  <Button
-                    variant="secondary"
-                    onClick={() => setIsPublishDialogOpen(true)}
-                    disabled={publishMutation.isPending}
-                  >
+              <Stack direction="vertical" gap={1} align="end">
+                <Stack direction="horizontal" gap={2}>
+                  {publishStatus?.configured && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => setIsPublishDialogOpen(true)}
+                      disabled={publishMutation.isPending}
+                    >
+                      <Button.LeftIcon>
+                        <Icon
+                          name={
+                            publishStatus.connected ? "refresh-cw" : "upload"
+                          }
+                          className="h-4 w-4"
+                        />
+                      </Button.LeftIcon>
+                      <Button.Text>
+                        {publishMutation.isPending
+                          ? "Publishing..."
+                          : publishStatus.connected
+                            ? "Re-publish"
+                            : "Publish to GitHub"}
+                      </Button.Text>
+                    </Button>
+                  )}
+                  <Button onClick={() => setIsCreateDialogOpen(true)}>
                     <Button.LeftIcon>
-                      <Icon
-                        name={publishStatus.connected ? "refresh-cw" : "upload"}
-                        className="h-4 w-4"
-                      />
+                      <Plus className="h-4 w-4" />
                     </Button.LeftIcon>
-                    <Button.Text>
-                      {publishMutation.isPending
-                        ? "Publishing..."
-                        : publishStatus.connected
-                          ? "Re-publish"
-                          : "Publish to GitHub"}
-                    </Button.Text>
+                    <Button.Text>New Plugin</Button.Text>
                   </Button>
+                </Stack>
+                {publishStatus?.connected && publishStatus.repoUrl && (
+                  <a
+                    href={publishStatus.repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
+                  >
+                    {publishStatus.repoOwner && publishStatus.repoName
+                      ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
+                      : publishStatus.repoUrl}
+                  </a>
                 )}
-                <Button onClick={() => setIsCreateDialogOpen(true)}>
-                  <Button.LeftIcon>
-                    <Plus className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>New Plugin</Button.Text>
-                </Button>
               </Stack>
             )}
           </Page.Section.CTA>
