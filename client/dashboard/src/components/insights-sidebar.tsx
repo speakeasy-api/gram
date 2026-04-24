@@ -252,15 +252,29 @@ When the user asks about "current period", "selected period", "this timeframe", 
     [mcpConfig, title, subtitle, suggestions, theme, systemPrompt],
   );
 
+  // Fingerprint of the most recently applied non-null override, used to skip
+  // sessionKey bumps when an override is re-applied with the same content but
+  // a fresh object identity. Pages mount <InsightsConfig {...inlineProps}
+  // suggestions={[…]} /> with literal arrays/objects, so the InsightsConfig
+  // effect re-fires on every parent re-render with a structurally-equal
+  // options value. Without this guard those repeats would unmount the
+  // assistant runtime and destroy any in-progress conversation.
+  const lastOverrideFingerprintRef = useRef<string>("");
   const handleSetOverride = useCallback(
     (next: InsightsConfigOptions | null) => {
       setOverride(next);
-      // Only bump the session on a *new* chart-specific override (i.e. an
-      // Explore-with-AI click). Clearing to null (triggered when the user
-      // closes the panel) should not remount — it just returns the next open
-      // to the base "Ask AI" defaults and preserves the already-running
-      // conversation under the default key.
-      if (next !== null) setSessionKey((k) => k + 1);
+      if (next === null) {
+        lastOverrideFingerprintRef.current = "";
+        return;
+      }
+      // Only bump the session on a genuinely new chart-specific override
+      // (different content, e.g. a different Explore-with-AI chart). Clearing
+      // to null also doesn't bump — the next open returns to the base "Ask
+      // AI" defaults and preserves the already-running conversation.
+      const fingerprint = JSON.stringify(next);
+      if (fingerprint === lastOverrideFingerprintRef.current) return;
+      lastOverrideFingerprintRef.current = fingerprint;
+      setSessionKey((k) => k + 1);
     },
     [],
   );

@@ -191,17 +191,20 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     toolsWithCustomComponents,
   );
 
-  // Hold systemPrompt in a ref so transport's useMemo identity is stable across
-  // prompt changes. Consumers like Gram's AI Insights sidebar rebuild
-  // elementsConfig whenever the page-level override changes (new welcome
-  // copy + new contextInfo for "Explore with AI"), which feeds a fresh
-  // systemPrompt through. If systemPrompt was a direct useMemo dep, the
-  // transport identity would change → useChatRuntime would rebuild the runtime
-  // → in-flight switchToNewThread().then(append) calls would resolve against
-  // a torn-down resources map and throw `tapLookupResources: Resource not
-  // found for lookup: {"key":"__LOCALID_…"}`. Reading via ref inside
-  // sendMessages keeps the transport identity stable while every new
-  // completion still picks up the latest system prompt.
+  // Optimization: hold systemPrompt in a ref so changing it doesn't churn the
+  // transport useMemo identity (which would otherwise force `useChatRuntime`'s
+  // dynamic-transport proxy to swap its underlying reference more than
+  // necessary). Aligns with the existing ensureValidHeadersRef and
+  // approvalHelpersRef patterns in this file.
+  //
+  // NOTE: The same `sendMessages` closure already captures other
+  // config-bound values (`config.api?.headers`, `config.gramEnvironment`,
+  // and the `mcpHeaders` mutable shared object) without re-deriving them
+  // when config changes. Today no consumer mutates those at runtime, but
+  // before extending the ref pattern to additional fields, verify the
+  // staleness implications for non-Insights consumers — the AI Insights
+  // sidebar happens to remount the whole provider via `sessionKey` so it
+  // never depends on this closure being current.
   const systemPromptRef = useRef(systemPrompt);
   systemPromptRef.current = systemPrompt;
 
