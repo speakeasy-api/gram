@@ -1667,11 +1667,10 @@ type SkillBreakdownRow struct {
 
 // GetSkillBreakdownParams defines parameters for getting per-user skill breakdown.
 type GetSkillBreakdownParams struct {
-	GramProjectID  string
-	TimeStart      int64
-	TimeEnd        int64
-	Filters        []AttributeFilter
-	TypesToInclude []string
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+	Filters       []AttributeFilter
 }
 
 // GetSkillBreakdown retrieves per-(skill, user) usage counts.
@@ -1681,12 +1680,16 @@ func (q *Queries) GetSkillBreakdown(ctx context.Context, arg GetSkillBreakdownPa
 	sb := sq.Select("skill_name", "user_email", "count(*) as use_count").
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("event_source = 'hook'").
+		Where("tool_name = 'Skill'").
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
 		Where("start_time_unix_nano <= ?", arg.TimeEnd).
 		Where("skill_name != ''")
 
-	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
-	sb = sb.GroupBy("skill_name", "user_email").OrderBy("skill_name", "use_count DESC")
+	// Apply attribute filters (user, server) but not type filters — skill type is hardcoded above.
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, nil)
+	sb = sb.GroupBy("skill_name", "user_email").OrderBy("skill_name", "use_count DESC").
+		Limit(10000) // Defensive cap
 
 	query, args, err := sb.ToSql()
 	if err != nil {
