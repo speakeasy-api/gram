@@ -1852,9 +1852,9 @@ function ServerErrorRateChart({
 type TimeSeriesDataset = {
   label: string;
   data: number[];
-  borderColor: string | undefined;
+  borderColor: string;
   backgroundColor: string;
-  pointBackgroundColor: string | undefined;
+  pointBackgroundColor: string;
   fill: boolean;
   tension: number;
   borderWidth: number;
