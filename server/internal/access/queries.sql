@@ -17,13 +17,11 @@ FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = ANY(@principal_urns::text[]);
 
--- name: UpsertPrincipalGrant :one
--- Creates or updates a single grant row. On conflict (same org/principal/scope/resource),
--- the updated_at timestamp is refreshed. Returns the full row.
+-- name: InsertPrincipalGrant :one
+-- Inserts a single grant row. Callers (SyncGrants) delete-then-insert
+-- within a transaction, so duplicates should not occur.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, resource)
 VALUES (@organization_id, @principal_urn, @scope, @resource)
-ON CONFLICT (organization_id, principal_urn, scope, resource)
-DO UPDATE SET updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, resource, created_at, updated_at;
 
 -- name: DeletePrincipalGrant :execrows

@@ -1775,8 +1775,7 @@ CREATE TABLE IF NOT EXISTS principal_grants (
 
   CONSTRAINT principal_grants_pkey PRIMARY KEY (id),
   CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT principal_grants_selectors_check CHECK (selectors IS NULL OR jsonb_typeof(selectors) = 'object'),
-  CONSTRAINT principal_grants_org_principal_scope_resource_key UNIQUE (organization_id, principal_urn, scope, resource)
+  CONSTRAINT principal_grants_selectors_check CHECK (selectors IS NULL OR jsonb_typeof(selectors) = 'object')
 );
 
 COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource=''*'' means unrestricted. Selectors can further constrain applicability.';

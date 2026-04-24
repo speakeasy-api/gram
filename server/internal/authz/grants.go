@@ -107,7 +107,7 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 		}
 
 		if grant.Resources == nil {
-			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+			if _, err := q.InsertPrincipalGrant(ctx, repo.InsertPrincipalGrantParams{
 				OrganizationID: orgID,
 				PrincipalUrn:   principalURN,
 				Scope:          grant.Scope,
@@ -120,7 +120,7 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 		}
 
 		for _, resource := range grant.Resources {
-			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+			if _, err := q.InsertPrincipalGrant(ctx, repo.InsertPrincipalGrantParams{
 				OrganizationID: orgID,
 				PrincipalUrn:   principalURN,
 				Scope:          grant.Scope,
