@@ -169,6 +169,8 @@ type GetHooksSummaryResult struct {
 	TimeSeries []*HooksTimeSeriesPoint
 	// Time-bucketed event counts by skill
 	SkillTimeSeries []*SkillTimeSeriesPoint
+	// Per-user skill breakdown
+	SkillBreakdown []*SkillBreakdownRow
 }
 
 // GetMetricsSummaryResult is the result type of the telemetry service
@@ -770,6 +772,16 @@ type ServiceInfo struct {
 	Name string
 	// Service version
 	Version *string
+}
+
+// Per-(skill, user) aggregated counts
+type SkillBreakdownRow struct {
+	// Skill name
+	SkillName string
+	// User email address
+	UserEmail string
+	// Use count for this skill/user combination
+	UseCount int64
 }
 
 // Aggregated skills metrics for a single skill

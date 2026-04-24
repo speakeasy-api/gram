@@ -477,6 +477,93 @@ func TestGetHooksSummary_SkillTimeSeriesExcludesNonSkillEvents(t *testing.T) {
 	require.Equal(t, int64(1), result.SkillTimeSeries[0].EventCount)
 }
 
+func TestGetHooksSummary_SkillBreakdownGroupsBySkillAndUser(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	now := time.Now().UTC()
+
+	// user1 uses "golang" twice, user2 uses "golang" once, user2 uses "typescript" once.
+	for i, params := range []struct {
+		user, skill string
+	}{
+		{"user1@example.com", "golang"},
+		{"user1@example.com", "golang"},
+		{"user2@example.com", "golang"},
+		{"user2@example.com", "typescript"},
+	} {
+		insertHookEvent(t, ctx, hookEventParams{
+			projectID:      projectID,
+			deploymentID:   deploymentID,
+			timestamp:      now.Add(-time.Duration(10+i) * time.Minute),
+			traceID:        uuid.New().String(),
+			userEmail:      params.user,
+			hookSource:     "local",
+			toolSource:     "",
+			toolName:       "Skill",
+			skillName:      params.skill,
+			conversationID: "conv-1",
+		})
+	}
+
+	time.Sleep(200 * time.Millisecond)
+
+	result, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+
+	require.NoError(t, err)
+
+	type key struct{ skill, user string }
+	bySkillUser := make(map[key]int64)
+	for _, row := range result.SkillBreakdown {
+		bySkillUser[key{row.SkillName, row.UserEmail}] += row.UseCount
+	}
+
+	require.Equal(t, int64(2), bySkillUser[key{"golang", "user1@example.com"}])
+	require.Equal(t, int64(1), bySkillUser[key{"golang", "user2@example.com"}])
+	require.Equal(t, int64(1), bySkillUser[key{"typescript", "user2@example.com"}])
+	require.NotContains(t, bySkillUser, key{"typescript", "user1@example.com"})
+}
+
+func TestGetHooksSummary_SkillBreakdownEmptyWhenNoSkillEvents(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	now := time.Now().UTC()
+
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   deploymentID,
+		timestamp:      now.Add(-5 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "user@example.com",
+		hookSource:     "mcp",
+		toolSource:     "server-a",
+		toolName:       "fetch",
+		conversationID: "conv-1",
+	})
+
+	time.Sleep(200 * time.Millisecond)
+
+	result, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+
+	require.NoError(t, err)
+	require.Empty(t, result.SkillBreakdown)
+}
+
 func TestGetHooksSummary_SkillTimeSeriesWithSkillTypeFilter(t *testing.T) {
 	t.Parallel()
 

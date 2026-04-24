@@ -1269,8 +1269,9 @@ var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
 	Attribute("breakdown", ArrayOf(HooksBreakdownRowType), "Cross-dimensional pivot: (user, server, source, tool) x counts")
 	Attribute("time_series", ArrayOf(HooksTimeSeriesPointType), "Time-bucketed event counts by server and user")
 	Attribute("skill_time_series", ArrayOf(SkillTimeSeriesPointType), "Time-bucketed event counts by skill")
+	Attribute("skill_breakdown", ArrayOf(SkillBreakdownRowType), "Per-user skill breakdown")
 
-	Required("servers", "users", "skills", "total_events", "total_sessions", "breakdown", "time_series", "skill_time_series")
+	Required("servers", "users", "skills", "total_events", "total_sessions", "breakdown", "time_series", "skill_time_series", "skill_breakdown")
 })
 
 var HooksBreakdownRowType = Type("HooksBreakdownRow", func() {
@@ -1316,6 +1317,16 @@ var SkillSummaryType = Type("SkillSummary", func() {
 	Attribute("unique_users", Int64, "Number of unique users who used this skill")
 
 	Required("skill_name", "use_count", "unique_users")
+})
+
+var SkillBreakdownRowType = Type("SkillBreakdownRow", func() {
+	Description("Per-(skill, user) aggregated counts")
+
+	Attribute("skill_name", String, "Skill name")
+	Attribute("user_email", String, "User email address")
+	Attribute("use_count", Int64, "Use count for this skill/user combination")
+
+	Required("skill_name", "user_email", "use_count")
 })
 
 var HooksServerSummaryType = Type("HooksServerSummary", func() {

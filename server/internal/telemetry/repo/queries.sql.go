@@ -1658,6 +1658,61 @@ func (q *Queries) GetSkillsSummary(ctx context.Context, arg GetSkillsSummaryPara
 	return summaries, nil
 }
 
+// SkillBreakdownRow contains per-(skill, user) aggregated counts.
+type SkillBreakdownRow struct {
+	SkillName string `ch:"skill_name"`
+	UserEmail string `ch:"user_email"`
+	UseCount  uint64 `ch:"use_count"`
+}
+
+// GetSkillBreakdownParams defines parameters for getting per-user skill breakdown.
+type GetSkillBreakdownParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	Filters        []AttributeFilter
+	TypesToInclude []string
+}
+
+// GetSkillBreakdown retrieves per-(skill, user) usage counts.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetSkillBreakdown(ctx context.Context, arg GetSkillBreakdownParams) ([]SkillBreakdownRow, error) {
+	sb := sq.Select("skill_name", "user_email", "count(*) as use_count").
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("start_time_unix_nano >= ?", arg.TimeStart).
+		Where("start_time_unix_nano <= ?", arg.TimeEnd).
+		Where("skill_name != ''")
+
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+	sb = sb.GroupBy("skill_name", "user_email").OrderBy("skill_name", "use_count DESC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building skill breakdown query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []SkillBreakdownRow
+	for rows.Next() {
+		var row SkillBreakdownRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan skill breakdown row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // HooksBreakdownRow contains cross-dimensional aggregated counts for a unique (user, server, source, tool) combination.
 type HooksBreakdownRow struct {
 	UserEmail    string `ch:"user_email"`

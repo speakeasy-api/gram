@@ -305,6 +305,8 @@ type GetHooksSummaryResponseBody struct {
 	TimeSeries []*HooksTimeSeriesPointResponseBody `form:"time_series" json:"time_series" xml:"time_series"`
 	// Time-bucketed event counts by skill
 	SkillTimeSeries []*SkillTimeSeriesPointResponseBody `form:"skill_time_series" json:"skill_time_series" xml:"skill_time_series"`
+	// Per-user skill breakdown
+	SkillBreakdown []*SkillBreakdownRowResponseBody `form:"skill_breakdown" json:"skill_breakdown" xml:"skill_breakdown"`
 }
 
 // ListHooksTracesResponseBody is the type of the "telemetry" service
@@ -3160,6 +3162,17 @@ type SkillTimeSeriesPointResponseBody struct {
 	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
 }
 
+// SkillBreakdownRowResponseBody is used to define fields on response body
+// types.
+type SkillBreakdownRowResponseBody struct {
+	// Skill name
+	SkillName string `form:"skill_name" json:"skill_name" xml:"skill_name"`
+	// User email address
+	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
+	// Use count for this skill/user combination
+	UseCount int64 `form:"use_count" json:"use_count" xml:"use_count"`
+}
+
 // HookTraceSummaryResponseBody is used to define fields on response body types.
 type HookTraceSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
@@ -3571,6 +3584,18 @@ func NewGetHooksSummaryResponseBody(res *telemetry.GetHooksSummaryResult) *GetHo
 		}
 	} else {
 		body.SkillTimeSeries = []*SkillTimeSeriesPointResponseBody{}
+	}
+	if res.SkillBreakdown != nil {
+		body.SkillBreakdown = make([]*SkillBreakdownRowResponseBody, len(res.SkillBreakdown))
+		for i, val := range res.SkillBreakdown {
+			if val == nil {
+				body.SkillBreakdown[i] = nil
+				continue
+			}
+			body.SkillBreakdown[i] = marshalTelemetrySkillBreakdownRowToSkillBreakdownRowResponseBody(val)
+		}
+	} else {
+		body.SkillBreakdown = []*SkillBreakdownRowResponseBody{}
 	}
 	return body
 }

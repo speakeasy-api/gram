@@ -1524,11 +1524,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		bucketSizeNs = fiveMinNs
 	}
 
-	// Run all seven independent ClickHouse queries in parallel
+	// Run all eight independent ClickHouse queries in parallel
 	var (
 		serverRows            []repo.HooksServerSummaryRow
 		userRows              []repo.HooksUserSummaryRow
 		skillRows             []repo.SkillSummaryRow
+		skillBreakdownRows    []repo.SkillBreakdownRow
 		breakdownRows         []repo.HooksBreakdownRow
 		timeSeriesPoints      []repo.HooksTimeSeriesPoint
 		skillTimeSeriesPoints []repo.SkillTimeSeriesPoint
@@ -1576,6 +1577,20 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		})
 		if err != nil {
 			return fmt.Errorf("get skills summary: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		skillBreakdownRows, err = s.chRepo.GetSkillBreakdown(egCtx, repo.GetSkillBreakdownParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Filters:        attributeFilters,
+			TypesToInclude: typesToInclude,
+		})
+		if err != nil {
+			return fmt.Errorf("get skill breakdown: %w", err)
 		}
 		return nil
 	})
@@ -1678,6 +1693,16 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		})
 	}
 
+	// Transform skill breakdown rows into response
+	skillBreakdown := make([]*telem_gen.SkillBreakdownRow, 0, len(skillBreakdownRows))
+	for _, row := range skillBreakdownRows {
+		skillBreakdown = append(skillBreakdown, &telem_gen.SkillBreakdownRow{
+			SkillName: row.SkillName,
+			UserEmail: row.UserEmail,
+			UseCount:  int64(row.UseCount), //nolint:gosec // Bounded count
+		})
+	}
+
 	// Transform breakdown rows into response
 	breakdown := make([]*telem_gen.HooksBreakdownRow, 0, len(breakdownRows))
 	for _, row := range breakdownRows {
@@ -1718,6 +1743,7 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		Servers:         servers,
 		Users:           users,
 		Skills:          skills,
+		SkillBreakdown:  skillBreakdown,
 		TotalEvents:     totalEvents,
 		TotalSessions:   totalSessions,
 		Breakdown:       breakdown,
