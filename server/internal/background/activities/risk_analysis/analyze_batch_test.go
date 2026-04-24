@@ -48,6 +48,8 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		"http://127.0.0.1:1",                   //nolint:forbidigo // Test-only dead URL.
 		&http.Client{Timeout: 1 * time.Second}, //nolint:forbidigo // Test-only HTTP client.
 		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		testenv.NewLogger(t),
 	)
 
 	ab := risk_analysis.NewAnalyzeBatch(

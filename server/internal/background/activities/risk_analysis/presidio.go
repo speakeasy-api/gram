@@ -5,13 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -44,18 +47,39 @@ type presidioResult struct {
 
 // PresidioClient calls the Presidio Analyzer HTTP API.
 type PresidioClient struct {
-	baseURL    string
-	httpClient *http.Client //nolint:forbidigo // Injected via guardian.Policy in the wiring layer.
-	tracer     trace.Tracer
+	baseURL         string
+	httpClient      *http.Client //nolint:forbidigo // Injected via guardian.Policy in the wiring layer.
+	tracer          trace.Tracer
+	logger          *slog.Logger
+	requestDuration metric.Float64Histogram
+	requestFailures metric.Int64Counter
 }
 
 // NewPresidioClient creates a client pointing at the given base URL.
 // The httpClient should be obtained from guardian.Policy.PooledClient().
-func NewPresidioClient(baseURL string, httpClient *http.Client, tracerProvider trace.TracerProvider) *PresidioClient { //nolint:forbidigo // Accepts guardian-provided client.
+func NewPresidioClient(baseURL string, httpClient *http.Client, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) *PresidioClient { //nolint:forbidigo // Accepts guardian-provided client.
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio")
+
+	requestDuration, _ := meter.Float64Histogram(
+		"risk.presidio.request_duration",
+		metric.WithDescription("Duration of individual Presidio /analyze HTTP requests in seconds"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
+	)
+
+	requestFailures, _ := meter.Int64Counter(
+		"risk.presidio.failures",
+		metric.WithDescription("Number of failed Presidio /analyze requests"),
+		metric.WithUnit("{request}"),
+	)
+
 	return &PresidioClient{
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		httpClient: httpClient,
-		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
+		baseURL:         strings.TrimRight(baseURL, "/"),
+		httpClient:      httpClient,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
+		logger:          logger,
+		requestDuration: requestDuration,
+		requestFailures: requestFailures,
 	}
 }
 
@@ -123,9 +147,17 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 
 func (p *PresidioClient) analyze(ctx context.Context, text string, entities []string) (_ []Finding, err error) {
 	ctx, span := p.tracer.Start(ctx, "presidio.analyze")
+	start := time.Now()
 	defer func() {
+		duration := time.Since(start)
+		if p.requestDuration != nil {
+			p.requestDuration.Record(ctx, duration.Seconds())
+		}
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
+			if p.requestFailures != nil {
+				p.requestFailures.Add(ctx, 1)
+			}
 		}
 		span.End()
 	}()

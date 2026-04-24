@@ -25,8 +25,8 @@ func presidioClient(t *testing.T) *risk_analysis.PresidioClient {
 	if err != nil || resp.StatusCode != http.StatusOK {
 		t.Skip("presidio not running at " + url)
 	}
-	resp.Body.Close()                                                                                                  //nolint:errcheck // Test only.
-	return risk_analysis.NewPresidioClient(url, &http.Client{Timeout: 30 * time.Second}, testenv.NewTracerProvider(t)) //nolint:forbidigo // Test-only HTTP client.
+	resp.Body.Close()                                                                                                                                                     //nolint:errcheck // Test only.
+	return risk_analysis.NewPresidioClient(url, &http.Client{Timeout: 30 * time.Second}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), testenv.NewLogger(t)) //nolint:forbidigo // Test-only HTTP client.
 }
 
 // --- Real positives: PII that should be detected ---
