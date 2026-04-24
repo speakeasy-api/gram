@@ -139,3 +139,36 @@ func TestUpdateMcpSlug_RBACForbidden(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+func TestUpdateMcpSlug_RejectsCrossTenantMcpFrontend(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	ownFrontendID := seedMcpFrontend(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	created, err := ti.service.CreateMcpSlug(ctx, &gen.CreateMcpSlugPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		CustomDomainID:   nil,
+		McpFrontendID:    ownFrontendID,
+		Slug:             types.McpSlugString(authCtx.OrganizationSlug + "-legit"),
+	})
+	require.NoError(t, err)
+
+	otherFrontendID := seedOtherProjectMcpFrontend(t, ctx, ti.conn, authCtx.ActiveOrganizationID).String()
+
+	_, err = ti.service.UpdateMcpSlug(ctx, &gen.UpdateMcpSlugPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+		CustomDomainID:   nil,
+		McpFrontendID:    otherFrontendID,
+		Slug:             types.McpSlugString(authCtx.OrganizationSlug + "-legit"),
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}

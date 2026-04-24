@@ -21,6 +21,7 @@ import (
 	mcpfrontendsrepo "github.com/speakeasy-api/gram/server/internal/mcpfrontends/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpslugs"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -136,6 +137,41 @@ func seedMcpFrontend(t *testing.T, ctx context.Context, conn *pgxpool.Pool, proj
 
 	frontend, err := mcpfrontendsrepo.New(conn).CreateMCPFrontend(ctx, mcpfrontendsrepo.CreateMCPFrontendParams{
 		ProjectID:             projectID,
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ExternalOauthServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OauthProxyServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
+		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            "disabled",
+	})
+	require.NoError(t, err)
+
+	return frontend.ID
+}
+
+// seedOtherProjectMcpFrontend creates an additional project in the caller's
+// organization and inserts an mcp_frontend under that *other* project.
+// Used to exercise cross-tenant ownership rejection.
+func seedOtherProjectMcpFrontend(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) uuid.UUID {
+	t.Helper()
+
+	slug := "other-" + uuid.New().String()[:8]
+	otherProject, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+
+	server, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ProjectID:     otherProject.ID,
+		TransportType: "streamable-http",
+		Url:           "https://other.example.com/mcp/" + uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	frontend, err := mcpfrontendsrepo.New(conn).CreateMCPFrontend(ctx, mcpfrontendsrepo.CreateMCPFrontendParams{
+		ProjectID:             otherProject.ID,
 		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ExternalOauthServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OauthProxyServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
