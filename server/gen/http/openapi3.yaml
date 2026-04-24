@@ -8628,6 +8628,522 @@ paths:
             x-speakeasy-name-override: validate
             x-speakeasy-react-hook:
                 name: ValidateAPIKey
+    /rpc/mcpFrontends.create:
+        post:
+            description: Create a new MCP frontend
+            operationId: createMcpFrontend
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateMcpFrontendForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/McpFrontend'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createMcpFrontend mcpFrontends
+            tags:
+                - mcpFrontends
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreateMcpFrontend
+    /rpc/mcpFrontends.delete:
+        delete:
+            description: Delete an MCP frontend
+            operationId: deleteMcpFrontend
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the MCP frontend to delete
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the MCP frontend to delete
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteMcpFrontend mcpFrontends
+            tags:
+                - mcpFrontends
+            x-speakeasy-name-override: delete
+            x-speakeasy-react-hook:
+                name: DeleteMcpFrontend
+    /rpc/mcpFrontends.get:
+        get:
+            description: Get an MCP frontend by ID
+            operationId: getMcpFrontend
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the MCP frontend
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the MCP frontend
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/McpFrontend'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getMcpFrontend mcpFrontends
+            tags:
+                - mcpFrontends
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: GetMcpFrontend
+    /rpc/mcpFrontends.list:
+        get:
+            description: List all MCP frontends for a project
+            operationId: listMcpFrontends
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMcpFrontendsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listMcpFrontends mcpFrontends
+            tags:
+                - mcpFrontends
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: McpFrontends
+    /rpc/mcpFrontends.update:
+        post:
+            description: 'Update an MCP frontend. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.'
+            operationId: updateMcpFrontend
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateMcpFrontendForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/McpFrontend'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateMcpFrontend mcpFrontends
+            tags:
+                - mcpFrontends
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: UpdateMcpFrontend
     /rpc/mcpMetadata.export:
         post:
             description: Export MCP server details as JSON for documentation and integration purposes.
@@ -9374,6 +9890,546 @@ paths:
             x-speakeasy-name-override: listRegistries
             x-speakeasy-react-hook:
                 name: ListMCPRegistries
+    /rpc/mcpSlugs.create:
+        post:
+            description: Create a new MCP slug for an MCP frontend
+            operationId: createMcpSlug
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateMcpSlugForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/McpSlug'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createMcpSlug mcpSlugs
+            tags:
+                - mcpSlugs
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreateMcpSlug
+    /rpc/mcpSlugs.delete:
+        delete:
+            description: Delete an MCP slug
+            operationId: deleteMcpSlug
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the MCP slug to delete
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the MCP slug to delete
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteMcpSlug mcpSlugs
+            tags:
+                - mcpSlugs
+            x-speakeasy-name-override: delete
+            x-speakeasy-react-hook:
+                name: DeleteMcpSlug
+    /rpc/mcpSlugs.get:
+        get:
+            description: Get an MCP slug by id or by (custom_domain_id, slug). Provide either id, or slug with an optional custom_domain_id — not both.
+            operationId: getMcpSlug
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the MCP slug
+                  in: query
+                  name: id
+                  schema:
+                    description: The ID of the MCP slug
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The ID of the custom domain the slug is registered under. Omit to look up a platform-domain slug.
+                  in: query
+                  name: custom_domain_id
+                  schema:
+                    description: The ID of the custom domain the slug is registered under. Omit to look up a platform-domain slug.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The slug to look up
+                  in: query
+                  name: slug
+                  schema:
+                    description: A url-friendly label (up to 128 characters) that addresses an MCP frontend through a slug-based URL. Platform-domain slugs (no custom domain) must be prefixed with the organization slug.
+                    maxLength: 128
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/McpSlug'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getMcpSlug mcpSlugs
+            tags:
+                - mcpSlugs
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: GetMcpSlug
+    /rpc/mcpSlugs.list:
+        get:
+            description: List MCP slugs for a project. Optionally filter to only those associated with a specific MCP frontend.
+            operationId: listMcpSlugs
+            parameters:
+                - allowEmptyValue: true
+                  description: 'Optional filter: only return slugs associated with this MCP frontend.'
+                  in: query
+                  name: mcp_frontend_id
+                  schema:
+                    description: 'Optional filter: only return slugs associated with this MCP frontend.'
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMcpSlugsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listMcpSlugs mcpSlugs
+            tags:
+                - mcpSlugs
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: McpSlugs
+    /rpc/mcpSlugs.update:
+        post:
+            description: 'Update an MCP slug. This is a full-record replace: fields omitted from the request become null on the stored record. The id, mcp_frontend_id, and slug fields are required.'
+            operationId: updateMcpSlug
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateMcpSlugForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/McpSlug'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateMcpSlug mcpSlugs
+            tags:
+                - mcpSlugs
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: UpdateMcpSlug
     /rpc/organizations.getInviteByToken:
         get:
             description: Resolve a WorkOS invitation from its token (e.g. accept-flow).
@@ -20767,6 +21823,59 @@ components:
             required:
                 - name
                 - scopes
+        CreateMcpFrontendForm:
+            type: object
+            properties:
+                environment_id:
+                    type: string
+                    description: The ID of the environment to associate with the frontend
+                    format: uuid
+                external_oauth_server_id:
+                    type: string
+                    description: The ID of the external OAuth server to associate with the frontend
+                    format: uuid
+                oauth_proxy_server_id:
+                    type: string
+                    description: The ID of the OAuth proxy server to associate with the frontend
+                    format: uuid
+                remote_mcp_server_id:
+                    type: string
+                    description: The ID of the remote MCP server to use as the backend
+                    format: uuid
+                toolset_id:
+                    type: string
+                    description: The ID of the toolset to use as the backend
+                    format: uuid
+                visibility:
+                    type: string
+                    description: The visibility of an MCP frontend
+                    enum:
+                        - disabled
+                        - private
+                        - public
+            description: Form for creating a new MCP frontend. Exactly one of remote_mcp_server_id or toolset_id must be provided. At most one of external_oauth_server_id or oauth_proxy_server_id may be provided.
+            required:
+                - visibility
+        CreateMcpSlugForm:
+            type: object
+            properties:
+                custom_domain_id:
+                    type: string
+                    description: The ID of the custom domain to register the slug under. Omit for a platform-domain slug.
+                    format: uuid
+                mcp_frontend_id:
+                    type: string
+                    description: The ID of the MCP frontend this slug addresses
+                    format: uuid
+                slug:
+                    type: string
+                    description: A url-friendly label (up to 128 characters) that addresses an MCP frontend through a slug-based URL. Platform-domain slugs (no custom domain) must be prefixed with the organization slug.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 128
+            description: Form for creating a new MCP slug. Platform-domain slugs (no custom_domain_id) must be prefixed with the organization slug.
+            required:
+                - mcp_frontend_id
+                - slug
         CreatePackageForm:
             type: object
             properties:
@@ -23749,6 +24858,26 @@ components:
                         $ref: '#/components/schemas/Key'
             required:
                 - keys
+        ListMcpFrontendsResult:
+            type: object
+            properties:
+                mcp_frontends:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/McpFrontend'
+            description: Result type for listing MCP frontends
+            required:
+                - mcp_frontends
+        ListMcpSlugsResult:
+            type: object
+            properties:
+                mcp_slugs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/McpSlug'
+            description: Result type for listing MCP slugs
+            required:
+                - mcp_slugs
         ListMembersResult:
             type: object
             properties:
@@ -24278,6 +25407,59 @@ components:
                 - name
                 - description
                 - input_schema
+        McpFrontend:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the MCP frontend was created
+                    format: date-time
+                environment_id:
+                    type: string
+                    description: The ID of the environment associated with the frontend
+                    format: uuid
+                external_oauth_server_id:
+                    type: string
+                    description: The ID of the external OAuth server associated with the frontend
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the MCP frontend
+                    format: uuid
+                oauth_proxy_server_id:
+                    type: string
+                    description: The ID of the OAuth proxy server associated with the frontend
+                    format: uuid
+                project_id:
+                    type: string
+                    description: The project ID this MCP frontend belongs to
+                    format: uuid
+                remote_mcp_server_id:
+                    type: string
+                    description: The ID of the remote MCP server used as the backend
+                    format: uuid
+                toolset_id:
+                    type: string
+                    description: The ID of the toolset used as the backend
+                    format: uuid
+                updated_at:
+                    type: string
+                    description: When the MCP frontend was last updated
+                    format: date-time
+                visibility:
+                    type: string
+                    description: The visibility of an MCP frontend
+                    enum:
+                        - disabled
+                        - private
+                        - public
+            description: 'An MCP frontend configuration: authentication, environment, and backend selection for an MCP server.'
+            required:
+                - id
+                - project_id
+                - visibility
+                - created_at
+                - updated_at
         McpMetadata:
             type: object
             properties:
@@ -24327,6 +25509,46 @@ components:
             required:
                 - id
                 - toolset_id
+                - created_at
+                - updated_at
+        McpSlug:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the MCP slug was created
+                    format: date-time
+                custom_domain_id:
+                    type: string
+                    description: The ID of the custom domain this slug is registered under. Null for platform-domain slugs.
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the MCP slug
+                    format: uuid
+                mcp_frontend_id:
+                    type: string
+                    description: The ID of the MCP frontend this slug addresses
+                    format: uuid
+                project_id:
+                    type: string
+                    description: The project ID this MCP slug belongs to
+                    format: uuid
+                slug:
+                    type: string
+                    description: A url-friendly label (up to 128 characters) that addresses an MCP frontend through a slug-based URL. Platform-domain slugs (no custom domain) must be prefixed with the organization slug.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 128
+                updated_at:
+                    type: string
+                    description: When the MCP slug was last updated
+                    format: date-time
+            description: 'An MCP slug: a url-friendly identifier that addresses an MCP frontend.'
+            required:
+                - id
+                - project_id
+                - mcp_frontend_id
+                - slug
                 - created_at
                 - updated_at
         ModelUsage:
@@ -28062,6 +29284,69 @@ components:
             required:
                 - entries_to_update
                 - entries_to_remove
+        UpdateMcpFrontendForm:
+            type: object
+            properties:
+                environment_id:
+                    type: string
+                    description: The ID of the environment to associate with the frontend
+                    format: uuid
+                external_oauth_server_id:
+                    type: string
+                    description: The ID of the external OAuth server to associate with the frontend
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the MCP frontend to update
+                    format: uuid
+                oauth_proxy_server_id:
+                    type: string
+                    description: The ID of the OAuth proxy server to associate with the frontend
+                    format: uuid
+                remote_mcp_server_id:
+                    type: string
+                    description: The ID of the remote MCP server to use as the backend
+                    format: uuid
+                toolset_id:
+                    type: string
+                    description: The ID of the toolset to use as the backend
+                    format: uuid
+                visibility:
+                    type: string
+                    description: The visibility of an MCP frontend
+                    enum:
+                        - disabled
+                        - private
+                        - public
+            description: 'Form for updating an MCP frontend. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.'
+            required:
+                - id
+                - visibility
+        UpdateMcpSlugForm:
+            type: object
+            properties:
+                custom_domain_id:
+                    type: string
+                    description: The ID of the custom domain to register the slug under. Omit to move the slug to a platform domain.
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the MCP slug to update
+                    format: uuid
+                mcp_frontend_id:
+                    type: string
+                    description: The ID of the MCP frontend this slug addresses
+                    format: uuid
+                slug:
+                    type: string
+                    description: A url-friendly label (up to 128 characters) that addresses an MCP frontend through a slug-based URL. Platform-domain slugs (no custom domain) must be prefixed with the organization slug.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 128
+            description: 'Form for updating an MCP slug. This is a full-record replace: the custom_domain_id field omitted from the request becomes null on the stored record. Platform-domain slugs (no custom_domain_id) must be prefixed with the organization slug.'
+            required:
+                - id
+                - mcp_frontend_id
+                - slug
         UpdateMemberRoleForm:
             type: object
             properties:
@@ -28924,8 +30209,12 @@ tags:
       description: Explore third-party tools in Gram.
     - name: keys
       description: Managing system api keys.
+    - name: mcpFrontends
+      description: Managing MCP frontends, which configure authentication, environment, and backend selection for an MCP server.
     - name: mcpMetadata
       description: Manages metadata for the MCP install page shown to users.
+    - name: mcpSlugs
+      description: Managing MCP slugs, the url-friendly identifiers that address MCP frontends.
     - name: organizations
       description: Organization membership, invitations, and directory.
     - name: packages
