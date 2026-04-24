@@ -48,6 +48,22 @@ func ResourceKindForScope(scope Scope) string {
 	}
 }
 
+// Disposition values matching MCP tool annotation hint names (snake_case, no _hint suffix).
+const (
+	DispositionReadOnly    = "read_only"
+	DispositionDestructive = "destructive"
+	DispositionIdempotent  = "idempotent"
+	DispositionOpenWorld   = "open_world"
+)
+
+// validDispositions is the set of allowed disposition values.
+var validDispositions = map[string]bool{
+	DispositionReadOnly:    true,
+	DispositionDestructive: true,
+	DispositionIdempotent:  true,
+	DispositionOpenWorld:   true,
+}
+
 // allowedSelectorKeys defines which extra keys (beyond resource_kind and
 // resource_id) are valid for each scope family. Scope families not listed here
 // allow no extra keys.
@@ -87,12 +103,15 @@ func ValidateSelector(scope Scope, sel Selector) error {
 	}
 
 	allowed := allowedSelectorKeys[expectedKind]
-	for k := range sel {
+	for k, v := range sel {
 		if k == "resource_kind" || k == "resource_id" {
 			continue
 		}
 		if !allowed[k] {
 			return fmt.Errorf("selector key %q is not allowed for scope %q", k, scope)
+		}
+		if k == "disposition" && !validDispositions[v] {
+			return fmt.Errorf("invalid disposition value %q", v)
 		}
 	}
 

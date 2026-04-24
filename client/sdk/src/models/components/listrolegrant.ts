@@ -39,9 +39,9 @@ export type SubScopes = ClosedEnum<typeof SubScopes>;
 
 export type ListRoleGrant = {
   /**
-   * Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
+   * Selector constraints. Null means unrestricted. Each selector is a set of key-value conditions.
    */
-  resources?: Array<string> | undefined;
+  selectors?: Array<Record<string, string>> | undefined;
   /**
    * The scope slug this grant applies to.
    */
@@ -68,7 +68,7 @@ export const ListRoleGrant$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    resources: z.optional(z.array(z.string())),
+    selectors: z.optional(z.array(z.record(z.string(), z.string()))),
     scope: ListRoleGrantScope$inboundSchema,
     sub_scopes: z.optional(z.array(SubScopes$inboundSchema)),
   }),

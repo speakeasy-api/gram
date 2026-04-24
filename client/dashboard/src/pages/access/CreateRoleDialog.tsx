@@ -14,7 +14,6 @@ import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
-import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import {
   invalidateAllMembers,
   useMembers,
@@ -30,7 +29,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ChevronRight, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ScopePickerPopover } from "./ScopePickerPopover";
-import type { AnnotationHint, CustomTab, RoleGrant, Scope } from "./types";
+import type {
+  AnnotationHint,
+  CustomTab,
+  RoleGrant,
+  Scope,
+  Selector,
+} from "./types";
+import { DISPOSITION_TO_ANNOTATION } from "./types";
 
 interface CreateRoleDialogProps {
   open: boolean;
@@ -41,66 +47,30 @@ interface CreateRoleDialogProps {
 function grantsFromRole(role: Role): Record<string, RoleGrant> {
   const result: Record<string, RoleGrant> = {};
   for (const g of role.grants) {
-    result[g.scope] = { scope: g.scope, resources: g.resources ?? null };
+    result[g.scope] = { scope: g.scope, selectors: g.selectors ?? null };
   }
   return result;
 }
 
-const ANNOTATION_HINTS: AnnotationHint[] = [
-  "readOnlyHint",
-  "destructiveHint",
-  "idempotentHint",
-  "openWorldHint",
-];
-
 /**
- * Infer which custom tab was used from saved compound resource IDs
- * by comparing against the current tool data.
+ * Infer which custom tab was used from saved selectors by inspecting
+ * their keys — disposition selectors → "auto-groups", tool selectors → "select".
  */
-function inferCustomTab(
-  resources: string[],
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  toolsets: any[],
-): { tab: CustomTab; annotations?: AnnotationHint[] } {
-  if (!resources.length || !toolsets.length) return { tab: "select" };
+function inferCustomTab(selectors: Selector[]): {
+  tab: CustomTab;
+  annotations?: AnnotationHint[];
+} {
+  if (!selectors.length) return { tab: "select" };
 
-  const resourceSet = new Set(resources);
-
-  // Build annotation → compound IDs lookup
-  const annotationIds = new Map<AnnotationHint, Set<string>>();
-
-  for (const ts of toolsets) {
-    for (const tool of ts.tools) {
-      for (const hint of ANNOTATION_HINTS) {
-        if (tool.annotations?.[hint] === true) {
-          let s = annotationIds.get(hint);
-          if (!s) {
-            s = new Set();
-            annotationIds.set(hint, s);
-          }
-          s.add(`${ts.slug}:${tool.name}`);
-        }
-      }
-    }
+  // Check for disposition selectors → "auto-groups" tab
+  const dispositionSelectors = selectors.filter((s) => s.disposition);
+  if (dispositionSelectors.length > 0) {
+    const annotations = dispositionSelectors
+      .map((s) => DISPOSITION_TO_ANNOTATION[s.disposition])
+      .filter(Boolean);
+    return { tab: "auto-groups", annotations };
   }
 
-  // Check if resources exactly match one or more annotation groups
-  const matched: AnnotationHint[] = [];
-  const union = new Set<string>();
-  for (const hint of ANNOTATION_HINTS) {
-    const ids = annotationIds.get(hint);
-    if (ids && ids.size > 0 && [...ids].every((id) => resourceSet.has(id))) {
-      matched.push(hint);
-      ids.forEach((id) => union.add(id));
-    }
-  }
-  if (matched.length > 0 && union.size === resourceSet.size) {
-    return { tab: "auto-groups", annotations: matched };
-  }
-
-  // All tabs now use serverSlug:toolName, so we can't distinguish between
-  // "select" and "collection" tabs from IDs alone.
-  // Default to "select" — the user's tool selections are preserved correctly.
   return { tab: "select" };
 }
 
@@ -133,7 +103,6 @@ export function CreateRoleDialog({
     (rolesData?.roles ?? []).map((r) => [r.id, r.name]),
   );
   const { data: scopesData } = useListScopes();
-  const { data: toolsetsData } = useListToolsetsForOrg();
 
   const scopeGroups = useMemo(() => {
     const scopes = scopesData?.scopes ?? [];
@@ -148,9 +117,8 @@ export function CreateRoleDialog({
     }));
   }, [scopesData]);
 
-  // Pre-populate fields when editing — wait for async data so inferCustomTab
-  // and autoExpanded work correctly.
-  if (editingRole && !initialized && scopesData && toolsetsData) {
+  // Pre-populate fields when editing — wait for async data so autoExpanded works correctly.
+  if (editingRole && !initialized && scopesData) {
     setName(editingRole.name);
     setDescription(editingRole.description);
     const roleGrants = grantsFromRole(editingRole);
@@ -162,15 +130,15 @@ export function CreateRoleDialog({
         .map((g) => g.label),
     );
     setExpandedGroups(autoExpanded);
-    // Restore custom mode and active tab for MCP scopes with tool-level selections
+    // Restore custom mode and active tab for MCP scopes with tool/disposition selectors
     const restoredCustom = new Set<string>();
-    const allToolsets = toolsetsData?.toolsets ?? [];
     for (const [scope, grant] of Object.entries(roleGrants)) {
       if (!scope.startsWith("mcp:")) continue;
-      const hasToolIds = grant.resources?.some((r) => r.includes(":")) ?? false;
-      if (!hasToolIds) continue;
+      const hasCustomSelectors =
+        grant.selectors?.some((s) => s.tool || s.disposition) ?? false;
+      if (!hasCustomSelectors) continue;
       restoredCustom.add(scope);
-      const detected = inferCustomTab(grant.resources ?? [], allToolsets);
+      const detected = inferCustomTab(grant.selectors ?? []);
       roleGrants[scope] = {
         ...grant,
         customTab: detected.tab,
@@ -212,7 +180,7 @@ export function CreateRoleDialog({
   const isMutating = createRole.isPending || updateRole.isPending;
 
   const grantCount = Object.values(grants).filter(
-    (g) => g.resources === null || g.resources.length > 0,
+    (g) => g.selectors === null || g.selectors.length > 0,
   ).length;
 
   const toggleScope = (scope: Scope) => {
@@ -221,16 +189,16 @@ export function CreateRoleDialog({
       if (next[scope]) {
         delete next[scope];
       } else {
-        next[scope] = { scope, resources: null };
+        next[scope] = { scope, selectors: null };
       }
       return next;
     });
   };
 
-  const setGrantResources = (scope: Scope, resources: string[] | null) => {
+  const setGrantSelectors = (scope: Scope, selectors: Selector[] | null) => {
     setGrants((prev) => ({
       ...prev,
-      [scope]: { ...prev[scope], scope, resources },
+      [scope]: { ...prev[scope], scope, selectors },
     }));
   };
 
@@ -265,7 +233,7 @@ export function CreateRoleDialog({
         if (allSelected) {
           delete next[scope.slug];
         } else if (!next[scope.slug]) {
-          next[scope.slug] = { scope: scope.slug, resources: null };
+          next[scope.slug] = { scope: scope.slug, selectors: null };
         }
       }
       return next;
@@ -286,13 +254,13 @@ export function CreateRoleDialog({
 
   const handleSubmit = () => {
     const sdkGrants = Object.values(grants)
-      // Drop scopes with an empty resource list — the user switched to
-      // "specific" but didn't select any resources, so there's nothing to grant.
-      .filter((g) => g.resources === null || g.resources.length > 0)
+      // Drop scopes with an empty selector list — the user switched to
+      // "specific" but didn't select anything, so there's nothing to grant.
+      .filter((g) => g.selectors === null || g.selectors.length > 0)
       .map((g) => ({
         scope: g.scope,
         // Local type uses null for unrestricted; SDK uses undefined
-        resources: g.resources === null ? undefined : g.resources,
+        selectors: g.selectors === null ? undefined : g.selectors,
       }));
 
     if (isEditing) {
@@ -503,11 +471,11 @@ export function CreateRoleDialog({
                                     <ScopePickerPopover
                                       resourceType={scopeDef.resourceType}
                                       scope={scopeDef.slug}
-                                      resources={grant.resources}
-                                      onChangeResources={(resources) =>
-                                        setGrantResources(
+                                      selectors={grant.selectors}
+                                      onChangeSelectors={(selectors) =>
+                                        setGrantSelectors(
                                           scopeDef.slug,
-                                          resources,
+                                          selectors,
                                         )
                                       }
                                       customMode={customScopes.has(

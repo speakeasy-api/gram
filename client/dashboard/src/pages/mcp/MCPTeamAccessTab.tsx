@@ -47,30 +47,33 @@ function getAccessLevel(
 ): AccessLevel {
   const grant = role.grants.find((g) => g.scope === scope);
   if (!grant) return "none";
-  // resources undefined/null = unrestricted
-  if (grant.resources === undefined || grant.resources === null) return "full";
-  if (grant.resources.length === 0) return "none";
-  // Check if this toolset's slug is in the resources
-  const hasServer = grant.resources.includes(toolsetSlug);
-  // Check if any tool-level compound IDs match (serverSlug:toolId)
-  const hasTools = grant.resources.some((r) => r.startsWith(`${toolsetSlug}:`));
+  // selectors undefined/null = unrestricted
+  if (grant.selectors === undefined || grant.selectors === null) return "full";
+  if (grant.selectors.length === 0) return "none";
+  // Check if any selector targets this toolset as a server
+  const hasServer = grant.selectors.some(
+    (s) => s.resource_id === toolsetSlug && !s.tool,
+  );
+  // Check if any selector targets specific tools on this server
+  const hasTools = grant.selectors.some(
+    (s) => s.resource_id === toolsetSlug && s.tool,
+  );
   if (hasServer) return "server";
   if (hasTools) return "tools";
   return "none";
 }
 
-/** Extract tool identifiers from compound resource IDs for this server */
+/** Extract tool names from selectors for this server */
 function getToolIdsForScope(
   role: Role,
   scope: string,
   toolsetSlug: string,
 ): string[] {
   const grant = role.grants.find((g) => g.scope === scope);
-  if (!grant?.resources) return [];
-  const prefix = `${toolsetSlug}:`;
-  return grant.resources
-    .filter((r) => r.startsWith(prefix))
-    .map((r) => r.slice(prefix.length));
+  if (!grant?.selectors) return [];
+  return grant.selectors
+    .filter((s) => s.resource_id === toolsetSlug && s.tool)
+    .map((s) => s.tool);
 }
 
 /** Match tool identifiers against toolset tools (by id or name) */

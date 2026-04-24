@@ -27,9 +27,9 @@ export type Scope = ClosedEnum<typeof Scope>;
 
 export type RoleGrant = {
   /**
-   * Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
+   * Selector constraints. Null means unrestricted. Each selector is a set of key-value conditions (e.g. resource_kind, resource_id, disposition, tool).
    */
-  resources?: Array<string> | undefined;
+  selectors?: Array<Record<string, string>> | undefined;
   /**
    * The scope slug this grant applies to.
    */
@@ -45,12 +45,12 @@ export const Scope$outboundSchema: z.ZodMiniEnum<typeof Scope> =
 /** @internal */
 export const RoleGrant$inboundSchema: z.ZodMiniType<RoleGrant, unknown> = z
   .object({
-    resources: z.optional(z.array(z.string())),
+    selectors: z.optional(z.array(z.record(z.string(), z.string()))),
     scope: Scope$inboundSchema,
   });
 /** @internal */
 export type RoleGrant$Outbound = {
-  resources?: Array<string> | undefined;
+  selectors?: Array<Record<string, string>> | undefined;
   scope: string;
 };
 
@@ -59,7 +59,7 @@ export const RoleGrant$outboundSchema: z.ZodMiniType<
   RoleGrant$Outbound,
   RoleGrant
 > = z.object({
-  resources: z.optional(z.array(z.string())),
+  selectors: z.optional(z.array(z.record(z.string(), z.string()))),
   scope: Scope$outboundSchema,
 });
 

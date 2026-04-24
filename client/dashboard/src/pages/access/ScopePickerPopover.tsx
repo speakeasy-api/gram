@@ -31,16 +31,22 @@ import {
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { AnnotationHint, CustomTab, ResourceType } from "./types";
+import type {
+  AnnotationHint,
+  CustomTab,
+  ResourceType,
+  Selector,
+} from "./types";
+import { ANNOTATION_TO_DISPOSITION } from "./types";
 
 interface ScopePickerPopoverProps {
   /** The resource type determines which resource list to show */
   resourceType: ResourceType;
   /** The scope slug this picker is for (e.g. "mcp:connect") */
   scope?: string;
-  /** null = unrestricted; string[] = allowlist */
-  resources: string[] | null;
-  onChangeResources: (resources: string[] | null) => void;
+  /** null = unrestricted; Selector[] = constrained */
+  selectors: Selector[] | null;
+  onChangeSelectors: (selectors: Selector[] | null) => void;
   /** Whether "Custom" mode is active (MCP scopes only) */
   customMode?: boolean;
   onCustomModeChange?: (custom: boolean) => void;
@@ -122,8 +128,8 @@ function useMCPServers(enabled: boolean) {
 export function ScopePickerPopover({
   resourceType,
   scope,
-  resources,
-  onChangeResources,
+  selectors,
+  onChangeSelectors,
   customMode,
   onCustomModeChange,
   annotations,
@@ -137,8 +143,8 @@ export function ScopePickerPopover({
   const [expanded, setExpanded] = useState(false);
   const customToolCount = useMemo(() => {
     if (!customMode) return 0;
-    return (resources ?? []).length;
-  }, [customMode, resources]);
+    return (selectors ?? []).length;
+  }, [customMode, selectors]);
 
   // Org-scoped permissions have no resource picker — they're always org-wide
   if (resourceType === "org") {
@@ -149,21 +155,38 @@ export function ScopePickerPopover({
     );
   }
 
-  const isUnrestricted = resources === null;
+  const isUnrestricted = selectors === null;
   const isMcpConnect = scope === "mcp:connect";
   const projectList = organization.projects.map((p) => ({
     id: p.id,
     name: p.name,
   }));
 
-  const label = getLabel(resourceType, resources, customMode, customToolCount);
+  const label = getLabel(resourceType, selectors, customMode, customToolCount);
+
+  const resourceKind = resourceType === "project" ? "project" : "mcp";
 
   const toggleResource = (id: string) => {
-    if (resources === null) return;
-    const has = resources.includes(id);
-    const next = has ? resources.filter((r) => r !== id) : [...resources, id];
-    onChangeResources(next);
+    if (selectors === null) return;
+    const has = selectors.some(
+      (s) => s.resource_kind === resourceKind && s.resource_id === id,
+    );
+    if (has) {
+      onChangeSelectors(
+        selectors.filter(
+          (s) => !(s.resource_kind === resourceKind && s.resource_id === id),
+        ),
+      );
+    } else {
+      onChangeSelectors([
+        ...selectors,
+        { resource_kind: resourceKind, resource_id: id },
+      ]);
+    }
   };
+
+  const isResourceSelected = (id: string) =>
+    selectors?.some((s) => s.resource_id === id) ?? false;
 
   const scopeOptions = (
     <div className="shrink-0 pb-1.5">
@@ -175,7 +198,7 @@ export function ScopePickerPopover({
             onCustomModeChange?.(false);
             onChangeAnnotations?.([]);
           }
-          onChangeResources(null);
+          onChangeSelectors(null);
         }}
       />
       <ScopeOption
@@ -186,10 +209,10 @@ export function ScopePickerPopover({
         onClick={() => {
           if (customMode) {
             onCustomModeChange?.(false);
-            onChangeResources([]);
+            onChangeSelectors([]);
             onChangeAnnotations?.([]);
           } else if (isUnrestricted) {
-            onChangeResources([]);
+            onChangeSelectors([]);
           }
         }}
       />
@@ -199,7 +222,7 @@ export function ScopePickerPopover({
           selected={!!customMode}
           onClick={() => {
             onCustomModeChange?.(true);
-            if (isUnrestricted) onChangeResources([]);
+            if (isUnrestricted) onChangeSelectors([]);
           }}
         />
       )}
@@ -215,7 +238,7 @@ export function ScopePickerPopover({
               key={resource.id}
               id={resource.id}
               name={resource.name}
-              checked={resources.includes(resource.id)}
+              checked={isResourceSelected(resource.id)}
               onToggle={toggleResource}
             />
           ))
@@ -229,7 +252,7 @@ export function ScopePickerPopover({
                   key={server.id}
                   id={server.id}
                   name={server.name}
-                  checked={resources.includes(server.id)}
+                  checked={isResourceSelected(server.id)}
                   onToggle={toggleResource}
                 />
               ))}
@@ -243,7 +266,7 @@ export function ScopePickerPopover({
       value={customTab ?? "select"}
       className="flex min-h-0 flex-1 flex-col gap-0"
       onValueChange={(value) => {
-        onChangeResources([]);
+        onChangeSelectors([]);
         onChangeAnnotations?.([]);
         onCustomTabChange?.(value as CustomTab);
       }}
@@ -279,8 +302,29 @@ export function ScopePickerPopover({
       >
         <ToolSelectionPanel
           mcpServers={mcpServers}
-          resources={resources ?? []}
-          onToggle={toggleResource}
+          selectors={selectors ?? []}
+          onToggleTool={(serverId, toolName) => {
+            const sels = selectors ?? [];
+            const exists = sels.some(
+              (s) => s.resource_id === serverId && s.tool === toolName,
+            );
+            if (exists) {
+              onChangeSelectors(
+                sels.filter(
+                  (s) => !(s.resource_id === serverId && s.tool === toolName),
+                ),
+              );
+            } else {
+              onChangeSelectors([
+                ...sels,
+                {
+                  resource_kind: "mcp",
+                  resource_id: serverId,
+                  tool: toolName,
+                },
+              ]);
+            }
+          }}
           className={toolScrollClass}
         />
       </TabsContent>
@@ -292,21 +336,12 @@ export function ScopePickerPopover({
           annotations={annotations ?? []}
           onChangeAnnotations={(newAnnotations) => {
             onChangeAnnotations?.(newAnnotations);
-            const matchedIds: string[] = [];
-            for (const group of mcpServers) {
-              for (const server of group.servers) {
-                for (const tool of server.tools) {
-                  if (
-                    newAnnotations.some(
-                      (hint) => tool.annotations?.[hint] === true,
-                    )
-                  ) {
-                    matchedIds.push(`${server.id}:${tool.name}`);
-                  }
-                }
-              }
-            }
-            onChangeResources(matchedIds);
+            const newSelectors = newAnnotations.map((hint) => ({
+              resource_kind: "mcp",
+              resource_id: "*",
+              disposition: ANNOTATION_TO_DISPOSITION[hint],
+            }));
+            onChangeSelectors(newSelectors);
           }}
           mcpServers={mcpServers}
         />
@@ -317,8 +352,8 @@ export function ScopePickerPopover({
       >
         <CollectionGroupPanel
           mcpServers={mcpServers}
-          resources={resources ?? []}
-          onChangeResources={onChangeResources}
+          selectors={selectors ?? []}
+          onChangeSelectors={onChangeSelectors}
         />
       </TabsContent>
     </Tabs>
@@ -406,13 +441,13 @@ export function ScopePickerPopover({
 
 function ToolSelectionPanel({
   mcpServers,
-  resources,
-  onToggle,
+  selectors,
+  onToggleTool,
   className,
 }: {
   mcpServers: ServerGroup[];
-  resources: string[];
-  onToggle: (id: string) => void;
+  selectors: Selector[];
+  onToggleTool: (serverId: string, toolName: string) => void;
   className?: string;
 }) {
   const allServers = useMemo(
@@ -562,7 +597,10 @@ function ToolSelectionPanel({
             >
               {toolVirtualizer.getVirtualItems().map((virtualItem) => {
                 const tool = filteredTools[virtualItem.index];
-                const toolId = `${selectedServerId}:${tool.name}`;
+                const isSelected = selectors.some(
+                  (s) =>
+                    s.resource_id === selectedServerId && s.tool === tool.name,
+                );
                 return (
                   <div
                     key={tool.id}
@@ -576,10 +614,12 @@ function ToolSelectionPanel({
                     }}
                   >
                     <ResourceCheckbox
-                      id={toolId}
+                      id={tool.name}
                       name={tool.name}
-                      checked={resources.includes(toolId)}
-                      onToggle={onToggle}
+                      checked={isSelected}
+                      onToggle={() =>
+                        onToggleTool(selectedServerId!, tool.name)
+                      }
                       compact
                     />
                   </div>
@@ -711,12 +751,12 @@ function AnnotationGroupPanel({
 
 function CollectionGroupPanel({
   mcpServers,
-  resources,
-  onChangeResources,
+  selectors,
+  onChangeSelectors,
 }: {
   mcpServers: ServerGroup[];
-  resources: string[];
-  onChangeResources: (resources: string[]) => void;
+  selectors: Selector[];
+  onChangeSelectors: (selectors: Selector[] | null) => void;
 }) {
   const client = useSdkClient();
 
@@ -798,21 +838,40 @@ function CollectionGroupPanel({
         Select all tools by collection:
       </div>
       {collectionGroups.map((group) => {
-        const allToolIds = group.servers.flatMap((s) =>
-          s.tools.map((t) => `${s.id}:${t.name}`),
+        const allToolSelectors: Selector[] = group.servers.flatMap((s) =>
+          s.tools.map((t) => ({
+            resource_kind: "mcp",
+            resource_id: s.id,
+            tool: t.name,
+          })),
         );
         const allSelected =
-          allToolIds.length > 0 &&
-          allToolIds.every((id) => resources.includes(id));
+          allToolSelectors.length > 0 &&
+          allToolSelectors.every((ts) =>
+            selectors.some(
+              (s) => s.resource_id === ts.resource_id && s.tool === ts.tool,
+            ),
+          );
 
         const toggleAll = () => {
           if (allSelected) {
-            const removeSet = new Set(allToolIds);
-            onChangeResources(resources.filter((r) => !removeSet.has(r)));
+            onChangeSelectors(
+              selectors.filter(
+                (s) =>
+                  !allToolSelectors.some(
+                    (ts) =>
+                      s.resource_id === ts.resource_id && s.tool === ts.tool,
+                  ),
+              ),
+            );
           } else {
-            const existing = new Set(resources);
-            const toAdd = allToolIds.filter((id) => !existing.has(id));
-            onChangeResources([...resources, ...toAdd]);
+            const toAdd = allToolSelectors.filter(
+              (ts) =>
+                !selectors.some(
+                  (s) => s.resource_id === ts.resource_id && s.tool === ts.tool,
+                ),
+            );
+            onChangeSelectors([...selectors, ...toAdd]);
           }
         };
 
@@ -832,7 +891,8 @@ function CollectionGroupPanel({
               {group.name}
             </span>
             <span className="text-muted-foreground shrink-0 text-xs">
-              {allToolIds.length} tool{allToolIds.length !== 1 ? "s" : ""}
+              {allToolSelectors.length} tool
+              {allToolSelectors.length !== 1 ? "s" : ""}
             </span>
           </button>
         );
@@ -902,19 +962,19 @@ function ScopeOption({
 
 function getLabel(
   resourceType: ResourceType,
-  resources: string[] | null,
+  selectors: Selector[] | null,
   customMode?: boolean,
   customToolCount?: number,
 ): string {
   if (customMode) {
     const count = customToolCount ?? 0;
     if (count === 0) return "Select...";
-    return `${count} tool${count === 1 ? "" : "s"} selected`;
+    return `${count} selector${count === 1 ? "" : "s"}`;
   }
-  if (resources === null) {
+  if (selectors === null) {
     return resourceType === "project" ? "All projects" : "All servers";
   }
-  if (resources.length === 0) return "Select...";
+  if (selectors.length === 0) return "Select...";
   const noun = resourceType === "project" ? "project" : "server";
-  return `${resources.length} ${noun}${resources.length === 1 ? "" : "s"} selected`;
+  return `${selectors.length} ${noun}${selectors.length === 1 ? "" : "s"} selected`;
 }
