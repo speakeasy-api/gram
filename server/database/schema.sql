@@ -2053,6 +2053,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   name TEXT NOT NULL,
   sources TEXT[] NOT NULL,
+  presidio_entities TEXT[],
   version BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
