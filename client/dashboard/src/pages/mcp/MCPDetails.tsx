@@ -1957,7 +1957,9 @@ export function OAuthDetailsModal({
                       className="hover:bg-destructive border-none hover:text-white"
                       onClick={() =>
                         removeOAuthMutation.mutate({
-                          request: { slug: toolset.slug },
+                          request: {
+                            slug: toolset.slug,
+                          },
                         })
                       }
                     >

@@ -269,6 +269,7 @@ async function seed() {
     );
   }
 
+  // oxlint-disable-next-line no-unused-vars
   const key = await initAPIKey({
     gram,
     sessionId,
@@ -1566,7 +1567,7 @@ async function seedObservabilityData(init: {
 
   const NUM_CHATS = 500; // Reduced for faster seeding
   const DAYS_BACK = 30;
-  const NUM_HOOKS = 500; // Reduced for faster seeding
+  const NUM_HOOKS = 6000;
 
   // Use actual tool URNs from the deployment
   const TOOLS = toolUrns;
@@ -2106,46 +2107,258 @@ async function seedObservabilityData(init: {
 
   // Hook-specific constants
   const HOOK_SOURCES = ["claude", "vscode", "cli", "api"];
-  const MCP_SERVERS = ["", "github", "filesystem", "postgres", "slack", ""]; // Empty string = local tools
-  const HOOK_TOOL_NAMES = [
-    "Read",
-    "Write",
-    "Edit",
-    "Bash",
-    "Grep",
-    "Glob",
-    "mcp__github__list-repos",
-    "mcp__filesystem__read-file",
-    "mcp__postgres__query",
+  const HOOK_SOURCE_WEIGHTS = [45, 39, 11, 6];
+  const HOOK_SOURCE_TOTAL = HOOK_SOURCE_WEIGHTS.reduce((s, w) => s + w, 0);
+
+  const MCP_SERVER_CONFIGS = [
+    {
+      name: "slack",
+      tools: [
+        "slack_search_public_and_private",
+        "slack_send_message",
+        "slack_read_channel",
+        "slack_read_thread",
+        "slack_search_channels",
+        "slack_search_public",
+      ],
+      weight: 30,
+      failureRate: 0.07,
+    },
+    {
+      name: "notion",
+      tools: [
+        "notion-search",
+        "notion-fetch",
+        "notion-create-pages",
+        "notion-get-users",
+        "notion-update-page",
+        "notion-create-comment",
+      ],
+      weight: 14,
+      failureRate: 0.02,
+    },
+    {
+      name: "claude_ai_Slack",
+      tools: [
+        "slack_read_channel",
+        "slack_send_message",
+        "slack_search_channels",
+        "slack_read_thread",
+        "slack_search_users",
+      ],
+      weight: 9,
+      failureRate: 0.04,
+    },
+    {
+      name: "datadog-mcp",
+      tools: [
+        "get_datadog_metric",
+        "analyze_datadog_logs",
+        "aggregate_spans",
+        "list_dashboards",
+        "query_logs",
+        "get_trace",
+      ],
+      weight: 7,
+      failureRate: 0.06,
+    },
+    {
+      name: "linear",
+      tools: [
+        "list_issues",
+        "get_issue",
+        "save_issue",
+        "list_teams",
+        "save_comment",
+      ],
+      weight: 5,
+      failureRate: 0.06,
+    },
+    {
+      name: "Claude_in_Chrome",
+      tools: ["computer", "navigate", "screenshot", "click", "type"],
+      weight: 3,
+      failureRate: 0.06,
+    },
+    {
+      name: "local",
+      tools: [
+        "Skill",
+        "Write",
+        "Read",
+        "Edit",
+        "Grep",
+        "ToolSearch",
+        "Web Search",
+        "Bash",
+      ],
+      weight: 8,
+      failureRate: 0.05,
+    },
+    {
+      name: "claude_ai_Linear",
+      tools: [
+        "get_issue",
+        "list_comments",
+        "save_issue",
+        "list_issues",
+        "save_comment",
+        "get_team",
+        "list_teams",
+      ],
+      weight: 3,
+      failureRate: 0.09,
+    },
+    {
+      name: "plugin_slack_slack",
+      tools: [
+        "slack_read_channel",
+        "slack_search_public_and_private",
+        "slack_send_message",
+        "slack_read_thread",
+      ],
+      weight: 2,
+      failureRate: 0.64,
+    },
+    {
+      name: "claude_ai_HubSpot",
+      tools: ["search_crm_objects", "get_contact", "list_contacts"],
+      weight: 2,
+      failureRate: 0.02,
+    },
+    {
+      name: "claude_ai_Figma",
+      tools: [
+        "get_design_context",
+        "get_screenshot",
+        "get_metadata",
+        "get_figjam",
+        "search_design_system",
+      ],
+      weight: 2,
+      failureRate: 0.35,
+    },
+    {
+      name: "Gmail",
+      tools: [
+        "search_threads",
+        "get_thread",
+        "create_draft",
+        "list_labels",
+        "send_message",
+      ],
+      weight: 2,
+      failureRate: 0.0,
+    },
+    {
+      name: "claude_ai_Datadog",
+      tools: [
+        "get_datadog_metric",
+        "analyze_datadog_logs",
+        "list_monitors",
+        "list_dashboards",
+      ],
+      weight: 1,
+      failureRate: 0.1,
+    },
   ];
+  const SERVER_TOTAL_WEIGHT = MCP_SERVER_CONFIGS.reduce(
+    (s, c) => s + c.weight,
+    0,
+  );
+
   const USER_EMAILS = [
-    "alice@example.com",
-    "bob@example.com",
-    "charlie@example.com",
-    "",
-  ]; // Empty string = no user email
+    "thomas@example.com",
+    "daniel@example.com",
+    "adam@example.com",
+    "katrina@example.com",
+    "brian@example.com",
+    "sagar@example.com",
+    "quinn@example.com",
+    "chase@example.com",
+    "subomi@example.com",
+    "alex@example.com",
+    "tiago@example.com",
+  ];
+  const USER_EMAIL_WEIGHTS = [25, 20, 18, 12, 10, 8, 5, 2, 3, 2, 1];
+  const USER_EMAIL_TOTAL = USER_EMAIL_WEIGHTS.reduce((s, w) => s + w, 0);
+
+  const SKILL_NAMES = [
+    "datadog",
+    "frontend",
+    "golang",
+    "postgresql",
+    "clickhouse",
+    "pr",
+    "standup",
+    "mise-tasks",
+    "pdf",
+    "caveman",
+    "code-review",
+    "generate-tests",
+    "write-commit-msg",
+    "explain-error",
+    "summarize-pr",
+    "draft-docs",
+    "debug-issue",
+  ];
+  const SKILL_NAME_WEIGHTS = [
+    18, 16, 14, 12, 10, 9, 8, 6, 5, 4, 3, 3, 3, 2, 2, 2, 2,
+  ];
+  const SKILL_NAME_TOTAL = SKILL_NAME_WEIGHTS.reduce((s, w) => s + w, 0);
+
+  function sqlAttrs(attrs: Record<string, any>): string {
+    return JSON.stringify(attrs).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  }
+
+  function weightedPick<T>(items: T[], weights: number[], total: number): T {
+    const roll = Math.random() * total;
+    let accum = 0;
+    for (let j = 0; j < items.length; j++) {
+      accum += weights[j];
+      if (roll < accum) return items[j];
+    }
+    return items[items.length - 1];
+  }
 
   for (let i = 0; i < NUM_HOOKS; i++) {
-    const sessionId = `session-${i % 50}`; // Group hooks into sessions
-    const toolUseId = `toolu_${crypto.randomBytes(12).toString("hex")}`;
-    const userEmail =
-      USER_EMAILS[Math.floor(Math.random() * USER_EMAILS.length)];
-    const hookSource =
-      HOOK_SOURCES[Math.floor(Math.random() * HOOK_SOURCES.length)];
-    const toolName =
-      HOOK_TOOL_NAMES[Math.floor(Math.random() * HOOK_TOOL_NAMES.length)];
-    const mcpServer =
-      MCP_SERVERS[Math.floor(Math.random() * MCP_SERVERS.length)];
-
     const daysAgo = Math.random() * DAYS_BACK;
+    const sessionId = `session-${Math.floor(daysAgo * 24)}`; // one session per hour
+
+    const serverRoll = Math.random() * SERVER_TOTAL_WEIGHT;
+    let serverAccum = 0;
+    let serverConfig = MCP_SERVER_CONFIGS[0];
+    for (const cfg of MCP_SERVER_CONFIGS) {
+      serverAccum += cfg.weight;
+      if (serverRoll < serverAccum) {
+        serverConfig = cfg;
+        break;
+      }
+    }
+    const toolName =
+      serverConfig.tools[Math.floor(Math.random() * serverConfig.tools.length)];
+    const mcpServer = serverConfig.name;
+
+    const toolUseId = `toolu_${crypto.randomBytes(12).toString("hex")}`;
+    const hookSource = weightedPick(
+      HOOK_SOURCES,
+      HOOK_SOURCE_WEIGHTS,
+      HOOK_SOURCE_TOTAL,
+    );
+    const userEmail = weightedPick(
+      USER_EMAILS,
+      USER_EMAIL_WEIGHTS,
+      USER_EMAIL_TOTAL,
+    );
+
     const eventTime = new Date(now - daysAgo * msPerDay);
     const baseTimeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
 
     // Generate a unique trace ID for this tool call (32 hex chars)
     const traceId = crypto.randomBytes(16).toString("hex");
 
-    // Decide if this is a successful call or failure (90% success)
-    const isFailure = Math.random() > 0.9;
+    // Decide if this is a successful call or failure
+    const isFailure = Math.random() < serverConfig.failureRate;
 
     // 1. SessionStart event (10% of the time)
     if (Math.random() < 0.1) {
@@ -2159,9 +2372,14 @@ async function seedObservabilityData(init: {
       if (userEmail) attrs["user.email"] = userEmail;
 
       chInserts.push(
-        `(${baseTimeNano}, ${baseTimeNano}, 'INFO', 'Hook: SessionStart', '${traceId}', '${JSON.stringify(attrs).replace(/'/g, "\\'")}', '{}', '${projectId}', 'SessionStart', '${hookSource}', '${sessionId}')`,
+        `(${baseTimeNano}, ${baseTimeNano}, 'INFO', 'Hook: SessionStart', '${traceId}', '${sqlAttrs(attrs)}', '{}', '${projectId}', 'SessionStart', '${hookSource}', '${sessionId}')`,
       );
     } else {
+      const skillName =
+        toolName === "Skill"
+          ? weightedPick(SKILL_NAMES, SKILL_NAME_WEIGHTS, SKILL_NAME_TOTAL)
+          : null;
+
       // 2. PreToolUse event
       const preToolAttrs: Record<string, any> = {
         "gram.event.source": "hook",
@@ -2173,10 +2391,15 @@ async function seedObservabilityData(init: {
         "gen_ai.tool_call.id": toolUseId,
       };
       if (userEmail) preToolAttrs["user.email"] = userEmail;
-      if (mcpServer) preToolAttrs["gram.tool_call.source"] = mcpServer;
+      if (mcpServer && toolName !== "Skill")
+        preToolAttrs["gram.tool_call.source"] = mcpServer;
+      if (skillName)
+        preToolAttrs["gen_ai.tool.call.arguments"] = JSON.stringify({
+          skill: skillName,
+        });
 
       chInserts.push(
-        `(${baseTimeNano}, ${baseTimeNano}, 'INFO', 'Tool: ${toolName}, Hook: PreToolUse', '${traceId}', '${JSON.stringify(preToolAttrs).replace(/'/g, "\\'")}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,
+        `(${baseTimeNano}, ${baseTimeNano}, 'INFO', 'Tool: ${toolName}, Hook: PreToolUse', '${traceId}', '${sqlAttrs(preToolAttrs)}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,
       );
 
       // 3. PostToolUse or PostToolUseFailure event
@@ -2194,11 +2417,16 @@ async function seedObservabilityData(init: {
         "gen_ai.tool_call.id": toolUseId,
       };
       if (userEmail) postToolAttrs["user.email"] = userEmail;
-      if (mcpServer) postToolAttrs["gram.tool_call.source"] = mcpServer;
+      if (mcpServer && toolName !== "Skill")
+        postToolAttrs["gram.tool_call.source"] = mcpServer;
+      if (skillName)
+        postToolAttrs["gen_ai.tool.call.arguments"] = JSON.stringify({
+          skill: skillName,
+        });
       if (isFailure) postToolAttrs["gram.hook.error"] = "Tool execution failed";
 
       chInserts.push(
-        `(${postTimeNano}, ${postTimeNano}, '${isFailure ? "ERROR" : "INFO"}', 'Tool: ${toolName}, Hook: ${postHookEvent}', '${traceId}', '${JSON.stringify(postToolAttrs).replace(/'/g, "\\'")}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,
+        `(${postTimeNano}, ${postTimeNano}, '${isFailure ? "ERROR" : "INFO"}', 'Tool: ${toolName}, Hook: ${postHookEvent}', '${traceId}', '${sqlAttrs(postToolAttrs)}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,
       );
     }
   }

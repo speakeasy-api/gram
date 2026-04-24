@@ -38,7 +38,7 @@ import { useOrgRoutes } from "@/routes";
 import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
-import type { Server as CatalogServer } from "@/pages/catalog/hooks";
+import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 
 export function CollectionDetailRoot() {
   return <Outlet />;

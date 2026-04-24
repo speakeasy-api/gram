@@ -5,8 +5,8 @@ management:
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
-  releaseVersion: 0.33.8
-  configChecksum: 948bcf537c59db8a5bbaac70a167f977
+  releaseVersion: 0.33.2
+  configChecksum: e9c491bbc52142c7219b33a2b4bfdad6
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -2056,11 +2056,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:8a9f6312d6c86724c1e989bf4fdd8077db2598cf
+    last_write_checksum: sha1:05c473dd6f8fbfb43c0697af156d91e16ecc94e3
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:12c2e7956948821f826c2b260af0ce6639e76bd5
+    last_write_checksum: sha1:98737534006484873c5c0ac8e4b273d9200f0061
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2662,7 +2662,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:02ef2a18ed955f4399c24946174b96647e70127e
+    last_write_checksum: sha1:61a4632a4c278e9fa7d54adfc035c9502bdc8169
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -7541,23 +7541,8 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  listRiskResults:
-    speakeasy-default-list-risk-results:
-      parameters:
-        query:
-          limit: 100
-      responses:
-        "200":
-          application/json: {"results": [], "total_count": 76092}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listRiskResultsByChat:
     speakeasy-default-list-risk-results-by-chat:
-      parameters:
-        query:
-          limit: 10
       responses:
         "200":
           application/json: {"chats": [{"chat_id": "a4e520fa-e4b6-4b77-9ad4-c6d85bdaf335", "findings_count": 36125, "latest_detected": "2024-09-23T17:42:21.543Z"}]}
@@ -7565,18 +7550,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  listRiskResultsByUser:
-    speakeasy-default-list-risk-results-by-user:
-      parameters:
-        query:
-          limit: 10
+  listRiskResults:
+    speakeasy-default-list-risk-results:
       responses:
         "200":
-          application/json: {"users": [{"chats_count": 835470, "findings_count": 833728, "latest_detected": "2024-01-21T22:51:24.579Z"}]}
+          application/json: {"results": [], "total_count": 380094}
         "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
