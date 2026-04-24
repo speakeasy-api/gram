@@ -157,6 +157,17 @@ export function InsightsProvider({
     text: string;
     nonce: number;
   } | null>(null);
+  // Bumped every time a new chart-specific override is installed. Used as a
+  // React `key` on <GramElementsProvider> so each "Explore with AI" click
+  // unmounts the previous assistant runtime entirely and mounts a fresh one.
+  // This avoids the internal assistant-ui race where `instances` (the hook
+  // manager's per-thread Map) and `threadData` (OptimisticState) get out of
+  // sync across rapid thread switches, which surfaces during render of
+  // `_InnerActiveThreadProvider` as:
+  //   `tapLookupResources: Resource not found for lookup: {"key":"__LOCALID_…"}`
+  // Matches the intended UX: each chart's Explore click is a fresh focused
+  // conversation, not a branch off the last one.
+  const [sessionKey, setSessionKey] = useState(0);
   const { theme } = useMoonshineConfig();
 
   // Resolve effective values: per-page override wins, fall back to defaults.
@@ -192,13 +203,14 @@ ${contextInfo}
 When the user asks about "current period", "selected period", "this timeframe", or similar, use the date range from the context above. Do not ask the user to specify a date range if it's already provided in the context.`
     : baseInstructions;
 
-  // New config identity on every override change is intentional: clicking
-  // "Explore with AI" on a different chart should drop the user into a fresh,
-  // focused conversation with the new contextInfo, not splice a new system
-  // prompt into an in-flight thread from a different chart. If we ever want
-  // to preserve threads across Explore clicks, split transport config
-  // (mcpConfig/model/theme) from presentation config (systemPrompt/welcome)
-  // inside GramElementsProvider so only the transport piece is stable.
+  // elementsConfig identity changes on every override (new systemPrompt /
+  // welcome copy / suggestions). That's fine for presentation: GramElementsProvider
+  // holds systemPrompt behind a ref, so the underlying transport + runtime
+  // stay stable across override churn. Each "Explore with AI" click still
+  // gets a fresh focused conversation via PendingPromptBridge's
+  // switchToNewThread() — we just no longer tear down the runtime mid-flight,
+  // which previously raced with append() and threw
+  // `tapLookupResources: Resource not found for lookup: __LOCALID_…`.
   const elementsConfig = useMemo<ElementsConfig>(
     () => ({
       ...mcpConfig,
@@ -241,7 +253,15 @@ When the user asks about "current period", "selected period", "this timeframe", 
   );
 
   const handleSetOverride = useCallback(
-    (next: InsightsConfigOptions | null) => setOverride(next),
+    (next: InsightsConfigOptions | null) => {
+      setOverride(next);
+      // Only bump the session on a *new* chart-specific override (i.e. an
+      // Explore-with-AI click). Clearing to null (triggered when the user
+      // closes the panel) should not remount — it just returns the next open
+      // to the base "Ask AI" defaults and preserves the already-running
+      // conversation under the default key.
+      if (next !== null) setSessionKey((k) => k + 1);
+    },
     [],
   );
 
@@ -328,7 +348,7 @@ When the user asks about "current period", "selected period", "this timeframe", 
 
           {/* Chat content */}
           <div className="flex-1 overflow-hidden">
-            <GramElementsProvider config={elementsConfig}>
+            <GramElementsProvider key={sessionKey} config={elementsConfig}>
               <PendingPromptBridge
                 pending={pendingPrompt}
                 onConsume={consumePendingPrompt}
@@ -372,22 +392,19 @@ function PendingPromptBridge({
     firedNonceRef.current = pending.nonce;
 
     const { text } = pending;
-    // Switch to a brand-new thread before appending. This sidesteps the
-    // assistant-ui MessageRepository id-collision error
-    // ("A message with the same id already exists in the parent tree")
-    // that triggers when a second Explore click tries to append into a
-    // thread that still holds messages from the previous chart's
-    // conversation. It also matches the intended product UX: each Explore
-    // CTA starts a fresh focused chat with the new contextInfo.
-    assistantRuntime.threads
-      .switchToNewThread()
-      .then(() => {
-        assistantRuntime.thread.append(text);
-      })
-      .catch((err: unknown) => {
-        // eslint-disable-next-line no-console
-        console.error("Failed to send Explore prompt:", err);
-      });
+    // InsightsProvider keys <GramElementsProvider> on `sessionKey`, so every
+    // Explore-with-AI click already mounts a fresh runtime with a single
+    // initial thread. We just append the prompt to that fresh main thread —
+    // no need to call switchToNewThread() here. Doing so previously raced
+    // with assistant-ui's internal `_InnerActiveThreadProvider` mounting and
+    // surfaced as `tapLookupResources: Resource not found for lookup:
+    // __LOCALID_…` during render.
+    try {
+      assistantRuntime.thread.append(text);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to send Explore prompt:", err);
+    }
 
     onConsume();
   }, [pending, assistantRuntime, onConsume]);

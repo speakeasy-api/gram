@@ -191,6 +191,20 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     toolsWithCustomComponents,
   );
 
+  // Hold systemPrompt in a ref so transport's useMemo identity is stable across
+  // prompt changes. Consumers like Gram's AI Insights sidebar rebuild
+  // elementsConfig whenever the page-level override changes (new welcome
+  // copy + new contextInfo for "Explore with AI"), which feeds a fresh
+  // systemPrompt through. If systemPrompt was a direct useMemo dep, the
+  // transport identity would change → useChatRuntime would rebuild the runtime
+  // → in-flight switchToNewThread().then(append) calls would resolve against
+  // a torn-down resources map and throw `tapLookupResources: Resource not
+  // found for lookup: {"key":"__LOCALID_…"}`. Reading via ref inside
+  // sendMessages keeps the transport identity stable while every new
+  // completion still picks up the latest system prompt.
+  const systemPromptRef = useRef(systemPrompt);
+  systemPromptRef.current = systemPrompt;
+
   // Initialize error tracking on mount
   useEffect(() => {
     initErrorTracking({
@@ -422,7 +436,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           const modelMessages = compaction.messages;
 
           const result = streamText({
-            system: systemPrompt,
+            system: systemPromptRef.current,
             model: modelToUse,
             messages: modelMessages,
             tools,
@@ -494,7 +508,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       config.contextCompaction?.compactAtFraction,
       config.contextCompaction?.keepRecent,
       model,
-      systemPrompt,
       mcpTools,
       getApprovalHelpers,
       apiUrl,

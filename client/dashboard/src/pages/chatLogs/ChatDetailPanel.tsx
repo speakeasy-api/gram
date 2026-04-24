@@ -27,6 +27,7 @@ import { Button } from "@speakeasy-api/moonshine";
 import type { RiskResult } from "@gram/client/models/components";
 import { CircularProgress } from "./CircularProgress";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { MessageContent } from "@gram-ai/elements";
 
 interface ChatDetailPanelProps {
   chatId: string;
@@ -354,11 +355,18 @@ function MessageItem({
                 {message.role === "tool" ? (
                   <CodeBlock content={message.content ?? ""} maxHeight={300} />
                 ) : (
-                  <div className="whitespace-pre-wrap">
-                    {typeof message.content === "string"
-                      ? message.content.trim()
-                      : JSON.stringify(message.content)}
-                  </div>
+                  // MessageContent recognizes ```chart and ```ui fenced code
+                  // blocks and renders them as the same widgets the live AI
+                  // Insights sidebar displays. For everything else (plain
+                  // text, prose, unrecognized code blocks) it falls back to
+                  // preformatted text.
+                  <MessageContent
+                    content={
+                      typeof message.content === "string"
+                        ? message.content.trim()
+                        : JSON.stringify(message.content)
+                    }
+                  />
                 )}
               </div>
             )}
