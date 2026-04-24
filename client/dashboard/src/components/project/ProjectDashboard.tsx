@@ -243,7 +243,7 @@ export function ProjectDashboard() {
                                 title: "Top servers & hot tools",
                                 label: "Last 7 days",
                                 prompt:
-                                  "Servers ranked by the number of tool calls they served in the selected period, based on logs captured in hook telemetry in addition to MCP servers hosted on Gram.",
+                                  "Which servers received the most tool calls in the last 7 days, and which specific tools on each server are driving that volume? Lets look at data from all logs including hooks telemetry.",
                               },
                             ],
                           })
