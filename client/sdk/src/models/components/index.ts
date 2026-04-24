@@ -262,6 +262,7 @@ export * from "./setproductfeaturerequestbody.js";
 export * from "./setprojectlogoresult.js";
 export * from "./setsourceenvironmentlinkrequestbody.js";
 export * from "./settoolsetenvironmentlinkrequestbody.js";
+export * from "./skillbreakdownrow.js";
 export * from "./skillsummary.js";
 export * from "./skilltimeseriespoint.js";
 export * from "./slackappresult.js";
