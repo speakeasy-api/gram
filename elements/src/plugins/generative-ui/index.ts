@@ -6,6 +6,7 @@ import { GenerativeUIRenderer } from "./component";
  * Use the language identifier 'ui' or 'json-render' in code blocks.
  */
 export const generativeUI: Plugin = {
+  id: "generative-ui",
   language: "ui",
   prompt: `Render structured data as visual UI using \`\`\`ui code blocks with valid JSON.
 

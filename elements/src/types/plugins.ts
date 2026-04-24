@@ -16,6 +16,12 @@ import { ComponentType } from "react";
  */
 export interface Plugin {
   /**
+   * Unique identifier for the plugin. Used by `recommended.except()` to
+   * selectively exclude plugins. Defaults to `language` if not set.
+   */
+  id?: string;
+
+  /**
    * Any prompt that the plugin may need to add to the system prompt.
    * Will be appended to the built-in system prompt.
    *
