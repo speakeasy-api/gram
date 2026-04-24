@@ -13,7 +13,7 @@ export type AnnotationHint =
   | "openWorldHint";
 
 /** The four tool-selection tabs in custom mode. */
-export type CustomTab = "select" | "auto-groups" | "http-method" | "collection";
+export type CustomTab = "select" | "auto-groups" | "collection";
 
 /** A single grant within a role: a scope + optional resource allowlist. */
 export interface RoleGrant {

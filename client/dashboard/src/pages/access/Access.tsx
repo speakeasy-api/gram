@@ -44,7 +44,10 @@ export default function Access() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs substitutions={tabDisplayNames} />
+        <Page.Header.Breadcrumbs
+          substitutions={tabDisplayNames}
+          skipSegments={["access"]}
+        />
       </Page.Header>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">

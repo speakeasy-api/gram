@@ -19,7 +19,6 @@ import {
   ChevronRight,
   Maximize2,
   Minimize2,
-  SquareAsterisk,
   Globe,
   Repeat,
   Shield,
@@ -31,6 +30,7 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { AnnotationHint, CustomTab, ResourceType } from "./types";
 
 interface ScopePickerPopoverProps {
@@ -266,14 +266,6 @@ export function ScopePickerPopover({
         </TabsTrigger>
         <div className="bg-border/40 my-1 w-px self-stretch" />
         <TabsTrigger
-          value="http-method"
-          className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
-        >
-          <SquareAsterisk className="h-3.5 w-3.5" />
-          By HTTP method
-        </TabsTrigger>
-        <div className="bg-border/40 my-1 w-px self-stretch" />
-        <TabsTrigger
           value="collection"
           className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
         >
@@ -320,16 +312,6 @@ export function ScopePickerPopover({
         />
       </TabsContent>
       <TabsContent
-        value="http-method"
-        className="min-h-[200px] flex-1 overflow-y-auto px-2 py-1"
-      >
-        <HttpMethodGroupPanel
-          mcpServers={mcpServers}
-          resources={resources ?? []}
-          onChangeResources={onChangeResources}
-        />
-      </TabsContent>
-      <TabsContent
         value="collection"
         className="min-h-[200px] flex-1 overflow-y-auto px-2 py-1"
       >
@@ -370,19 +352,21 @@ export function ScopePickerPopover({
           {customMode && (
             <div className="-mx-1.5 -mb-1.5 flex max-h-[min(420px,60vh)] flex-col">
               {customTabs("max-h-[min(340px,50vh)]")}
-              <div className="bg-background border-border shrink-0 rounded-b-lg border-t">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPopoverOpen(false);
-                    setExpanded(true);
-                  }}
-                  className="text-muted-foreground hover:text-foreground hover:bg-muted/50 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-b-lg px-3 py-2.5 text-xs transition-colors"
-                >
-                  <Maximize2 className="h-3 w-3" />
-                  Open in full screen
-                </button>
-              </div>
+              {(customTab ?? "select") === "select" && (
+                <div className="bg-background border-border shrink-0 rounded-b-lg border-t">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPopoverOpen(false);
+                      setExpanded(true);
+                    }}
+                    className="text-muted-foreground hover:text-foreground hover:bg-muted/50 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-b-lg px-3 py-2.5 text-xs transition-colors"
+                  >
+                    <Maximize2 className="h-3 w-3" />
+                    Open in full screen
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </PopoverContent>
@@ -432,7 +416,10 @@ function ToolSelectionPanel({
   className?: string;
 }) {
   const allServers = useMemo(
-    () => mcpServers.flatMap((g) => g.servers),
+    () =>
+      mcpServers
+        .flatMap((g) => g.servers)
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [mcpServers],
   );
   const [selectedServerId, setSelectedServerId] = useState<string | null>(
@@ -462,36 +449,79 @@ function ToolSelectionPanel({
     }
   }, []);
 
+  const serverScrollRef = useRef<HTMLDivElement>(null);
+  const handleServerWheel = useCallback((e: React.WheelEvent) => {
+    if (serverScrollRef.current) {
+      serverScrollRef.current.scrollTop += e.deltaY;
+    }
+  }, []);
+
+  const serverVirtualizer = useVirtualizer({
+    count: allServers.length,
+    getScrollElement: () => serverScrollRef.current,
+    estimateSize: () => 40,
+    overscan: 5,
+  });
+
+  const toolVirtualizer = useVirtualizer({
+    count: filteredTools.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 40,
+    overscan: 5,
+  });
+
   return (
     <div className={cn("flex min-h-0 flex-1", className)}>
       {/* Left column — server list */}
-      <div className="border-border w-[160px] shrink-0 overflow-y-auto border-r">
-        <div className="bg-muted/50 text-muted-foreground border-border flex h-10 items-center gap-1.5 border-b px-3 text-[10px] font-medium tracking-wider uppercase">
+      <div className="border-border flex min-h-0 w-[160px] shrink-0 flex-col border-r">
+        <div className="bg-muted/50 text-muted-foreground border-border flex h-10 shrink-0 items-center gap-1.5 border-b px-3 text-[10px] font-medium tracking-wider uppercase">
           <Globe className="h-3 w-3" />
           Server List
         </div>
-        {allServers.map((server) => {
-          const isActive = selectedServerId === server.id;
-          return (
-            <button
-              key={server.id}
-              type="button"
-              onClick={() => {
-                setSelectedServerId(server.id);
-                setSearch("");
-              }}
-              className={cn(
-                "hover:bg-muted/50 flex h-10 w-full cursor-pointer items-center justify-between truncate px-3 text-sm",
-                isActive && "bg-muted font-medium",
-              )}
-            >
-              <span className="truncate">{server.name}</span>
-              {isActive && (
-                <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
-              )}
-            </button>
-          );
-        })}
+        <div
+          ref={serverScrollRef}
+          onWheel={handleServerWheel}
+          className="min-h-0 flex-1 overflow-y-auto"
+        >
+          <div
+            style={{
+              height: `${serverVirtualizer.getTotalSize()}px`,
+              position: "relative",
+            }}
+          >
+            {serverVirtualizer.getVirtualItems().map((virtualItem) => {
+              const server = allServers[virtualItem.index];
+              const isActive = selectedServerId === server.id;
+              return (
+                <button
+                  key={server.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedServerId(server.id);
+                    setSearch("");
+                  }}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: `${virtualItem.size}px`,
+                    transform: `translateY(${virtualItem.start}px)`,
+                  }}
+                  className={cn(
+                    "hover:bg-muted/50 flex cursor-pointer items-center justify-between truncate px-3 text-sm",
+                    isActive && "bg-muted font-medium",
+                  )}
+                >
+                  <span className="truncate">{server.name}</span>
+                  {isActive && (
+                    <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Right column — tools for selected server */}
@@ -517,26 +547,45 @@ function ToolSelectionPanel({
         <div
           ref={scrollRef}
           onWheel={handleWheel}
-          className="tool-scroll min-h-0 flex-1 overflow-y-auto pb-2"
+          className="tool-scroll min-h-0 flex-1 overflow-y-auto"
         >
           {filteredTools.length === 0 ? (
             <div className="text-muted-foreground px-3 py-3 text-sm">
               {tools.length === 0 ? "No tools found" : "No matching tools"}
             </div>
           ) : (
-            filteredTools.map((tool) => {
-              const toolId = `${selectedServerId}:${tool.name}`;
-              return (
-                <ResourceCheckbox
-                  key={tool.id}
-                  id={toolId}
-                  name={tool.name}
-                  checked={resources.includes(toolId)}
-                  onToggle={onToggle}
-                  compact
-                />
-              );
-            })
+            <div
+              style={{
+                height: `${toolVirtualizer.getTotalSize()}px`,
+                position: "relative",
+              }}
+            >
+              {toolVirtualizer.getVirtualItems().map((virtualItem) => {
+                const tool = filteredTools[virtualItem.index];
+                const toolId = `${selectedServerId}:${tool.name}`;
+                return (
+                  <div
+                    key={tool.id}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: `${virtualItem.size}px`,
+                      transform: `translateY(${virtualItem.start}px)`,
+                    }}
+                  >
+                    <ResourceCheckbox
+                      id={toolId}
+                      name={tool.name}
+                      checked={resources.includes(toolId)}
+                      onToggle={onToggle}
+                      compact
+                    />
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>
@@ -652,128 +701,6 @@ function AnnotationGroupPanel({
             </div>
             <span className="text-muted-foreground shrink-0 text-xs">
               {matchCount} tool{matchCount !== 1 ? "s" : ""}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
-
-const METHOD_COLORS: Record<string, string> = {
-  GET: "text-blue-600 bg-blue-50",
-  POST: "text-green-600 bg-green-50",
-  PUT: "text-amber-600 bg-amber-50",
-  PATCH: "text-orange-600 bg-orange-50",
-  DELETE: "text-red-600 bg-red-50",
-};
-
-function HttpMethodGroupPanel({
-  mcpServers,
-  resources,
-  onChangeResources,
-}: {
-  mcpServers: ServerGroup[];
-  resources: string[];
-  onChangeResources: (resources: string[]) => void;
-}) {
-  const allTools = useMemo(
-    () =>
-      mcpServers.flatMap((g) =>
-        g.servers.flatMap((s) =>
-          s.tools.map((t) => ({ ...t, serverSlug: s.id, serverName: s.name })),
-        ),
-      ),
-    [mcpServers],
-  );
-
-  const httpTools = useMemo(
-    () => allTools.filter((t) => t.type === "http"),
-    [allTools],
-  );
-
-  const toolsByMethod = useMemo(() => {
-    const map = new Map<string, typeof httpTools>();
-    for (const tool of httpTools) {
-      const method = tool.httpMethod?.toUpperCase() ?? "OTHER";
-      const list = map.get(method) ?? [];
-      list.push(tool);
-      map.set(method, list);
-    }
-    // Sort tools within each method group
-    for (const [key, tools] of map) {
-      map.set(
-        key,
-        tools.sort((a, b) => a.name.localeCompare(b.name)),
-      );
-    }
-    // Sort method groups by HTTP_METHODS order, with OTHER last
-    const sorted = new Map<string, typeof httpTools>();
-    for (const method of HTTP_METHODS) {
-      const tools = map.get(method);
-      if (tools) sorted.set(method, tools);
-    }
-    const other = map.get("OTHER");
-    if (other) sorted.set("OTHER", other);
-    return sorted;
-  }, [httpTools]);
-
-  if (httpTools.length === 0) {
-    return (
-      <div className="text-muted-foreground py-6 text-center text-sm">
-        No HTTP tools found
-      </div>
-    );
-  }
-
-  return (
-    <div className="py-1">
-      <div className="text-muted-foreground px-2 py-2 text-sm">
-        Select all tools by HTTP method:
-      </div>
-      {[...toolsByMethod.entries()].map(([method, tools]) => {
-        const compoundIds = tools.map((t) => `${t.serverSlug}:${t.name}`);
-        const allSelected =
-          compoundIds.length > 0 &&
-          compoundIds.every((id) => resources.includes(id));
-        const colors =
-          METHOD_COLORS[method] ?? "text-muted-foreground bg-muted";
-
-        const toggleAll = () => {
-          if (allSelected) {
-            const removeSet = new Set(compoundIds);
-            onChangeResources(resources.filter((r) => !removeSet.has(r)));
-          } else {
-            const existing = new Set(resources);
-            const toAdd = compoundIds.filter((id) => !existing.has(id));
-            onChangeResources([...resources, ...toAdd]);
-          }
-        };
-
-        return (
-          <button
-            key={method}
-            type="button"
-            onClick={toggleAll}
-            className="hover:bg-accent flex w-full cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 text-sm"
-          >
-            <Checkbox
-              checked={allSelected}
-              className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
-              tabIndex={-1}
-            />
-            <span
-              className={cn(
-                "inline-flex min-w-[52px] items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide",
-                colors,
-              )}
-            >
-              {method}
-            </span>
-            <span className="flex-1 text-left">
-              {tools.length} tool{tools.length !== 1 ? "s" : ""}
             </span>
           </button>
         );
