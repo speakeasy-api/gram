@@ -143,7 +143,7 @@ function PolicyCenterContent() {
   const [formEnabled, setFormEnabled] = useState(true);
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
-  >(new Set(["secrets"]));
+  >(new Set<RuleCategory>(["secrets", "pii"]));
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -178,7 +178,7 @@ function PolicyCenterContent() {
     setEditingPolicy(null);
     setFormName("");
     setFormEnabled(true);
-    setSelectedCategories(new Set(["secrets"]));
+    setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
     setSheetOpen(true);
   };
 
