@@ -6,46 +6,12 @@ import type { ElementsContextType, Model } from "@/types";
 import { recommended } from "@/plugins";
 import { chart } from "@/plugins/chart";
 import { generativeUI } from "@/plugins/generative-ui";
+import { parseSegments } from "./MessageContent.parser";
 
 const SUPPORTED_LANGUAGES: Record<string, FC<{ code: string }>> = {
   chart: chart.Component as FC<{ code: string }>,
   ui: generativeUI.Component as FC<{ code: string }>,
 };
-
-type Segment =
-  | { type: "text"; text: string }
-  | { type: "block"; lang: string; code: string };
-
-const FENCE_RE = /```(\w+)\r?\n([\s\S]*?)```/g;
-
-function parseSegments(content: string): Segment[] {
-  const segments: Segment[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  FENCE_RE.lastIndex = 0;
-  while ((match = FENCE_RE.exec(content)) !== null) {
-    if (match.index > lastIndex) {
-      segments.push({
-        type: "text",
-        text: content.slice(lastIndex, match.index),
-      });
-    }
-    const lang = (match[1] ?? "").toLowerCase();
-    const code = match[2] ?? "";
-    if (lang in SUPPORTED_LANGUAGES) {
-      segments.push({ type: "block", lang, code });
-    } else {
-      // Unsupported language: keep original block as text so it's still
-      // visible (renders as a normal fenced code block in plain text).
-      segments.push({ type: "text", text: match[0] });
-    }
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < content.length) {
-    segments.push({ type: "text", text: content.slice(lastIndex) });
-  }
-  return segments;
-}
 
 // Minimal stub ElementsContext value. The chart/ui plugin renderers reach into
 // ElementsContext via useDensity()/useElements() to read density classes, so a

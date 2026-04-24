@@ -252,37 +252,34 @@ When the user asks about "current period", "selected period", "this timeframe", 
     [mcpConfig, title, subtitle, suggestions, theme, systemPrompt],
   );
 
-  // Fingerprint of the most recently applied non-null override, used to skip
-  // sessionKey bumps when an override is re-applied with the same content but
-  // a fresh object identity. Pages mount <InsightsConfig {...inlineProps}
-  // suggestions={[…]} /> with literal arrays/objects, so the InsightsConfig
-  // effect re-fires on every parent re-render with a structurally-equal
-  // options value. Without this guard those repeats would unmount the
-  // assistant runtime and destroy any in-progress conversation.
-  const lastOverrideFingerprintRef = useRef<string>("");
+  // Page-level overrides only swap welcome copy / suggestions / contextInfo —
+  // they must NOT remount the runtime. <InsightsConfig> mounts on every page
+  // (ChatLogs, Logs, ObservabilityOverview, Hooks…) and re-fires its effect
+  // both on parent re-renders (fresh inline props identity) and on
+  // page-to-page navigation (new options content). Bumping `sessionKey` on
+  // any non-null override would destroy in-flight conversations across
+  // those transitions.
   const handleSetOverride = useCallback(
     (next: InsightsConfigOptions | null) => {
       setOverride(next);
-      if (next === null) {
-        lastOverrideFingerprintRef.current = "";
-        return;
-      }
-      // Only bump the session on a genuinely new chart-specific override
-      // (different content, e.g. a different Explore-with-AI chart). Clearing
-      // to null also doesn't bump — the next open returns to the base "Ask
-      // AI" defaults and preserves the already-running conversation.
-      const fingerprint = JSON.stringify(next);
-      if (fingerprint === lastOverrideFingerprintRef.current) return;
-      lastOverrideFingerprintRef.current = fingerprint;
-      setSessionKey((k) => k + 1);
     },
     [],
   );
 
   const handleSendPrompt = useCallback((text: string) => {
+    // Each sendPrompt represents an "Explore with AI" click — a new focused
+    // conversation tied to a specific chart's contextInfo. Bumping
+    // sessionKey here remounts <GramElementsProvider> so the prompt lands in
+    // a clean assistant runtime; this is the load-bearing fix for the
+    // `tapLookupResources: Resource not found for lookup: __LOCALID_…`
+    // crash that was caused by overlapping switchToNewThread() calls in a
+    // long-lived runtime. <InsightsConfig> deliberately does not call
+    // sendPrompt, so page-level config changes never bump the session.
+    //
     // Nonce lets the bridge detect repeat clicks on the same prompt (same
     // chart twice in a row); reference-equal objects would otherwise be
     // skipped by the bridge's useEffect.
+    setSessionKey((k) => k + 1);
     setPendingPrompt({ text, nonce: Date.now() });
   }, []);
 
