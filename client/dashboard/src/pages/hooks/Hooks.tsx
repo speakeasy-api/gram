@@ -1822,7 +1822,7 @@ function ServerErrorRateChart({
       hasData={labels.length > 0}
     >
       {labels.length === 0 ? (
-        <ChartNoData />
+        <ChartNoData message="No errors in this period" />
       ) : (
         <>
           <div
@@ -1926,14 +1926,18 @@ function buildTimeSeriesFromSummary<
   return { labels, tooltipLabels, datasets };
 }
 
-function ChartNoData() {
+function ChartNoData({
+  message = "No data in this period",
+}: {
+  message?: string;
+}) {
   return (
     <div className="flex h-24 items-center justify-center">
       <Badge variant="neutral">
         <Badge.LeftIcon>
           <Icon name="chart-no-axes-column" size="small" />
         </Badge.LeftIcon>
-        <Badge.Text>No data</Badge.Text>
+        <Badge.Text>{message}</Badge.Text>
       </Badge>
     </div>
   );
@@ -2298,7 +2302,7 @@ function ErrorsOverTimeChart({
       hasData={hasErrors}
     >
       {!hasErrors ? (
-        <ChartNoData />
+        <ChartNoData message="No errors in this period" />
       ) : (
         <MultiLineChart
           labels={labels}
