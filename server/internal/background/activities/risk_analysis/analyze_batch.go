@@ -180,9 +180,37 @@ func (a *AnalyzeBatch) scan(ctx context.Context, sources []string, presidioEntit
 
 	merged := make([][]Finding, n)
 	for i := range n {
-		merged[i] = append(gitleaksFindings[i], presidioFindings[i]...)
+		// Gitleaks findings come first so they take priority over presidio
+		// when both scanners match the same text region.
+		combined := append(gitleaksFindings[i], presidioFindings[i]...)
+		merged[i] = dedup(combined)
 	}
 	return merged, nil
+}
+
+// dedup removes findings that overlap the same text region. Earlier entries
+// in the slice win (gitleaks before presidio), so secrets take priority over PII.
+func dedup(findings []Finding) []Finding {
+	if len(findings) <= 1 {
+		return findings
+	}
+	var out []Finding
+	for _, f := range findings {
+		if overlapsAny(out, f) {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+func overlapsAny(kept []Finding, candidate Finding) bool {
+	for _, k := range kept {
+		if k.StartPos < candidate.EndPos && candidate.StartPos < k.EndPos {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, batchFindings [][]Finding) ([]repo.InsertRiskResultsParams, int) {
