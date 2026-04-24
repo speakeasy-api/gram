@@ -148,10 +148,14 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
 	}
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "create assistant requires a user identity").Log(ctx, s.logger)
+	}
 	record, err := s.core.CreateAssistant(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		*authCtx.ProjectID,
+		authCtx.UserID,
 		payload.Name,
 		payload.Model,
 		payload.Instructions,

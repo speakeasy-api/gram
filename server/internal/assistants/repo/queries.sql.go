@@ -154,6 +154,7 @@ const createAssistant = `-- name: CreateAssistant :one
 INSERT INTO assistants (
   project_id,
   organization_id,
+  created_by_user_id,
   name,
   model,
   instructions,
@@ -168,41 +169,45 @@ INSERT INTO assistants (
   $5,
   $6,
   $7,
-  $8
+  $8,
+  $9
 )
-RETURNING id, project_id, organization_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
 `
 
 type CreateAssistantParams struct {
-	ProjectID      uuid.UUID
-	OrganizationID string
-	Name           string
-	Model          string
-	Instructions   string
-	WarmTtlSeconds int64
-	MaxConcurrency int64
-	Status         string
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Model           string
+	Instructions    string
+	WarmTtlSeconds  int64
+	MaxConcurrency  int64
+	Status          string
 }
 
 type CreateAssistantRow struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	Name           string
-	Model          string
-	Instructions   string
-	WarmTtlSeconds int64
-	MaxConcurrency int64
-	Status         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Model           string
+	Instructions    string
+	WarmTtlSeconds  int64
+	MaxConcurrency  int64
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
 }
 
 func (q *Queries) CreateAssistant(ctx context.Context, arg CreateAssistantParams) (CreateAssistantRow, error) {
 	row := q.db.QueryRow(ctx, createAssistant,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.CreatedByUserID,
 		arg.Name,
 		arg.Model,
 		arg.Instructions,
@@ -215,6 +220,7 @@ func (q *Queries) CreateAssistant(ctx context.Context, arg CreateAssistantParams
 		&i.ID,
 		&i.ProjectID,
 		&i.OrganizationID,
+		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
 		&i.Instructions,
@@ -267,7 +273,7 @@ func (q *Queries) FailAssistantThreadEvent(ctx context.Context, arg FailAssistan
 }
 
 const getAssistant = `-- name: GetAssistant :one
-SELECT id, project_id, organization_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = $1
   AND project_id = $2
@@ -280,18 +286,19 @@ type GetAssistantParams struct {
 }
 
 type GetAssistantRow struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	Name           string
-	Model          string
-	Instructions   string
-	WarmTtlSeconds int64
-	MaxConcurrency int64
-	Status         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Model           string
+	Instructions    string
+	WarmTtlSeconds  int64
+	MaxConcurrency  int64
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
 }
 
 func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (GetAssistantRow, error) {
@@ -301,6 +308,7 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 		&i.ID,
 		&i.ProjectID,
 		&i.OrganizationID,
+		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
 		&i.Instructions,
@@ -315,25 +323,26 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 }
 
 const getAssistantForDispatch = `-- name: GetAssistantForDispatch :one
-SELECT id, project_id, organization_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = $1
   AND deleted IS FALSE
 `
 
 type GetAssistantForDispatchRow struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	Name           string
-	Model          string
-	Instructions   string
-	WarmTtlSeconds int64
-	MaxConcurrency int64
-	Status         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Model           string
+	Instructions    string
+	WarmTtlSeconds  int64
+	MaxConcurrency  int64
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
 }
 
 func (q *Queries) GetAssistantForDispatch(ctx context.Context, assistantID uuid.UUID) (GetAssistantForDispatchRow, error) {
@@ -343,6 +352,7 @@ func (q *Queries) GetAssistantForDispatch(ctx context.Context, assistantID uuid.
 		&i.ID,
 		&i.ProjectID,
 		&i.OrganizationID,
+		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
 		&i.Instructions,
@@ -412,7 +422,7 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 }
 
 const listAssistants = `-- name: ListAssistants :many
-SELECT id, project_id, organization_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -420,18 +430,19 @@ ORDER BY created_at DESC
 `
 
 type ListAssistantsRow struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	Name           string
-	Model          string
-	Instructions   string
-	WarmTtlSeconds int64
-	MaxConcurrency int64
-	Status         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Model           string
+	Instructions    string
+	WarmTtlSeconds  int64
+	MaxConcurrency  int64
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
 }
 
 func (q *Queries) ListAssistants(ctx context.Context, projectID uuid.UUID) ([]ListAssistantsRow, error) {
@@ -447,6 +458,7 @@ func (q *Queries) ListAssistants(ctx context.Context, projectID uuid.UUID) ([]Li
 			&i.ID,
 			&i.ProjectID,
 			&i.OrganizationID,
+			&i.CreatedByUserID,
 			&i.Name,
 			&i.Model,
 			&i.Instructions,
@@ -722,6 +734,7 @@ SELECT
   a.id AS assistant_record_id,
   a.project_id AS assistant_record_project_id,
   a.organization_id,
+  a.created_by_user_id,
   a.name,
   a.model,
   a.instructions,
@@ -770,6 +783,7 @@ type LoadThreadContextRow struct {
 	AssistantRecordID        uuid.UUID
 	AssistantRecordProjectID uuid.UUID
 	OrganizationID           string
+	CreatedByUserID          pgtype.Text
 	Name                     string
 	Model                    string
 	Instructions             string
@@ -804,6 +818,7 @@ func (q *Queries) LoadThreadContext(ctx context.Context, arg LoadThreadContextPa
 		&i.AssistantRecordID,
 		&i.AssistantRecordProjectID,
 		&i.OrganizationID,
+		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
 		&i.Instructions,
@@ -1167,7 +1182,7 @@ SET
 WHERE id = $7
   AND project_id = $8
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
 `
 
 type UpdateAssistantParams struct {
@@ -1182,18 +1197,19 @@ type UpdateAssistantParams struct {
 }
 
 type UpdateAssistantRow struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	Name           string
-	Model          string
-	Instructions   string
-	WarmTtlSeconds int64
-	MaxConcurrency int64
-	Status         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Model           string
+	Instructions    string
+	WarmTtlSeconds  int64
+	MaxConcurrency  int64
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
 }
 
 func (q *Queries) UpdateAssistant(ctx context.Context, arg UpdateAssistantParams) (UpdateAssistantRow, error) {
@@ -1212,6 +1228,7 @@ func (q *Queries) UpdateAssistant(ctx context.Context, arg UpdateAssistantParams
 		&i.ID,
 		&i.ProjectID,
 		&i.OrganizationID,
+		&i.CreatedByUserID,
 		&i.Name,
 		&i.Model,
 		&i.Instructions,

@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -28,8 +30,12 @@ const issuer = "gram-assistants"
 const revocationCacheTTL = 5 * time.Second
 
 type Claims struct {
-	OrgID       string `json:"org_id"`
-	ProjectID   string `json:"project_id"`
+	OrgID     string `json:"org_id"`
+	ProjectID string `json:"project_id"`
+	// UserID is the assistant owner at mint time. It outlives an ownership
+	// transfer by at most the token TTL — after that the next /configure or
+	// /turn mints a fresh token against the new owner.
+	UserID      string `json:"user_id"`
 	AssistantID string `json:"assistant_id"`
 	ThreadID    string `json:"thread_id"`
 	jwt.RegisteredClaims
@@ -38,6 +44,7 @@ type Claims struct {
 type GenerateInput struct {
 	OrgID       string
 	ProjectID   uuid.UUID
+	UserID      string
 	AssistantID uuid.UUID
 	ThreadID    uuid.UUID
 	TTL         time.Duration
@@ -48,15 +55,17 @@ type Manager struct {
 	db         *pgxpool.Pool
 	orgs       *organizationsrepo.Queries
 	projects   *projectsrepo.Queries
+	authz      *authz.Engine
 	revocation *revocationCache
 }
 
-func New(jwtSecret string, db *pgxpool.Pool) *Manager {
+func New(jwtSecret string, db *pgxpool.Pool, authzEngine *authz.Engine) *Manager {
 	return &Manager{
 		jwtSecret:  jwtSecret,
 		db:         db,
 		orgs:       organizationsrepo.New(db),
 		projects:   projectsrepo.New(db),
+		authz:      authzEngine,
 		revocation: newRevocationCache(revocationCacheTTL),
 	}
 }
@@ -71,6 +80,7 @@ func (m *Manager) Generate(input GenerateInput) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		OrgID:       input.OrgID,
 		ProjectID:   input.ProjectID.String(),
+		UserID:      input.UserID,
 		AssistantID: input.AssistantID.String(),
 		ThreadID:    input.ThreadID.String(),
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -103,6 +113,7 @@ func (m *Manager) Validate(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{
 		OrgID:       "",
 		ProjectID:   "",
+		UserID:      "",
 		AssistantID: "",
 		ThreadID:    "",
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -174,8 +185,12 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 	}
 
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-		ActiveOrganizationID:  claims.OrgID,
-		UserID:                "",
+		ActiveOrganizationID: claims.OrgID,
+		// UserID carries the assistant owner captured at mint time. It may
+		// outlive an ownership transfer by up to the token TTL; the next
+		// runtime /configure or /turn mints a fresh token against the new
+		// owner.
+		UserID:                claims.UserID,
 		ExternalUserID:        "",
 		APIKeyID:              "",
 		SessionID:             nil,
@@ -186,9 +201,20 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		AccountType:           org.GramAccountType,
 		Whitelisted:           org.Whitelisted,
 		HasActiveSubscription: false,
-		APIKeyScopes:          nil,
+		APIKeyScopes:          []string{auth.APIKeyScopeChat.String(), auth.APIKeyScopeConsumer.String()},
 		IsAdmin:               false,
 	})
+	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{
+		AssistantID: assistantID,
+		ThreadID:    threadID,
+	})
+
+	if m.authz != nil {
+		ctx, err = m.authz.PrepareContext(ctx)
+		if err != nil {
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load assistant owner grants")
+		}
+	}
 
 	return ctx, claims, nil
 }

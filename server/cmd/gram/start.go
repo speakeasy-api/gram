@@ -637,7 +637,7 @@ func newStartCommand() *cli.Command {
 			}
 
 			authorizer := auth.New(logger, db, sessionManager, authzEngine)
-			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db)
+			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db, authzEngine)
 			assistantRuntimeConfig, err := assistantRuntimeConfigFromCLI(c)
 			if err != nil {
 				return err

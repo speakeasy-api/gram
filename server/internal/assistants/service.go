@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -122,19 +123,20 @@ func int64ToInt(value int64) int {
 }
 
 type assistantRecord struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	Name           string
-	Model          string
-	Instructions   string
-	Toolsets       []assistantToolsetRow
-	WarmTTLSeconds int
-	MaxConcurrency int
-	Status         string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	DeletedAt      sql.NullTime
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID string
+	Name            string
+	Model           string
+	Instructions    string
+	Toolsets        []assistantToolsetRow
+	WarmTTLSeconds  int
+	MaxConcurrency  int
+	Status          string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	DeletedAt       sql.NullTime
 }
 
 type assistantThreadRecord struct {
@@ -189,91 +191,96 @@ type assistantToolsetRow struct {
 
 func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistantRecord {
 	return assistantRecord{
-		ID:             row.ID,
-		ProjectID:      row.ProjectID,
-		OrganizationID: row.OrganizationID,
-		Name:           row.Name,
-		Model:          row.Model,
-		Instructions:   row.Instructions,
-		Toolsets:       nil,
-		WarmTTLSeconds: int64ToInt(row.WarmTtlSeconds),
-		MaxConcurrency: int64ToInt(row.MaxConcurrency),
-		Status:         row.Status,
-		CreatedAt:      row.CreatedAt.Time,
-		UpdatedAt:      row.UpdatedAt.Time,
-		DeletedAt:      sqlNullTime(row.DeletedAt),
+		ID:              row.ID,
+		ProjectID:       row.ProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		WarmTTLSeconds:  int64ToInt(row.WarmTtlSeconds),
+		MaxConcurrency:  int64ToInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       sqlNullTime(row.DeletedAt),
 	}
 }
 
 func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRecord {
 	return assistantRecord{
-		ID:             row.ID,
-		ProjectID:      row.ProjectID,
-		OrganizationID: row.OrganizationID,
-		Name:           row.Name,
-		Model:          row.Model,
-		Instructions:   row.Instructions,
-		Toolsets:       nil,
-		WarmTTLSeconds: int64ToInt(row.WarmTtlSeconds),
-		MaxConcurrency: int64ToInt(row.MaxConcurrency),
-		Status:         row.Status,
-		CreatedAt:      row.CreatedAt.Time,
-		UpdatedAt:      row.UpdatedAt.Time,
-		DeletedAt:      sqlNullTime(row.DeletedAt),
+		ID:              row.ID,
+		ProjectID:       row.ProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		WarmTTLSeconds:  int64ToInt(row.WarmTtlSeconds),
+		MaxConcurrency:  int64ToInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       sqlNullTime(row.DeletedAt),
 	}
 }
 
 func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecord {
 	return assistantRecord{
-		ID:             row.ID,
-		ProjectID:      row.ProjectID,
-		OrganizationID: row.OrganizationID,
-		Name:           row.Name,
-		Model:          row.Model,
-		Instructions:   row.Instructions,
-		Toolsets:       nil,
-		WarmTTLSeconds: int64ToInt(row.WarmTtlSeconds),
-		MaxConcurrency: int64ToInt(row.MaxConcurrency),
-		Status:         row.Status,
-		CreatedAt:      row.CreatedAt.Time,
-		UpdatedAt:      row.UpdatedAt.Time,
-		DeletedAt:      sqlNullTime(row.DeletedAt),
+		ID:              row.ID,
+		ProjectID:       row.ProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		WarmTTLSeconds:  int64ToInt(row.WarmTtlSeconds),
+		MaxConcurrency:  int64ToInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       sqlNullTime(row.DeletedAt),
 	}
 }
 
 func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow) assistantRecord {
 	return assistantRecord{
-		ID:             row.ID,
-		ProjectID:      row.ProjectID,
-		OrganizationID: row.OrganizationID,
-		Name:           row.Name,
-		Model:          row.Model,
-		Instructions:   row.Instructions,
-		Toolsets:       nil,
-		WarmTTLSeconds: int64ToInt(row.WarmTtlSeconds),
-		MaxConcurrency: int64ToInt(row.MaxConcurrency),
-		Status:         row.Status,
-		CreatedAt:      row.CreatedAt.Time,
-		UpdatedAt:      row.UpdatedAt.Time,
-		DeletedAt:      sqlNullTime(row.DeletedAt),
+		ID:              row.ID,
+		ProjectID:       row.ProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		WarmTTLSeconds:  int64ToInt(row.WarmTtlSeconds),
+		MaxConcurrency:  int64ToInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       sqlNullTime(row.DeletedAt),
 	}
 }
 
 func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistantRecord {
 	return assistantRecord{
-		ID:             row.ID,
-		ProjectID:      row.ProjectID,
-		OrganizationID: row.OrganizationID,
-		Name:           row.Name,
-		Model:          row.Model,
-		Instructions:   row.Instructions,
-		Toolsets:       nil,
-		WarmTTLSeconds: int64ToInt(row.WarmTtlSeconds),
-		MaxConcurrency: int64ToInt(row.MaxConcurrency),
-		Status:         row.Status,
-		CreatedAt:      row.CreatedAt.Time,
-		UpdatedAt:      row.UpdatedAt.Time,
-		DeletedAt:      sqlNullTime(row.DeletedAt),
+		ID:              row.ID,
+		ProjectID:       row.ProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		WarmTTLSeconds:  int64ToInt(row.WarmTtlSeconds),
+		MaxConcurrency:  int64ToInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       sqlNullTime(row.DeletedAt),
 	}
 }
 
@@ -701,6 +708,7 @@ func (s *ServiceCore) CreateAssistant(
 	ctx context.Context,
 	organizationID string,
 	projectID uuid.UUID,
+	createdByUserID string,
 	name string,
 	model string,
 	instructions string,
@@ -709,6 +717,10 @@ func (s *ServiceCore) CreateAssistant(
 	maxConcurrency int,
 	status string,
 ) (assistantRecord, error) {
+	if createdByUserID == "" {
+		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
+	}
+
 	resolved, err := s.resolveToolsetRefsForWrite(ctx, projectID, toolsets)
 	if err != nil {
 		return assistantRecord{}, err
@@ -722,14 +734,15 @@ func (s *ServiceCore) CreateAssistant(
 
 	queries := assistantrepo.New(tx)
 	created, err := queries.CreateAssistant(ctx, assistantrepo.CreateAssistantParams{
-		ProjectID:      projectID,
-		OrganizationID: organizationID,
-		Name:           name,
-		Model:          model,
-		Instructions:   instructions,
-		WarmTtlSeconds: int64(warmTTLSeconds),
-		MaxConcurrency: int64(maxConcurrency),
-		Status:         status,
+		ProjectID:       projectID,
+		OrganizationID:  organizationID,
+		CreatedByUserID: conv.ToPGText(createdByUserID),
+		Name:            name,
+		Model:           model,
+		Instructions:    instructions,
+		WarmTtlSeconds:  int64(warmTTLSeconds),
+		MaxConcurrency:  int64(maxConcurrency),
+		Status:          status,
 	})
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("insert assistant: %w", err)
@@ -1403,6 +1416,7 @@ func (s *ServiceCore) mintAssistantRuntimeToken(assistant assistantRecord, threa
 	token, err := s.assistantTokens.Generate(assistanttokens.GenerateInput{
 		OrgID:       assistant.OrganizationID,
 		ProjectID:   assistant.ProjectID,
+		UserID:      assistant.CreatedByUserID,
 		AssistantID: assistant.ID,
 		ThreadID:    thread.ID,
 		TTL:         assistantRuntimeTokenTTL,
@@ -1517,19 +1531,20 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, threadID uuid.UUID)
 		LastEventAt:   row.LastEventAt.Time,
 	}
 	assistant := assistantRecord{
-		ID:             row.AssistantRecordID,
-		ProjectID:      row.AssistantRecordProjectID,
-		OrganizationID: row.OrganizationID,
-		Name:           row.Name,
-		Model:          row.Model,
-		Instructions:   row.Instructions,
-		Toolsets:       nil,
-		WarmTTLSeconds: int64ToInt(row.WarmTtlSeconds),
-		MaxConcurrency: int64ToInt(row.MaxConcurrency),
-		Status:         row.Status,
-		CreatedAt:      row.CreatedAt.Time,
-		UpdatedAt:      row.UpdatedAt.Time,
-		DeletedAt:      sqlNullTime(row.DeletedAt),
+		ID:              row.AssistantRecordID,
+		ProjectID:       row.AssistantRecordProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		WarmTTLSeconds:  int64ToInt(row.WarmTtlSeconds),
+		MaxConcurrency:  int64ToInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       sqlNullTime(row.DeletedAt),
 	}
 	runtime := assistantRuntimeRecord{
 		ID:                  row.RuntimeID,

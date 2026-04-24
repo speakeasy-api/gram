@@ -82,6 +82,7 @@ INSERT INTO assistant_toolsets (
 INSERT INTO assistants (
   project_id,
   organization_id,
+  created_by_user_id,
   name,
   model,
   instructions,
@@ -91,6 +92,7 @@ INSERT INTO assistants (
 ) VALUES (
   @project_id,
   @organization_id,
+  @created_by_user_id,
   @name,
   @model,
   @instructions,
@@ -98,24 +100,24 @@ INSERT INTO assistants (
   @max_concurrency,
   @status
 )
-RETURNING id, project_id, organization_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at;
+RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at;
 
 -- name: ListAssistants :many
-SELECT id, project_id, organization_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
 -- name: GetAssistant :one
-SELECT id, project_id, organization_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = @assistant_id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: GetAssistantForDispatch :one
-SELECT id, project_id, organization_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = @assistant_id
   AND deleted IS FALSE;
@@ -133,7 +135,7 @@ SET
 WHERE id = @assistant_id
   AND project_id = @project_id
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at;
+RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at;
 
 -- name: DeleteAssistant :exec
 UPDATE assistants
@@ -315,6 +317,7 @@ SELECT
   a.id AS assistant_record_id,
   a.project_id AS assistant_record_project_id,
   a.organization_id,
+  a.created_by_user_id,
   a.name,
   a.model,
   a.instructions,
