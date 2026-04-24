@@ -201,6 +201,40 @@ func TestGenerateCodexMCPConfigUsesEnvHTTPHeadersForPublicServers(t *testing.T) 
 	require.Empty(t, server.HTTPHeaders, "public servers should not bake Authorization")
 }
 
+func TestCodexAuthPolicy(t *testing.T) {
+	t.Parallel()
+	private := PluginServerInfo{DisplayName: "priv", MCPURL: "https://x"}
+	publicNoEnv := PluginServerInfo{DisplayName: "pub", MCPURL: "https://x", IsPublic: true}
+	publicWithEnv := PluginServerInfo{
+		DisplayName: "pub-env",
+		MCPURL:      "https://x",
+		IsPublic:    true,
+		EnvConfigs:  []ServerEnvConfig{{VariableName: "FOO", DisplayName: "X-Foo"}},
+	}
+
+	tests := []struct {
+		name    string
+		servers []PluginServerInfo
+		apiKey  string
+		want    string
+	}{
+		{"private with baked key is silent", []PluginServerInfo{private}, "k", "ON_USE"},
+		{"private without key needs GRAM_API_KEY prompt", []PluginServerInfo{private}, "", "ON_INSTALL"},
+		{"public with env configs needs prompt", []PluginServerInfo{publicWithEnv}, "", "ON_INSTALL"},
+		{"fully public with no env configs is silent", []PluginServerInfo{publicNoEnv}, "", "ON_USE"},
+		{"mixed: any prompting server forces ON_INSTALL", []PluginServerInfo{publicNoEnv, publicWithEnv}, "k", "ON_INSTALL"},
+		{"no servers is silent", nil, "", "ON_USE"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := codexAuthPolicy(PluginInfo{Servers: tc.servers}, GenerateConfig{APIKey: tc.apiKey})
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func TestGenerateSinglePluginPackageCodex(t *testing.T) {
 	t.Parallel()
 	plugin := PluginInfo{

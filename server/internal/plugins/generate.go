@@ -83,7 +83,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 			},
 			Policy: codexMarketplacePolicy{
 				Installation:   "AVAILABLE",
-				Authentication: "ON_INSTALL",
+				Authentication: codexAuthPolicy(p, cfg),
 			},
 		})
 	}
@@ -236,6 +236,25 @@ func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 func generateCodexPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
 	name := p.Slug + "-codex"
 	return generateCodexPluginInDir(files, name, name, p, cfg)
+}
+
+// codexAuthPolicy picks ON_INSTALL when the user will be prompted for a
+// secret (public server env vars or a Gram API key the published config
+// can't bake in) and ON_USE when nothing needs to be collected. A baked-in
+// APIKey plus all-public-no-env servers means the plugin is install-silent.
+func codexAuthPolicy(p PluginInfo, cfg GenerateConfig) string {
+	for _, s := range p.Servers {
+		if s.IsPublic {
+			if len(s.EnvConfigs) > 0 {
+				return "ON_INSTALL"
+			}
+			continue
+		}
+		if cfg.APIKey == "" {
+			return "ON_INSTALL"
+		}
+	}
+	return "ON_USE"
 }
 
 func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p PluginInfo, cfg GenerateConfig) error {
