@@ -2,6 +2,7 @@
 
 import { FC, useMemo } from "react";
 import { ElementsContext } from "@/contexts/contexts";
+import { ToolExecutionProvider } from "@/contexts/ToolExecutionContext";
 import type { ElementsContextType, Model } from "@/types";
 import { recommended } from "@/plugins";
 import { chart } from "@/plugins/chart";
@@ -62,27 +63,35 @@ export const MessageContent: FC<MessageContentProps> = ({
 
   return (
     <ElementsContext.Provider value={STUB_CONTEXT}>
-      <div className={className}>
-        {segments.map((seg, i) => {
-          if (seg.type === "text") {
-            // Skip purely-whitespace text segments between adjacent widgets so
-            // the layout doesn't get blank line-height runs.
-            if (seg.text.trim() === "") return null;
+      {/* Empty ToolExecutionProvider so generative-ui's <ActionButton> sees
+          isToolAvailable() === false and renders disabled instead of a
+          live-looking button that no-ops on click. Static viewers (session
+          detail panel, replay) intentionally don't run tool calls; the
+          ActionButton's defensive fallback would also catch this, but
+          mounting the provider explicitly makes the intent visible in code. */}
+      <ToolExecutionProvider tools={{}}>
+        <div className={className}>
+          {segments.map((seg, i) => {
+            if (seg.type === "text") {
+              // Skip purely-whitespace text segments between adjacent widgets
+              // so the layout doesn't get blank line-height runs.
+              if (seg.text.trim() === "") return null;
+              return (
+                <div key={i} className="whitespace-pre-wrap">
+                  {seg.text}
+                </div>
+              );
+            }
+            const Component = SUPPORTED_LANGUAGES[seg.lang];
+            if (!Component) return null;
             return (
-              <div key={i} className="whitespace-pre-wrap">
-                {seg.text}
+              <div key={i} className="my-2">
+                <Component code={seg.code} />
               </div>
             );
-          }
-          const Component = SUPPORTED_LANGUAGES[seg.lang];
-          if (!Component) return null;
-          return (
-            <div key={i} className="my-2">
-              <Component code={seg.code} />
-            </div>
-          );
-        })}
-      </div>
+          })}
+        </div>
+      </ToolExecutionProvider>
     </ElementsContext.Provider>
   );
 };
