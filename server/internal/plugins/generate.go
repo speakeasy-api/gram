@@ -466,10 +466,13 @@ type cursorMCPServer struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
-// Codex types — schema verified against
-// github.com/openai/codex/codex-rs/core-plugins/src/manifest.rs (plugin manifest)
-// and github.com/openai/codex/codex-rs/config/src/mcp_types.rs (.mcp.json server entries).
-// Note: Codex MCP server fields are snake_case, unlike Claude/Cursor camelCase.
+// Codex types — schema verified against openai/codex @
+// f802f0a3911655ac0e2876fceedf8ad833431df3 (2026-04-24):
+//   codex-rs/core-plugins/src/manifest.rs  — plugin manifest (rename_all = "camelCase")
+//   codex-rs/core-plugins/src/loader.rs    — .mcp.json wrapper format
+//   codex-rs/config/src/mcp_types.rs       — server transport (untagged; url selects streamable_http)
+// Note: MCP server entry fields are snake_case; plugin manifest fields are camelCase.
+// Refresh this pin when Codex's plugin support moves out of preview.
 
 type codexPluginMeta struct {
 	Name        string          `json:"name"`

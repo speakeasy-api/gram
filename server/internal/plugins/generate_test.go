@@ -42,10 +42,13 @@ func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 	expectedPaths := []string{
 		".claude-plugin/marketplace.json",
 		".cursor-plugin/marketplace.json",
+		".agents/plugins/marketplace.json",
 		"engineering-tools/.claude-plugin/plugin.json",
 		"engineering-tools/.mcp.json",
 		"engineering-tools-cursor/.cursor-plugin/plugin.json",
 		"engineering-tools-cursor/mcp.json",
+		"engineering-tools-codex/.codex-plugin/plugin.json",
+		"engineering-tools-codex/.mcp.json",
 	}
 	for _, p := range expectedPaths {
 		_, ok := files[p]
@@ -107,6 +110,95 @@ func TestGenerateCursorMCPConfigUsesEnvSyntax(t *testing.T) {
 
 	gramServer := mcpConfig.MCPServers["gram-server"]
 	require.Equal(t, "Bearer ${env:GRAM_API_KEY}", gramServer.Headers["Authorization"])
+}
+
+func TestGenerateCodexMCPConfigUsesBearerTokenEnvVar(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "gram-server", MCPURL: "https://app.getgram.ai/mcp/test"},
+				{DisplayName: "another", MCPURL: "https://app.getgram.ai/mcp/another"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	for name, server := range mcpConfig.MCPServers {
+		require.Equal(t, "GRAM_API_KEY", server.BearerTokenEnvVar, "server %s missing bearer_token_env_var", name)
+		require.Empty(t, server.HTTPHeaders, "server %s should not bake headers when no APIKey is set", name)
+		require.Empty(t, server.EnvHTTPHeaders, "server %s is private; env_http_headers is for public servers", name)
+	}
+}
+
+func TestGenerateCodexMCPConfigBakesInjectedAPIKey(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name:    "Test",
+			Slug:    "test",
+			Servers: []PluginServerInfo{{DisplayName: "gram-server", MCPURL: "https://app.getgram.ai/mcp/test"}},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+		APIKey:    "gram_test_key_123",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	server := mcpConfig.MCPServers["gram-server"]
+	require.Equal(t, "Bearer gram_test_key_123", server.HTTPHeaders["Authorization"])
+	require.Empty(t, server.BearerTokenEnvVar, "baked-key path must not also set bearer_token_env_var")
+}
+
+func TestGenerateCodexMCPConfigUsesEnvHTTPHeadersForPublicServers(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{{
+				DisplayName: "public-api",
+				MCPURL:      "https://app.getgram.ai/mcp/public",
+				IsPublic:    true,
+				EnvConfigs: []ServerEnvConfig{
+					{VariableName: "OPENAI_API_KEY", DisplayName: "X-OpenAI-Key"},
+				},
+			}},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	server := mcpConfig.MCPServers["public-api"]
+	require.Equal(t, "OPENAI_API_KEY", server.EnvHTTPHeaders["X-OpenAI-Key"])
+	require.Empty(t, server.BearerTokenEnvVar, "public servers should not set bearer_token_env_var")
+	require.Empty(t, server.HTTPHeaders, "public servers should not bake Authorization")
 }
 
 func TestGenerateReadmeEscapesMarkdownInTableCells(t *testing.T) {
