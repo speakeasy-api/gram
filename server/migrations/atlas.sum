@@ -1,4 +1,4 @@
-h1:E4wru1NBRkyguBVwOuNNZB29mOZ725US+Xih3I+qM0I=
+h1:zhjPpLQP0rCWjTgqTDLBrQgfitT791MJ1R0wIv8uhQI=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -138,3 +138,4 @@ h1:E4wru1NBRkyguBVwOuNNZB29mOZ725US+Xih3I+qM0I=
 20260423100002_external-mcp-tool-definitions-tool-urn-idx.sql h1:4gyE/U5pj1jyYV3i8b0jLsYaUK8/8Cv1pzllNVOpBNA=
 20260423131344_functions-machine-specs.sql h1:s3h0Cn9yFq8bAUsknM3Mdt+y5PmGDW9LjxDncy9u6fM=
 20260424180558_risk-policies-presidio-entities.sql h1:J2K6r/ugugOHgE4MtV0aJzi59x2WcQDdUcUgUyNEfUQ=
+20260424180559_risk-policies-default-pii.sql h1:Y65C/Ex0m8nIrW7C2IXpung3tJFTSox5HTY/gVPHvTM=
