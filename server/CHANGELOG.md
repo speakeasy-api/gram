@@ -1,5 +1,11 @@
 # server
 
+## 0.42.1
+
+### Patch Changes
+
+- 2b2d423: added per-skill time series data to the hooks summary API to power skill usage charts.
+
 ## 0.42.0
 
 ### Minor Changes
