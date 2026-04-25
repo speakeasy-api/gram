@@ -277,16 +277,21 @@ function PolicyCenterContent() {
               data. Create your first policy to get started.
             </Type>
             <Button
-              onClick={() =>
+              onClick={() => {
+                const { sources, presidioEntities } = categoriesToPayload(
+                  new Set<RuleCategory>(["secrets", "pii"]),
+                );
                 createMutation.mutate({
                   request: {
                     createRiskPolicyRequestBody: {
-                      name: "Secret Scanner",
+                      name: "Risk Scanner",
                       enabled: true,
+                      sources,
+                      presidioEntities,
                     },
                   },
-                })
-              }
+                });
+              }}
               disabled={createMutation.isPending}
             >
               {createMutation.isPending ? (
