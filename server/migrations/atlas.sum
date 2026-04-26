@@ -1,4 +1,4 @@
-h1:GT0DZFDAftSSXdPGkZhPO9cXcNFk5zzeb/311151rIc=
+h1:P9rAtV36Rusg7aNo5jBHVCue80ue51YmAATwm9eE+wI=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -140,3 +140,4 @@ h1:GT0DZFDAftSSXdPGkZhPO9cXcNFk5zzeb/311151rIc=
 20260424000001_plugin-github-connections.sql h1:ZQ3SVGPTDCTQQ4yekOw0ulg6CIi5PDeCoUP6W8ID/B0=
 20260424100001_drop-grant-resource-unique.sql h1:pBZbAEJ77hCRvWPpZ34hNYFVksgIifpjPcRaSW0QzZM=
 20260424100002_grant-selector-unique.sql h1:Aw0DO1C6Gxp1t8kcQrr21X9aK+YhgUpmQyqAx0NJTC4=
+20260424180455_assistants-add-created-by-user-id.sql h1:rxhY6U/NefDBWyw7DGTbYyadyEVO0phfYsiVLQJDti4=
