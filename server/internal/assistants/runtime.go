@@ -206,6 +206,8 @@ type runtimeState struct {
 	httpClient    *guardian.HTTPClient
 	cmd           *exec.Cmd
 	done          chan struct{}
+	ready         chan struct{}
+	bootErr       error
 	configured    bool
 	cleanupOnce   sync.Once
 	waitErr       error
@@ -330,31 +332,68 @@ func (m *RuntimeManager) Ensure(ctx context.Context, runtime assistantRuntimeRec
 	if err := validateRuntimeBackend(m, runtime.Backend); err != nil {
 		return RuntimeBackendEnsureResult{}, err
 	}
+	threadID := runtime.AssistantThreadID
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if state, ok := m.runtimes[runtime.AssistantThreadID]; ok {
+	if state, ok := m.runtimes[threadID]; ok {
 		select {
 		case <-state.done:
-			delete(m.runtimes, runtime.AssistantThreadID)
+			delete(m.runtimes, threadID)
 		default:
-			return RuntimeBackendEnsureResult{
-				ColdStart:           false,
-				NeedsConfigure:      !state.configured,
-				BackendMetadataJSON: nil,
-			}, nil
+			m.mu.Unlock()
+			return m.awaitReady(ctx, state)
 		}
 	}
 
-	state, err := m.startRuntimeLocked(ctx, runtime.AssistantThreadID)
+	state, err := m.beginStartLocked(threadID)
 	if err != nil {
+		m.mu.Unlock()
 		return RuntimeBackendEnsureResult{}, err
 	}
-	m.runtimes[runtime.AssistantThreadID] = state
+	m.runtimes[threadID] = state
+	m.mu.Unlock()
+
+	// The slow boot work (file copies, SSH, cmd start, health-check polling
+	// up to runtimeBootTimeout) runs without holding m.mu so concurrent
+	// Ensure calls for other threads can proceed in parallel. Concurrent
+	// callers for this same threadID block on state.ready below.
+	if err := m.completeStart(ctx, state); err != nil {
+		m.mu.Lock()
+		if cur, ok := m.runtimes[threadID]; ok && cur == state {
+			delete(m.runtimes, threadID)
+		}
+		m.mu.Unlock()
+		state.bootErr = err
+		// state.cmd is only set after cmd.Start succeeds, which is the same
+		// place waitForProcess is spawned. If cmd is nil here, no goroutine
+		// will close state.done; close it ourselves so awaiters unblock.
+		if state.cmd == nil {
+			close(state.done)
+		}
+		close(state.ready)
+		m.cleanupState(state)
+		return RuntimeBackendEnsureResult{}, err
+	}
+	close(state.ready)
 	return RuntimeBackendEnsureResult{
 		ColdStart:           true,
 		NeedsConfigure:      true,
+		BackendMetadataJSON: nil,
+	}, nil
+}
+
+func (m *RuntimeManager) awaitReady(ctx context.Context, state *runtimeState) (RuntimeBackendEnsureResult, error) {
+	select {
+	case <-state.ready:
+	case <-ctx.Done():
+		return RuntimeBackendEnsureResult{}, fmt.Errorf("await assistant runtime ready: %w", ctx.Err())
+	}
+	if state.bootErr != nil {
+		return RuntimeBackendEnsureResult{}, state.bootErr
+	}
+	return RuntimeBackendEnsureResult{
+		ColdStart:           false,
+		NeedsConfigure:      !state.configured,
 		BackendMetadataJSON: nil,
 	}, nil
 }
@@ -404,6 +443,13 @@ func (m *RuntimeManager) Stop(_ context.Context, runtime assistantRuntimeRecord)
 	m.mu.Unlock()
 	if !ok {
 		return nil
+	}
+	// Wait for in-progress boot to finish populating state fields so our
+	// cleanup does not race the boot goroutine. runtimeBootTimeout caps the
+	// wait; the +5s slack covers stopState's own 10s done timeout window.
+	select {
+	case <-state.ready:
+	case <-time.After(runtimeBootTimeout + 5*time.Second):
 	}
 	m.stopState(state)
 	return nil
@@ -531,7 +577,11 @@ func (m *RuntimeManager) getRuntime(threadID uuid.UUID) (*runtimeState, error) {
 	return state, nil
 }
 
-func (m *RuntimeManager) startRuntimeLocked(ctx context.Context, threadID uuid.UUID) (*runtimeState, error) {
+// beginStartLocked validates the manager and reserves a slot. It must be called
+// with m.mu held. Returns a state shell whose slot is allocated; the slow boot
+// work (file copies, SSH, cmd start, health-check polling) runs in
+// completeStart without holding m.mu.
+func (m *RuntimeManager) beginStartLocked(threadID uuid.UUID) (*runtimeState, error) {
 	if m.config.HostKind == RuntimeHostKindLinux && goruntime.GOOS != "linux" {
 		return nil, fmt.Errorf("assistant Firecracker runtime host kind %q requires linux hosts", m.config.HostKind)
 	}
@@ -540,23 +590,51 @@ func (m *RuntimeManager) startRuntimeLocked(ctx context.Context, threadID uuid.U
 	}
 
 	slot := m.allocateSlotLocked()
+	return &runtimeState{
+		threadID:      threadID,
+		slot:          slot,
+		workdir:       "",
+		tapName:       "",
+		hostIP:        netip.Addr{},
+		guestIP:       netip.Addr{},
+		apiBaseURL:    "",
+		fcConfigPath:  "",
+		fcSocketPath:  "",
+		stderr:        nil,
+		logFile:       nil,
+		httpClient:    nil,
+		cmd:           nil,
+		done:          make(chan struct{}),
+		ready:         make(chan struct{}),
+		bootErr:       nil,
+		configured:    false,
+		cleanupOnce:   sync.Once{},
+		waitErr:       nil,
+		stopRequested: atomic.Bool{},
+	}, nil
+}
+
+func (m *RuntimeManager) completeStart(ctx context.Context, state *runtimeState) error {
+	threadID := state.threadID
+	slot := state.slot
+
 	hostIP, guestIP, err := slotAddresses(m.config.NetworkBaseCIDR, slot)
 	if err != nil {
-		m.releaseSlotLocked(slot)
-		return nil, err
+		return err
 	}
+	state.hostIP = hostIP
+	state.guestIP = guestIP
+	state.apiBaseURL = fmt.Sprintf("http://%s:%d", guestIP.String(), m.config.GuestAPIPort)
 
 	workdir := filepath.Join(m.config.Workdir, threadID.String())
 	if err := os.MkdirAll(workdir, 0750); err != nil {
-		m.releaseSlotLocked(slot)
-		return nil, fmt.Errorf("create assistant runtime workdir: %w", err)
+		return fmt.Errorf("create assistant runtime workdir: %w", err)
 	}
+	state.workdir = workdir
 
 	rootfsPath := filepath.Join(workdir, "rootfs.ext4")
 	if err := copyFile(m.config.RootFSPath, rootfsPath, 0640); err != nil {
-		_ = os.RemoveAll(workdir)
-		m.releaseSlotLocked(slot)
-		return nil, fmt.Errorf("copy assistant runtime rootfs: %w", err)
+		return fmt.Errorf("copy assistant runtime rootfs: %w", err)
 	}
 
 	tapName := fmt.Sprintf("%s%d", m.config.TapPrefix, slot)
@@ -565,13 +643,14 @@ func (m *RuntimeManager) startRuntimeLocked(ctx context.Context, threadID uuid.U
 	// which a repo-nested workdir easily exceeds. Use a short per-slot path in
 	// /run (tmpfs) — unique across concurrent runtimes and removed by cleanup.
 	fcSocketPath := fmt.Sprintf("/run/gramfc-%d.socket", slot)
+	state.tapName = tapName
+	state.fcConfigPath = fcConfigPath
+	state.fcSocketPath = fcSocketPath
 
 	// Prepare tap + routing + orphan-socket cleanup in a single SSH round-trip
 	// to save ~2s of sudo/PAM overhead versus running them as separate calls.
 	if err := m.prepareSlotHost(ctx, tapName, hostIP, fcSocketPath); err != nil {
-		_ = os.RemoveAll(workdir)
-		m.releaseSlotLocked(slot)
-		return nil, err
+		return err
 	}
 	fcConfig := firecrackerConfig{
 		BootSource: firecrackerBootSource{
@@ -603,28 +682,22 @@ func (m *RuntimeManager) startRuntimeLocked(ctx context.Context, threadID uuid.U
 	}
 	configJSON, err := json.Marshal(fcConfig)
 	if err != nil {
-		_ = m.deleteTapDevice(context.Background(), tapName)
-		_ = os.RemoveAll(workdir)
-		m.releaseSlotLocked(slot)
-		return nil, fmt.Errorf("marshal assistant firecracker config: %w", err)
+		return fmt.Errorf("marshal assistant firecracker config: %w", err)
 	}
 	if err := os.WriteFile(fcConfigPath, configJSON, 0600); err != nil {
-		_ = m.deleteTapDevice(context.Background(), tapName)
-		_ = os.RemoveAll(workdir)
-		m.releaseSlotLocked(slot)
-		return nil, fmt.Errorf("write assistant firecracker config: %w", err)
+		return fmt.Errorf("write assistant firecracker config: %w", err)
 	}
 
 	stderr := &lockedBuffer{
 		mu:  sync.Mutex{},
 		buf: bytes.Buffer{},
 	}
+	state.stderr = stderr
+	state.httpClient = m.newRuntimeHTTPClient()
+
 	cmd, err := m.startFirecrackerCommand(ctx, fcConfigPath, fcSocketPath)
 	if err != nil {
-		_ = m.deleteTapDevice(context.Background(), tapName)
-		_ = os.RemoveAll(workdir)
-		m.releaseSlotLocked(slot)
-		return nil, err
+		return err
 	}
 	cmd.Dir = workdir
 	// Log file lives in the workdir ROOT so cleanupState's workdir removal
@@ -633,51 +706,26 @@ func (m *RuntimeManager) startRuntimeLocked(ctx context.Context, threadID uuid.U
 	runtimeLogPath := filepath.Join(filepath.Dir(workdir), fmt.Sprintf("%s.log", threadID.String()))
 	runtimeLogFile, err := os.OpenFile(runtimeLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0640) //nolint:gosec // runtimeLogPath is derived from the manager's own workdir, not user input
 	if err != nil {
-		_ = m.deleteTapDevice(context.Background(), tapName)
-		_ = os.RemoveAll(workdir)
-		m.releaseSlotLocked(slot)
-		return nil, fmt.Errorf("open runtime log file: %w", err)
+		return fmt.Errorf("open runtime log file: %w", err)
 	}
+	state.logFile = runtimeLogFile
 	m.updateLatestLogSymlink(runtimeLogPath)
 	cmd.Stdout = io.MultiWriter(stderr, runtimeLogFile)
 	cmd.Stderr = io.MultiWriter(stderr, runtimeLogFile)
 
 	if err := cmd.Start(); err != nil {
-		_ = m.deleteTapDevice(context.Background(), tapName)
-		_ = os.RemoveAll(workdir)
-		m.releaseSlotLocked(slot)
-		return nil, fmt.Errorf("start firecracker runtime: %w", err)
+		return fmt.Errorf("start firecracker runtime: %w", err)
 	}
-
-	state := &runtimeState{
-		threadID:      threadID,
-		slot:          slot,
-		workdir:       workdir,
-		tapName:       tapName,
-		hostIP:        hostIP,
-		guestIP:       guestIP,
-		apiBaseURL:    fmt.Sprintf("http://%s:%d", guestIP.String(), m.config.GuestAPIPort),
-		fcConfigPath:  fcConfigPath,
-		fcSocketPath:  fcSocketPath,
-		stderr:        stderr,
-		logFile:       runtimeLogFile,
-		httpClient:    m.newRuntimeHTTPClient(),
-		cmd:           cmd,
-		done:          make(chan struct{}),
-		configured:    false,
-		cleanupOnce:   sync.Once{},
-		waitErr:       nil,
-		stopRequested: atomic.Bool{},
-	}
+	state.cmd = cmd
 
 	go m.waitForProcess(threadID, state)
 
 	if err := m.waitForRuntimeHealth(ctx, state); err != nil {
 		m.stopState(state)
-		return nil, fmt.Errorf("wait for assistant runtime health: %w; stderr=%s", err, truncateForMetadata(state.stderr.String(), 32*1024))
+		return fmt.Errorf("wait for assistant runtime health: %w; stderr=%s", err, truncateForMetadata(state.stderr.String(), 32*1024))
 	}
 
-	return state, nil
+	return nil
 }
 
 func (m *RuntimeManager) waitForProcess(threadID uuid.UUID, state *runtimeState) {

@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 const issuer = "gram-assistants"
@@ -56,6 +57,7 @@ type Manager struct {
 	tokens     *tokenrepo.Queries
 	orgs       *organizationsrepo.Queries
 	projects   *projectsrepo.Queries
+	users      *usersrepo.Queries
 	authz      *authz.Engine
 	revocation *revocationCache
 }
@@ -66,6 +68,7 @@ func New(jwtSecret string, db *pgxpool.Pool, authzEngine *authz.Engine) *Manager
 		tokens:     tokenrepo.New(db),
 		orgs:       organizationsrepo.New(db),
 		projects:   projectsrepo.New(db),
+		users:      usersrepo.New(db),
 		authz:      authzEngine,
 		revocation: newRevocationCache(revocationCacheTTL),
 	}
@@ -181,23 +184,25 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "unable to load assistant organization")
 	}
 
+	owner, err := m.users.GetUser(ctx, claims.UserID)
+	if err != nil {
+		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "unable to load assistant owner")
+	}
+
 	if err := m.checkRevocation(ctx, threadID, assistantID); err != nil {
 		return ctx, nil, err
 	}
 
+	email := owner.Email
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-		ActiveOrganizationID: claims.OrgID,
-		// UserID carries the assistant owner captured at mint time. It may
-		// outlive an ownership transfer by up to the token TTL; the next
-		// runtime /configure or /turn mints a fresh token against the new
-		// owner.
-		UserID:                claims.UserID,
+		ActiveOrganizationID:  claims.OrgID,
+		UserID:                owner.ID,
 		ExternalUserID:        "",
 		APIKeyID:              "",
 		SessionID:             nil,
 		ProjectID:             &project.ID,
 		OrganizationSlug:      org.Slug,
-		Email:                 nil,
+		Email:                 &email,
 		ProjectSlug:           &project.Slug,
 		AccountType:           org.GramAccountType,
 		Whitelisted:           org.Whitelisted,
