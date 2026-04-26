@@ -27,7 +27,7 @@ type LogRiskPolicyCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID
+	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 }
 
@@ -69,7 +69,7 @@ type LogRiskPolicyUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID
+	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 
 	SnapshotBefore *types.RiskPolicy
@@ -125,7 +125,7 @@ type LogRiskPolicyDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID
+	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 }
 
@@ -167,7 +167,7 @@ type LogRiskPolicyTriggerEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID
+	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 }
 

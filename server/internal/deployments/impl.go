@@ -899,7 +899,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 
 		DeploymentURN: urn.NewDeployment(newID),
 
-		SourceDeploymentID: urn.NewDeployment(deploymentID),
+		SourceDeploymentURN: urn.NewDeployment(deploymentID),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment redeploy audit log").Log(ctx, s.logger)
 	}

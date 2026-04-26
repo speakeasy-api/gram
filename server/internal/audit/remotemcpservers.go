@@ -26,7 +26,7 @@ type LogRemoteMcpServerCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RemoteMcpServerID  uuid.UUID
+	RemoteMcpServerID  uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RemoteMcpServer and migrate to RemoteMcpServerURN; pending team discussion
 	RemoteMcpServerURL string
 }
 
@@ -68,7 +68,7 @@ type LogRemoteMcpServerUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RemoteMcpServerID  uuid.UUID
+	RemoteMcpServerID  uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RemoteMcpServer and migrate to RemoteMcpServerURN; pending team discussion
 	RemoteMcpServerURL string
 	SnapshotBefore     *types.RemoteMcpServer
 	SnapshotAfter      *types.RemoteMcpServer
@@ -123,7 +123,7 @@ type LogRemoteMcpServerDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RemoteMcpServerID  uuid.UUID
+	RemoteMcpServerID  uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RemoteMcpServer and migrate to RemoteMcpServerURN; pending team discussion
 	RemoteMcpServerURL string
 }
 
