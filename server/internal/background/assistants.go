@@ -50,16 +50,10 @@ func assistantThreadWorkflowID(threadID uuid.UUID) string {
 }
 
 func SignalAssistantCoordinator(ctx context.Context, temporalEnv *tenv.Environment, assistantID uuid.UUID) error {
-	if temporalEnv == nil {
-		return fmt.Errorf("temporal environment is not configured")
-	}
 	return signalAssistantCoordinator(ctx, temporalEnv.Client(), string(temporalEnv.Queue()), assistantID)
 }
 
 func SignalAssistantThread(ctx context.Context, temporalEnv *tenv.Environment, projectID, threadID uuid.UUID) error {
-	if temporalEnv == nil {
-		return fmt.Errorf("temporal environment is not configured")
-	}
 	return signalAssistantThread(ctx, temporalEnv.Client(), string(temporalEnv.Queue()), projectID, threadID)
 }
 

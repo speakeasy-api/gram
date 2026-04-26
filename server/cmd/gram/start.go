@@ -510,10 +510,9 @@ func newStartCommand() *cli.Command {
 			}
 
 			if temporalEnv == nil {
-				logger.WarnContext(ctx, "temporal disabled")
-			} else {
-				shutdownFuncs = append(shutdownFuncs, shutdown)
+				return errors.New("insufficient options to create temporal client")
 			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 
@@ -813,7 +812,7 @@ func newStartCommand() *cli.Command {
 
 			group := pool.New()
 
-			if temporalEnv != nil && c.Bool("dev-single-process") {
+			if c.Bool("dev-single-process") {
 				workerInterruptCh := make(chan any)
 				group.Go(func() {
 					<-sigctx.Done()
@@ -871,9 +870,8 @@ func newStartCommand() *cli.Command {
 					DisableProfiling: false,
 				}
 
-				temporals := []*o11y.NamedResource[client.Client]{}
-				if temporalEnv != nil {
-					temporals = append(temporals, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalEnv.Client()})
+				temporals := []*o11y.NamedResource[client.Client]{
+					{Name: "default", Resource: temporalEnv.Client()},
 				}
 
 				listenAddr := srv.Addr
