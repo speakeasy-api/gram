@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -158,7 +159,7 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 		payload.Toolsets,
 		normalizeWarmTTLSeconds(payload.WarmTTLSeconds),
 		normalizeMaxConcurrency(payload.MaxConcurrency),
-		normalizeStatus(payload.Status),
+		conv.PtrValOrEmpty(payload.Status, StatusActive),
 	)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "create assistant")

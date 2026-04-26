@@ -619,11 +619,7 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 	if err := appsRepo.MarkFlyAppReaped(ctx, repo.MarkFlyAppReapedParams{
 		ID:        app.ID,
 		ReapError: conv.ToPGTextEmpty(reapErrorMessage),
-		ReapedAt: pgtype.Timestamptz{
-			Time:             time.Now().UTC(),
-			Valid:            true,
-			InfinityModifier: 0,
-		},
+		ReapedAt:  conv.ToPGTimestamptz(time.Now().UTC()),
 	}); err != nil {
 		return fmt.Errorf("mark app as reaped: %w", err)
 	}

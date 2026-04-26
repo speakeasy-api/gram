@@ -470,11 +470,7 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 	// Calculate expiration time
 	var expiresAt pgtype.Timestamptz
 	if tokenResp.ExpiresIn > 0 {
-		expiresAt = pgtype.Timestamptz{
-			Time:             time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second),
-			Valid:            true,
-			InfinityModifier: pgtype.Finite,
-		}
+		expiresAt = conv.ToPGTimestamptz(time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second))
 	}
 
 	// Store token in database
@@ -1043,8 +1039,8 @@ func (s *ExternalOAuthService) getOrRegisterClient(
 		OauthServerIssuer:     oauthConfig.Issuer,
 		ClientID:              dcrResp.ClientID,
 		ClientSecretEncrypted: conv.PtrToPGTextEmpty(encryptedSecret),
-		ClientIDIssuedAt:      pgtype.Timestamptz{Time: conv.PtrValOr(issuedAt, time.Time{}), Valid: issuedAt != nil, InfinityModifier: pgtype.Finite},
-		ClientSecretExpiresAt: pgtype.Timestamptz{Time: conv.PtrValOr(expiresAt, time.Time{}), Valid: expiresAt != nil, InfinityModifier: pgtype.Finite},
+		ClientIDIssuedAt:      conv.PtrToPGTimestamptz(issuedAt),
+		ClientSecretExpiresAt: conv.PtrToPGTimestamptz(expiresAt),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("store client registration: %w", err)

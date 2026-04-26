@@ -6,6 +6,7 @@ import (
 	"math"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -145,6 +146,30 @@ func PtrToPGTextEmpty(t *string) pgtype.Text {
 	}
 
 	return pgtype.Text{String: *t, Valid: *t != ""}
+}
+
+// ToPGTimestamptz converts a time.Time to a pgtype.Timestamptz with Valid set
+// to true and InfinityModifier set to Finite.
+func ToPGTimestamptz(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: t, Valid: true, InfinityModifier: pgtype.Finite}
+}
+
+// PtrToPGTimestamptz converts a *time.Time to a pgtype.Timestamptz. If the
+// pointer is nil, the result has Valid set to false.
+func PtrToPGTimestamptz(t *time.Time) pgtype.Timestamptz {
+	if t == nil {
+		return pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite}
+	}
+	return pgtype.Timestamptz{Time: *t, Valid: true, InfinityModifier: pgtype.Finite}
+}
+
+// PtrToPGInt8 converts an int pointer to a pgtype.Int8. If the pointer is nil,
+// the result has Valid set to false.
+func PtrToPGInt8(v *int) pgtype.Int8 {
+	if v == nil {
+		return pgtype.Int8{Int64: 0, Valid: false}
+	}
+	return pgtype.Int8{Int64: int64(*v), Valid: true}
 }
 
 // PtrToPGBool converts a bool pointer to a pgtype.Bool. If the pointer is nil,
@@ -291,4 +316,17 @@ func ClampedIntToUint8(v int) (out uint8, clamped bool) {
 		return 0, true
 	}
 	return uint8(v), false
+}
+
+// SafeInt converts int64 to int, clamping at the platform's int boundaries.
+func SafeInt(v int64) int {
+	const maxInt = int64(^uint(0) >> 1)
+	const minInt = -maxInt - 1
+	if v > maxInt {
+		return int(maxInt)
+	}
+	if v < minInt {
+		return int(minInt)
+	}
+	return int(v)
 }

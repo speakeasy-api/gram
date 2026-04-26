@@ -66,53 +66,6 @@ func assistantValidationError(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", errAssistantValidation, fmt.Sprintf(format, args...))
 }
 
-func pgTimestamp(value time.Time) pgtype.Timestamptz {
-	return pgtype.Timestamptz{Time: value, InfinityModifier: pgtype.Finite, Valid: true}
-}
-
-func pgText(value string) pgtype.Text {
-	return pgtype.Text{String: value, Valid: true}
-}
-
-func pgTextPtr(value *string) pgtype.Text {
-	if value == nil {
-		return pgtype.Text{String: "", Valid: false}
-	}
-	return pgText(*value)
-}
-
-func pgInt8Ptr(value *int) pgtype.Int8 {
-	if value == nil {
-		return pgtype.Int8{Int64: 0, Valid: false}
-	}
-	return pgtype.Int8{Int64: int64(*value), Valid: true}
-}
-
-func intToInt32(value int) int32 {
-	const maxInt32 = int64(1<<31 - 1)
-	const minInt32 = -1 << 31
-	asInt64 := int64(value)
-	if asInt64 > maxInt32 {
-		return int32(maxInt32)
-	}
-	if asInt64 < minInt32 {
-		return int32(minInt32)
-	}
-	return int32(value)
-}
-
-func int64ToInt(value int64) int {
-	const maxInt = int64(^uint(0) >> 1)
-	const minInt = -maxInt - 1
-	if value > maxInt {
-		return int(maxInt)
-	}
-	if value < minInt {
-		return int(minInt)
-	}
-	return int(value)
-}
-
 type assistantRecord struct {
 	ID              uuid.UUID
 	ProjectID       uuid.UUID
@@ -190,8 +143,8 @@ func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistan
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
-		WarmTTLSeconds:  int64ToInt(row.WarmTtlSeconds),
-		MaxConcurrency:  int64ToInt(row.MaxConcurrency),
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -209,8 +162,8 @@ func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRe
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
-		WarmTTLSeconds:  int64ToInt(row.WarmTtlSeconds),
-		MaxConcurrency:  int64ToInt(row.MaxConcurrency),
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -228,8 +181,8 @@ func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecor
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
-		WarmTTLSeconds:  int64ToInt(row.WarmTtlSeconds),
-		MaxConcurrency:  int64ToInt(row.MaxConcurrency),
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -247,8 +200,8 @@ func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
-		WarmTTLSeconds:  int64ToInt(row.WarmTtlSeconds),
-		MaxConcurrency:  int64ToInt(row.MaxConcurrency),
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -266,8 +219,8 @@ func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistan
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
-		WarmTTLSeconds:  int64ToInt(row.WarmTtlSeconds),
-		MaxConcurrency:  int64ToInt(row.MaxConcurrency),
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -415,10 +368,10 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	runtimeAssistantIDs, err := queries.ReapStuckAssistantRuntimes(ctx, assistantrepo.ReapStuckAssistantRuntimesParams{
 		StoppedState:    runtimeStateStopped,
 		StartingState:   runtimeStateStarting,
-		StartingCutoff:  pgTimestamp(now.Add(-runtimeStartupReapGrace)),
+		StartingCutoff:  conv.ToPGTimestamptz(now.Add(-runtimeStartupReapGrace)),
 		ActiveState:     runtimeStateActive,
-		WarmCutoff:      pgTimestamp(now.Add(-runtimeWarmExpiryReapGrace)),
-		HeartbeatCutoff: pgTimestamp(now.Add(-runtimeProcessingLeaseGrace)),
+		WarmCutoff:      conv.ToPGTimestamptz(now.Add(-runtimeWarmExpiryReapGrace)),
+		HeartbeatCutoff: conv.ToPGTimestamptz(now.Add(-runtimeProcessingLeaseGrace)),
 	})
 	if err != nil {
 		return out, fmt.Errorf("reap stuck assistant runtimes: %w", err)
@@ -435,7 +388,7 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	eventAssistantIDs, err := queries.RequeueStaleAssistantEvents(ctx, assistantrepo.RequeueStaleAssistantEventsParams{
 		PendingStatus:    eventStatusPending,
 		ProcessingStatus: eventStatusProcessing,
-		UpdatedBefore:    pgTimestamp(now.Add(-eventProcessingRequeueGrace)),
+		UpdatedBefore:    conv.ToPGTimestamptz(now.Add(-eventProcessingRequeueGrace)),
 	})
 	if err != nil {
 		return out, fmt.Errorf("reap stuck assistant thread events: %w", err)
@@ -505,13 +458,6 @@ func normalizeWarmTTLSeconds(v *int) int {
 func normalizeMaxConcurrency(v *int) int {
 	if v == nil || *v < 1 {
 		return DefaultMaxConcurrency
-	}
-	return *v
-}
-
-func normalizeStatus(v *string) string {
-	if v == nil || *v == "" {
-		return StatusActive
 	}
 	return *v
 }
@@ -853,12 +799,12 @@ func (s *ServiceCore) UpdateAssistant(
 
 	queries := assistantrepo.New(tx)
 	updated, err := queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
-		Name:           pgTextPtr(name),
-		Model:          pgTextPtr(model),
-		Instructions:   pgTextPtr(instructions),
-		WarmTtlSeconds: pgInt8Ptr(warmTTLSeconds),
-		MaxConcurrency: pgInt8Ptr(maxConcurrency),
-		Status:         pgTextPtr(status),
+		Name:           conv.PtrToPGText(name),
+		Model:          conv.PtrToPGText(model),
+		Instructions:   conv.PtrToPGText(instructions),
+		WarmTtlSeconds: conv.PtrToPGInt8(warmTTLSeconds),
+		MaxConcurrency: conv.PtrToPGInt8(maxConcurrency),
+		Status:         conv.PtrToPGText(status),
 		AssistantID:    assistantID,
 		ProjectID:      projectID,
 	})
@@ -917,6 +863,10 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	if err != nil {
 		return EnqueueResult{}, err
 	}
+	triggerInstanceID, err := conv.PtrToNullUUID(conv.PtrEmpty(task.TriggerInstanceID))
+	if err != nil {
+		return EnqueueResult{}, fmt.Errorf("parse trigger instance id: %w", err)
+	}
 	chatID := deterministicChatID(assistant.ID, task.CorrelationID)
 
 	tx, err := s.db.Begin(ctx)
@@ -932,7 +882,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
-		Title:          pgText(assistant.Name),
+		Title:          conv.ToPGText(assistant.Name),
 	}); err != nil {
 		return EnqueueResult{}, fmt.Errorf("upsert assistant chat: %w", err)
 	}
@@ -954,7 +904,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		AssistantThreadID:     threadID,
 		AssistantID:           assistant.ID,
 		ProjectID:             assistant.ProjectID,
-		TriggerInstanceID:     nullableUUID(task.TriggerInstanceID),
+		TriggerInstanceID:     triggerInstanceID,
 		EventID:               task.EventID,
 		CorrelationID:         task.CorrelationID,
 		Status:                eventStatusPending,
@@ -1033,14 +983,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 	}
 }
 
-func nullableUUID(raw string) uuid.NullUUID {
-	parsed, err := uuid.Parse(raw)
-	if err != nil {
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	}
-	return uuid.NullUUID{UUID: parsed, Valid: true}
-}
-
 func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.UUID) ([]uuid.UUID, error) {
 	assistant, err := s.getAssistantForDispatch(ctx, assistantID)
 	if err != nil {
@@ -1081,7 +1023,7 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 		return nil, fmt.Errorf("count active assistant runtimes: %w", err)
 	}
 
-	available := max(assistant.MaxConcurrency-int64ToInt(activeCount), 0)
+	available := max(assistant.MaxConcurrency-conv.SafeInt(activeCount), 0)
 	if available > 0 {
 		coldThreads, err := queries.ListColdPendingThreadsForAdmit(ctx, assistantrepo.ListColdPendingThreadsForAdmitParams{
 			ProjectID:     assistant.ProjectID,
@@ -1089,7 +1031,7 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 			PendingStatus: eventStatusPending,
 			StartingState: runtimeStateStarting,
 			ActiveState:   runtimeStateActive,
-			LimitCount:    intToInt32(available),
+			LimitCount:    conv.SafeInt32(available),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("select cold assistant threads: %w", err)
@@ -1402,7 +1344,7 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 	completionsURL := runtimeServerURL.JoinPath("chat", "completions").String()
 	return runtimeStartupConfig{
 		Model:          assistant.Model,
-		Instructions:   optionalString(instructions),
+		Instructions:   conv.PtrEmpty(instructions),
 		AuthToken:      token,
 		CompletionsURL: &completionsURL,
 		ChatID:         thread.ChatID.String(),
@@ -1539,8 +1481,8 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
-		WarmTTLSeconds:  int64ToInt(row.WarmTtlSeconds),
-		MaxConcurrency:  int64ToInt(row.MaxConcurrency),
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -1689,7 +1631,7 @@ func (s *ServiceCore) claimNextPendingEvent(ctx context.Context, projectID, thre
 			Status:                row.Status,
 			NormalizedPayloadJSON: row.NormalizedPayloadJson,
 			SourcePayloadJSON:     row.SourcePayloadJson,
-			Attempts:              int64ToInt(row.Attempts),
+			Attempts:              conv.SafeInt(row.Attempts),
 			LastError:             row.LastError,
 		}, true, nil
 	}
@@ -1710,7 +1652,7 @@ func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid
 func (s *ServiceCore) failEvent(ctx context.Context, projectID, eventID uuid.UUID, runErr error) error {
 	err := assistantrepo.New(s.db).FailAssistantThreadEvent(ctx, assistantrepo.FailAssistantThreadEventParams{
 		FailedStatus: eventStatusFailed,
-		LastError:    pgText(runErr.Error()),
+		LastError:    conv.ToPGText(runErr.Error()),
 		EventID:      eventID,
 		ProjectID:    projectID,
 	})
@@ -1723,7 +1665,7 @@ func (s *ServiceCore) failEvent(ctx context.Context, projectID, eventID uuid.UUI
 func (s *ServiceCore) resetEventToPending(ctx context.Context, projectID, eventID uuid.UUID, runErr error) error {
 	err := assistantrepo.New(s.db).ResetAssistantThreadEventToPending(ctx, assistantrepo.ResetAssistantThreadEventToPendingParams{
 		PendingStatus: eventStatusPending,
-		LastError:     pgText(runErr.Error()),
+		LastError:     conv.ToPGText(runErr.Error()),
 		EventID:       eventID,
 		ProjectID:     projectID,
 	})
@@ -1736,7 +1678,7 @@ func (s *ServiceCore) resetEventToPending(ctx context.Context, projectID, eventI
 func (s *ServiceCore) setRuntimeActive(ctx context.Context, projectID, runtimeID uuid.UUID, warmUntil time.Time) error {
 	err := assistantrepo.New(s.db).SetAssistantRuntimeActive(ctx, assistantrepo.SetAssistantRuntimeActiveParams{
 		ActiveState: runtimeStateActive,
-		WarmUntil:   pgTimestamp(warmUntil),
+		WarmUntil:   conv.ToPGTimestamptz(warmUntil),
 		RuntimeID:   runtimeID,
 		ProjectID:   projectID,
 	})
@@ -1780,11 +1722,4 @@ func (s *ServiceCore) stopRuntimeRecord(ctx context.Context, projectID, threadID
 		return fmt.Errorf("stop assistant runtime: %w", err)
 	}
 	return nil
-}
-
-func optionalString(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
 }

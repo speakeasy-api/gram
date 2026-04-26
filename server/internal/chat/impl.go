@@ -366,13 +366,13 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 	if payload.From != nil {
 		t, err := time.Parse(time.RFC3339, *payload.From)
 		if err == nil {
-			fromTime = pgtype.Timestamptz{Time: t, Valid: true, InfinityModifier: pgtype.Finite}
+			fromTime = conv.ToPGTimestamptz(t)
 		}
 	}
 	if payload.To != nil {
 		t, err := time.Parse(time.RFC3339, *payload.To)
 		if err == nil {
-			toTime = pgtype.Timestamptz{Time: t, Valid: true, InfinityModifier: pgtype.Finite}
+			toTime = conv.ToPGTimestamptz(t)
 		}
 	}
 
