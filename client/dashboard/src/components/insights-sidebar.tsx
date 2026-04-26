@@ -1,13 +1,28 @@
+import { useAiInsightsMcpConfig } from "@/hooks/useAiInsightsMcpConfig";
 import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
 import { useAssistantRuntime } from "@assistant-ui/react";
 import type { ElementsConfig } from "@gram-ai/elements";
 import { Chat, GramElementsProvider } from "@gram-ai/elements";
+import {
+  invalidateAllInsightsListMemories,
+  invalidateAllInsightsListProposals,
+  useInsightsListMemories,
+} from "@gram/client/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
-import { ChevronRight, Sparkles, Terminal, Wand2 } from "lucide-react";
+import {
+  ChevronRight,
+  RotateCw,
+  Sparkles,
+  Terminal,
+  Wand2,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
+import { MemoryPill } from "./insights/MemoryPill";
+import { ProposalsPanel } from "./insights/ProposalsPanel";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
 export type { InsightsConfigOptions } from "./insights-context";
@@ -157,10 +172,76 @@ export function InsightsProvider({
     text: string;
     nonce: number;
   } | null>(null);
+  // Bumping this remounts <GramElementsProvider> via the `key` prop, which
+  // drops the chat thread + forces a fresh chatSessions.create call. Use when
+  // the chat session goes stale (token expired, MCP env decryption failure
+  // since fixed, etc.) and the user wants a clean slate without a full reload.
+  const [sessionEpoch, setSessionEpoch] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const queryClient = useQueryClient();
+  const refreshSession = useCallback(() => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    // (1) Remount the chat provider so the chat session token + thread reset.
+    setSessionEpoch((e) => e + 1);
+    // (2) Invalidate the proposals + memories caches so the panels pick up
+    // anything the agent created since the last fetch (the agent's MCP
+    // mutations don't tickle React Query on the dashboard side).
+    void invalidateAllInsightsListProposals(queryClient);
+    void invalidateAllInsightsListMemories(queryClient);
+    // 700ms gives the spin enough visual presence to register as a deliberate
+    // action without feeling laggy. The provider remounts immediately on epoch
+    // change; the timeout is purely UX feedback.
+    window.setTimeout(() => setIsRefreshing(false), 700);
+  }, [isRefreshing, queryClient]);
   const { theme } = useMoonshineConfig();
 
+  // Ai-insights MCP lives at the same Gram origin as the rest of the
+  // dashboard. We reuse the observability MCP config's transport/auth (api
+  // url, session, environment headers) because both MCPs share the same
+  // server — different URLs on the same origin don't need different auth.
+  // If that assumption ever breaks (e.g. the ai-insights MCP moves to a
+  // different host), this is the place to split transport per MCP.
+  const aiInsightsMcpConfig = useAiInsightsMcpConfig();
+
   // Resolve effective values: per-page override wins, fall back to defaults.
-  const mcpConfig = override?.mcpConfig ?? defaultMcpConfig;
+  const rawMcpConfig = override?.mcpConfig ?? defaultMcpConfig;
+  const mcpConfig = useMemo<typeof rawMcpConfig>(() => {
+    const observabilityMcp = rawMcpConfig.mcp;
+    const aiInsightsMcp = aiInsightsMcpConfig.mcp;
+    const urls: string[] = [];
+    if (typeof observabilityMcp === "string" && observabilityMcp) {
+      urls.push(observabilityMcp);
+    } else if (Array.isArray(observabilityMcp)) {
+      urls.push(...observabilityMcp);
+    }
+    if (typeof aiInsightsMcp === "string" && aiInsightsMcp) {
+      urls.push(aiInsightsMcp);
+    } else if (Array.isArray(aiInsightsMcp)) {
+      urls.push(...aiInsightsMcp);
+    }
+    if (urls.length === 0) {
+      return rawMcpConfig;
+    }
+    // Pages narrow the observability tool list via `tools.toolsToInclude`
+    // (e.g. ChatLogs.tsx whitelists just gram_search_logs/gram_search_chats).
+    // Elements applies that filter to the *merged* tool list across all MCPs,
+    // which would silently drop every insights_* tool from the ai-insights
+    // MCP. Wrap the page's filter so insights_* tools are always allowed
+    // through regardless of how the observability surface is narrowed.
+    const rawFilter = rawMcpConfig.tools?.toolsToInclude;
+    const wrappedFilter = ({ toolName }: { toolName: string }) => {
+      if (toolName.startsWith("insights_")) return true;
+      if (typeof rawFilter === "function") return rawFilter({ toolName });
+      if (Array.isArray(rawFilter)) return rawFilter.includes(toolName);
+      return true; // No filter → include everything.
+    };
+    return {
+      ...rawMcpConfig,
+      mcp: urls,
+      tools: { ...rawMcpConfig.tools, toolsToInclude: wrappedFilter },
+    };
+  }, [rawMcpConfig, aiInsightsMcpConfig]);
   const title = override?.title ?? defaultTitle;
   const subtitle = override?.subtitle ?? defaultSubtitle;
   const suggestions = override?.suggestions ?? defaultSuggestions;
@@ -169,8 +250,46 @@ export function InsightsProvider({
 
   const sidebarWidth = `min(${SIDEBAR_MAX_WIDTH}px, ${SIDEBAR_MAX_PERCENT}vw)`;
 
+  // Memory slice — only fetch when the sidebar is open. The chat agent
+  // sees the top-20 most-recently-used memories injected as
+  // <workspace_memory> bullets at the top of its system prompt.
+  // throwOnError: false — a 401/5xx must degrade to "no memories" so the
+  // entire dashboard isn't replaced by the global error boundary.
+  const { data: memoriesData } = useInsightsListMemories(
+    { limit: 20 },
+    undefined,
+    {
+      enabled: isExpanded,
+      throwOnError: false,
+      // Poll while the sidebar is open — picks up memories the agent creates
+      // during the same conversation without requiring a manual refresh.
+      refetchInterval: 10_000,
+    },
+  );
+  const memories = memoriesData?.memories ?? [];
+  const workspaceMemoryBlock = useMemo(() => {
+    if (memories.length === 0) return "";
+    const bullets = memories
+      .map((m) => {
+        const tagPart = m.tags.length > 0 ? ` [${m.tags.join(", ")}]` : "";
+        return `- (${m.kind})${tagPart} ${m.content}`;
+      })
+      .join("\n");
+    return `<workspace_memory>
+Relevant facts, playbooks, and findings from prior sessions in this project. Consult these before asking the user for context they may have already provided.
+${bullets}
+</workspace_memory>
+
+`;
+  }, [memories]);
+
+  // Investigation protocol paragraph (verbatim from the design spec). Always
+  // appended; tells the agent how to structure multi-step investigations.
+  const investigationProtocol = `
+When asked to diagnose an issue, follow this loop: (1) form a single hypothesis, (2) gather evidence with read tools, (3) record what you learned via \`insights_record_finding\`, (4) if evidence points to a tool or toolset fix, call \`insights_propose_variation\` or \`insights_propose_toolset_change\` with a clear \`reasoning\`. Do NOT apply proposals yourself; the human will review.`;
+
   // Build system prompt with optional context info.
-  const baseInstructions = `You are a helpful assistant for analyzing logs in Gram, an AI observability platform. Focus exclusively on log search and analysis.
+  const baseInstructions = `${workspaceMemoryBlock}You are a helpful assistant for analyzing logs in Gram, an AI observability platform. Focus exclusively on log search and analysis.
 
 The current date is ${new Date().toISOString().split("T")[0]}.
 
@@ -181,7 +300,8 @@ Custom attributes: SDK users can attach arbitrary key-value attributes to their 
 When a user asks about logs for a specific user, tenant, customer, or entity:
 1. Always call listAttributeKeys first for the relevant time window to discover which @-prefixed attributes exist.
 2. Identify the most relevant attribute and filter on it (e.g. { path: "@user", operator: "eq", values: ["someone@example.com"] }).
-3. If no relevant @-prefixed attributes exist, tell the user and fall back to text search instead.`;
+3. If no relevant @-prefixed attributes exist, tell the user and fall back to text search instead.
+${investigationProtocol}`;
 
   const systemPrompt = contextInfo
     ? `${baseInstructions}
@@ -239,6 +359,10 @@ When the user asks about "current period", "selected period", "this timeframe", 
     }),
     [mcpConfig, title, subtitle, suggestions, theme, systemPrompt],
   );
+  // workspaceMemoryBlock + investigationProtocol flow into systemPrompt, so
+  // the memo above picks them up through that dep. Keeping them out of the
+  // dep list avoids triggering extra config-identity churn when React Query
+  // rehydrates equivalent memory data.
 
   const handleSetOverride = useCallback(
     (next: InsightsConfigOptions | null) => setOverride(next),
@@ -303,13 +427,33 @@ When the user asks about "current period", "selected period", "this timeframe", 
               <Sparkles className="text-primary size-5" />
               <span className="font-semibold">AI Insights</span>
             </div>
-            <button
-              onClick={() => setIsExpanded(false)}
-              className="hover:bg-muted rounded p-1.5 transition-colors"
-              aria-label="Close AI Insights"
-            >
-              <ChevronRight className="size-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={refreshSession}
+                disabled={isRefreshing}
+                className={cn(
+                  "hover:bg-muted text-muted-foreground rounded p-1.5 transition-colors",
+                  isRefreshing && "cursor-not-allowed opacity-70",
+                )}
+                aria-label="Refresh AI Insights session"
+                aria-busy={isRefreshing}
+                title="Start a new chat session"
+              >
+                <RotateCw
+                  className={cn(
+                    "size-4 transition-transform",
+                    isRefreshing && "animate-spin",
+                  )}
+                />
+              </button>
+              <button
+                onClick={() => setIsExpanded(false)}
+                className="hover:bg-muted rounded p-1.5 transition-colors"
+                aria-label="Close AI Insights"
+              >
+                <ChevronRight className="size-5" />
+              </button>
+            </div>
           </div>
 
           {/* Dev notice when MCP is not configured */}
@@ -326,9 +470,18 @@ When the user asks about "current period", "selected period", "this timeframe", 
             </div>
           )}
 
+          {/* Proposals + memory (only mount when expanded so queries don't
+              fire for closed sidebars). */}
+          {isExpanded && (
+            <>
+              <ProposalsPanel />
+              <MemoryPill />
+            </>
+          )}
+
           {/* Chat content */}
           <div className="flex-1 overflow-hidden">
-            <GramElementsProvider config={elementsConfig}>
+            <GramElementsProvider key={sessionEpoch} config={elementsConfig}>
               <PendingPromptBridge
                 pending={pendingPrompt}
                 onConsume={consumePendingPrompt}

@@ -7541,6 +7541,1158 @@ paths:
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
+  /rpc/insights.applyProposal:
+    post:
+      description: Apply a pending proposal to the underlying resource.
+      operationId: applyProposal
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyProposalForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: applyProposal insights
+      tags:
+        - insights
+      x-speakeasy-name-override: applyProposal
+  /rpc/insights.dismissProposal:
+    post:
+      description: Mark a proposal as dismissed.
+      operationId: dismissProposal
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DismissProposalForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: dismissProposal insights
+      tags:
+        - insights
+      x-speakeasy-name-override: dismissProposal
+  /rpc/insights.forgetMemory:
+    post:
+      description: Agent or user deletes a memory by id (agent-side).
+      operationId: forgetMemory
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgetMemoryForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: forgetMemory insights
+      tags:
+        - insights
+      x-speakeasy-name-override: forgetMemory
+  /rpc/insights.forgetMemoryById:
+    post:
+      description: UI-driven delete of a memory the agent created. Audit-logged.
+      operationId: forgetMemoryById
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgetMemoryForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: forgetMemoryById insights
+      tags:
+        - insights
+      x-speakeasy-name-override: forgetMemoryById
+  /rpc/insights.listMemories:
+    get:
+      description: List memories for the active project. Supports recall ranking by tags + recency.
+      operationId: listMemories
+      parameters:
+        - allowEmptyValue: true
+          description: Optional memory kind filter (fact, playbook, glossary, finding)
+          in: query
+          name: kind
+          schema:
+            description: Optional memory kind filter (fact, playbook, glossary, finding)
+            type: string
+        - allowEmptyValue: true
+          description: Optional tags to rank/filter by
+          in: query
+          name: tags
+          schema:
+            description: Optional tags to rank/filter by
+            items:
+              type: string
+            type: array
+        - allowEmptyValue: true
+          description: Max number of memories to return (default 50, max 200)
+          in: query
+          name: limit
+          schema:
+            description: Max number of memories to return (default 50, max 200)
+            format: int64
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMemoriesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listMemories insights
+      tags:
+        - insights
+      x-speakeasy-name-override: listMemories
+  /rpc/insights.listProposals:
+    get:
+      description: List proposals for the active project.
+      operationId: listProposals
+      parameters:
+        - allowEmptyValue: true
+          description: Optional status filter (pending, applied, dismissed, superseded, rolled_back)
+          in: query
+          name: status
+          schema:
+            description: Optional status filter (pending, applied, dismissed, superseded, rolled_back)
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListProposalsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listProposals insights
+      tags:
+        - insights
+      x-speakeasy-name-override: listProposals
+  /rpc/insights.proposeToolVariation:
+    post:
+      description: Agent proposes an edit to a tool variation. Inserts a pending proposal row.
+      operationId: proposeToolVariation
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposeToolVariationForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: proposeToolVariation insights
+      tags:
+        - insights
+      x-speakeasy-name-override: proposeToolVariation
+  /rpc/insights.proposeToolsetChange:
+    post:
+      description: Agent proposes a change to a toolset (add/remove tools, rename).
+      operationId: proposeToolsetChange
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposeToolsetChangeForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: proposeToolsetChange insights
+      tags:
+        - insights
+      x-speakeasy-name-override: proposeToolsetChange
+  /rpc/insights.recordFinding:
+    post:
+      description: Agent records an investigation finding. Sugar over rememberFact with kind=finding and short TTL.
+      operationId: recordFinding
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordFindingForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: recordFinding insights
+      tags:
+        - insights
+      x-speakeasy-name-override: recordFinding
+  /rpc/insights.rememberFact:
+    post:
+      description: Agent writes a memory (fact, playbook, glossary) into workspace memory.
+      operationId: rememberFact
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RememberFactForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: rememberFact insights
+      tags:
+        - insights
+      x-speakeasy-name-override: rememberFact
+  /rpc/insights.rollbackProposal:
+    post:
+      description: Roll back an applied proposal by writing the snapshotted current_value back.
+      operationId: rollbackProposal
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyProposalForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: rollbackProposal insights
+      tags:
+        - insights
+      x-speakeasy-name-override: rollbackProposal
   /rpc/instances.get:
     get:
       description: Load all relevant data for an instance of a toolset and environment
@@ -19256,6 +20408,17 @@ components:
         - status
         - created_at
         - updated_at
+    ApplyProposalForm:
+      type: object
+      properties:
+        force:
+          type: boolean
+          description: If true, override staleness checks and apply anyway
+        proposal_id:
+          type: string
+          description: The ID of the proposal to apply
+      required:
+        - proposal_id
     Asset:
       type: object
       properties:
@@ -21005,6 +22168,14 @@ components:
         - functions_tool_count
         - external_mcp_asset_count
         - external_mcp_tool_count
+    DismissProposalForm:
+      type: object
+      properties:
+        proposal_id:
+          type: string
+          description: The ID of the proposal to dismiss
+      required:
+        - proposal_id
     Environment:
       type: object
       properties:
@@ -21500,6 +22671,14 @@ components:
         - id
         - label
         - count
+    ForgetMemoryForm:
+      type: object
+      properties:
+        memory_id:
+          type: string
+          description: The ID of the memory to forget
+      required:
+        - memory_id
     FunctionEnvironmentVariable:
       type: object
       properties:
@@ -23000,6 +24179,15 @@ components:
           description: The members in your organization.
       required:
         - members
+    ListMemoriesResult:
+      type: object
+      properties:
+        memories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Memory'
+      required:
+        - memories
     ListPackagesResult:
       type: object
       properties:
@@ -23052,6 +24240,15 @@ components:
           description: The created prompt template
       required:
         - templates
+    ListProposalsResult:
+      type: object
+      properties:
+        proposals:
+          type: array
+          items:
+            $ref: '#/components/schemas/Proposal'
+      required:
+        - proposals
     ListRegistriesResponseBody:
       type: object
       properties:
@@ -23570,6 +24767,54 @@ components:
         - toolset_id
         - created_at
         - updated_at
+    Memory:
+      type: object
+      properties:
+        content:
+          type: string
+          description: Memory content
+        created_at:
+          type: string
+          description: Created timestamp
+        expires_at:
+          type: string
+          description: Expiry timestamp
+        id:
+          type: string
+          description: Memory ID
+        kind:
+          type: string
+          description: 'Memory kind: fact, playbook, glossary, finding'
+        last_used_at:
+          type: string
+          description: Last used timestamp
+        source_chat_id:
+          type: string
+          description: Source chat ID, if any
+        tags:
+          type: array
+          items:
+            type: string
+          description: Memory tags
+        usefulness_score:
+          type: integer
+          description: Recall score
+          format: int64
+      required:
+        - id
+        - kind
+        - content
+        - tags
+        - usefulness_score
+        - last_used_at
+        - created_at
+    MemoryResult:
+      type: object
+      properties:
+        memory:
+          $ref: '#/components/schemas/Memory'
+      required:
+        - memory
     ModelUsage:
       type: object
       properties:
@@ -24870,6 +26115,114 @@ components:
       required:
         - id
         - name
+    Proposal:
+      type: object
+      properties:
+        applied_at:
+          type: string
+          description: Applied timestamp
+        applied_by_user_id:
+          type: string
+          description: User that applied
+        applied_value:
+          type: string
+          description: JSON-encoded value actually written at apply time
+        created_at:
+          type: string
+          description: Creation timestamp (RFC3339)
+        current_value:
+          type: string
+          description: JSON-encoded snapshot of the resource at proposal time
+        dismissed_at:
+          type: string
+          description: Dismissed timestamp
+        dismissed_by_user_id:
+          type: string
+          description: User that dismissed
+        id:
+          type: string
+          description: Proposal ID
+        kind:
+          type: string
+          description: 'Proposal kind: tool_variation or toolset_change'
+        proposed_value:
+          type: string
+          description: JSON-encoded proposed value
+        reasoning:
+          type: string
+          description: Agent reasoning
+        rolled_back_at:
+          type: string
+          description: Rolled back timestamp
+        rolled_back_by_user_id:
+          type: string
+          description: User that rolled back
+        source_chat_id:
+          type: string
+          description: Source chat ID, if any
+        status:
+          type: string
+          description: pending, applied, dismissed, superseded, rolled_back
+        target_ref:
+          type: string
+          description: Target tool name or toolset slug
+      required:
+        - id
+        - kind
+        - target_ref
+        - current_value
+        - proposed_value
+        - status
+        - created_at
+    ProposalResult:
+      type: object
+      properties:
+        proposal:
+          $ref: '#/components/schemas/Proposal'
+      required:
+        - proposal
+    ProposeToolVariationForm:
+      type: object
+      properties:
+        current_value:
+          type: string
+          description: Optional JSON-encoded snapshot of the current variation; server falls back to live read if missing
+        proposed_value:
+          type: string
+          description: JSON-encoded proposed variation override fields
+        reasoning:
+          type: string
+          description: The agent's justification for the proposal
+        source_chat_id:
+          type: string
+          description: Optional chat ID that produced the proposal
+        tool_name:
+          type: string
+          description: The source tool name to vary
+      required:
+        - tool_name
+        - proposed_value
+    ProposeToolsetChangeForm:
+      type: object
+      properties:
+        current_value:
+          type: string
+          description: Optional JSON-encoded snapshot of the current toolset state
+        proposed_value:
+          type: string
+          description: JSON-encoded proposed toolset change (add_tools, remove_tools, new_name)
+        reasoning:
+          type: string
+          description: The agent's justification for the change
+        source_chat_id:
+          type: string
+          description: Optional chat ID that produced the proposal
+        toolset_slug:
+          type: string
+          description: The slug of the toolset to change
+      required:
+        - toolset_slug
+        - proposed_value
     PublishPackageForm:
       type: object
       properties:
@@ -24911,6 +26264,22 @@ components:
           description: Whether RBAC enforcement is currently enabled for this organization.
       required:
         - rbac_enabled
+    RecordFindingForm:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The investigation finding (max 2000 chars)
+        source_chat_id:
+          type: string
+          description: Optional chat ID that produced the finding
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags for recall
+      required:
+        - content
     RedeployRequestBody:
       type: object
       properties:
@@ -24932,6 +26301,31 @@ components:
           description: The name of the org to register
       required:
         - org_name
+    RememberFactForm:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The memory content (max 2000 chars)
+        kind:
+          type: string
+          description: 'The memory kind: fact, playbook, glossary, or finding'
+          enum:
+            - fact
+            - playbook
+            - glossary
+            - finding
+        source_chat_id:
+          type: string
+          description: Optional chat ID that produced the memory
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags for recall
+      required:
+        - kind
+        - content
     RemoteMcpServer:
       type: object
       properties:
@@ -25357,6 +26751,17 @@ components:
             - mcp:connect
       required:
         - scope
+    RollbackProposalForm:
+      type: object
+      properties:
+        force:
+          type: boolean
+          description: If true, override drift checks and roll back anyway
+        proposal_id:
+          type: string
+          description: The ID of the applied proposal to roll back
+      required:
+        - proposal_id
     ScopeDefinition:
       type: object
       properties:
@@ -28000,6 +29405,8 @@ tags:
     description: Manages display name overrides for hooks servers.
   - name: hooks
     description: Receives hook events from coding assistants for tool usage observability.
+  - name: insights
+    description: Manage AI Insights proposals and workspace memory.
   - name: instances
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations

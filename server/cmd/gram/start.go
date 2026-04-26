@@ -79,6 +79,8 @@ import (
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/triggers"
 
+	"github.com/speakeasy-api/gram/server/internal/aiinsights"
+	"github.com/speakeasy-api/gram/server/internal/insights"
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/usage"
@@ -748,7 +750,11 @@ func newStartCommand() *cli.Command {
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, serverURL))
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, posthogClient, telemSvc, assetStorage, authzEngine))
-			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
+			variationsSvc := variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine)
+			variations.Attach(mux, variationsSvc)
+			insightsSvc := insights.NewService(logger, tracerProvider, db, sessionManager, authzEngine, variationsSvc, toolsetsSvc)
+			insights.Attach(mux, insightsSvc)
+			aiinsights.Attach(mux, aiinsights.New(logger, auth.New(logger, db, sessionManager, authzEngine), insightsSvc))
 			customdomains.Attach(mux, customdomains.NewService(logger, tracerProvider, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}, authzEngine))
 			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter, authzEngine))
 			tm.Attach(mux, telemSvc)

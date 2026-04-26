@@ -249,6 +249,20 @@ run();
 * [listServerNameOverrides](docs/sdks/hooksservernames/README.md#listservernameoverrides) - list hooksServerNames
 * [upsertServerNameOverride](docs/sdks/hooksservernames/README.md#upsertservernameoverride) - upsert hooksServerNames
 
+### [Insights](docs/sdks/insights/README.md)
+
+* [applyProposal](docs/sdks/insights/README.md#applyproposal) - applyProposal insights
+* [dismissProposal](docs/sdks/insights/README.md#dismissproposal) - dismissProposal insights
+* [forgetMemory](docs/sdks/insights/README.md#forgetmemory) - forgetMemory insights
+* [forgetMemoryById](docs/sdks/insights/README.md#forgetmemorybyid) - forgetMemoryById insights
+* [listMemories](docs/sdks/insights/README.md#listmemories) - listMemories insights
+* [listProposals](docs/sdks/insights/README.md#listproposals) - listProposals insights
+* [proposeToolVariation](docs/sdks/insights/README.md#proposetoolvariation) - proposeToolVariation insights
+* [proposeToolsetChange](docs/sdks/insights/README.md#proposetoolsetchange) - proposeToolsetChange insights
+* [recordFinding](docs/sdks/insights/README.md#recordfinding) - recordFinding insights
+* [rememberFact](docs/sdks/insights/README.md#rememberfact) - rememberFact insights
+* [rollbackProposal](docs/sdks/insights/README.md#rollbackproposal) - rollbackProposal insights
+
 ### [Instances](docs/sdks/instances/README.md)
 
 * [getBySlug](docs/sdks/instances/README.md#getbyslug) - getInstance instances
@@ -520,6 +534,17 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`hooksServerNamesDeleteServerNameOverride`](docs/sdks/hooksservernames/README.md#deleteservernameoverride) - delete hooksServerNames
 - [`hooksServerNamesListServerNameOverrides`](docs/sdks/hooksservernames/README.md#listservernameoverrides) - list hooksServerNames
 - [`hooksServerNamesUpsertServerNameOverride`](docs/sdks/hooksservernames/README.md#upsertservernameoverride) - upsert hooksServerNames
+- [`insightsApplyProposal`](docs/sdks/insights/README.md#applyproposal) - applyProposal insights
+- [`insightsDismissProposal`](docs/sdks/insights/README.md#dismissproposal) - dismissProposal insights
+- [`insightsForgetMemory`](docs/sdks/insights/README.md#forgetmemory) - forgetMemory insights
+- [`insightsForgetMemoryById`](docs/sdks/insights/README.md#forgetmemorybyid) - forgetMemoryById insights
+- [`insightsListMemories`](docs/sdks/insights/README.md#listmemories) - listMemories insights
+- [`insightsListProposals`](docs/sdks/insights/README.md#listproposals) - listProposals insights
+- [`insightsProposeToolsetChange`](docs/sdks/insights/README.md#proposetoolsetchange) - proposeToolsetChange insights
+- [`insightsProposeToolVariation`](docs/sdks/insights/README.md#proposetoolvariation) - proposeToolVariation insights
+- [`insightsRecordFinding`](docs/sdks/insights/README.md#recordfinding) - recordFinding insights
+- [`insightsRememberFact`](docs/sdks/insights/README.md#rememberfact) - rememberFact insights
+- [`insightsRollbackProposal`](docs/sdks/insights/README.md#rollbackproposal) - rollbackProposal insights
 - [`instancesGetBySlug`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`integrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`integrationsList`](docs/sdks/integrations/README.md#list) - list integrations
@@ -739,6 +764,17 @@ To learn about this feature and how to get started, check
 - [`useHooksServerNamesDeleteServerNameOverrideMutation`](docs/sdks/hooksservernames/README.md#deleteservernameoverride) - delete hooksServerNames
 - [`useHooksServerNamesListServerNameOverrides`](docs/sdks/hooksservernames/README.md#listservernameoverrides) - list hooksServerNames
 - [`useHooksServerNamesUpsertServerNameOverrideMutation`](docs/sdks/hooksservernames/README.md#upsertservernameoverride) - upsert hooksServerNames
+- [`useInsightsApplyProposalMutation`](docs/sdks/insights/README.md#applyproposal) - applyProposal insights
+- [`useInsightsDismissProposalMutation`](docs/sdks/insights/README.md#dismissproposal) - dismissProposal insights
+- [`useInsightsForgetMemoryByIdMutation`](docs/sdks/insights/README.md#forgetmemorybyid) - forgetMemoryById insights
+- [`useInsightsForgetMemoryMutation`](docs/sdks/insights/README.md#forgetmemory) - forgetMemory insights
+- [`useInsightsListMemories`](docs/sdks/insights/README.md#listmemories) - listMemories insights
+- [`useInsightsListProposals`](docs/sdks/insights/README.md#listproposals) - listProposals insights
+- [`useInsightsProposeToolsetChangeMutation`](docs/sdks/insights/README.md#proposetoolsetchange) - proposeToolsetChange insights
+- [`useInsightsProposeToolVariationMutation`](docs/sdks/insights/README.md#proposetoolvariation) - proposeToolVariation insights
+- [`useInsightsRecordFindingMutation`](docs/sdks/insights/README.md#recordfinding) - recordFinding insights
+- [`useInsightsRememberFactMutation`](docs/sdks/insights/README.md#rememberfact) - rememberFact insights
+- [`useInsightsRollbackProposalMutation`](docs/sdks/insights/README.md#rollbackproposal) - rollbackProposal insights
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`useIntegrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`useLatestDeployment`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments

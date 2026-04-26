@@ -23,7 +23,7 @@ import type { Plugin } from "./plugins";
  */
 export type GetSessionFn = (init: { projectSlug: string }) => Promise<string>;
 
-type ServerUrl = string;
+export type ServerUrl = string;
 
 export const VARIANTS = ["widget", "sidecar", "standalone"] as const;
 export type Variant = (typeof VARIANTS)[number];
@@ -31,11 +31,20 @@ export type Variant = (typeof VARIANTS)[number];
 /**
  * The top level configuration object for the Elements library.
  *
- * @example
+ * @example Single MCP server
  * const config: ElementsConfig = {
  *   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
  *   projectSlug: 'my-project',
  *   systemPrompt: 'You are a helpful assistant.',
+ * }
+ *
+ * @example Multiple MCP servers
+ * const config: ElementsConfig = {
+ *   mcp: [
+ *     'https://app.getgram.ai/mcp/your-mcp-slug',
+ *     'https://app.getgram.ai/mcp/ai-insights',
+ *   ],
+ *   projectSlug: 'my-project',
  * }
  */
 export interface ElementsConfig {
@@ -91,17 +100,27 @@ export interface ElementsConfig {
   projectSlug: string;
 
   /**
-   * The Gram Server URL to use for the Elements library.
+   * The MCP server URL(s) to connect to. Accepts either a single string or an
+   * array of strings. When multiple URLs are provided, tools from all servers
+   * are fetched in parallel and merged; tool calls are routed to the server
+   * that originally exposed them.
+   *
    * Can be retrieved from https://app.getgram.ai/{team}/{project}/mcp/{mcp_slug}
    *
-   * Note: This config option will likely change in the future
-   *
-   * @example
+   * @example Single URL
    * const config: ElementsConfig = {
    *   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
    * }
+   *
+   * @example Multiple URLs
+   * const config: ElementsConfig = {
+   *   mcp: [
+   *     'https://app.getgram.ai/mcp/your-mcp-slug',
+   *     'https://app.getgram.ai/mcp/ai-insights',
+   *   ],
+   * }
    */
-  mcp?: ServerUrl;
+  mcp?: ServerUrl | ServerUrl[];
 
   /**
    * Custom environment variable overrides for the Elements library.

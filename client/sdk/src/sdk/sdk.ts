@@ -16,6 +16,7 @@ import { Environments } from "./environments.js";
 import { Features } from "./features.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
+import { Insights } from "./insights.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { Keys } from "./keys.js";
@@ -96,6 +97,11 @@ export class Gram extends ClientSDK {
   private _hooksServerNames?: HooksServerNames;
   get hooksServerNames(): HooksServerNames {
     return (this._hooksServerNames ??= new HooksServerNames(this._options));
+  }
+
+  private _insights?: Insights;
+  get insights(): Insights {
+    return (this._insights ??= new Insights(this._options));
   }
 
   private _instances?: Instances;

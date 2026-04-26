@@ -17,6 +17,9 @@ const (
 	ScopeMCPRead      Scope = "mcp:read"
 	ScopeMCPWrite     Scope = "mcp:write"
 	ScopeMCPConnect   Scope = "mcp:connect"
+	ScopeInsightsRead    Scope = "insights:read"
+	ScopeInsightsPropose Scope = "insights:propose"
+	ScopeInsightsApply   Scope = "insights:apply"
 )
 
 // scopeExpansions maps a required scope to the higher-privilege scopes that also satisfy it.
@@ -30,6 +33,9 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeMCPRead:      {ScopeMCPWrite},
 	ScopeMCPWrite:     nil,
 	ScopeMCPConnect:   {ScopeMCPRead, ScopeMCPWrite},
+	ScopeInsightsRead:    {ScopeInsightsApply},
+	ScopeInsightsPropose: {ScopeInsightsApply},
+	ScopeInsightsApply:   nil,
 }
 
 // scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege

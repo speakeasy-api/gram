@@ -563,6 +563,45 @@ type HttpToolDefinition struct {
 	Deleted             bool
 }
 
+type InsightsMemory struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	Kind            string
+	Content         string
+	Tags            []string
+	SourceChatID    uuid.NullUUID
+	UsefulnessScore int32
+	ExpiresAt       pgtype.Timestamptz
+	LastUsedAt      pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type InsightsProposal struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	OrganizationID     string
+	Kind               string
+	TargetRef          string
+	CurrentValue       []byte
+	ProposedValue      []byte
+	AppliedValue       []byte
+	Reasoning          pgtype.Text
+	SourceChatID       uuid.NullUUID
+	Status             string
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	AppliedAt          pgtype.Timestamptz
+	DismissedAt        pgtype.Timestamptz
+	RolledBackAt       pgtype.Timestamptz
+	AppliedByUserID    pgtype.Text
+	DismissedByUserID  pgtype.Text
+	RolledBackByUserID pgtype.Text
+}
+
 type McpEnvironmentConfig struct {
 	ID                uuid.UUID
 	ProjectID         uuid.UUID

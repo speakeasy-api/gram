@@ -2107,3 +2107,99 @@ ON risk_results (project_id, chat_message_id);
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
 WHERE found IS TRUE;
+
+-- AI Insights: agent-authored proposals to mutate tool variations or toolsets.
+-- The agent never writes directly; it inserts pending rows here. A human applies
+-- or dismisses. Rollback is possible because current_value snapshots the pre-apply
+-- state.
+CREATE TABLE IF NOT EXISTS insights_proposals (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  -- 'tool_variation' or 'toolset_change'
+  kind TEXT NOT NULL,
+  -- Tool name (for variations) or toolset slug (for toolsets)
+  target_ref TEXT NOT NULL,
+
+  -- Snapshot of the resource at proposal time. Used for staleness detection on
+  -- apply, and as the rollback target after apply.
+  current_value JSONB NOT NULL,
+  -- The change the agent proposes
+  proposed_value JSONB NOT NULL,
+  -- The value actually written at apply time. Normally equals proposed_value.
+  applied_value JSONB,
+
+  reasoning TEXT,
+  source_chat_id uuid,
+
+  status TEXT NOT NULL DEFAULT 'pending',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  applied_at timestamptz,
+  dismissed_at timestamptz,
+  rolled_back_at timestamptz,
+
+  -- Human who took the action. Stored as TEXT (matching audit_logs pattern) so
+  -- entries survive user deletion.
+  applied_by_user_id TEXT,
+  dismissed_by_user_id TEXT,
+  rolled_back_by_user_id TEXT,
+
+  CONSTRAINT insights_proposals_pkey PRIMARY KEY (id),
+  CONSTRAINT insights_proposals_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT insights_proposals_source_chat_id_fkey FOREIGN KEY (source_chat_id) REFERENCES chats (id) ON DELETE SET NULL,
+  CONSTRAINT insights_proposals_kind_check CHECK (kind IN ('tool_variation', 'toolset_change')),
+  CONSTRAINT insights_proposals_status_check CHECK (status IN ('pending', 'applied', 'dismissed', 'superseded', 'rolled_back'))
+);
+
+CREATE INDEX IF NOT EXISTS insights_proposals_project_status_created_idx
+ON insights_proposals (project_id, status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS insights_proposals_project_target_idx
+ON insights_proposals (project_id, kind, target_ref);
+
+-- AI Insights: durable workspace memory the agent uses for recall across
+-- sessions. Per-project. Findings auto-expire; facts and playbooks do not.
+CREATE TABLE IF NOT EXISTS insights_memories (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  -- 'fact', 'playbook', 'glossary', 'finding'
+  kind TEXT NOT NULL,
+  content TEXT NOT NULL,
+  -- Agent-chosen tags used for recall ranking
+  tags TEXT[] NOT NULL DEFAULT '{}',
+
+  source_chat_id uuid,
+
+  -- Bumped each time the memory is recalled into a system prompt. Cheap signal
+  -- for pruning unused memories.
+  usefulness_score INT NOT NULL DEFAULT 0,
+
+  -- Nullable; set for findings (now() + 7 days) and for facts that have aged
+  -- past the 90-day no-use threshold.
+  expires_at timestamptz,
+  last_used_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT insights_memories_pkey PRIMARY KEY (id),
+  CONSTRAINT insights_memories_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT insights_memories_source_chat_id_fkey FOREIGN KEY (source_chat_id) REFERENCES chats (id) ON DELETE SET NULL,
+  CONSTRAINT insights_memories_kind_check CHECK (kind IN ('fact', 'playbook', 'glossary', 'finding')),
+  CONSTRAINT insights_memories_content_length_check CHECK (char_length(content) <= 2000)
+);
+
+CREATE INDEX IF NOT EXISTS insights_memories_project_kind_last_used_idx
+ON insights_memories (project_id, kind, last_used_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS insights_memories_tags_gin_idx
+ON insights_memories USING GIN (tags)
+WHERE deleted IS FALSE;

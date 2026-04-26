@@ -28,6 +28,7 @@ import (
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
 	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
+	insightsc "github.com/speakeasy-api/gram/server/gen/http/insights/client"
 	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
@@ -72,6 +73,7 @@ func UsageCommands() []string {
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|logs|metrics)",
+		"insights (propose-tool-variation|propose-toolset-change|list-proposals|apply-proposal|rollback-proposal|dismiss-proposal|forget-memory-by-id|remember-fact|forget-memory|list-memories|record-finding)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
@@ -573,6 +575,76 @@ func ParseEndpoint(
 		hooksMetricsBodyFlag             = hooksMetricsFlags.String("body", "REQUIRED", "")
 		hooksMetricsApikeyTokenFlag      = hooksMetricsFlags.String("apikey-token", "", "")
 		hooksMetricsProjectSlugInputFlag = hooksMetricsFlags.String("project-slug-input", "", "")
+
+		insightsFlags = flag.NewFlagSet("insights", flag.ContinueOnError)
+
+		insightsProposeToolVariationFlags                = flag.NewFlagSet("propose-tool-variation", flag.ExitOnError)
+		insightsProposeToolVariationBodyFlag             = insightsProposeToolVariationFlags.String("body", "REQUIRED", "")
+		insightsProposeToolVariationSessionTokenFlag     = insightsProposeToolVariationFlags.String("session-token", "", "")
+		insightsProposeToolVariationApikeyTokenFlag      = insightsProposeToolVariationFlags.String("apikey-token", "", "")
+		insightsProposeToolVariationProjectSlugInputFlag = insightsProposeToolVariationFlags.String("project-slug-input", "", "")
+
+		insightsProposeToolsetChangeFlags                = flag.NewFlagSet("propose-toolset-change", flag.ExitOnError)
+		insightsProposeToolsetChangeBodyFlag             = insightsProposeToolsetChangeFlags.String("body", "REQUIRED", "")
+		insightsProposeToolsetChangeSessionTokenFlag     = insightsProposeToolsetChangeFlags.String("session-token", "", "")
+		insightsProposeToolsetChangeApikeyTokenFlag      = insightsProposeToolsetChangeFlags.String("apikey-token", "", "")
+		insightsProposeToolsetChangeProjectSlugInputFlag = insightsProposeToolsetChangeFlags.String("project-slug-input", "", "")
+
+		insightsListProposalsFlags                = flag.NewFlagSet("list-proposals", flag.ExitOnError)
+		insightsListProposalsStatusFlag           = insightsListProposalsFlags.String("status", "", "")
+		insightsListProposalsSessionTokenFlag     = insightsListProposalsFlags.String("session-token", "", "")
+		insightsListProposalsApikeyTokenFlag      = insightsListProposalsFlags.String("apikey-token", "", "")
+		insightsListProposalsProjectSlugInputFlag = insightsListProposalsFlags.String("project-slug-input", "", "")
+
+		insightsApplyProposalFlags                = flag.NewFlagSet("apply-proposal", flag.ExitOnError)
+		insightsApplyProposalBodyFlag             = insightsApplyProposalFlags.String("body", "REQUIRED", "")
+		insightsApplyProposalSessionTokenFlag     = insightsApplyProposalFlags.String("session-token", "", "")
+		insightsApplyProposalApikeyTokenFlag      = insightsApplyProposalFlags.String("apikey-token", "", "")
+		insightsApplyProposalProjectSlugInputFlag = insightsApplyProposalFlags.String("project-slug-input", "", "")
+
+		insightsRollbackProposalFlags                = flag.NewFlagSet("rollback-proposal", flag.ExitOnError)
+		insightsRollbackProposalBodyFlag             = insightsRollbackProposalFlags.String("body", "REQUIRED", "")
+		insightsRollbackProposalSessionTokenFlag     = insightsRollbackProposalFlags.String("session-token", "", "")
+		insightsRollbackProposalApikeyTokenFlag      = insightsRollbackProposalFlags.String("apikey-token", "", "")
+		insightsRollbackProposalProjectSlugInputFlag = insightsRollbackProposalFlags.String("project-slug-input", "", "")
+
+		insightsDismissProposalFlags                = flag.NewFlagSet("dismiss-proposal", flag.ExitOnError)
+		insightsDismissProposalBodyFlag             = insightsDismissProposalFlags.String("body", "REQUIRED", "")
+		insightsDismissProposalSessionTokenFlag     = insightsDismissProposalFlags.String("session-token", "", "")
+		insightsDismissProposalApikeyTokenFlag      = insightsDismissProposalFlags.String("apikey-token", "", "")
+		insightsDismissProposalProjectSlugInputFlag = insightsDismissProposalFlags.String("project-slug-input", "", "")
+
+		insightsForgetMemoryByIDFlags                = flag.NewFlagSet("forget-memory-by-id", flag.ExitOnError)
+		insightsForgetMemoryByIDBodyFlag             = insightsForgetMemoryByIDFlags.String("body", "REQUIRED", "")
+		insightsForgetMemoryByIDSessionTokenFlag     = insightsForgetMemoryByIDFlags.String("session-token", "", "")
+		insightsForgetMemoryByIDApikeyTokenFlag      = insightsForgetMemoryByIDFlags.String("apikey-token", "", "")
+		insightsForgetMemoryByIDProjectSlugInputFlag = insightsForgetMemoryByIDFlags.String("project-slug-input", "", "")
+
+		insightsRememberFactFlags                = flag.NewFlagSet("remember-fact", flag.ExitOnError)
+		insightsRememberFactBodyFlag             = insightsRememberFactFlags.String("body", "REQUIRED", "")
+		insightsRememberFactSessionTokenFlag     = insightsRememberFactFlags.String("session-token", "", "")
+		insightsRememberFactApikeyTokenFlag      = insightsRememberFactFlags.String("apikey-token", "", "")
+		insightsRememberFactProjectSlugInputFlag = insightsRememberFactFlags.String("project-slug-input", "", "")
+
+		insightsForgetMemoryFlags                = flag.NewFlagSet("forget-memory", flag.ExitOnError)
+		insightsForgetMemoryBodyFlag             = insightsForgetMemoryFlags.String("body", "REQUIRED", "")
+		insightsForgetMemorySessionTokenFlag     = insightsForgetMemoryFlags.String("session-token", "", "")
+		insightsForgetMemoryApikeyTokenFlag      = insightsForgetMemoryFlags.String("apikey-token", "", "")
+		insightsForgetMemoryProjectSlugInputFlag = insightsForgetMemoryFlags.String("project-slug-input", "", "")
+
+		insightsListMemoriesFlags                = flag.NewFlagSet("list-memories", flag.ExitOnError)
+		insightsListMemoriesKindFlag             = insightsListMemoriesFlags.String("kind", "", "")
+		insightsListMemoriesTagsFlag             = insightsListMemoriesFlags.String("tags", "", "")
+		insightsListMemoriesLimitFlag            = insightsListMemoriesFlags.String("limit", "", "")
+		insightsListMemoriesSessionTokenFlag     = insightsListMemoriesFlags.String("session-token", "", "")
+		insightsListMemoriesApikeyTokenFlag      = insightsListMemoriesFlags.String("apikey-token", "", "")
+		insightsListMemoriesProjectSlugInputFlag = insightsListMemoriesFlags.String("project-slug-input", "", "")
+
+		insightsRecordFindingFlags                = flag.NewFlagSet("record-finding", flag.ExitOnError)
+		insightsRecordFindingBodyFlag             = insightsRecordFindingFlags.String("body", "REQUIRED", "")
+		insightsRecordFindingSessionTokenFlag     = insightsRecordFindingFlags.String("session-token", "", "")
+		insightsRecordFindingApikeyTokenFlag      = insightsRecordFindingFlags.String("apikey-token", "", "")
+		insightsRecordFindingProjectSlugInputFlag = insightsRecordFindingFlags.String("project-slug-input", "", "")
 
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
 
@@ -1315,6 +1387,19 @@ func ParseEndpoint(
 	hooksLogsFlags.Usage = hooksLogsUsage
 	hooksMetricsFlags.Usage = hooksMetricsUsage
 
+	insightsFlags.Usage = insightsUsage
+	insightsProposeToolVariationFlags.Usage = insightsProposeToolVariationUsage
+	insightsProposeToolsetChangeFlags.Usage = insightsProposeToolsetChangeUsage
+	insightsListProposalsFlags.Usage = insightsListProposalsUsage
+	insightsApplyProposalFlags.Usage = insightsApplyProposalUsage
+	insightsRollbackProposalFlags.Usage = insightsRollbackProposalUsage
+	insightsDismissProposalFlags.Usage = insightsDismissProposalUsage
+	insightsForgetMemoryByIDFlags.Usage = insightsForgetMemoryByIDUsage
+	insightsRememberFactFlags.Usage = insightsRememberFactUsage
+	insightsForgetMemoryFlags.Usage = insightsForgetMemoryUsage
+	insightsListMemoriesFlags.Usage = insightsListMemoriesUsage
+	insightsRecordFindingFlags.Usage = insightsRecordFindingUsage
+
 	instancesFlags.Usage = instancesUsage
 	instancesGetInstanceFlags.Usage = instancesGetInstanceUsage
 
@@ -1510,6 +1595,8 @@ func ParseEndpoint(
 			svcf = hooksServerNamesFlags
 		case "hooks":
 			svcf = hooksFlags
+		case "insights":
+			svcf = insightsFlags
 		case "instances":
 			svcf = instancesFlags
 		case "integrations":
@@ -1868,6 +1955,43 @@ func ParseEndpoint(
 
 			case "metrics":
 				epf = hooksMetricsFlags
+
+			}
+
+		case "insights":
+			switch epn {
+			case "propose-tool-variation":
+				epf = insightsProposeToolVariationFlags
+
+			case "propose-toolset-change":
+				epf = insightsProposeToolsetChangeFlags
+
+			case "list-proposals":
+				epf = insightsListProposalsFlags
+
+			case "apply-proposal":
+				epf = insightsApplyProposalFlags
+
+			case "rollback-proposal":
+				epf = insightsRollbackProposalFlags
+
+			case "dismiss-proposal":
+				epf = insightsDismissProposalFlags
+
+			case "forget-memory-by-id":
+				epf = insightsForgetMemoryByIDFlags
+
+			case "remember-fact":
+				epf = insightsRememberFactFlags
+
+			case "forget-memory":
+				epf = insightsForgetMemoryFlags
+
+			case "list-memories":
+				epf = insightsListMemoriesFlags
+
+			case "record-finding":
+				epf = insightsRecordFindingFlags
 
 			}
 
@@ -2617,6 +2741,43 @@ func ParseEndpoint(
 			case "metrics":
 				endpoint = c.Metrics()
 				data, err = hooksc.BuildMetricsPayload(*hooksMetricsBodyFlag, *hooksMetricsApikeyTokenFlag, *hooksMetricsProjectSlugInputFlag)
+			}
+		case "insights":
+			c := insightsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "propose-tool-variation":
+				endpoint = c.ProposeToolVariation()
+				data, err = insightsc.BuildProposeToolVariationPayload(*insightsProposeToolVariationBodyFlag, *insightsProposeToolVariationSessionTokenFlag, *insightsProposeToolVariationApikeyTokenFlag, *insightsProposeToolVariationProjectSlugInputFlag)
+			case "propose-toolset-change":
+				endpoint = c.ProposeToolsetChange()
+				data, err = insightsc.BuildProposeToolsetChangePayload(*insightsProposeToolsetChangeBodyFlag, *insightsProposeToolsetChangeSessionTokenFlag, *insightsProposeToolsetChangeApikeyTokenFlag, *insightsProposeToolsetChangeProjectSlugInputFlag)
+			case "list-proposals":
+				endpoint = c.ListProposals()
+				data, err = insightsc.BuildListProposalsPayload(*insightsListProposalsStatusFlag, *insightsListProposalsSessionTokenFlag, *insightsListProposalsApikeyTokenFlag, *insightsListProposalsProjectSlugInputFlag)
+			case "apply-proposal":
+				endpoint = c.ApplyProposal()
+				data, err = insightsc.BuildApplyProposalPayload(*insightsApplyProposalBodyFlag, *insightsApplyProposalSessionTokenFlag, *insightsApplyProposalApikeyTokenFlag, *insightsApplyProposalProjectSlugInputFlag)
+			case "rollback-proposal":
+				endpoint = c.RollbackProposal()
+				data, err = insightsc.BuildRollbackProposalPayload(*insightsRollbackProposalBodyFlag, *insightsRollbackProposalSessionTokenFlag, *insightsRollbackProposalApikeyTokenFlag, *insightsRollbackProposalProjectSlugInputFlag)
+			case "dismiss-proposal":
+				endpoint = c.DismissProposal()
+				data, err = insightsc.BuildDismissProposalPayload(*insightsDismissProposalBodyFlag, *insightsDismissProposalSessionTokenFlag, *insightsDismissProposalApikeyTokenFlag, *insightsDismissProposalProjectSlugInputFlag)
+			case "forget-memory-by-id":
+				endpoint = c.ForgetMemoryByID()
+				data, err = insightsc.BuildForgetMemoryByIDPayload(*insightsForgetMemoryByIDBodyFlag, *insightsForgetMemoryByIDSessionTokenFlag, *insightsForgetMemoryByIDApikeyTokenFlag, *insightsForgetMemoryByIDProjectSlugInputFlag)
+			case "remember-fact":
+				endpoint = c.RememberFact()
+				data, err = insightsc.BuildRememberFactPayload(*insightsRememberFactBodyFlag, *insightsRememberFactSessionTokenFlag, *insightsRememberFactApikeyTokenFlag, *insightsRememberFactProjectSlugInputFlag)
+			case "forget-memory":
+				endpoint = c.ForgetMemory()
+				data, err = insightsc.BuildForgetMemoryPayload(*insightsForgetMemoryBodyFlag, *insightsForgetMemorySessionTokenFlag, *insightsForgetMemoryApikeyTokenFlag, *insightsForgetMemoryProjectSlugInputFlag)
+			case "list-memories":
+				endpoint = c.ListMemories()
+				data, err = insightsc.BuildListMemoriesPayload(*insightsListMemoriesKindFlag, *insightsListMemoriesTagsFlag, *insightsListMemoriesLimitFlag, *insightsListMemoriesSessionTokenFlag, *insightsListMemoriesApikeyTokenFlag, *insightsListMemoriesProjectSlugInputFlag)
+			case "record-finding":
+				endpoint = c.RecordFinding()
+				data, err = insightsc.BuildRecordFindingPayload(*insightsRecordFindingBodyFlag, *insightsRecordFindingSessionTokenFlag, *insightsRecordFindingApikeyTokenFlag, *insightsRecordFindingProjectSlugInputFlag)
 			}
 		case "instances":
 			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -5101,6 +5262,294 @@ func hooksMetricsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks metrics --body '{\n      \"resourceMetrics\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"intValue\": 1,\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeMetrics\": [\n               {\n                  \"metrics\": [\n                     {\n                        \"description\": \"abc123\",\n                        \"name\": \"abc123\",\n                        \"sum\": {\n                           \"aggregationTemporality\": 1,\n                           \"dataPoints\": [\n                              {\n                                 \"asDouble\": 1,\n                                 \"asInt\": 1,\n                                 \"attributes\": [\n                                    {\n                                       \"key\": \"abc123\",\n                                       \"value\": {\n                                          \"intValue\": 1,\n                                          \"stringValue\": \"abc123\"\n                                       }\n                                    }\n                                 ],\n                                 \"startTimeUnixNano\": \"abc123\",\n                                 \"timeUnixNano\": \"abc123\"\n                              }\n                           ],\n                           \"isMonotonic\": false\n                        },\n                        \"unit\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// insightsUsage displays the usage of the insights command and its subcommands.
+func insightsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage AI Insights proposals and workspace memory.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] insights COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    propose-tool-variation: Agent proposes an edit to a tool variation. Inserts a pending proposal row.`)
+	fmt.Fprintln(os.Stderr, `    propose-toolset-change: Agent proposes a change to a toolset (add/remove tools, rename).`)
+	fmt.Fprintln(os.Stderr, `    list-proposals: List proposals for the active project.`)
+	fmt.Fprintln(os.Stderr, `    apply-proposal: Apply a pending proposal to the underlying resource.`)
+	fmt.Fprintln(os.Stderr, `    rollback-proposal: Roll back an applied proposal by writing the snapshotted current_value back.`)
+	fmt.Fprintln(os.Stderr, `    dismiss-proposal: Mark a proposal as dismissed.`)
+	fmt.Fprintln(os.Stderr, `    forget-memory-by-id: UI-driven delete of a memory the agent created. Audit-logged.`)
+	fmt.Fprintln(os.Stderr, `    remember-fact: Agent writes a memory (fact, playbook, glossary) into workspace memory.`)
+	fmt.Fprintln(os.Stderr, `    forget-memory: Agent or user deletes a memory by id (agent-side).`)
+	fmt.Fprintln(os.Stderr, `    list-memories: List memories for the active project. Supports recall ranking by tags + recency.`)
+	fmt.Fprintln(os.Stderr, `    record-finding: Agent records an investigation finding. Sugar over rememberFact with kind=finding and short TTL.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s insights COMMAND --help\n", os.Args[0])
+}
+func insightsProposeToolVariationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] insights propose-tool-variation", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Agent proposes an edit to a tool variation. Inserts a pending proposal row.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "insights propose-tool-variation --body '{\n      \"current_value\": \"abc123\",\n      \"proposed_value\": \"abc123\",\n      \"reasoning\": \"abc123\",\n      \"source_chat_id\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func insightsProposeToolsetChangeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] insights propose-toolset-change", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Agent proposes a change to a toolset (add/remove tools, rename).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "insights propose-toolset-change --body '{\n      \"current_value\": \"abc123\",\n      \"proposed_value\": \"abc123\",\n      \"reasoning\": \"abc123\",\n      \"source_chat_id\": \"abc123\",\n      \"toolset_slug\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func insightsListProposalsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] insights list-proposals", os.Args[0])
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List proposals for the active project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "insights list-proposals --status \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func insightsApplyProposalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] insights apply-proposal", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Apply a pending proposal to the underlying resource.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "insights apply-proposal --body '{\n      \"force\": false,\n      \"proposal_id\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func insightsRollbackProposalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] insights rollback-proposal", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Roll back an applied proposal by writing the snapshotted current_value back.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "insights rollback-proposal --body '{\n      \"force\": false,\n      \"proposal_id\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func insightsDismissProposalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] insights dismiss-proposal", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Mark a proposal as dismissed.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "insights dismiss-proposal --body '{\n      \"proposal_id\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func insightsForgetMemoryByIDUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] insights forget-memory-by-id", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `UI-driven delete of a memory the agent created. Audit-logged.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "insights forget-memory-by-id --body '{\n      \"memory_id\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func insightsRememberFactUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] insights remember-fact", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Agent writes a memory (fact, playbook, glossary) into workspace memory.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "insights remember-fact --body '{\n      \"content\": \"abc123\",\n      \"kind\": \"playbook\",\n      \"source_chat_id\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func insightsForgetMemoryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] insights forget-memory", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Agent or user deletes a memory by id (agent-side).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "insights forget-memory --body '{\n      \"memory_id\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func insightsListMemoriesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] insights list-memories", os.Args[0])
+	fmt.Fprint(os.Stderr, " -kind STRING")
+	fmt.Fprint(os.Stderr, " -tags JSON")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List memories for the active project. Supports recall ranking by tags + recency.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -kind STRING: `)
+	fmt.Fprintln(os.Stderr, `    -tags JSON: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "insights list-memories --kind \"abc123\" --tags '[\n      \"abc123\"\n   ]' --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func insightsRecordFindingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] insights record-finding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Agent records an investigation finding. Sugar over rememberFact with kind=finding and short TTL.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "insights record-finding --body '{\n      \"content\": \"abc123\",\n      \"source_chat_id\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // instancesUsage displays the usage of the instances command and its

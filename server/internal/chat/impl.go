@@ -769,6 +769,26 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			if readErr != nil {
 				if !errors.Is(readErr, io.EOF) {
 					s.logger.ErrorContext(ctx, "stream read error", attr.SlogError(readErr))
+					// Surface the error to the SSE client. Without this the
+					// upstream provider error (quota exhausted, rate-limited,
+					// model rejected the request, etc.) is invisible to the
+					// browser — the AI SDK sees a stream that ended cleanly
+					// with no content and falls into its retry loop, which
+					// after 3 attempts surfaces "Failed after 3 attempts.
+					// Last error: " with empty message. Write an OpenAI-compat
+					// error data frame so the client gets a real diagnostic.
+					errPayload, jsonErr := json.Marshal(map[string]any{
+						"error": map[string]any{
+							"message": readErr.Error(),
+							"type":    "upstream_stream_error",
+						},
+					})
+					if jsonErr == nil {
+						_, _ = fmt.Fprintf(w, "data: %s\n\n", errPayload)
+						if canFlush {
+							flusher.Flush()
+						}
+					}
 				}
 				break
 			}
