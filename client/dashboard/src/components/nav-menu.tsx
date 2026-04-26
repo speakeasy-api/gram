@@ -96,7 +96,12 @@ export function NavButton({
       ) : (
         Icon && <Icon className={cn("trans text-muted-foreground")} />
       )}
-      <Type variant="small">{titleNode ?? title}</Type>
+      <Type
+        variant="small"
+        className="transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0"
+      >
+        {titleNode ?? title}
+      </Type>
       {title === "Billing" && <ProductTierBadge />}
     </SidebarMenuButton>
   );
