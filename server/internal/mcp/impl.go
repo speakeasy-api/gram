@@ -144,6 +144,7 @@ func NewService(
 	triggerApp *bgtriggers.App,
 	temporal *temporal.Environment,
 	authzEngine *authz.Engine,
+	assistantTokens *assistanttokens.Manager,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -193,7 +194,7 @@ func NewService(
 		features:            features,
 		vectorToolStore:     vectorToolStore,
 		temporal:            temporal,
-		assistantTokens:     nil,
+		assistantTokens:     assistantTokens,
 		sessions:            sessions,
 		chatSessionsManager: chatSessionsManager,
 		enc:                 enc,
@@ -212,10 +213,6 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	// OAuth 2.1 Authorization Server Metadata
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-protected-resource/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP)
-}
-
-func (s *Service) SetAssistantTokens(manager *assistanttokens.Manager) {
-	s.assistantTokens = manager
 }
 
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
@@ -920,11 +917,8 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
-	if s.assistantTokens != nil {
-		authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
-		if err == nil {
-			return authorizedCtx, nil
-		}
+	if authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token); err == nil {
+		return authorizedCtx, nil
 	}
 
 	var oAuthToken *oauth.Token

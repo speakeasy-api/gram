@@ -84,6 +84,7 @@ func NewService(
 	telemetryService *telemetry.Service,
 	assetStorage assets.BlobStore,
 	authzEngine *authz.Engine,
+	assistantTokens *assistanttokens.Manager,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
@@ -92,7 +93,7 @@ func NewService(
 		db:               db,
 		sessions:         sessions,
 		chatSessions:     chatSessions,
-		assistantTokens:  nil,
+		assistantTokens:  assistantTokens,
 		logger:           logger,
 		repo:             repo.New(db),
 		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
@@ -123,24 +124,18 @@ func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JW
 	return s.chatSessions.Authorize(ctx, token)
 }
 
-func (s *Service) SetAssistantTokens(manager *assistanttokens.Manager) {
-	s.assistantTokens = manager
-}
-
 // directAuthorize performs authentication and authorization for chat requests.
 // It tries session auth first, then API key auth, then chat session token as fallback.
 // It also validates the project header and ensures ProjectID is present.
 func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, error) {
-	if s.assistantTokens != nil {
-		if token := r.Header.Get("Authorization"); token != "" {
-			authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
-			if err == nil {
-				authCtx, ok := contextvalues.GetAuthContext(authorizedCtx)
-				if !ok || authCtx == nil || authCtx.ProjectID == nil {
-					return authorizedCtx, nil, oops.C(oops.CodeUnauthorized)
-				}
-				return authorizedCtx, authCtx, nil
+	if token := r.Header.Get("Authorization"); token != "" {
+		authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
+		if err == nil {
+			authCtx, ok := contextvalues.GetAuthContext(authorizedCtx)
+			if !ok || authCtx == nil || authCtx.ProjectID == nil {
+				return authorizedCtx, nil, oops.C(oops.CodeUnauthorized)
 			}
+			return authorizedCtx, authCtx, nil
 		}
 	}
 

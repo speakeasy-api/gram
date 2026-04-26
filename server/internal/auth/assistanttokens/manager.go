@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -52,7 +53,7 @@ type GenerateInput struct {
 
 type Manager struct {
 	jwtSecret  string
-	db         *pgxpool.Pool
+	tokens     *tokenrepo.Queries
 	orgs       *organizationsrepo.Queries
 	projects   *projectsrepo.Queries
 	authz      *authz.Engine
@@ -62,7 +63,7 @@ type Manager struct {
 func New(jwtSecret string, db *pgxpool.Pool, authzEngine *authz.Engine) *Manager {
 	return &Manager{
 		jwtSecret:  jwtSecret,
-		db:         db,
+		tokens:     tokenrepo.New(db),
 		orgs:       organizationsrepo.New(db),
 		projects:   projectsrepo.New(db),
 		authz:      authzEngine,
@@ -224,9 +225,6 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 // per-turn burst of authorized calls (1× /chat/completions + N× MCP)
 // collapses to a single DB hit.
 func (m *Manager) checkRevocation(ctx context.Context, threadID, assistantID uuid.UUID) error {
-	if m.db == nil {
-		return nil
-	}
 	if allowed, ok := m.revocation.get(threadID); ok {
 		if allowed {
 			return nil
@@ -234,17 +232,10 @@ func (m *Manager) checkRevocation(ctx context.Context, threadID, assistantID uui
 		return oops.E(oops.CodeUnauthorized, nil, "assistant token has been revoked")
 	}
 
-	var (
-		threadDeleted    bool
-		assistantDeleted bool
-		assistantStatus  string
-	)
-	err := m.db.QueryRow(ctx, `
-SELECT t.deleted, a.deleted, a.status
-FROM assistant_threads t
-JOIN assistants a ON a.id = t.assistant_id
-WHERE t.id = $1 AND t.assistant_id = $2
-`, threadID, assistantID).Scan(&threadDeleted, &assistantDeleted, &assistantStatus)
+	row, err := m.tokens.GetAssistantTokenRevocation(ctx, tokenrepo.GetAssistantTokenRevocationParams{
+		ThreadID:    threadID,
+		AssistantID: assistantID,
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			m.revocation.put(threadID, false)
@@ -253,7 +244,7 @@ WHERE t.id = $1 AND t.assistant_id = $2
 		return oops.E(oops.CodeUnauthorized, err, "unable to load assistant thread")
 	}
 
-	allowed := !threadDeleted && !assistantDeleted && assistantStatus == "active"
+	allowed := !row.ThreadDeleted && !row.AssistantDeleted && row.AssistantStatus == "active"
 	m.revocation.put(threadID, allowed)
 	if !allowed {
 		return oops.E(oops.CodeUnauthorized, nil, "assistant token has been revoked")

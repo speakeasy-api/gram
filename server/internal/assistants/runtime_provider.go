@@ -2,14 +2,16 @@ package assistants
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/url"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/superfly/fly-go/tokens"
+
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
 const (
@@ -46,13 +48,16 @@ func normalizeRuntimeProvider(provider string) string {
 	}
 }
 
-func NewRuntimeBackend(logger *slog.Logger, config RuntimeBackendConfig) (RuntimeBackend, error) {
-	switch normalizeRuntimeProvider(config.Provider) {
-	case RuntimeProviderLocal:
-		return NewRuntimeManager(logger, config.Local), nil
-	default:
-		return nil, fmt.Errorf("unsupported assistant runtime provider %q", config.Provider)
+// NewRuntimeBackend selects the runtime implementation. The provider string
+// is validated by assistantRuntimeConfigFromCLI before reaching here, so any
+// unknown value is a programmer error and panics rather than silently
+// degrading.
+func NewRuntimeBackend(logger *slog.Logger, httpPolicy *guardian.Policy, config RuntimeBackendConfig) RuntimeBackend {
+	provider := normalizeRuntimeProvider(config.Provider)
+	if provider != RuntimeProviderLocal {
+		panic(fmt.Sprintf("assistants.NewRuntimeBackend: unsupported provider %q (CLI validation should have rejected this)", provider))
 	}
+	return NewRuntimeManager(logger, httpPolicy, config.Local)
 }
 
 func ValidateRuntimeBackendServerURL(ctx context.Context, runtime RuntimeBackend, serverURL *url.URL) error {
@@ -67,9 +72,10 @@ func ValidateRuntimeBackendServerURL(ctx context.Context, runtime RuntimeBackend
 		Backend:             runtime.Backend(),
 		BackendMetadataJSON: nil,
 		State:               "",
-		WarmUntil: sql.NullTime{
-			Time:  time.Time{},
-			Valid: false,
+		WarmUntil: pgtype.Timestamptz{
+			Time:             time.Time{},
+			InfinityModifier: pgtype.Finite,
+			Valid:            false,
 		},
 	}, serverURL)
 	if err != nil {

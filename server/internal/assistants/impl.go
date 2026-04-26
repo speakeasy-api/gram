@@ -22,23 +22,30 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 )
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	auth   *auth.Auth
-	authz  *authz.Engine
-	core   *ServiceCore
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	auth        *auth.Auth
+	authz       *authz.Engine
+	core        *ServiceCore
+	temporalEnv *tenv.Environment
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
+var _ bgtriggers.Dispatcher = (*Service)(nil)
+
+const assistantWorkflowDispatchEnabled = false
 
 func NewService(
 	logger *slog.Logger,
@@ -49,32 +56,21 @@ func NewService(
 	assistantTokens *assistanttokens.Manager,
 	serverURL *url.URL,
 	slackClient *slackclient.SlackClient,
-	runtimeConfig RuntimeBackendConfig,
+	runtimeBackend RuntimeBackend,
+	temporalEnv *tenv.Environment,
 	telemetryLogger *telemetry.Logger,
-) (*Service, error) {
+) *Service {
 	logger = logger.With(attr.SlogComponent("assistants"))
-	runtimeBackend, err := NewRuntimeBackend(logger, runtimeConfig)
-	if err != nil {
-		return nil, fmt.Errorf("create assistant runtime backend: %w", err)
-	}
-	if err := ValidateRuntimeBackendServerURL(context.Background(), runtimeBackend, serverURL); err != nil {
-		return nil, err
-	}
 	instrumentedRuntime := newTelemetryRuntimeBackend(runtimeBackend, telemetryLogger)
 	core := NewServiceCore(logger, db, instrumentedRuntime, slackClient, assistantTokens, serverURL, telemetryLogger)
-	// Local Firecracker runtimes surface unexpected VM exits via callback so
-	// the DB row can be reconciled; Fly machines are managed remotely and
-	// don't expose an equivalent signal.
-	if rm, ok := runtimeBackend.(*RuntimeManager); ok {
-		rm.SetOnUnexpectedExit(core.HandleUnexpectedRuntimeExit)
-	}
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		logger: logger,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
-		core:   core,
-	}, nil
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		logger:      logger,
+		auth:        auth.New(logger, db, sessions, authzEngine),
+		authz:       authzEngine,
+		core:        core,
+		temporalEnv: temporalEnv,
+	}
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -92,9 +88,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) ListAssistants(ctx context.Context, _ *gen.ListAssistantsPayload) (*gen.ListAssistantsResult, error) {
-	authCtx, err := requireProjectAuthContext(ctx)
-	if err != nil {
-		return nil, err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
@@ -117,9 +113,9 @@ func (s *Service) ListAssistants(ctx context.Context, _ *gen.ListAssistantsPaylo
 }
 
 func (s *Service) GetAssistant(ctx context.Context, payload *gen.GetAssistantPayload) (*types.Assistant, error) {
-	authCtx, err := requireProjectAuthContext(ctx)
-	if err != nil {
-		return nil, err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
@@ -141,9 +137,9 @@ func (s *Service) GetAssistant(ctx context.Context, payload *gen.GetAssistantPay
 }
 
 func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssistantPayload) (*types.Assistant, error) {
-	authCtx, err := requireProjectAuthContext(ctx)
-	if err != nil {
-		return nil, err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
@@ -175,9 +171,9 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 }
 
 func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssistantPayload) (*types.Assistant, error) {
-	authCtx, err := requireProjectAuthContext(ctx)
-	if err != nil {
-		return nil, err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return nil, err
@@ -210,9 +206,9 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 }
 
 func (s *Service) DeleteAssistant(ctx context.Context, payload *gen.DeleteAssistantPayload) error {
-	authCtx, err := requireProjectAuthContext(ctx)
-	if err != nil {
-		return err
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
 		return err
@@ -227,16 +223,29 @@ func (s *Service) DeleteAssistant(ctx context.Context, payload *gen.DeleteAssist
 	return nil
 }
 
-func (s *Service) Core() *ServiceCore {
-	return s.core
+func (s *Service) Kind() string {
+	return bgtriggers.TargetKindAssistant
 }
 
-func requireProjectAuthContext(ctx context.Context) (*contextvalues.AuthContext, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
+func (s *Service) Dispatch(ctx context.Context, task bgtriggers.Task) error {
+	if !assistantWorkflowDispatchEnabled {
+		// Keep assistant trigger delivery inert while the coordinator and thread
+		// workflows are stubs, so partial rollout does not create pending work
+		// that no workflow can admit or process yet.
+		return nil
 	}
-	return authCtx, nil
+
+	result, err := s.core.EnqueueTriggerTask(ctx, task)
+	if err != nil {
+		return fmt.Errorf("enqueue assistant trigger task: %w", err)
+	}
+	if !result.EventCreated || result.AssistantID == uuid.Nil {
+		return nil
+	}
+	if err := background.SignalAssistantCoordinator(ctx, s.temporalEnv, result.AssistantID); err != nil {
+		return fmt.Errorf("signal assistant coordinator: %w", err)
+	}
+	return nil
 }
 
 func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error, message string) error {

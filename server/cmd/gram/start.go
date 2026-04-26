@@ -638,7 +638,7 @@ func newStartCommand() *cli.Command {
 
 			authorizer := auth.New(logger, db, sessionManager, authzEngine)
 			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db, authzEngine)
-			assistantRuntimeConfig, err := assistantRuntimeConfigFromCLI(c)
+			assistantRuntime, err := newAssistantRuntime(ctx, logger, c, guardianPolicy, db, serverURL)
 			if err != nil {
 				return err
 			}
@@ -678,8 +678,8 @@ func newStartCommand() *cli.Command {
 				triggerApp,
 				temporalEnv,
 				authzEngine,
+				assistantTokenManager,
 			)
-			mcpService.SetAssistantTokens(assistantTokenManager)
 
 			chatClient := chat.NewAgenticChatClient(
 				logger,
@@ -689,13 +689,9 @@ func newStartCommand() *cli.Command {
 				completionsClient,
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
-			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, posthogClient, telemSvc, assetStorage, authzEngine)
-			chatService.SetAssistantTokens(assistantTokenManager)
-			assistantsSvc, err := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantTokenManager, serverURL, slackClient, assistantRuntimeConfig, telemLogger)
-			if err != nil {
-				return fmt.Errorf("failed to create assistants service: %w", err)
-			}
-			triggerApp.RegisterDispatcher(assistants.NewDispatcher(assistantsSvc.Core(), temporalEnv))
+			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager)
+			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantTokenManager, serverURL, slackClient, assistantRuntime, temporalEnv, telemLogger)
+			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine)

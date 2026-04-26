@@ -59,11 +59,13 @@ FROM assistant_toolsets at
 JOIN toolsets t ON t.id = at.toolset_id
 LEFT JOIN environments e ON e.id = at.environment_id
 WHERE at.assistant_id = ANY(@assistant_ids::UUID[])
+  AND at.project_id = @project_id
 ORDER BY at.created_at;
 
 -- name: ClearAssistantToolsets :exec
 DELETE FROM assistant_toolsets
-WHERE assistant_id = @assistant_id;
+WHERE assistant_id = @assistant_id
+  AND project_id = @project_id;
 
 -- name: AddAssistantToolsets :copyfrom
 INSERT INTO assistant_toolsets (
@@ -295,12 +297,14 @@ WITH touch_runtime AS (
     last_heartbeat_at = clock_timestamp(),
     updated_at = clock_timestamp()
   WHERE r.id = @runtime_id
+    AND r.project_id = @project_id
     AND r.deleted IS FALSE
     AND r.state IN (@starting_state, @active_state)
 )
 UPDATE assistant_thread_events e
 SET updated_at = clock_timestamp()
 WHERE e.id = @event_id
+  AND e.project_id = @project_id
   AND e.deleted IS FALSE
   AND e.status = @processing_status;
 
@@ -339,6 +343,7 @@ FROM assistant_threads t
 JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
 JOIN assistant_runtimes r ON r.assistant_thread_id = t.id AND r.project_id = t.project_id
 WHERE t.id = @thread_id
+  AND t.project_id = @project_id
   AND t.deleted IS FALSE
   AND a.deleted IS FALSE
   AND r.deleted IS FALSE
@@ -386,7 +391,8 @@ SET
   processed_at = clock_timestamp(),
   last_error = NULL,
   updated_at = clock_timestamp()
-WHERE id = @event_id;
+WHERE id = @event_id
+  AND project_id = @project_id;
 
 -- name: FailAssistantThreadEvent :exec
 UPDATE assistant_thread_events
@@ -394,7 +400,8 @@ SET
   status = @failed_status,
   last_error = @last_error,
   updated_at = clock_timestamp()
-WHERE id = @event_id;
+WHERE id = @event_id
+  AND project_id = @project_id;
 
 -- name: ResetAssistantThreadEventToPending :exec
 UPDATE assistant_thread_events
@@ -402,7 +409,8 @@ SET
   status = @pending_status,
   last_error = @last_error,
   updated_at = clock_timestamp()
-WHERE id = @event_id;
+WHERE id = @event_id
+  AND project_id = @project_id;
 
 -- name: SetAssistantRuntimeActive :exec
 UPDATE assistant_runtimes
@@ -411,14 +419,16 @@ SET
   warm_until = @warm_until,
   last_heartbeat_at = clock_timestamp(),
   updated_at = clock_timestamp()
-WHERE id = @runtime_id;
+WHERE id = @runtime_id
+  AND project_id = @project_id;
 
 -- name: UpdateAssistantRuntimeMetadata :exec
 UPDATE assistant_runtimes
 SET
   backend_metadata_json = @backend_metadata_json,
   updated_at = clock_timestamp()
-WHERE id = @runtime_id;
+WHERE id = @runtime_id
+  AND project_id = @project_id;
 
 -- name: StopAssistantRuntime :exec
 UPDATE assistant_runtimes

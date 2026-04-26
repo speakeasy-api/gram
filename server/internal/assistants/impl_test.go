@@ -139,11 +139,12 @@ VALUES ($1, 'Project', $2, 'org-test')
 	logger := testenv.NewLogger(t)
 	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	service := &Service{
-		tracer: noop.NewTracerProvider().Tracer("test"),
-		logger: logger,
-		auth:   nil,
-		authz:  authzEngine,
-		core:   NewServiceCore(logger, conn, testRuntimeBackend{backend: runtimeBackendLocal, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger)),
+		tracer:      noop.NewTracerProvider().Tracer("test"),
+		logger:      logger,
+		auth:        nil,
+		authz:       authzEngine,
+		core:        NewServiceCore(logger, conn, testRuntimeBackend{backend: runtimeBackendLocal, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger)),
+		temporalEnv: nil,
 	}
 
 	sessionID := "session-test"

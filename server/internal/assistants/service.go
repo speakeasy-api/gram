@@ -3,7 +3,6 @@ package assistants
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -71,14 +70,6 @@ func pgTimestamp(value time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: value, InfinityModifier: pgtype.Finite, Valid: true}
 }
 
-func sqlNullTime(value pgtype.Timestamptz) sql.NullTime {
-	return sql.NullTime{Time: value.Time, Valid: value.Valid}
-}
-
-func sqlNullString(value pgtype.Text) sql.NullString {
-	return sql.NullString{String: value.String, Valid: value.Valid}
-}
-
 func pgText(value string) pgtype.Text {
 	return pgtype.Text{String: value, Valid: true}
 }
@@ -136,7 +127,7 @@ type assistantRecord struct {
 	Status          string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
-	DeletedAt       sql.NullTime
+	DeletedAt       pgtype.Timestamptz
 }
 
 type assistantThreadRecord struct {
@@ -158,7 +149,7 @@ type assistantRuntimeRecord struct {
 	Backend             string
 	BackendMetadataJSON []byte
 	State               string
-	WarmUntil           sql.NullTime
+	WarmUntil           pgtype.Timestamptz
 }
 
 type assistantThreadEventRecord struct {
@@ -173,7 +164,7 @@ type assistantThreadEventRecord struct {
 	NormalizedPayloadJSON []byte
 	SourcePayloadJSON     []byte
 	Attempts              int
-	LastError             sql.NullString
+	LastError             pgtype.Text
 }
 
 // assistantToolsetRow is the hydrated view of a row in assistant_toolsets
@@ -183,10 +174,10 @@ type assistantToolsetRow struct {
 	ToolsetID              uuid.UUID
 	ToolsetSlug            string
 	McpEnabled             bool
-	McpSlug                sql.NullString
-	DefaultEnvironmentSlug sql.NullString
+	McpSlug                pgtype.Text
+	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
-	EnvironmentSlug        sql.NullString
+	EnvironmentSlug        pgtype.Text
 }
 
 func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistantRecord {
@@ -204,7 +195,7 @@ func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistan
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
-		DeletedAt:       sqlNullTime(row.DeletedAt),
+		DeletedAt:       row.DeletedAt,
 	}
 }
 
@@ -223,7 +214,7 @@ func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRe
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
-		DeletedAt:       sqlNullTime(row.DeletedAt),
+		DeletedAt:       row.DeletedAt,
 	}
 }
 
@@ -242,7 +233,7 @@ func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecor
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
-		DeletedAt:       sqlNullTime(row.DeletedAt),
+		DeletedAt:       row.DeletedAt,
 	}
 }
 
@@ -261,7 +252,7 @@ func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
-		DeletedAt:       sqlNullTime(row.DeletedAt),
+		DeletedAt:       row.DeletedAt,
 	}
 }
 
@@ -280,7 +271,7 @@ func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistan
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
-		DeletedAt:       sqlNullTime(row.DeletedAt),
+		DeletedAt:       row.DeletedAt,
 	}
 }
 
@@ -470,31 +461,38 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 // without this the partial unique index on (assistant_thread_id) WHERE
 // deleted IS FALSE AND ended IS FALSE silently blocks admit's ON CONFLICT
 // DO NOTHING insert and the thread wedges.
-func (s *ServiceCore) HandleUnexpectedRuntimeExit(threadID uuid.UUID) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	projectID, err := s.resolveThreadProjectID(ctx, threadID)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "resolve assistant thread project after unexpected exit failed",
-			attr.SlogAssistantThreadID(threadID.String()),
-			attr.SlogError(err),
-		)
-		return
+// NewUnexpectedRuntimeExitHandler returns a callback suitable for
+// RuntimeManagerConfig.OnUnexpectedExit. It only needs the db pool and a
+// logger, so it can be wired at deps.go time without creating an artificial
+// dep on ServiceCore. The handler reconciles the DB runtime row when a VM
+// dies without a Stop() call so admit can re-provision the thread on its
+// next event.
+func NewUnexpectedRuntimeExitHandler(logger *slog.Logger, db *pgxpool.Pool) func(threadID uuid.UUID) {
+	return func(threadID uuid.UUID) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		projectID, err := assistantrepo.New(db).ResolveThreadProjectID(ctx, threadID)
+		if err != nil {
+			logger.ErrorContext(ctx, "resolve assistant thread project after unexpected exit failed",
+				attr.SlogAssistantThreadID(threadID.String()),
+				attr.SlogError(err),
+			)
+			return
+		}
+		err = assistantrepo.New(db).StopAssistantRuntime(ctx, assistantrepo.StopAssistantRuntimeParams{
+			State:         runtimeStateStopped,
+			ProjectID:     projectID,
+			ThreadID:      threadID,
+			StartingState: runtimeStateStarting,
+			ActiveState:   runtimeStateActive,
+		})
+		if err != nil {
+			logger.ErrorContext(ctx, "reconcile assistant runtime after unexpected exit failed",
+				attr.SlogAssistantThreadID(threadID.String()),
+				attr.SlogError(err),
+			)
+		}
 	}
-	if err := s.stopRuntimeRecord(ctx, projectID, threadID, runtimeStateStopped); err != nil {
-		s.logger.ErrorContext(ctx, "reconcile assistant runtime after unexpected exit failed",
-			attr.SlogAssistantThreadID(threadID.String()),
-			attr.SlogError(err),
-		)
-	}
-}
-
-func (s *ServiceCore) resolveThreadProjectID(ctx context.Context, threadID uuid.UUID) (uuid.UUID, error) {
-	projectID, err := assistantrepo.New(s.db).ResolveThreadProjectID(ctx, threadID)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("resolve assistant thread project id: %w", err)
-	}
-	return projectID, nil
 }
 
 func normalizeWarmTTLSeconds(v *int) int {
@@ -618,12 +616,15 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 
 // loadAssistantToolsets pulls the hydrated toolset rows for one or more
 // assistants in a single query so callers can attach them without N+1.
-func (s *ServiceCore) loadAssistantToolsets(ctx context.Context, assistantIDs []uuid.UUID) (map[uuid.UUID][]assistantToolsetRow, error) {
+func (s *ServiceCore) loadAssistantToolsets(ctx context.Context, projectID uuid.UUID, assistantIDs []uuid.UUID) (map[uuid.UUID][]assistantToolsetRow, error) {
 	out := map[uuid.UUID][]assistantToolsetRow{}
 	if len(assistantIDs) == 0 {
 		return out, nil
 	}
-	rows, err := assistantrepo.New(s.db).LoadAssistantToolsets(ctx, assistantIDs)
+	rows, err := assistantrepo.New(s.db).LoadAssistantToolsets(ctx, assistantrepo.LoadAssistantToolsetsParams{
+		AssistantIds: assistantIDs,
+		ProjectID:    projectID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("load assistant toolsets: %w", err)
 	}
@@ -632,10 +633,10 @@ func (s *ServiceCore) loadAssistantToolsets(ctx context.Context, assistantIDs []
 			ToolsetID:              row.ToolsetID,
 			ToolsetSlug:            row.ToolsetSlug,
 			McpEnabled:             row.McpEnabled,
-			McpSlug:                sqlNullString(row.McpSlug),
-			DefaultEnvironmentSlug: sqlNullString(row.DefaultEnvironmentSlug),
+			McpSlug:                row.McpSlug,
+			DefaultEnvironmentSlug: row.DefaultEnvironmentSlug,
 			EnvironmentID:          row.EnvironmentID,
-			EnvironmentSlug:        sqlNullString(row.EnvironmentSlug),
+			EnvironmentSlug:        row.EnvironmentSlug,
 		})
 	}
 	return out, nil
@@ -651,7 +652,10 @@ func writeAssistantToolsets(
 	resolved []resolvedToolsetInsert,
 ) error {
 	queries := assistantrepo.New(tx)
-	if err := queries.ClearAssistantToolsets(ctx, assistantID); err != nil {
+	if err := queries.ClearAssistantToolsets(ctx, assistantrepo.ClearAssistantToolsetsParams{
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+	}); err != nil {
 		return fmt.Errorf("clear assistant toolsets: %w", err)
 	}
 	if len(resolved) == 0 {
@@ -757,7 +761,7 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, fmt.Errorf("commit assistant tx: %w", err)
 	}
 
-	refs, err := s.loadAssistantToolsets(ctx, []uuid.UUID{record.ID})
+	refs, err := s.loadAssistantToolsets(ctx, projectID, []uuid.UUID{record.ID})
 	if err != nil {
 		return assistantRecord{}, err
 	}
@@ -779,7 +783,7 @@ func (s *ServiceCore) ListAssistants(ctx context.Context, projectID uuid.UUID) (
 		ids = append(ids, record.ID)
 	}
 
-	refs, err := s.loadAssistantToolsets(ctx, ids)
+	refs, err := s.loadAssistantToolsets(ctx, projectID, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -798,7 +802,7 @@ func (s *ServiceCore) GetAssistant(ctx context.Context, projectID uuid.UUID, ass
 		return assistantRecord{}, fmt.Errorf("select assistant: %w", err)
 	}
 	record := assistantRecordFromGetRow(row)
-	refs, err := s.loadAssistantToolsets(ctx, []uuid.UUID{record.ID})
+	refs, err := s.loadAssistantToolsets(ctx, projectID, []uuid.UUID{record.ID})
 	if err != nil {
 		return assistantRecord{}, err
 	}
@@ -812,7 +816,7 @@ func (s *ServiceCore) getAssistantForDispatch(ctx context.Context, assistantID u
 		return assistantRecord{}, fmt.Errorf("select assistant for dispatch: %w", err)
 	}
 	record := assistantRecordFromDispatchRow(row)
-	refs, err := s.loadAssistantToolsets(ctx, []uuid.UUID{record.ID})
+	refs, err := s.loadAssistantToolsets(ctx, record.ProjectID, []uuid.UUID{record.ID})
 	if err != nil {
 		return assistantRecord{}, err
 	}
@@ -873,7 +877,7 @@ func (s *ServiceCore) UpdateAssistant(
 		return assistantRecord{}, fmt.Errorf("commit assistant tx: %w", err)
 	}
 
-	refs, err := s.loadAssistantToolsets(ctx, []uuid.UUID{record.ID})
+	refs, err := s.loadAssistantToolsets(ctx, projectID, []uuid.UUID{record.ID})
 	if err != nil {
 		return assistantRecord{}, err
 	}
@@ -1111,8 +1115,8 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 	return admitted, nil
 }
 
-func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
-	thread, assistant, runtimeRecord, err := s.loadThreadContext(ctx, threadID)
+func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
+	thread, assistant, runtimeRecord, err := s.loadThreadContext(ctx, projectID, threadID)
 	if err != nil {
 		return ProcessThreadEventsResult{}, err
 	}
@@ -1183,7 +1187,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, threadID uuid.UUI
 	}
 
 	if runtimeRecord.State == runtimeStateStarting {
-		if err := s.setRuntimeActive(ctx, runtimeRecord.ID, time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds)*time.Second)); err != nil {
+		if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds)*time.Second)); err != nil {
 			return ProcessThreadEventsResult{}, err
 		}
 	}
@@ -1201,7 +1205,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, threadID uuid.UUI
 		turnCtx := withAssistantLogEvent(ctx, event)
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_start", "assistant turn started", "INFO", nil)
 
-		stopLeaseHeartbeat := s.startProcessingLeaseHeartbeat(turnCtx, runtimeRecord.ID, event.ID)
+		stopLeaseHeartbeat := s.startProcessingLeaseHeartbeat(turnCtx, thread.ProjectID, runtimeRecord.ID, event.ID)
 		runErr := s.processEventTurn(turnCtx, thread, assistant, runtimeRecord, event, coldStart)
 		stopLeaseHeartbeat()
 		if runErr != nil {
@@ -1235,11 +1239,11 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, threadID uuid.UUI
 			// event. The warm runtime stays up for subsequent events.
 			if event.Attempts >= maxEventAttempts {
 				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event exceeded max attempts", "ERROR", runErr)
-				if err := s.failEvent(ctx, event.ID, fmt.Errorf("exceeded %d attempts: %w", maxEventAttempts, runErr)); err != nil {
+				if err := s.failEvent(ctx, thread.ProjectID, event.ID, fmt.Errorf("exceeded %d attempts: %w", maxEventAttempts, runErr)); err != nil {
 					return ProcessThreadEventsResult{}, err
 				}
 				warmUntil := time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds) * time.Second)
-				if err := s.setRuntimeActive(ctx, runtimeRecord.ID, warmUntil); err != nil {
+				if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, warmUntil); err != nil {
 					return ProcessThreadEventsResult{}, err
 				}
 				return ProcessThreadEventsResult{
@@ -1254,11 +1258,11 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, threadID uuid.UUI
 			// keep the warm runtime, let the coordinator re-kick on the next
 			// admit cycle.
 			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_requeued", "assistant event requeued for retry", "WARN", runErr)
-			if err := s.resetEventToPending(ctx, event.ID, runErr); err != nil {
+			if err := s.resetEventToPending(ctx, thread.ProjectID, event.ID, runErr); err != nil {
 				return ProcessThreadEventsResult{}, err
 			}
 			warmUntil := time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds) * time.Second)
-			if err := s.setRuntimeActive(ctx, runtimeRecord.ID, warmUntil); err != nil {
+			if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, warmUntil); err != nil {
 				return ProcessThreadEventsResult{}, err
 			}
 			return ProcessThreadEventsResult{
@@ -1270,7 +1274,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, threadID uuid.UUI
 			}, nil
 		}
 
-		if err := s.completeEvent(ctx, event.ID); err != nil {
+		if err := s.completeEvent(ctx, thread.ProjectID, event.ID); err != nil {
 			return ProcessThreadEventsResult{}, err
 		}
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_completed", "assistant event completed", "INFO", nil)
@@ -1279,7 +1283,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, threadID uuid.UUI
 	}
 
 	warmUntil := time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds) * time.Second)
-	if err := s.setRuntimeActive(ctx, runtimeRecord.ID, warmUntil); err != nil {
+	if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, warmUntil); err != nil {
 		return ProcessThreadEventsResult{}, err
 	}
 	return ProcessThreadEventsResult{
@@ -1326,6 +1330,7 @@ func (s *ServiceCore) processEventTurn(
 
 func (s *ServiceCore) startProcessingLeaseHeartbeat(
 	ctx context.Context,
+	projectID uuid.UUID,
 	runtimeID uuid.UUID,
 	eventID uuid.UUID,
 ) func() {
@@ -1340,7 +1345,7 @@ func (s *ServiceCore) startProcessingLeaseHeartbeat(
 			case <-hbCtx.Done():
 				return
 			case <-ticker.C:
-				if err := s.touchProcessingLease(hbCtx, runtimeID, eventID); err != nil && hbCtx.Err() == nil {
+				if err := s.touchProcessingLease(hbCtx, projectID, runtimeID, eventID); err != nil && hbCtx.Err() == nil {
 					s.logger.WarnContext(hbCtx, "refresh assistant processing lease failed",
 						attr.SlogAssistantRuntimeID(runtimeID.String()),
 						attr.SlogAssistantEventID(eventID.String()),
@@ -1353,11 +1358,12 @@ func (s *ServiceCore) startProcessingLeaseHeartbeat(
 	return cancel
 }
 
-func (s *ServiceCore) touchProcessingLease(ctx context.Context, runtimeID uuid.UUID, eventID uuid.UUID) error {
+func (s *ServiceCore) touchProcessingLease(ctx context.Context, projectID, runtimeID, eventID uuid.UUID) error {
 	err := assistantrepo.New(s.db).TouchProcessingLease(ctx, assistantrepo.TouchProcessingLeaseParams{
 		EventID:          eventID,
 		ProcessingStatus: eventStatusProcessing,
 		RuntimeID:        runtimeID,
+		ProjectID:        projectID,
 		StartingState:    runtimeStateStarting,
 		ActiveState:      runtimeStateActive,
 	})
@@ -1410,9 +1416,6 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 // assistant) and server-side Authorize revokes instantly when the thread or
 // assistant is deleted/paused.
 func (s *ServiceCore) mintAssistantRuntimeToken(assistant assistantRecord, thread assistantThreadRecord) (string, error) {
-	if s.assistantTokens == nil {
-		return "", fmt.Errorf("assistant token manager is not configured")
-	}
 	token, err := s.assistantTokens.Generate(assistanttokens.GenerateInput{
 		OrgID:       assistant.OrganizationID,
 		ProjectID:   assistant.ProjectID,
@@ -1459,10 +1462,6 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 }
 
 func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetRow) ([]runtimeMCPServer, error) {
-	if serverURL == nil {
-		return nil, fmt.Errorf("assistant runtime server URL is not configured")
-	}
-
 	servers := make([]runtimeMCPServer, 0, len(toolsets))
 	for _, t := range toolsets {
 		if !t.McpEnabled {
@@ -1494,9 +1493,9 @@ func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetR
 }
 
 func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, threadID uuid.UUID) error {
-	projectID, err := s.resolveThreadProjectID(ctx, threadID)
+	projectID, err := assistantrepo.New(s.db).ResolveThreadProjectID(ctx, threadID)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve assistant thread project id: %w", err)
 	}
 	runtimeRecord, err := s.loadActiveRuntimeRecord(ctx, projectID, threadID)
 	if err != nil {
@@ -1511,9 +1510,10 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, threadID uuid.UUI
 	return nil
 }
 
-func (s *ServiceCore) loadThreadContext(ctx context.Context, threadID uuid.UUID) (assistantThreadRecord, assistantRecord, assistantRuntimeRecord, error) {
+func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID uuid.UUID) (assistantThreadRecord, assistantRecord, assistantRuntimeRecord, error) {
 	row, err := assistantrepo.New(s.db).LoadThreadContext(ctx, assistantrepo.LoadThreadContextParams{
 		ThreadID:      threadID,
+		ProjectID:     projectID,
 		StartingState: runtimeStateStarting,
 		ActiveState:   runtimeStateActive,
 	})
@@ -1544,7 +1544,7 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, threadID uuid.UUID)
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
-		DeletedAt:       sqlNullTime(row.DeletedAt),
+		DeletedAt:       row.DeletedAt,
 	}
 	runtime := assistantRuntimeRecord{
 		ID:                  row.RuntimeID,
@@ -1554,9 +1554,9 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, threadID uuid.UUID)
 		Backend:             row.Backend,
 		BackendMetadataJSON: row.BackendMetadataJson,
 		State:               row.State,
-		WarmUntil:           sqlNullTime(row.WarmUntil),
+		WarmUntil:           row.WarmUntil,
 	}
-	refs, err := s.loadAssistantToolsets(ctx, []uuid.UUID{assistant.ID})
+	refs, err := s.loadAssistantToolsets(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
 		return assistantThreadRecord{}, assistantRecord{}, assistantRuntimeRecord{}, err
 	}
@@ -1582,7 +1582,7 @@ func (s *ServiceCore) loadActiveRuntimeRecord(ctx context.Context, projectID, th
 		Backend:             row.Backend,
 		BackendMetadataJSON: row.BackendMetadataJson,
 		State:               row.State,
-		WarmUntil:           sqlNullTime(row.WarmUntil),
+		WarmUntil:           row.WarmUntil,
 	}, nil
 }
 
@@ -1690,15 +1690,16 @@ func (s *ServiceCore) claimNextPendingEvent(ctx context.Context, projectID, thre
 			NormalizedPayloadJSON: row.NormalizedPayloadJson,
 			SourcePayloadJSON:     row.SourcePayloadJson,
 			Attempts:              int64ToInt(row.Attempts),
-			LastError:             sqlNullString(row.LastError),
+			LastError:             row.LastError,
 		}, true, nil
 	}
 }
 
-func (s *ServiceCore) completeEvent(ctx context.Context, eventID uuid.UUID) error {
+func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid.UUID) error {
 	err := assistantrepo.New(s.db).CompleteAssistantThreadEvent(ctx, assistantrepo.CompleteAssistantThreadEventParams{
 		CompletedStatus: eventStatusCompleted,
 		EventID:         eventID,
+		ProjectID:       projectID,
 	})
 	if err != nil {
 		return fmt.Errorf("complete assistant thread event: %w", err)
@@ -1706,11 +1707,12 @@ func (s *ServiceCore) completeEvent(ctx context.Context, eventID uuid.UUID) erro
 	return nil
 }
 
-func (s *ServiceCore) failEvent(ctx context.Context, eventID uuid.UUID, runErr error) error {
+func (s *ServiceCore) failEvent(ctx context.Context, projectID, eventID uuid.UUID, runErr error) error {
 	err := assistantrepo.New(s.db).FailAssistantThreadEvent(ctx, assistantrepo.FailAssistantThreadEventParams{
 		FailedStatus: eventStatusFailed,
 		LastError:    pgText(runErr.Error()),
 		EventID:      eventID,
+		ProjectID:    projectID,
 	})
 	if err != nil {
 		return fmt.Errorf("fail assistant thread event: %w", err)
@@ -1718,11 +1720,12 @@ func (s *ServiceCore) failEvent(ctx context.Context, eventID uuid.UUID, runErr e
 	return nil
 }
 
-func (s *ServiceCore) resetEventToPending(ctx context.Context, eventID uuid.UUID, runErr error) error {
+func (s *ServiceCore) resetEventToPending(ctx context.Context, projectID, eventID uuid.UUID, runErr error) error {
 	err := assistantrepo.New(s.db).ResetAssistantThreadEventToPending(ctx, assistantrepo.ResetAssistantThreadEventToPendingParams{
 		PendingStatus: eventStatusPending,
 		LastError:     pgText(runErr.Error()),
 		EventID:       eventID,
+		ProjectID:     projectID,
 	})
 	if err != nil {
 		return fmt.Errorf("reset assistant thread event to pending: %w", err)
@@ -1730,11 +1733,12 @@ func (s *ServiceCore) resetEventToPending(ctx context.Context, eventID uuid.UUID
 	return nil
 }
 
-func (s *ServiceCore) setRuntimeActive(ctx context.Context, runtimeID uuid.UUID, warmUntil time.Time) error {
+func (s *ServiceCore) setRuntimeActive(ctx context.Context, projectID, runtimeID uuid.UUID, warmUntil time.Time) error {
 	err := assistantrepo.New(s.db).SetAssistantRuntimeActive(ctx, assistantrepo.SetAssistantRuntimeActiveParams{
 		ActiveState: runtimeStateActive,
 		WarmUntil:   pgTimestamp(warmUntil),
 		RuntimeID:   runtimeID,
+		ProjectID:   projectID,
 	})
 	if err != nil {
 		return fmt.Errorf("set assistant runtime active: %w", err)
@@ -1747,9 +1751,6 @@ func (s *ServiceCore) updateRuntimeEnsureResult(
 	runtime *assistantRuntimeRecord,
 	result RuntimeBackendEnsureResult,
 ) error {
-	if runtime == nil {
-		return fmt.Errorf("assistant runtime record is not configured")
-	}
 	if len(result.BackendMetadataJSON) == 0 {
 		return nil
 	}
@@ -1759,6 +1760,7 @@ func (s *ServiceCore) updateRuntimeEnsureResult(
 	if err := assistantrepo.New(s.db).UpdateAssistantRuntimeMetadata(ctx, assistantrepo.UpdateAssistantRuntimeMetadataParams{
 		BackendMetadataJson: result.BackendMetadataJSON,
 		RuntimeID:           runtime.ID,
+		ProjectID:           runtime.ProjectID,
 	}); err != nil {
 		return fmt.Errorf("update assistant runtime backend metadata: %w", err)
 	}

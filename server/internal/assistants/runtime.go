@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -221,10 +220,13 @@ type RuntimeManager struct {
 	runtimes         map[uuid.UUID]*runtimeState
 	nextSlot         int
 	freeSlots        []int
-	onUnexpectedExit atomic.Pointer[func(uuid.UUID)]
+	onUnexpectedExit func(uuid.UUID)
 }
 
-func NewRuntimeManager(logger *slog.Logger, config RuntimeManagerConfig) *RuntimeManager {
+// NewRuntimeManager wires the local Firecracker runtime. The httpPolicy must
+// permit traffic to the private 172.x guest subnet (an unsafe loopback-allowing
+// policy in local development); production never reaches this constructor.
+func NewRuntimeManager(logger *slog.Logger, httpPolicy *guardian.Policy, config RuntimeManagerConfig) *RuntimeManager {
 	if config.GuestAPIPort <= 0 {
 		config.GuestAPIPort = defaultRuntimeGuestPort
 	}
@@ -292,12 +294,7 @@ func NewRuntimeManager(logger *slog.Logger, config RuntimeManagerConfig) *Runtim
 		}
 	}
 
-	httpPolicy, err := guardian.NewUnsafePolicy(otel.GetTracerProvider(), []string{})
-	if err != nil {
-		panic(fmt.Sprintf("create assistant runtime guardian policy: %v", err))
-	}
-
-	m := &RuntimeManager{
+	return &RuntimeManager{
 		logger:           logger,
 		config:           config,
 		httpPolicy:       httpPolicy,
@@ -305,13 +302,8 @@ func NewRuntimeManager(logger *slog.Logger, config RuntimeManagerConfig) *Runtim
 		runtimes:         make(map[uuid.UUID]*runtimeState),
 		nextSlot:         0,
 		freeSlots:        nil,
-		onUnexpectedExit: atomic.Pointer[func(uuid.UUID)]{},
+		onUnexpectedExit: config.OnUnexpectedExit,
 	}
-	if config.OnUnexpectedExit != nil {
-		cb := config.OnUnexpectedExit
-		m.onUnexpectedExit.Store(&cb)
-	}
-	return m
 }
 
 // ErrRuntimeUnhealthy signals that a turn failed because the runtime itself
@@ -323,18 +315,6 @@ var ErrRuntimeUnhealthy = errors.New("assistant runtime unhealthy")
 
 func (m *RuntimeManager) Backend() string {
 	return runtimeBackendLocal
-}
-
-// SetOnUnexpectedExit installs (or replaces) the callback fired when a
-// firecracker process terminates without a preceding Stop(). Safe to call
-// after construction so the service layer can inject its DB sync hook once
-// both the runtime and the service core exist.
-func (m *RuntimeManager) SetOnUnexpectedExit(cb func(threadID uuid.UUID)) {
-	if cb == nil {
-		m.onUnexpectedExit.Store(nil)
-		return
-	}
-	m.onUnexpectedExit.Store(&cb)
 }
 
 func (m *RuntimeManager) SupportsBackend(backend string) bool {
@@ -717,10 +697,8 @@ func (m *RuntimeManager) waitForProcess(threadID uuid.UUID, state *runtimeState)
 	// If the process exited without a Stop() call, it crashed or was killed
 	// out from under us — notify the service layer so the DB runtime row can
 	// be marked stopped and the thread re-admitted on the next event.
-	if !state.stopRequested.Load() {
-		if cb := m.onUnexpectedExit.Load(); cb != nil {
-			(*cb)(threadID)
-		}
+	if !state.stopRequested.Load() && m.onUnexpectedExit != nil {
+		m.onUnexpectedExit(threadID)
 	}
 }
 
@@ -969,9 +947,6 @@ func (m *RuntimeManager) validateConfigLocked() error {
 }
 
 func (m *RuntimeManager) newRuntimeHTTPClient() *guardian.HTTPClient {
-	if m.httpPolicy == nil {
-		return nil
-	}
 	return m.httpPolicy.PooledClient()
 }
 

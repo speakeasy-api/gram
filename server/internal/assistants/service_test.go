@@ -360,7 +360,7 @@ func TestServiceCoreProcessThreadEventsCompletesEvent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{threadID}, admitted)
 
-	result, err := core.ProcessThreadEvents(t.Context(), threadID)
+	result, err := core.ProcessThreadEvents(t.Context(), projectID, threadID)
 	require.NoError(t, err)
 	require.True(t, result.ProcessedAnyEvent)
 	require.True(t, result.RuntimeActive)
@@ -407,7 +407,7 @@ func TestServiceCoreProcessThreadEventsRequeuesOnTurnFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{threadID}, admitted)
 
-	result, err := core.ProcessThreadEvents(t.Context(), threadID)
+	result, err := core.ProcessThreadEvents(t.Context(), projectID, threadID)
 	require.NoError(t, err)
 	require.False(t, result.ProcessedAnyEvent)
 	require.True(t, result.RetryAdmission)

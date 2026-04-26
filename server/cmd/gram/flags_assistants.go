@@ -1,12 +1,16 @@
 package gram
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
 var assistantRuntimeFlags = []cli.Flag{
@@ -173,4 +177,29 @@ func assistantRuntimeConfigFromCLI(c *cli.Context) (assistants.RuntimeBackendCon
 			ServerURLOverride:  override,
 		},
 	}, nil
+}
+
+// newAssistantRuntime resolves CLI flags into a fully wired assistant
+// RuntimeBackend. The local Firecracker manager talks to private 172.x guest
+// IPs, so it is intentionally given the unsafe loopback-allowing policy
+// produced by newGuardianPolicy in `local` environments only — this code path
+// is not reachable in production.
+func newAssistantRuntime(
+	ctx context.Context,
+	logger *slog.Logger,
+	c *cli.Context,
+	guardianPolicy *guardian.Policy,
+	db *pgxpool.Pool,
+	serverURL *url.URL,
+) (assistants.RuntimeBackend, error) {
+	cfg, err := assistantRuntimeConfigFromCLI(c)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Local.OnUnexpectedExit = assistants.NewUnexpectedRuntimeExitHandler(logger, db)
+	rb := assistants.NewRuntimeBackend(logger, guardianPolicy, cfg)
+	if err := assistants.ValidateRuntimeBackendServerURL(ctx, rb, serverURL); err != nil {
+		return nil, fmt.Errorf("validate assistant runtime server url: %w", err)
+	}
+	return rb, nil
 }

@@ -82,9 +82,6 @@ type telemetryRuntimeBackend struct {
 }
 
 func newTelemetryRuntimeBackend(inner RuntimeBackend, logger *telemetry.Logger) RuntimeBackend {
-	if inner == nil || logger == nil {
-		return inner
-	}
 	return &telemetryRuntimeBackend{inner: inner, logger: logger}
 }
 

@@ -91,10 +91,16 @@ func (q *Queries) ClaimNextPendingEvent(ctx context.Context, arg ClaimNextPendin
 const clearAssistantToolsets = `-- name: ClearAssistantToolsets :exec
 DELETE FROM assistant_toolsets
 WHERE assistant_id = $1
+  AND project_id = $2
 `
 
-func (q *Queries) ClearAssistantToolsets(ctx context.Context, assistantID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, clearAssistantToolsets, assistantID)
+type ClearAssistantToolsetsParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) ClearAssistantToolsets(ctx context.Context, arg ClearAssistantToolsetsParams) error {
+	_, err := q.db.Exec(ctx, clearAssistantToolsets, arg.AssistantID, arg.ProjectID)
 	return err
 }
 
@@ -106,15 +112,17 @@ SET
   last_error = NULL,
   updated_at = clock_timestamp()
 WHERE id = $2
+  AND project_id = $3
 `
 
 type CompleteAssistantThreadEventParams struct {
 	CompletedStatus string
 	EventID         uuid.UUID
+	ProjectID       uuid.UUID
 }
 
 func (q *Queries) CompleteAssistantThreadEvent(ctx context.Context, arg CompleteAssistantThreadEventParams) error {
-	_, err := q.db.Exec(ctx, completeAssistantThreadEvent, arg.CompletedStatus, arg.EventID)
+	_, err := q.db.Exec(ctx, completeAssistantThreadEvent, arg.CompletedStatus, arg.EventID, arg.ProjectID)
 	return err
 }
 
@@ -259,16 +267,23 @@ SET
   last_error = $2,
   updated_at = clock_timestamp()
 WHERE id = $3
+  AND project_id = $4
 `
 
 type FailAssistantThreadEventParams struct {
 	FailedStatus string
 	LastError    pgtype.Text
 	EventID      uuid.UUID
+	ProjectID    uuid.UUID
 }
 
 func (q *Queries) FailAssistantThreadEvent(ctx context.Context, arg FailAssistantThreadEventParams) error {
-	_, err := q.db.Exec(ctx, failAssistantThreadEvent, arg.FailedStatus, arg.LastError, arg.EventID)
+	_, err := q.db.Exec(ctx, failAssistantThreadEvent,
+		arg.FailedStatus,
+		arg.LastError,
+		arg.EventID,
+		arg.ProjectID,
+	)
 	return err
 }
 
@@ -678,8 +693,14 @@ FROM assistant_toolsets at
 JOIN toolsets t ON t.id = at.toolset_id
 LEFT JOIN environments e ON e.id = at.environment_id
 WHERE at.assistant_id = ANY($1::UUID[])
+  AND at.project_id = $2
 ORDER BY at.created_at
 `
+
+type LoadAssistantToolsetsParams struct {
+	AssistantIds []uuid.UUID
+	ProjectID    uuid.UUID
+}
 
 type LoadAssistantToolsetsRow struct {
 	AssistantID            uuid.UUID
@@ -692,8 +713,8 @@ type LoadAssistantToolsetsRow struct {
 	EnvironmentSlug        pgtype.Text
 }
 
-func (q *Queries) LoadAssistantToolsets(ctx context.Context, assistantIds []uuid.UUID) ([]LoadAssistantToolsetsRow, error) {
-	rows, err := q.db.Query(ctx, loadAssistantToolsets, assistantIds)
+func (q *Queries) LoadAssistantToolsets(ctx context.Context, arg LoadAssistantToolsetsParams) ([]LoadAssistantToolsetsRow, error) {
+	rows, err := q.db.Query(ctx, loadAssistantToolsets, arg.AssistantIds, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -756,17 +777,19 @@ FROM assistant_threads t
 JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
 JOIN assistant_runtimes r ON r.assistant_thread_id = t.id AND r.project_id = t.project_id
 WHERE t.id = $1
+  AND t.project_id = $2
   AND t.deleted IS FALSE
   AND a.deleted IS FALSE
   AND r.deleted IS FALSE
   AND r.ended IS FALSE
-  AND r.state IN ($2, $3)
+  AND r.state IN ($3, $4)
 ORDER BY r.created_at DESC
 LIMIT 1
 `
 
 type LoadThreadContextParams struct {
 	ThreadID      uuid.UUID
+	ProjectID     uuid.UUID
 	StartingState string
 	ActiveState   string
 }
@@ -804,7 +827,12 @@ type LoadThreadContextRow struct {
 }
 
 func (q *Queries) LoadThreadContext(ctx context.Context, arg LoadThreadContextParams) (LoadThreadContextRow, error) {
-	row := q.db.QueryRow(ctx, loadThreadContext, arg.ThreadID, arg.StartingState, arg.ActiveState)
+	row := q.db.QueryRow(ctx, loadThreadContext,
+		arg.ThreadID,
+		arg.ProjectID,
+		arg.StartingState,
+		arg.ActiveState,
+	)
 	var i LoadThreadContextRow
 	err := row.Scan(
 		&i.ID,
@@ -977,16 +1005,23 @@ SET
   last_error = $2,
   updated_at = clock_timestamp()
 WHERE id = $3
+  AND project_id = $4
 `
 
 type ResetAssistantThreadEventToPendingParams struct {
 	PendingStatus string
 	LastError     pgtype.Text
 	EventID       uuid.UUID
+	ProjectID     uuid.UUID
 }
 
 func (q *Queries) ResetAssistantThreadEventToPending(ctx context.Context, arg ResetAssistantThreadEventToPendingParams) error {
-	_, err := q.db.Exec(ctx, resetAssistantThreadEventToPending, arg.PendingStatus, arg.LastError, arg.EventID)
+	_, err := q.db.Exec(ctx, resetAssistantThreadEventToPending,
+		arg.PendingStatus,
+		arg.LastError,
+		arg.EventID,
+		arg.ProjectID,
+	)
 	return err
 }
 
@@ -1087,16 +1122,23 @@ SET
   last_heartbeat_at = clock_timestamp(),
   updated_at = clock_timestamp()
 WHERE id = $3
+  AND project_id = $4
 `
 
 type SetAssistantRuntimeActiveParams struct {
 	ActiveState string
 	WarmUntil   pgtype.Timestamptz
 	RuntimeID   uuid.UUID
+	ProjectID   uuid.UUID
 }
 
 func (q *Queries) SetAssistantRuntimeActive(ctx context.Context, arg SetAssistantRuntimeActiveParams) error {
-	_, err := q.db.Exec(ctx, setAssistantRuntimeActive, arg.ActiveState, arg.WarmUntil, arg.RuntimeID)
+	_, err := q.db.Exec(ctx, setAssistantRuntimeActive,
+		arg.ActiveState,
+		arg.WarmUntil,
+		arg.RuntimeID,
+		arg.ProjectID,
+	)
 	return err
 }
 
@@ -1139,19 +1181,22 @@ WITH touch_runtime AS (
   SET
     last_heartbeat_at = clock_timestamp(),
     updated_at = clock_timestamp()
-  WHERE r.id = $3
+  WHERE r.id = $4
+    AND r.project_id = $2
     AND r.deleted IS FALSE
-    AND r.state IN ($4, $5)
+    AND r.state IN ($5, $6)
 )
 UPDATE assistant_thread_events e
 SET updated_at = clock_timestamp()
 WHERE e.id = $1
+  AND e.project_id = $2
   AND e.deleted IS FALSE
-  AND e.status = $2
+  AND e.status = $3
 `
 
 type TouchProcessingLeaseParams struct {
 	EventID          uuid.UUID
+	ProjectID        uuid.UUID
 	ProcessingStatus string
 	RuntimeID        uuid.UUID
 	StartingState    string
@@ -1161,6 +1206,7 @@ type TouchProcessingLeaseParams struct {
 func (q *Queries) TouchProcessingLease(ctx context.Context, arg TouchProcessingLeaseParams) error {
 	_, err := q.db.Exec(ctx, touchProcessingLease,
 		arg.EventID,
+		arg.ProjectID,
 		arg.ProcessingStatus,
 		arg.RuntimeID,
 		arg.StartingState,
@@ -1248,15 +1294,17 @@ SET
   backend_metadata_json = $1,
   updated_at = clock_timestamp()
 WHERE id = $2
+  AND project_id = $3
 `
 
 type UpdateAssistantRuntimeMetadataParams struct {
 	BackendMetadataJson []byte
 	RuntimeID           uuid.UUID
+	ProjectID           uuid.UUID
 }
 
 func (q *Queries) UpdateAssistantRuntimeMetadata(ctx context.Context, arg UpdateAssistantRuntimeMetadataParams) error {
-	_, err := q.db.Exec(ctx, updateAssistantRuntimeMetadata, arg.BackendMetadataJson, arg.RuntimeID)
+	_, err := q.db.Exec(ctx, updateAssistantRuntimeMetadata, arg.BackendMetadataJson, arg.RuntimeID, arg.ProjectID)
 	return err
 }
 
