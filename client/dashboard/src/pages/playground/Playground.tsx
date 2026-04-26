@@ -402,13 +402,13 @@ export function ToolsetPanel({
     }
   };
 
-  // If listToolsets has completed and there's nothing there, show the onboarding panel
+  // Transient state: toolsets exist but none is selected yet. The auto-select
+  // useEffect below picks the first toolset on the next render — render
+  // nothing for that single frame rather than flashing a misleading
+  // "No MCP servers yet" message. The truly-empty case is handled by the
+  // parent PlaygroundInner early-return.
   if (toolsets !== undefined && !configRef.current.toolsetSlug) {
-    return (
-      <div className="flex h-full items-center justify-center p-8">
-        <PlaygroundEmptyState onCreate={() => routes.mcp.goTo()} />
-      </div>
-    );
+    return null;
   }
 
   return (
