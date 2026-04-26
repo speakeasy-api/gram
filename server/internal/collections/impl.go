@@ -432,15 +432,15 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 }
 
 func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Queries, collectionID, toolsetID uuid.UUID, organizationID, userID string) error {
-	toolset, err := s.toolsets.GetToolsetByID(ctx, toolsetID)
+	toolset, err := s.toolsets.GetToolsetByIDAndOrganization(ctx, toolsetsRepo.GetToolsetByIDAndOrganizationParams{
+		ID:             toolsetID,
+		OrganizationID: organizationID,
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.C(oops.CodeNotFound)
 		}
 		return oops.E(oops.CodeUnexpected, err, "error accessing toolset").Log(ctx, s.logger)
-	}
-	if toolset.OrganizationID != organizationID {
-		return oops.C(oops.CodeNotFound)
 	}
 	if !toolset.McpEnabled || !toolset.McpSlug.Valid {
 		return oops.E(oops.CodeInvalid, nil, "cannot attach a toolset that is not enabled as an MCP server").Log(ctx, s.logger)

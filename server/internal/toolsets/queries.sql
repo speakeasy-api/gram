@@ -3,10 +3,15 @@ SELECT *
 FROM toolsets
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 
--- name: GetToolsetByID :one
+-- name: GetToolsetByIDAndProject :one
 SELECT *
 FROM toolsets
-WHERE id = @id AND deleted IS FALSE;
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: GetToolsetByIDAndOrganization :one
+SELECT *
+FROM toolsets
+WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE;
 
 -- name: GetToolsetByMCPSlug :one
 -- project_id is required to ensure uniqueness since mcp_slug is only unique within a project
