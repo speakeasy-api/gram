@@ -1,5 +1,14 @@
 # dashboard
 
+## 0.43.1
+
+### Patch Changes
+
+- 1b6f532: add skill usage time series and users-per-skill charts
+- ac59dac: feat(plugins): replace the Claude-only download button on the plugin detail page with a Download Plugin dropdown offering both Claude and Cursor
+- Updated dependencies [2b2d423]
+  - @gram/client@0.33.6
+
 ## 0.43.0
 
 ### Minor Changes
