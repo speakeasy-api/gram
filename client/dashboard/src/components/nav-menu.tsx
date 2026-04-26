@@ -5,9 +5,12 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
+import { Loader2 } from "lucide-react";
 import React from "react";
 import { ProductTierBadge } from "./product-tier-badge";
 import { Type } from "./ui/type";
+
+const NAV_LOADING_DURATION_MS = 600;
 
 export function NavMenu({
   items,
@@ -59,6 +62,26 @@ export function NavButton({
   active?: boolean;
   Icon?: React.ComponentType<{ className?: string }>;
 }) {
+  const [isLoading, setIsLoading] = React.useState(false);
+  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  const handleClick = () => {
+    onClick?.();
+    if (target === "_blank") return;
+    setIsLoading(true);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(
+      () => setIsLoading(false),
+      NAV_LOADING_DURATION_MS,
+    );
+  };
+
   return (
     <SidebarMenuButton
       className="group/nav-button"
@@ -66,9 +89,13 @@ export function NavButton({
       href={href}
       target={target}
       isActive={active}
-      onClick={onClick}
+      onClick={handleClick}
     >
-      {Icon && <Icon className={cn("trans text-muted-foreground")} />}
+      {isLoading ? (
+        <Loader2 className="trans text-muted-foreground animate-spin" />
+      ) : (
+        Icon && <Icon className={cn("trans text-muted-foreground")} />
+      )}
       <Type variant="small">{titleNode ?? title}</Type>
       {title === "Billing" && <ProductTierBadge />}
     </SidebarMenuButton>

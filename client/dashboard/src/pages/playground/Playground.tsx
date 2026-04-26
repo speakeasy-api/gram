@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
   useRegisterEnvironmentTelemetry,
@@ -27,11 +28,10 @@ import {
 } from "@gram/client/react-query/index.js";
 import { ResizablePanel } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { ScrollTextIcon } from "lucide-react";
+import { MessageCircle, Plus, ScrollTextIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
 import { ChatProvider } from "./ChatContext";
 import { useChatContext } from "./useChatContext";
 import { ChatConfig } from "./ChatWindow";
@@ -42,6 +42,31 @@ import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
 import { PlaygroundElements } from "./PlaygroundElements";
 import { PlaygroundLogsPanel } from "./PlaygroundLogsPanel";
 import { ShareChatButton } from "./ShareChatButton";
+
+function PlaygroundEmptyState({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <MessageCircle className="text-muted-foreground h-6 w-6" />
+      </div>
+      <Type variant="subheading" className="mb-1">
+        No MCP servers yet
+      </Type>
+      <Type small muted className="mb-4 max-w-md text-center">
+        The playground lets you chat with tools from an MCP server. Create one
+        to start testing.
+      </Type>
+      <RequireScope scope="mcp:write" level="component">
+        {({ disabled }) => (
+          <Button onClick={onCreate} disabled={disabled}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create MCP Server
+          </Button>
+        )}
+      </RequireScope>
+    </div>
+  );
+}
 
 export default function Playground() {
   return (
@@ -104,9 +129,15 @@ function PlaygroundInner() {
           <Page.Header.Breadcrumbs fullWidth />
         </Page.Header>
         <Page.Body>
-          <div className="m-8 flex h-full">
-            <ToolsetsEmptyState onCreateToolset={() => routes.mcp.goTo()} />
-          </div>
+          <Page.Section>
+            <Page.Section.Title>Playground</Page.Section.Title>
+            <Page.Section.Description className="max-w-2xl">
+              Test your MCP servers and tools with a chat interface.
+            </Page.Section.Description>
+            <Page.Section.Body>
+              <PlaygroundEmptyState onCreate={() => routes.mcp.goTo()} />
+            </Page.Section.Body>
+          </Page.Section>
         </Page.Body>
       </Page>
     );
@@ -375,7 +406,7 @@ export function ToolsetPanel({
   if (toolsets !== undefined && !configRef.current.toolsetSlug) {
     return (
       <div className="flex h-full items-center justify-center p-8">
-        <ToolsetsEmptyState onCreateToolset={() => routes.mcp.goTo()} />
+        <PlaygroundEmptyState onCreate={() => routes.mcp.goTo()} />
       </div>
     );
   }
