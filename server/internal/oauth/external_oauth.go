@@ -661,6 +661,14 @@ func (s *ExternalOAuthService) handleExternalDisconnect(w http.ResponseWriter, r
 		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
 	}
 
+	// Verify toolset belongs to caller's project before deleting the token
+	if _, err := s.toolsetsRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+		ID:        toolsetID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+	}
+
 	// Delete token
 	if err := s.oauthRepo.DeleteUserOAuthTokenByToolset(ctx, repo.DeleteUserOAuthTokenByToolsetParams{
 		UserID:         authCtx.UserID,
