@@ -235,7 +235,6 @@ export function ToolsetPanel({
   const [editingTool, setEditingTool] = useState<Tool | null>(null);
 
   const { data: toolsetsData } = useListToolsets();
-  const routes = useRoutes();
   const client = useSdkClient();
   const updateToolsetMutation = useUpdateToolsetMutation();
   const queryClient = useQueryClient();
