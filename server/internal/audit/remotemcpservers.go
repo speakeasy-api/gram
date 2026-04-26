@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -69,8 +70,8 @@ type LogRemoteMcpServerUpdateEvent struct {
 
 	RemoteMcpServerID  uuid.UUID
 	RemoteMcpServerURL string
-	SnapshotBefore     any
-	SnapshotAfter      any
+	SnapshotBefore     *types.RemoteMcpServer
+	SnapshotAfter      *types.RemoteMcpServer
 }
 
 func LogRemoteMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, event LogRemoteMcpServerUpdateEvent) error {

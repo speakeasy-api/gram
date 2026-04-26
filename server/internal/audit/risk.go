@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -71,8 +72,8 @@ type LogRiskPolicyUpdateEvent struct {
 	RiskPolicyID   uuid.UUID
 	RiskPolicyName string
 
-	SnapshotBefore any
-	SnapshotAfter  any
+	SnapshotBefore *types.RiskPolicy
+	SnapshotAfter  *types.RiskPolicy
 }
 
 func LogRiskPolicyUpdate(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyUpdateEvent) error {
