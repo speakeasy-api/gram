@@ -3,6 +3,7 @@ package middleware
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -52,8 +53,24 @@ func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.
 
 			// Validate the origin against the audience claim.
 			// Browsers don't send Origin headers for same-origin GET/HEAD requests,
-			// so if Origin is empty, verify the Host matches an allowed audience domain.
+			// so if Origin is empty fall back to Referer's origin (browsers send
+			// Referer for fetches and embedded resources), and only finally to
+			// Host. The Referer fallback is what makes proxied dev environments
+			// work: when the Vite dev server forwards a request from
+			// https://localhost:5173 to the Go server on localhost:8080, the
+			// proxied request has Host: localhost:8080 which doesn't match the
+			// audience (https://localhost:5173) — but Referer survives the proxy
+			// hop and carries the original origin. Without this, authenticated
+			// GET probes from the MCP client (e.g. SSE detection) returned 403
+			// even though POSTs to the same path worked.
 			origin := r.Header.Get("Origin")
+			if origin == "" {
+				if ref := r.Header.Get("Referer"); ref != "" {
+					if u, err := url.Parse(ref); err == nil && u.Scheme != "" && u.Host != "" {
+						origin = u.Scheme + "://" + u.Host
+					}
+				}
+			}
 			if origin != "" {
 				if slices.Contains(claims.Audience, origin) {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -62,8 +79,9 @@ func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.
 					return
 				}
 			} else {
-				// No Origin header - likely a same-origin request. Verify the Host
-				// matches one of the audience domains to prevent bypass via stripped Origin.
+				// No Origin or Referer - last-resort same-origin check. Verify
+				// the Host matches one of the audience domains to prevent bypass
+				// via stripped headers.
 				host := r.Host
 				hostAllowed := false
 				for _, aud := range claims.Audience {

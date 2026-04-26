@@ -886,12 +886,14 @@ func decodeToolsetUpdateForm(raw []byte, targetRef string) (*toolsetsgen.UpdateT
 	if err := json.Unmarshal(raw, &f); err != nil {
 		return nil, fmt.Errorf("decode toolset form: %w", err)
 	}
-	slug := f.Slug
-	if slug == "" {
-		slug = targetRef
-	}
+	// Always force the slug from target_ref. Ignoring the agent-supplied slug
+	// keeps the human reviewer's mental model honest: the diff header shows
+	// target_ref, and the mutation hits exactly that toolset. Without this,
+	// an agent could embed a different slug in proposed_value and the
+	// UpdateToolset call would silently target the embedded slug instead of
+	// the one the reviewer thought they were approving.
 	return &toolsetsgen.UpdateToolsetPayload{
-		Slug:                types.Slug(slug),
+		Slug:                types.Slug(targetRef),
 		Name:                f.Name,
 		ToolUrns:            f.ToolURNs,
 		ResourceUrns:        f.ResourceURNs,
@@ -900,17 +902,28 @@ func decodeToolsetUpdateForm(raw []byte, targetRef string) (*toolsetsgen.UpdateT
 }
 
 // marshalToolsetSnapshot builds a comparable JSON snapshot of a toolset.
+// Includes every field that toolsetUpdateForm exposes so drift detection
+// covers the full mutation surface — without prompt_template_names here,
+// concurrent edits to that field would slip past the apply-time drift
+// check and silently get clobbered.
 func marshalToolsetSnapshot(ts *types.Toolset) ([]byte, error) {
 	if ts == nil {
 		return []byte("null"), nil
 	}
 	toolURNs := append([]string(nil), ts.ToolUrns...)
 	resourceURNs := append([]string(nil), ts.ResourceUrns...)
+	promptTemplateNames := make([]string, 0, len(ts.PromptTemplates))
+	for _, pt := range ts.PromptTemplates {
+		if pt != nil {
+			promptTemplateNames = append(promptTemplateNames, pt.Name)
+		}
+	}
 	snap := toolsetUpdateForm{
-		Slug:         string(ts.Slug),
-		Name:         &ts.Name,
-		ToolURNs:     toolURNs,
-		ResourceURNs: resourceURNs,
+		Slug:                string(ts.Slug),
+		Name:                &ts.Name,
+		ToolURNs:            toolURNs,
+		ResourceURNs:        resourceURNs,
+		PromptTemplateNames: promptTemplateNames,
 	}
 	return json.Marshal(snap)
 }
