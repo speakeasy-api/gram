@@ -26,7 +26,7 @@ type LogAccessRoleCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RoleID   string
+	RoleID   string //nolint:glint // TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
 	RoleName string
 	RoleSlug string
 }
@@ -69,7 +69,7 @@ type LogAccessRoleUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RoleID   string
+	RoleID   string //nolint:glint // TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
 	RoleName string
 	RoleSlug string
 
@@ -125,7 +125,7 @@ type LogAccessRoleDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RoleID   string
+	RoleID   string //nolint:glint // TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
 	RoleName string
 	RoleSlug string
 }
@@ -167,7 +167,7 @@ type LogAccessMemberRoleUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	MemberID    string
+	MemberID    string //nolint:glint // TODO(AGE-1954): discuss URN treatment for RBAC member identifiers; pending team discussion
 	MemberName  string
 	MemberEmail string
 

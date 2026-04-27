@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -25,7 +26,7 @@ type LogRemoteMcpServerCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RemoteMcpServerID  uuid.UUID
+	RemoteMcpServerID  uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RemoteMcpServer and migrate to RemoteMcpServerURN; pending team discussion
 	RemoteMcpServerURL string
 }
 
@@ -67,10 +68,10 @@ type LogRemoteMcpServerUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RemoteMcpServerID  uuid.UUID
+	RemoteMcpServerID  uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RemoteMcpServer and migrate to RemoteMcpServerURN; pending team discussion
 	RemoteMcpServerURL string
-	SnapshotBefore     any
-	SnapshotAfter      any
+	SnapshotBefore     *types.RemoteMcpServer
+	SnapshotAfter      *types.RemoteMcpServer
 }
 
 func LogRemoteMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, event LogRemoteMcpServerUpdateEvent) error {
@@ -122,7 +123,7 @@ type LogRemoteMcpServerDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RemoteMcpServerID  uuid.UUID
+	RemoteMcpServerID  uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RemoteMcpServer and migrate to RemoteMcpServerURN; pending team discussion
 	RemoteMcpServerURL string
 }
 

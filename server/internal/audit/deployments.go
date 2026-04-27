@@ -129,14 +129,14 @@ type LogDeploymentRedeployEvent struct {
 
 	DeploymentURN urn.Deployment
 
-	SourceDeploymentID urn.Deployment
+	SourceDeploymentURN urn.Deployment
 }
 
 func LogDeploymentRedeploy(ctx context.Context, dbtx repo.DBTX, event LogDeploymentRedeployEvent) error {
 	action := ActionDeploymentsRedeploy
 
 	metadata, err := marshalAuditPayload(map[string]any{
-		"source_deployment_id": event.SourceDeploymentID,
+		"source_deployment_id": event.SourceDeploymentURN,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)

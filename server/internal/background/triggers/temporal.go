@@ -69,10 +69,6 @@ func BuildScheduleOptions(instance triggerrepo.TriggerInstance, schedule string,
 }
 
 func ScheduleTriggerCronWorkflow(ctx context.Context, temporalEnv *tenv.Environment, opts ScheduleTriggerCronWorkflowOptions) error {
-	if temporalEnv == nil {
-		return fmt.Errorf("temporal environment is not configured")
-	}
-
 	tclient := temporalEnv.Client()
 	queue := temporalEnv.Queue()
 
@@ -123,10 +119,6 @@ func ScheduleTriggerCronWorkflow(ctx context.Context, temporalEnv *tenv.Environm
 }
 
 func DeleteTriggerCronWorkflowSchedule(ctx context.Context, temporalEnv *tenv.Environment, instanceID uuid.UUID) error {
-	if temporalEnv == nil {
-		return fmt.Errorf("temporal environment is not configured")
-	}
-
 	handle := temporalEnv.Client().ScheduleClient().GetHandle(ctx, triggerCronWorkflowScheduleID(instanceID))
 	if err := handle.Delete(ctx); err != nil && !isTemporalNotFound(err) {
 		return fmt.Errorf("delete schedule: %w", err)
@@ -135,10 +127,6 @@ func DeleteTriggerCronWorkflowSchedule(ctx context.Context, temporalEnv *tenv.En
 }
 
 func ExecuteTriggerDispatchWorkflow(ctx context.Context, temporalEnv *tenv.Environment, input TriggerDispatchWorkflowInput) error {
-	if temporalEnv == nil {
-		return fmt.Errorf("temporal environment is not configured")
-	}
-
 	tclient := temporalEnv.Client()
 	queue := temporalEnv.Queue()
 

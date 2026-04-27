@@ -234,6 +234,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TriggerDispatchWorkflow)
 	// Risk analysis workflow
 	temporalWorker.RegisterWorkflow(DrainRiskAnalysisWorkflow)
+	// Assistant workflows (stub bodies — populated in the workflows PR)
+	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {

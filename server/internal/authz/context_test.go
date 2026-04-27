@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -56,6 +57,79 @@ func TestPrepareContext_skipsNonSessionAuth(t *testing.T) {
 
 	_, ok = GrantsFromContext(ctx)
 	require.False(t, ok)
+}
+
+func TestPrepareContext_loadsAssistantPrincipalGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	engine := NewEngine(testinfra.NewLogger(t), conn, rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.SessionID = nil
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{
+		AssistantID: uuid.New(),
+		ThreadID:    uuid.New(),
+	})
+
+	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
+	seedConnectedUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "owner@example.com", "Owner", "user_workos_owner", "membership_owner")
+	seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeProjectRead, WildcardResource)
+
+	ctx, err := engine.PrepareContext(ctx)
+	require.NoError(t, err)
+
+	_, ok = GrantsFromContext(ctx)
+	require.True(t, ok)
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_assistant"}))
+}
+
+func TestShouldEnforce_assistantPrincipalOnEnterpriseOrgEnforces(t *testing.T) {
+	t.Parallel()
+
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	engine := NewEngine(testinfra.NewLogger(t), conn, rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.SessionID = nil
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{
+		AssistantID: uuid.New(),
+		ThreadID:    uuid.New(),
+	})
+
+	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
+
+	enforce, err := engine.ShouldEnforce(ctx)
+	require.NoError(t, err)
+	require.True(t, enforce)
+}
+
+func TestShouldEnforce_assistantPrincipalOnNonEnterpriseSkips(t *testing.T) {
+	t.Parallel()
+
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	engine := NewEngine(testinfra.NewLogger(t), conn, rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.SessionID = nil
+	authCtx.AccountType = "pro"
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{
+		AssistantID: uuid.New(),
+		ThreadID:    uuid.New(),
+	})
+
+	enforce, err := engine.ShouldEnforce(ctx)
+	require.NoError(t, err)
+	require.False(t, enforce)
 }
 
 func TestPrepareContext_skipsNonEnterpriseOrgs(t *testing.T) {
