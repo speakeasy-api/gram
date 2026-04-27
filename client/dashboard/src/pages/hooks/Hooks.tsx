@@ -1281,21 +1281,13 @@ function HookTraceRow({
   }, [displayServerName, serverName, toolName, skillName]);
 
   const statusConfig = useMemo(() => {
-    if (trace.hookStatus === "blocked") {
-      return {
-        color: "text-amber-500",
-        bgColor: "bg-amber-500/10",
-        label: "Blocked",
-      };
-    }
     if (trace.hookStatus === "failure") {
       return {
         color: "text-destructive",
         bgColor: "bg-destructive/10",
         label: "Failure",
       };
-    }
-    if (trace.hookStatus === "success") {
+    } else if (trace.hookStatus === "success") {
       return {
         color: "text-emerald-500",
         bgColor: "bg-emerald-500/10",

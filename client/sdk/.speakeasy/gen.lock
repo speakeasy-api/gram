@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 41d249cf19e4b198fa1899c22e76edae
+  docChecksum: f814ff8171fedbaa61d8c78e4a1d1523
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -319,7 +319,7 @@ trackedFiles:
   docs/models/components/hooksserversummary.md:
     last_write_checksum: sha1:65f741f7c4c0dd72b7fcc482bdc7b586b2419629
   docs/models/components/hookstatus.md:
-    last_write_checksum: sha1:c91a00f5a50e33f57ed8646335e79ea9a630e927
+    last_write_checksum: sha1:842ea50d39d893d742df1d249f3cb13d9b510fc6
   docs/models/components/hookstimeseriespoint.md:
     last_write_checksum: sha1:7417d6276d1004eea90e19a2d67a447bc1fea3e6
   docs/models/components/hooksusersummary.md:
@@ -3149,7 +3149,7 @@ trackedFiles:
   src/models/components/hooksusersummary.ts:
     last_write_checksum: sha1:3eeb9121e84176a2d5134fbf9b129ab0c6096933
   src/models/components/hooktracesummary.ts:
-    last_write_checksum: sha1:d635d43d002f8502344246e81b64c0eec34f9c23
+    last_write_checksum: sha1:6b9789032603476e6f335bf55a59d515fbe88d71
   src/models/components/httptooldefinition.ts:
     id: 4530c9b75199
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4

@@ -23169,7 +23169,6 @@ components:
           enum:
             - success
             - failure
-            - blocked
             - pending
         log_count:
           type: integer

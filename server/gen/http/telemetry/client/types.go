@@ -10007,8 +10007,8 @@ func ValidateHookTraceSummaryResponseBody(body *HookTraceSummaryResponseBody) (e
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.trace_id", *body.TraceID, "^[a-f0-9]{32}$"))
 	}
 	if body.HookStatus != nil {
-		if !(*body.HookStatus == "success" || *body.HookStatus == "failure" || *body.HookStatus == "blocked" || *body.HookStatus == "pending") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_status", *body.HookStatus, []any{"success", "failure", "blocked", "pending"}))
+		if !(*body.HookStatus == "success" || *body.HookStatus == "failure" || *body.HookStatus == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_status", *body.HookStatus, []any{"success", "failure", "pending"}))
 		}
 	}
 	return
