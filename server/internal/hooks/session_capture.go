@@ -79,24 +79,24 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 }
 
 // handleUserPromptSubmit captures the user's prompt text as a chat message.
-func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
 }
 
 // handleStop captures the assistant's final response text.
 // Note: If the Stop event includes tool calls, those are handled separately by PreToolUse events,
 // so we skip creating duplicate messages here.
-func (s *Service) handleStop(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handleStop(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
 }
 
 // handleSessionEnd finalizes the session by updating the timestamp.
-func (s *Service) handleSessionEnd(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handleSessionEnd(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
 }
 
 // handleNotification handles notification events (permission_prompt, idle_prompt, etc.)
-func (s *Service) handleNotification(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handleNotification(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
 }
 
@@ -157,7 +157,7 @@ func (s *Service) insertMessageWithFallbackUpsert(
 }
 
 // persistConversationEvent writes a conversation event (user prompt or assistant response) to PostgreSQL.
-func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) error {
+func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) error {
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
 		return fmt.Errorf("invalid project ID in session metadata: %w", err)
@@ -231,7 +231,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 }
 
 // writeToolCallRequestToPG writes an assistant message with tool_calls to PostgreSQL.
-func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) error {
+func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) error {
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
 		return fmt.Errorf("invalid project ID: %w", err)
@@ -284,7 +284,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 }
 
 // writeToolCallResultToPG writes a tool result message to PostgreSQL.
-func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) error {
+func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) error {
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
 		return fmt.Errorf("invalid project ID: %w", err)

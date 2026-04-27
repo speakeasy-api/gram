@@ -44,7 +44,7 @@ func NewClient(claude, cursor, logs, metrics goa.Endpoint) *Client {
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) Claude(ctx context.Context, p *ClaudePayload) (res *ClaudeHookResult, err error) {
+func (c *Client) Claude(ctx context.Context, p *ClaudeHookPayload) (res *ClaudeHookResult, err error) {
 	var ires any
 	ires, err = c.ClaudeEndpoint(ctx, p)
 	if err != nil {

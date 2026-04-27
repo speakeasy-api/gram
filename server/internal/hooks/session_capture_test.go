@@ -60,20 +60,20 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 	// Each of these is a distinct write path that previously either used
 	// metadata.ServiceName or a hardcoded string. The fix unified them — this
 	// test asserts the unification stays unified.
-	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudeHookPayload{
 		HookEventName: "UserPromptSubmit",
 		SessionID:     &sessionID,
 		Prompt:        &prompt,
 	}, metadata))
 
-	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudeHookPayload{
 		HookEventName:        "Stop",
 		SessionID:            &sessionID,
 		LastAssistantMessage: &lastAssistantMessage,
 		Model:                &model,
 	}, metadata))
 
-	require.NoError(t, ti.service.writeToolCallRequestToPG(ctx, &gen.ClaudePayload{
+	require.NoError(t, ti.service.writeToolCallRequestToPG(ctx, &gen.ClaudeHookPayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
 		ToolName:      &toolName,
@@ -82,7 +82,7 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 		Model:         &model,
 	}, metadata))
 
-	require.NoError(t, ti.service.writeToolCallResultToPG(ctx, &gen.ClaudePayload{
+	require.NoError(t, ti.service.writeToolCallResultToPG(ctx, &gen.ClaudeHookPayload{
 		HookEventName: "PostToolUse",
 		SessionID:     &sessionID,
 		ToolName:      &toolName,
@@ -90,7 +90,7 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 		ToolResponse:  toolResponse,
 	}, metadata))
 
-	require.NoError(t, ti.service.writeToolCallResultToPG(ctx, &gen.ClaudePayload{
+	require.NoError(t, ti.service.writeToolCallResultToPG(ctx, &gen.ClaudeHookPayload{
 		HookEventName: "PostToolUseFailure",
 		SessionID:     &sessionID,
 		ToolName:      &toolName,

@@ -186,11 +186,11 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 	require.Equal(t, "./b-cursor", cursorManifest.Plugins[1].Source)
 }
 
-func TestRenderHookScriptClaudeUsesGramKeyAndProjectHeaders(t *testing.T) {
+func TestRenderHookScriptClaudeSendsNoAuthHeaders(t *testing.T) {
 	t.Parallel()
-	// Claude's hook endpoint now declares Security(ByKey, ProjectSlug)
-	// just like Cursor, so both headers are required for plugin-driven
-	// org/project attribution.
+	// Claude's hook endpoint declares no Security() block (design.go:116),
+	// so any auth header on the request is dropped. We deliberately omit
+	// them so the script doesn't lie about what's being sent.
 	cfg := GenerateConfig{
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
@@ -200,9 +200,9 @@ func TestRenderHookScriptClaudeUsesGramKeyAndProjectHeaders(t *testing.T) {
 
 	require.Contains(t, script, "https://app.getgram.ai/rpc/hooks.claude")
 	require.NotContains(t, script, "/hooks/claude", "must not use the legacy /hooks/<platform> path")
-	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz")
-	require.Contains(t, script, "Gram-Project: acme-prod")
-	require.NotContains(t, script, "Authorization", "endpoint reads Gram-Key, not Authorization")
+	require.NotContains(t, script, "Authorization", "claude endpoint has no Security() block")
+	require.NotContains(t, script, "Gram-Key", "claude endpoint accepts no API key header")
+	require.NotContains(t, script, "Gram-Project", "claude endpoint accepts no project header")
 }
 
 func TestRenderHookScriptCursorUsesGramKeyAndProjectHeaders(t *testing.T) {

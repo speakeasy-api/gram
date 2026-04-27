@@ -37,17 +37,9 @@ func (c *Client) BuildClaudeRequest(ctx context.Context, v any) (*http.Request, 
 // server.
 func EncodeClaudeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*hooks.ClaudePayload)
+		p, ok := v.(*hooks.ClaudeHookPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("hooks", "claude", "*hooks.ClaudePayload", v)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
+			return goahttp.ErrInvalidType("hooks", "claude", "*hooks.ClaudeHookPayload", v)
 		}
 		body := NewClaudeRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {

@@ -17,7 +17,7 @@ import (
 
 // BuildClaudePayload builds the payload for the hooks claude endpoint from CLI
 // flags.
-func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, hooksClaudeProjectSlugInput string) (*hooks.ClaudePayload, error) {
+func BuildClaudePayload(hooksClaudeBody string) (*hooks.ClaudeHookPayload, error) {
 	var err error
 	var body ClaudeRequestBody
 	{
@@ -32,19 +32,7 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 			return nil, err
 		}
 	}
-	var apikeyToken *string
-	{
-		if hooksClaudeApikeyToken != "" {
-			apikeyToken = &hooksClaudeApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if hooksClaudeProjectSlugInput != "" {
-			projectSlugInput = &hooksClaudeProjectSlugInput
-		}
-	}
-	v := &hooks.ClaudePayload{
+	v := &hooks.ClaudeHookPayload{
 		HookEventName:        body.HookEventName,
 		ToolName:             body.ToolName,
 		ToolUseID:            body.ToolUseID,
@@ -73,8 +61,6 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 			v.AdditionalData[tk] = tv
 		}
 	}
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

@@ -33,9 +33,9 @@ func EncodeClaudeResponse(encoder func(context.Context, http.ResponseWriter) goa
 
 // DecodeClaudeRequest returns a decoder for requests sent to the hooks claude
 // endpoint.
-func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*hooks.ClaudePayload, error) {
-	return func(r *http.Request) (*hooks.ClaudePayload, error) {
-		var payload *hooks.ClaudePayload
+func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*hooks.ClaudeHookPayload, error) {
+	return func(r *http.Request) (*hooks.ClaudeHookPayload, error) {
+		var payload *hooks.ClaudeHookPayload
 		var (
 			body ClaudeRequestBody
 			err  error
@@ -55,34 +55,7 @@ func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if err != nil {
 			return payload, err
 		}
-
-		var (
-			apikeyToken      *string
-			projectSlugInput *string
-		)
-		apikeyTokenRaw := r.Header.Get("Gram-Key")
-		if apikeyTokenRaw != "" {
-			apikeyToken = &apikeyTokenRaw
-		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewClaudePayload(&body, apikeyToken, projectSlugInput)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
-			}
-		}
+		payload = NewClaudeHookPayload(&body)
 
 		return payload, nil
 	}

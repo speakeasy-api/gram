@@ -1602,9 +1602,9 @@ func NewMetricsGatewayErrorResponseBody(res *goa.ServiceError) *MetricsGatewayEr
 	return body
 }
 
-// NewClaudePayload builds a hooks service claude endpoint payload.
-func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.ClaudePayload {
-	v := &hooks.ClaudePayload{
+// NewClaudeHookPayload builds a hooks service claude endpoint payload.
+func NewClaudeHookPayload(body *ClaudeRequestBody) *hooks.ClaudeHookPayload {
+	v := &hooks.ClaudeHookPayload{
 		HookEventName:        *body.HookEventName,
 		ToolName:             body.ToolName,
 		ToolUseID:            body.ToolUseID,
@@ -1633,8 +1633,6 @@ func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugI
 			v.AdditionalData[tk] = tv
 		}
 	}
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }

@@ -7280,21 +7280,6 @@ paths:
             summary: claude hooks
             description: Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.
             operationId: hooks#claude
-            parameters:
-                - name: Gram-Key
-                  in: header
-                  description: API Key header
-                  allowEmptyValue: true
-                  schema:
-                    type: string
-                    description: API Key header
-                - name: Gram-Project
-                  in: header
-                  description: project header
-                  allowEmptyValue: true
-                  schema:
-                    type: string
-                    description: project header
             requestBody:
                 required: true
                 content:
@@ -7362,9 +7347,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
     /rpc/hooks.cursor:
         post:
             tags:
